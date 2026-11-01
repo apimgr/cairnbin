@@ -983,6 +983,16 @@ type CSRFConfig struct {
 	ExemptPaths []string `yaml:"exempt_paths"`
 }
 
+// CSRFBuiltinExemptPaths are always exempt from CSRF validation, in addition to
+// server.csrf.exempt_paths. They are the tokenless, cookie-free creation
+// endpoints the compat layer must serve to unmodified third-party clients
+// (curl, CI scripts, pastebin.com / lenpaste / microbin / stikked / hastebin /
+// dpaste / 0x0.st / sprunge / ix.io tooling): every /api/* route (API routes
+// never accept cookie auth, so there is no ambient authority to forge),
+// hastebin's POST /documents, microbin's POST /upload, and the curl-upload
+// family's POST /. Browser forms post to /pastes and keep full CSRF validation.
+var CSRFBuiltinExemptPaths = []string{"/api/*", "/documents", "/upload", "/"}
+
 // NotificationsConfig holds email notification settings.
 type NotificationsConfig struct {
 	Email EmailConfig `yaml:"email"`
@@ -1880,8 +1890,19 @@ func Load(path string) (*Config, error) {
 		return cfg, err
 	}
 
+	// A YAML type/unknown-key error (*yaml.TypeError) still fills every valid
+	// field, so keep going: validate, generate any missing secret, and hand the
+	// caller a usable config plus the error to warn about. Returning early would
+	// leave the encryption key and operator token empty and break token
+	// creation over a single typo (PART 5: never fail on invalid config —
+	// warn and use the default). A real syntax error is still returned as-is.
+	var decodeErr error
 	if err := decodeConfig(data, cfg); err != nil {
-		return cfg, err
+		var typeErr *yaml.TypeError
+		if !errors.As(err, &typeErr) {
+			return cfg, err
+		}
+		decodeErr = err
 	}
 
 	// Env always wins over file.
@@ -1922,13 +1943,15 @@ func Load(path string) (*Config, error) {
 		needSave = true
 	}
 
-	if needSave {
+	// Never rewrite a file that held invalid entries: Save would silently drop
+	// them, so the operator could not see what to fix.
+	if needSave && decodeErr == nil {
 		if saveErr := Save(path, cfg); saveErr != nil {
 			log.Printf("config: warning: could not persist generated secrets to %s: %v", path, saveErr)
 		}
 	}
 
-	return cfg, nil
+	return cfg, decodeErr
 }
 
 // ensureEncryptionKey generates a 32-byte AES-256-GCM key and stores it
@@ -3256,4 +3279,46 @@ func (m *ConfigManager) applyHotSettings(prev, next *Config) {
 	if prev.Web.SiteTitle != next.Web.SiteTitle || prev.Web.Theme != next.Web.Theme {
 		log.Printf("[config] hot-reload: branding settings updated")
 	}
+}
+
+// StartupScheme returns "https" when the server is configured to serve TLS and
+// "http" otherwise. Without a live request the protocol comes from config:
+// server.tls.enabled, Let's Encrypt, or port 443 all imply HTTPS (PART 12/15).
+func (c *Config) StartupScheme() string {
+	if c.Server.TLS.Enabled || c.Server.TLS.LetsEncrypt.Enabled {
+		return "https"
+	}
+	for _, p := range strings.Split(c.Server.Port, ",") {
+		if strings.TrimSpace(p) == "443" {
+			return "https"
+		}
+	}
+	return "http"
+}
+
+// StartupBaseURL builds the canonical base URL when no HTTP request is
+// available (startup banner, background-task email links, the raw-TCP termbin
+// reply). It mirrors the per-request baseURL(r) logic for the static config
+// path: server.base_url wins, otherwise {proto}://{fqdn}[:{port}] with the
+// standard :80/:443 stripped (PART 12).
+func (c *Config) StartupBaseURL() string {
+	if u := strings.TrimRight(c.Server.BaseURL, "/"); u != "" {
+		return u
+	}
+	proto := c.StartupScheme()
+	fqdn := c.ResolveFQDN()
+	if fqdn == "" {
+		fqdn = "localhost"
+	}
+	port := c.Server.Port
+	if strings.Contains(port, ",") {
+		port = ""
+	}
+	if (proto == "http" && port == "80") || (proto == "https" && port == "443") {
+		port = ""
+	}
+	if port != "" {
+		return proto + "://" + fqdn + ":" + port
+	}
+	return proto + "://" + fqdn
 }

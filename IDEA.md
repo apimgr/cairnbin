@@ -109,8 +109,8 @@ The server must be 100% wire-compatible with the following services — existing
 | Target | Guarantee |
 |--------|-----------|
 | **pastebin.com public API** | Paste creation, retrieval, and login-stub endpoints match the pastebin.com wire protocol (URL paths, request fields, response fields, HTTP status codes, content types) |
-| **lenpaste** (protocol reference: `forksmgr/lcomrade-lenpaste`) | lenpaste REST API including server info endpoint matches the lenpaste wire protocol |
-| **microbin** | microbin JSON API for paste creation and retrieval matches the microbin wire protocol |
+| **lenpaste** (protocol reference: `forksmgr/lcomrade-lenpaste`) | `POST /api/new` and `POST /api/v1/new` (form-urlencoded `title`/`body`/`syntax`/`expiration` seconds/`oneUse`) return `{"id","url","deleteToken"}`; `GET /api/get?id=` and `GET /api/v1/get?id=` return the paste JSON; `DELETE` (or `GET`) `/api/remove?id=&deleteToken=` deletes with the compat delete token; `GET /api/list`; `GET /api/v1/getServerInfo` returns the server-info JSON |
+| **microbin** | `POST /api/v1/pasta` (form-urlencoded, multipart, or JSON with `content`/`title`/`visibility`/`expiry`/`burn_after`) creates a paste — e.g. `curl -d "content=Hello" {base}/api/v1/pasta`; `GET /api/v1/pasta` lists, `GET /api/v1/pasta/{id}` retrieves, `DELETE /api/v1/pasta/{id}` deletes; text for plain clients, JSON when `Accept: application/json` |
 | **stikked** | `POST /api/create` (form-urlencoded `text`/`title`/`name`/`lang`/`expire`/`private`; `apikey` accepted and ignored) returns the plain-text view URL `{base}/view/{id}` or `Error: <msg>`; `GET /view/raw/{id}` raw content; `GET /view/{id}` renders the native paste-detail view directly (no redirect — even for link pastes, which the root `/{id}` route would otherwise redirect to their target); `GET /api/paste/{id}` returns the stikked JSON shape (`pid`, `title`, `name`, `created`, `lang`, `raw`, `hits`) |
 | **hastebin / haste-server** | `POST /documents` (raw request body) returns `{"key":"<id>"}`; `GET /documents/{key}` returns `{"data":"...","key":"..."}` (404 `{"message":"..."}`); `GET /raw/{key}` served by the native raw route |
 | **dpaste** | `POST /api/` and `POST /api/v2/` (form-urlencoded `content`/`lexer`/`syntax`/`filename`/`expires`/`format`) return the view URL — quoted by default, bare with `format=url`, or `{"url","content","lexer"}` with `format=json`; keyless |
@@ -163,7 +163,7 @@ Every subdomain-forced compat create path continues to honor the operator-config
 - Deletion before natural expiry requires the paste's owner token; the operator token deletes any paste unconditionally; compat-created pastes use their protocol's own delete token and the two systems are never mixed
 - An owner token may be reused across multiple pastes by the same caller; the server verifies the token is active before linking a new paste to it
 - The termbin/fiche raw-TCP listener is enabled by default on port 9999, capped at `server.termbin.max_size` (default 32768 bytes) with a `server.termbin.timeout` idle timeout (default `5s`)
-- Compat create paths are always anonymous and tokenless; any API key a compat protocol supplies is accepted and ignored
+- Compat create paths are always anonymous and tokenless; any API key a compat protocol supplies is accepted and ignored — they carry no CSRF token or cookie either, so every compat create route and the whole `/api/*` tree is exempt from CSRF validation (browser form routes such as `POST /pastes` keep it)
 - All token, hash, and signature comparisons are constant-time; plain equality comparison is never used for a security-sensitive value
 
 ### Endpoints (WHAT, not paths — see PART 14)

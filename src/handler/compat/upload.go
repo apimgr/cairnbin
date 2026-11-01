@@ -1,6 +1,7 @@
 package compat
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"strings"
@@ -41,6 +42,24 @@ func (c *Handler) RootUpload(w http.ResponseWriter, r *http.Request) {
 	// on a non-multipart Content-Type via ErrNotMultipart *before* checking
 	// the error from this same ParseForm call it makes internally, silently
 	// discarding a MaxBytesError. Capturing it here first avoids that.
+	//
+	// On a recognised curl-upload subdomain the whole body may be the paste
+	// (`curl --data-binary @- https://tb.{fqdn}/` sends it as
+	// application/x-www-form-urlencoded, which ParseForm would consume). Buffer
+	// the already size-bounded body so it can be replayed for ParseForm and
+	// still used raw below.
+	target := targetFromContext(r)
+	var rawBody []byte
+	rawCaptured := false
+	if target != "" && !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+		b, err := io.ReadAll(r.Body)
+		if err != nil && isMaxBytesErr(err) {
+			http.Error(w, "content exceeds the maximum allowed size", http.StatusRequestEntityTooLarge)
+			return
+		}
+		rawBody, rawCaptured = b, true
+		r.Body = io.NopCloser(bytes.NewReader(b))
+	}
 	if err := r.ParseForm(); err != nil && isMaxBytesErr(err) {
 		http.Error(w, "content exceeds the maximum allowed size", http.StatusRequestEntityTooLarge)
 		return
@@ -66,11 +85,15 @@ func (c *Handler) RootUpload(w http.ResponseWriter, r *http.Request) {
 	// recognised curl-upload subdomain, treat the whole (still
 	// MaxBytesReader-bounded) body as that target's content instead of
 	// falling through to the native create handler.
-	if target := targetFromContext(r); target != "" {
-		body, err := io.ReadAll(r.Body)
-		if err != nil && isMaxBytesErr(err) {
-			http.Error(w, "content exceeds the maximum allowed size", http.StatusRequestEntityTooLarge)
-			return
+	if target != "" {
+		body := rawBody
+		if !rawCaptured {
+			var err error
+			body, err = io.ReadAll(r.Body)
+			if err != nil && isMaxBytesErr(err) {
+				http.Error(w, "content exceeds the maximum allowed size", http.StatusRequestEntityTooLarge)
+				return
+			}
 		}
 		switch target {
 		case "termbin":

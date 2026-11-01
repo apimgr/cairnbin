@@ -206,6 +206,33 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	// Directory flags beat the CONFIG_DIR/DATA_DIR/LOG_DIR/CACHE_DIR/BACKUP_DIR/
+	// PID_FILE env fallbacks (PART 8: flag > env > default). Exporting them here
+	// means every path.Get*Dir call below, including the service, maintenance,
+	// update and status code paths, resolves to the flagged location.
+	for envName, flagValue := range map[string]string{
+		"CONFIG_DIR": configFlag,
+		"DATA_DIR":   dataFlag,
+		"LOG_DIR":    logFlag,
+		"CACHE_DIR":  cacheFlag,
+		"BACKUP_DIR": backupFlag,
+		"PID_FILE":   pidFlag,
+	} {
+		if flagValue == "" {
+			continue
+		}
+		prev, had := os.LookupEnv(envName)
+		os.Setenv(envName, flagValue)
+		name := envName
+		defer func() {
+			if had {
+				os.Setenv(name, prev)
+			} else {
+				os.Unsetenv(name)
+			}
+		}()
+	}
+
 	// ── Shell integration ─────────────────────────────────────────────────────
 
 	if shellCmd != "" {
@@ -749,9 +776,6 @@ Examples:
 	// Must run after paths are resolved but loads config independently.
 	if showStatus {
 		cfgPath := filepath.Join(configDir, "server.yml")
-		if configFlag != "" {
-			cfgPath = configFlag
-		}
 		statusCfg, _ := config.Load(cfgPath)
 		port := statusCfg.Server.Port
 		if port == "" {
@@ -782,12 +806,9 @@ Examples:
 	// ── Load config ───────────────────────────────────────────────────────────
 
 	cfgFile := filepath.Join(configDir, "server.yml")
-	if configFlag != "" {
-		cfgFile = configFlag
-	}
 
 	// Auto-migrate server.yaml → server.yml if the old filename exists and the new one does not.
-	if configFlag == "" {
+	{
 		yamlPath := filepath.Join(configDir, "server.yaml")
 		if _, statErr := os.Stat(yamlPath); statErr == nil {
 			if _, statErr2 := os.Stat(cfgFile); os.IsNotExist(statErr2) {
@@ -2094,48 +2115,16 @@ func schedulerNotifier(cfg *config.Config, auditW *audit.Writer) scheduler.Notif
 	}
 }
 
-// startupScheme returns "https" when the server is configured to serve TLS,
-// and "http" otherwise. Without a live request we derive the protocol from
-// config: port 443, server.tls.enabled, or Let's Encrypt enabled all imply
-// HTTPS. Called at startup and for background-task email links (PART 12/15).
+// startupScheme returns the config-derived {proto} for contexts without an
+// HTTP request (PART 12/15).
 func startupScheme(cfg *config.Config) string {
-	if cfg.Server.TLS.Enabled || cfg.Server.TLS.LetsEncrypt.Enabled {
-		return "https"
-	}
-	// Dual-port "80,443" or plain "443" → HTTPS is the primary scheme.
-	for _, p := range strings.Split(cfg.Server.Port, ",") {
-		if strings.TrimSpace(p) == "443" {
-			return "https"
-		}
-	}
-	return "http"
+	return cfg.StartupScheme()
 }
 
 // startupBaseURL builds the canonical base URL from config when no HTTP
-// request is yet available (startup, background tasks, email links). Mirrors
-// the runtime baseURL(r) logic for the static config path (PART 12).
+// request is yet available (startup, background tasks, email links).
 func startupBaseURL(cfg *config.Config) string {
-	if u := strings.TrimRight(cfg.Server.BaseURL, "/"); u != "" {
-		return u
-	}
-	proto := startupScheme(cfg)
-	fqdn := cfg.ResolveFQDN()
-	if fqdn == "" || strings.EqualFold(fqdn, "localhost") {
-		fqdn = "localhost"
-	}
-	port := cfg.Server.Port
-	// Dual-port "80,443" — omit port from the public URL.
-	if strings.Contains(port, ",") {
-		port = ""
-	}
-	// Strip standard :80/:443.
-	if (proto == "http" && port == "80") || (proto == "https" && port == "443") {
-		port = ""
-	}
-	if port != "" {
-		return proto + "://" + fqdn + ":" + port
-	}
-	return proto + "://" + fqdn
+	return cfg.StartupBaseURL()
 }
 
 // blocklistSources maps the configured blocklist sources to task.Source values.

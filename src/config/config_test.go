@@ -1288,3 +1288,57 @@ func TestContactFQDNDefault(t *testing.T) {
 		t.Errorf("AdminEmail with explicit FQDN: got %q", got)
 	}
 }
+
+// TestLoad_UnknownKeyStillGeneratesSecrets verifies a config with an unknown
+// key returns the error but remains usable: valid entries are kept and the
+// encryption key and operator token are generated, so token creation keeps
+// working, and the file with the invalid entry is not rewritten.
+func TestLoad_UnknownKeyStillGeneratesSecrets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	in := "server:\n  port: \"12345\"\n  unknown_option: true\n"
+	if err := os.WriteFile(path, []byte(in), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err == nil || !strings.Contains(err.Error(), "unknown_option") {
+		t.Fatalf("Load error = %v, want unknown_option error", err)
+	}
+	if cfg.Server.Port != "12345" {
+		t.Errorf("valid port not kept: %q", cfg.Server.Port)
+	}
+	if cfg.Web.Security.EncryptionKey == "" {
+		t.Error("encryption key not generated for config with invalid entry")
+	}
+	if cfg.Server.Token == "" {
+		t.Error("server.token not generated for config with invalid entry")
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != in {
+		t.Errorf("config with invalid entry was rewritten:\n%s", got)
+	}
+}
+
+// TestStartupBaseURL verifies the request-less base URL used by the termbin
+// reply and email links: configured base_url wins, non-standard ports are
+// kept, :80/:443 and dual-port specs are stripped.
+func TestStartupBaseURL(t *testing.T) {
+	cases := []struct {
+		name string
+		mut  func(*config.Config)
+		want string
+	}{
+		{"explicit base_url", func(c *config.Config) { c.Server.BaseURL = "https://paste.example.com/" }, "https://paste.example.com"},
+		{"custom port kept", func(c *config.Config) { c.Server.FQDN = "paste.example.com"; c.Server.Port = "64111" }, "http://paste.example.com:64111"},
+		{"port 80 stripped", func(c *config.Config) { c.Server.FQDN = "paste.example.com"; c.Server.Port = "80" }, "http://paste.example.com"},
+		{"port 443 is https and stripped", func(c *config.Config) { c.Server.FQDN = "paste.example.com"; c.Server.Port = "443" }, "https://paste.example.com"},
+		{"dual port omits port", func(c *config.Config) { c.Server.FQDN = "paste.example.com"; c.Server.Port = "80,443" }, "https://paste.example.com"},
+	}
+	for _, tc := range cases {
+		t.Setenv("DOMAIN", "")
+		cfg := config.DefaultConfig()
+		tc.mut(cfg)
+		if got := cfg.StartupBaseURL(); got != tc.want {
+			t.Errorf("%s: StartupBaseURL() = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

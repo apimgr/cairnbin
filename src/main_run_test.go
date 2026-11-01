@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -635,15 +636,25 @@ func TestRunMaintenanceBackup(t *testing.T) {
 	_ = code
 }
 
-// TestRunStatusWithConfig covers the configFlag true-branch inside the
-// --status probe block (line 799: cfgPath = configFlag). The config file
-// need not exist; config.Load handles missing files gracefully. run() exits
-// before entering the server-startup section.
+// TestRunStatusWithConfig covers --config DIR with the --status probe. The
+// directory need not hold a server.yml; config.Load handles missing files
+// gracefully. run() exits before entering the server-startup section.
 func TestRunStatusWithConfig(t *testing.T) {
 	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "server.yml")
-	code, _, _ := runCapture("--config", cfgPath, "--status")
+	code, _, _ := runCapture("--config", tmp, "--status")
 	if code != 0 && code != 1 {
 		t.Errorf("--config --status: exit %d, want 0 or 1", code)
+	}
+}
+
+// TestRunConfigFlagIsDirectory verifies --config names a directory: the flag
+// value is exported as CONFIG_DIR while run() executes and restored after.
+func TestRunConfigFlagIsDirectory(t *testing.T) {
+	t.Setenv("CONFIG_DIR", "")
+	os.Unsetenv("CONFIG_DIR")
+	tmp := t.TempDir()
+	runCapture("--config", tmp, "--status")
+	if v, set := os.LookupEnv("CONFIG_DIR"); set {
+		t.Errorf("CONFIG_DIR leaked after run(): %q", v)
 	}
 }

@@ -223,7 +223,7 @@ func TestCSRFMiddleware(t *testing.T) {
 		{
 			name: "cross-origin POST without cookie and without bearer rejected (no absent-cookie bypass)",
 			build: func() *http.Request {
-				r := newReq(http.MethodPost, "http://example.com/api/v1/paste")
+				r := newReq(http.MethodPost, "http://example.com/create")
 				r.Header.Set("Origin", "http://evil.com")
 				return r
 			},
@@ -233,7 +233,7 @@ func TestCSRFMiddleware(t *testing.T) {
 		{
 			name: "cookieless POST with no origin rejected (token absent)",
 			build: func() *http.Request {
-				return newReq(http.MethodPost, "http://example.com/api/new")
+				return newReq(http.MethodPost, "http://example.com/create")
 			},
 			wantStatus: http.StatusForbidden,
 			wantNext:   false,
@@ -5045,6 +5045,40 @@ func TestOwnerRestoreFailuresAreCountedPerIP(t *testing.T) {
 		}
 		if wantLimited && w.Code != http.StatusTooManyRequests {
 			t.Errorf("blocked restore status = %d, want 429", w.Code)
+		}
+	}
+}
+
+// TestCSRFMiddleware_BuiltinExemptPaths verifies the compat/API creation
+// endpoints accept tokenless, cookie-less POSTs while the browser form route
+// still requires a token.
+func TestCSRFMiddleware_BuiltinExemptPaths(t *testing.T) {
+	s := newCSRFServer()
+	cases := []struct {
+		path   string
+		wantOK bool
+	}{
+		{"/api/v1/pasta", true},
+		{"/api/v1/pastes", true},
+		{"/api/new", true},
+		{"/api/create", true},
+		{"/api/api_post.php", true},
+		{"/api/", true},
+		{"/api/v2/", true},
+		{"/documents", true},
+		{"/upload", true},
+		{"/", true},
+		{"/pastes", false},
+		{"/remove/abc", false},
+		{"/server/preferences", false},
+	}
+	for _, tc := range cases {
+		called := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
+		rec := httptest.NewRecorder()
+		s.csrfMiddleware(next).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "http://example.com"+tc.path, nil))
+		if called != tc.wantOK {
+			t.Errorf("POST %s: handler reached = %v, want %v (status %d)", tc.path, called, tc.wantOK, rec.Code)
 		}
 	}
 }

@@ -269,6 +269,24 @@ func TestRootUpload_SubdomainForced_Termbin(t *testing.T) {
 	}
 }
 
+// curl sends --data-binary bodies as application/x-www-form-urlencoded, which
+// ParseForm would consume; the raw body must still reach the target.
+func TestRootUpload_SubdomainForced_Termbin_URLEncodedRawBody(t *testing.T) {
+	h, _ := newCompatHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("hello from curl --data-binary"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = WithTarget(req, "termbin")
+	rr := httptest.NewRecorder()
+	h.RootUpload(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %q, want 200", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "://") {
+		t.Fatalf("body = %q, want a paste URL", rr.Body.String())
+	}
+}
+
 func TestRootUpload_SubdomainForced_IxIo(t *testing.T) {
 	h, _ := newCompatHandler(t)
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("ix.io subdomain body"))

@@ -105,4 +105,16 @@ same pass gets its own line item here.
   fetches (GeoIP, blocklist, CVE, update check) each use ad-hoc retry; and no
   cache warming (`config:server`, `security:blocklist`, `geoip:info`) at
   startup. Decide the callers before adding either, so neither ships unused.
+- PART 12 config layout vs AI.md: `rate_limit` is a top-level key (AI.md:
+  `server.rate_limit`), and the AES-256-GCM `encryption_key` lives under
+  `web.security.encryption_key` (AI.md PART 11: `server.security.encryption_key`).
+  Verify the rest of `src/config/config.go` against the PART 12 schema and
+  migrate keys with a backward-compatible loader.
+- PART 8/CSRF: `POST /pastes` (browser form route) still requires a CSRF token,
+  so a plain `curl -d content=... {base}/pastes` is rejected; API/compat routes
+  are exempt via `config.CSRFBuiltinExemptPaths`. Confirm this split with the
+  PART 16 frontend audit.
+- PART 25/27 build info: `src/main.go` derives `BuildDate` from `BuildEpoch` in
+  `init()`; AI.md requires `Version`, `CommitID`, `BuildDate`, `OfficialSite`
+  all set directly via `-ldflags -X` in the Makefile and every CI workflow.
 

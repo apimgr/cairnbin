@@ -40,6 +40,10 @@ All `api_dev_key` and `api_user_key` fields are accepted but ignored.
 
 | Route | Behavior |
 |-------|----------|
+| `POST https://pste.us/api/v1/pasta` | Create paste (form, multipart, or JSON: `content`, `title`, `visibility`, `expiry`, `burn_after`); `curl -d "content=Hello" https://pste.us/api/v1/pasta` |
+| `GET https://pste.us/api/v1/pasta` | List pastes |
+| `GET https://pste.us/api/v1/pasta/{id}` | Retrieve a paste |
+| `DELETE https://pste.us/api/v1/pasta/{id}` | Delete a paste |
 | `POST https://pste.us/upload` | Create paste (multipart) |
 | `GET https://pste.us/upload/{id}` | View paste |
 | `GET https://pste.us/p/{id}` | View paste |
@@ -61,8 +65,10 @@ All `api_dev_key` and `api_user_key` fields are accepted but ignored.
 | `GET https://pste.us/raw/{id}` | Raw text |
 | `GET https://pste.us/dl/{id}` | Download |
 | `GET https://pste.us/emb/{id}` | Embedded view |
-| `POST https://pste.us/api/v1/new` | Create paste (JSON/form) |
-| `GET https://pste.us/api/v1/get?id=` | Get paste JSON |
+| `POST https://pste.us/api/new`, `POST https://pste.us/api/v1/new` | Create paste (form: `title`, `body`, `syntax`, `expiration` seconds, `oneUse`); returns `{"id","url","deleteToken"}` — `curl -d "body=Hello&expiration=86400" https://pste.us/api/new` |
+| `GET https://pste.us/api/get?id=`, `GET https://pste.us/api/v1/get?id=` | Get paste JSON |
+| `DELETE https://pste.us/api/remove?id=&deleteToken=` | Delete with the compat delete token |
+| `GET https://pste.us/api/list` | List pastes |
 | `GET https://pste.us/api/v1/getServerInfo` | Server info JSON |
 | `GET https://pste.us/about` | Redirect to `/server/about` |
 | `GET https://pste.us/emb_help/` | Redirect to `/server/help` |
@@ -128,3 +134,7 @@ No authentication is ever performed — they redirect silently.
 | `GET https://pste.us/settings` | 302 → `/` |
 | `GET https://pste.us/auth/{id}` | 302 → `/{id}` |
 | `GET https://pste.us/auth_raw/{id}` | 302 → `/raw/{id}` |
+
+## Authentication and CSRF
+
+Every compat create route is anonymous and tokenless: no `Authorization` header, cookie, or CSRF token is needed, and any API key a protocol supplies is accepted and ignored. The whole `/api/*` tree, `POST /documents`, `POST /upload`, and `POST /` are exempt from CSRF validation; browser form routes such as `POST /pastes` still require the CSRF token.

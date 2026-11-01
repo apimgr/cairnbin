@@ -374,9 +374,10 @@ __check_status "Empty content → 400" POST "${DOCKER_BASE_URL}/api/v1/pastes" 4
 
 # ── Compat APIs ───────────────────────────────────────────────────────────────
 __info "--- Compat API endpoints ---"
+# Compat clients are tokenless and cookie-less (curl, CI scripts): none of
+# these requests may carry a CSRF token or Authorization header.
 # pastebin.com compat
 DOCKER_COMPAT_RESPONSE=$(curl -q -sf \
-    "${DOCKER_CSRF_ARGS[@]}" \
     --data "api_paste_code=compat+test&api_paste_private=0" \
     "${DOCKER_BASE_URL}/api/api_post.php") || __fail "pastebin.com compat POST: request failed"
 printf '%s' "${DOCKER_COMPAT_RESPONSE}" | grep -qi -- "http\|paste\|error" || \
@@ -384,15 +385,41 @@ printf '%s' "${DOCKER_COMPAT_RESPONSE}" | grep -qi -- "http\|paste\|error" || \
 __pass "pastebin.com compat POST /api/api_post.php"
 
 __check_status "pastebin.com login stub → 200" POST "${DOCKER_BASE_URL}/api/api_login.php" 200 \
-    "${DOCKER_CSRF_ARGS[@]}" \
     --data "api_dev_key=x&api_user_name=x&api_user_password=x"
 
 # lenpaste compat — wire protocol is form-encoded (netshare.PasteAddFromForm
 # in forksmgr/lcomrade-lenpaste reads req.PostForm, not a JSON body); the
 # content field is "body", not "text"
 __check_status "lenpaste /api/new → 200/201" POST "${DOCKER_BASE_URL}/api/new" 200 \
-    "${DOCKER_CSRF_ARGS[@]}" \
-    --data "body=lenpaste+compat+test"
+    --data "body=Hello&expiration=86400"
+__check_status "lenpaste /api/v1/new → 200" POST "${DOCKER_BASE_URL}/api/v1/new" 200 \
+    --data "body=Hello&expiration=86400"
+
+# microbin compat
+__check_status "microbin /api/v1/pasta → 201" POST "${DOCKER_BASE_URL}/api/v1/pasta" 201 \
+    --data "content=Hello"
+
+# stikked compat
+__check_status "stikked /api/create → 200" POST "${DOCKER_BASE_URL}/api/create" 200 \
+    --data "text=Hello&title=t&name=n&lang=text"
+
+# hastebin compat
+__check_status "hastebin /documents → 200" POST "${DOCKER_BASE_URL}/documents" 200 \
+    --data-binary "Hello"
+
+# dpaste compat
+__check_status "dpaste /api/ → 200" POST "${DOCKER_BASE_URL}/api/" 200 \
+    --data "content=Hello&lexer=text"
+__check_status "dpaste /api/v2/ → 200" POST "${DOCKER_BASE_URL}/api/v2/" 200 \
+    --data "content=Hello&format=json"
+
+# curl-upload family (POST / dispatches by field)
+__check_status "0x0.st POST / file → 200" POST "${DOCKER_BASE_URL}/" 200 \
+    --form "file=Hello;filename=a.txt"
+__check_status "sprunge POST / → 200" POST "${DOCKER_BASE_URL}/" 200 \
+    --data "sprunge=Hello"
+__check_status "ix.io POST / → 200" POST "${DOCKER_BASE_URL}/" 200 \
+    --data "f:1=Hello"
 
 __check_status "lenpaste /api/v1/getServerInfo → 200" GET "${DOCKER_BASE_URL}/api/v1/getServerInfo" 200
 

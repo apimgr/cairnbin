@@ -249,13 +249,28 @@ fi
 
 # ── Compat APIs ────────────────────────────────────────────────────────────────
 __info "--- Compat API endpoints ---"
-INCUS_COMPAT_RESPONSE=$(__vm "curl -sf ${INCUS_CSRF_ARGS} --data 'api_paste_code=compat+test&api_paste_private=0' ${INCUS_BASE}/api/api_post.php")
+# Compat clients are tokenless and cookie-less: no CSRF token or auth header.
+INCUS_COMPAT_RESPONSE=$(__vm "curl -sf --data 'api_paste_code=compat+test&api_paste_private=0' ${INCUS_BASE}/api/api_post.php")
 printf '%s' "${INCUS_COMPAT_RESPONSE}" | grep -qi -- "http\|paste\|error" || \
     __fail "pastebin.com compat POST: unexpected response: ${INCUS_COMPAT_RESPONSE}"
 __pass "pastebin.com compat POST /api/api_post.php"
 
 __check_status "lenpaste /api/new -> 200" POST "${INCUS_BASE}/api/new" 200 \
-	"${INCUS_CSRF_ARGS} --data 'body=lenpaste+compat+test'"
+	"--data 'body=Hello&expiration=86400'"
+__check_status "lenpaste /api/v1/new -> 200" POST "${INCUS_BASE}/api/v1/new" 200 \
+	"--data 'body=Hello&expiration=86400'"
+__check_status "microbin /api/v1/pasta -> 201" POST "${INCUS_BASE}/api/v1/pasta" 201 \
+	"--data 'content=Hello'"
+__check_status "stikked /api/create -> 200" POST "${INCUS_BASE}/api/create" 200 \
+	"--data 'text=Hello&title=t'"
+__check_status "hastebin /documents -> 200" POST "${INCUS_BASE}/documents" 200 \
+	"--data-binary Hello"
+__check_status "dpaste /api/ -> 200" POST "${INCUS_BASE}/api/" 200 \
+	"--data 'content=Hello'"
+__check_status "sprunge POST / -> 200" POST "${INCUS_BASE}/" 200 \
+	"--data 'sprunge=Hello'"
+__check_status "ix.io POST / -> 200" POST "${INCUS_BASE}/" 200 \
+	"--data 'f:1=Hello'"
 __check_status "lenpaste /api/v1/getServerInfo -> 200" GET "${INCUS_BASE}/api/v1/getServerInfo" 200
 
 # ── Swagger / GraphQL endpoints ───────────────────────────────────────────────

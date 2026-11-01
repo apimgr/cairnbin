@@ -2235,7 +2235,8 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 		hasBearer := r.Header.Get("Authorization") != "" || r.Header.Get("X-API-Token") != ""
 		bypass := !isMutating || hasBearer ||
 			isWebSocketUpgrade(r) ||
-			isCSRFExempt(r.URL.Path, cfg.Web.CSRF.ExemptPaths)
+			isCSRFExempt(r.URL.Path, cfg.Web.CSRF.ExemptPaths) ||
+			isCSRFExempt(r.URL.Path, config.CSRFBuiltinExemptPaths)
 
 		if !bypass {
 			// Read the submitted token from the header, falling back to the form
@@ -2415,13 +2416,10 @@ func (s *Server) startTermbin(ctx context.Context, cfg *config.Config) func() {
 		timeout = d
 	}
 
-	base := cfg.Server.BaseURL
-	if base == "" {
-		// Raw-TCP connections carry no Host header, so the full FQDN
-		// resolution chain from PART 12 (configured/DOMAIN, os.Hostname,
-		// HOSTNAME env, public IP, localhost as last resort) applies here.
-		base = "http://" + cfg.ResolveFQDN()
-	}
+	// Raw-TCP connections carry no Host header, so the config-derived base
+	// applies: server.base_url, else {proto}://{fqdn}[:{port}] using the full
+	// FQDN resolution chain from PART 12 with :80/:443 stripped.
+	base := cfg.StartupBaseURL()
 
 	log.Printf("termbin: listening on %s (max %d bytes, timeout %s)", addr, tb.MaxSize, timeout)
 
