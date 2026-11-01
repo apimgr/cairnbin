@@ -4,6 +4,7 @@ package handler
 // These live in package handler (not handler_test) so they can access unexported symbols.
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -362,4 +363,37 @@ func TestLoadLivePaste(t *testing.T) {
 			t.Errorf("ID: got %q, want %q", p.ID, id)
 		}
 	})
+}
+
+// TestSendAPIErrorDetails verifies the structured `details` object appears in
+// the canonical envelope only when provided.
+func TestSendAPIErrorDetails(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/pastes", nil)
+	r.Header.Set("Accept", "application/json")
+
+	rec := httptest.NewRecorder()
+	sendAPIErrorDetails(rec, r, "VALIDATION_FAILED", "content is required",
+		map[string]interface{}{"field": "content", "rule": "required"})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "VALIDATION_FAILED" || body["ok"] != false {
+		t.Errorf("envelope = %v", body)
+	}
+	details, _ := body["details"].(map[string]interface{})
+	if details["field"] != "content" || details["rule"] != "required" {
+		t.Errorf("details = %v, want field=content rule=required", body["details"])
+	}
+
+	rec = httptest.NewRecorder()
+	sendAPIError(rec, r, "NOT_FOUND", "paste not found")
+	var plain map[string]interface{}
+	_ = json.Unmarshal(rec.Body.Bytes(), &plain)
+	if _, has := plain["details"]; has {
+		t.Errorf("details must be omitted when empty: %v", plain)
+	}
 }

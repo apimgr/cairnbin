@@ -863,3 +863,22 @@ func TestHashToken(t *testing.T) {
 	// silence unused import warning if any
 	_ = bytes.NewBufferString(he)
 }
+
+// TestCreatePasteEmptyContentIsValidationFailed verifies an empty create is
+// reported as VALIDATION_FAILED naming the content field (PART 14).
+func TestCreatePasteEmptyContentIsValidationFailed(t *testing.T) {
+	h, _ := newTestHandler(t)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/pastes", strings.NewReader(`{"content":""}`))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+	h.CreatePaste(rec, r)
+	var body map[string]interface{}
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if rec.Code != http.StatusBadRequest || body["error"] != "VALIDATION_FAILED" {
+		t.Fatalf("status=%d body=%v, want 400 VALIDATION_FAILED", rec.Code, body)
+	}
+	if d, _ := body["details"].(map[string]interface{}); d["field"] != "content" || d["rule"] != "required" {
+		t.Errorf("details = %v", body["details"])
+	}
+}

@@ -1485,6 +1485,7 @@ func (s *Server) setupRoutes() {
 		// Cross-device preference sync API mirror (AI.md 23509-23512) — same
 		// handlers as the web routes above; each content-negotiates JSON here.
 		r.Get("/server/preferences", s.handlePreferences)
+		r.Post("/server/preferences", s.maybeRateLimit(s.handlePreferencesSetAPI))
 		r.Get("/server/preferences/tokens", s.handleOwnerTokensAPI)
 		r.Post("/server/preferences/tokens/primary/reveal", s.maybeStrictRateLimit(s.handleOwnerTokenRevealAPI))
 		r.Post("/server/preferences/tokens/primary/rotate", s.maybeStrictRateLimit(s.handleOwnerTokenRotateAPI))

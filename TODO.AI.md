@@ -41,7 +41,7 @@ same pass gets its own line item here.
 - [x] PART 11 Security & logging (gaps logged below)
 - [x] PART 12 Server configuration (web.security split logged below)
 - [x] PART 13 Health & versioning
-- [ ] PART 14 API structure
+- [x] PART 14 API structure
 - [ ] PART 15 SSL/TLS & Let's Encrypt
 - [ ] PART 16 Web frontend
 - [ ] PART 17 Email & notifications

@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -433,7 +434,7 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 		req.Language = ""
 		req.Content = strings.TrimSpace(req.Content)
 		if !ValidateLinkTarget(req.Content) {
-			return nil, http.StatusBadRequest, fmt.Errorf("content must be an absolute http:// or https:// URL")
+			return nil, http.StatusBadRequest, &validationError{field: "content", rule: "absolute_url", message: "content must be an absolute http:// or https:// URL"}
 		}
 	} else {
 		// Binary uploads that arrive with ContentType already set (multipart, JSON
@@ -467,7 +468,7 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 		}
 	}
 	if strings.TrimSpace(req.Content) == "" {
-		return nil, http.StatusBadRequest, fmt.Errorf("content is required")
+		return nil, http.StatusBadRequest, &validationError{field: "content", rule: "required", message: "content is required"}
 	}
 
 	// Visibility
@@ -648,6 +649,12 @@ func (h *PasteHandler) CreateFromForm(r *http.Request) (*model.CreateResponse, i
 func (h *PasteHandler) CreatePaste(w http.ResponseWriter, r *http.Request) {
 	resp, status, err := h.createFromRequest(r)
 	if err != nil {
+		var verr *validationError
+		if errors.As(err, &verr) {
+			sendAPIErrorDetails(w, r, "VALIDATION_FAILED", verr.message,
+				map[string]interface{}{"field": verr.field, "rule": verr.rule})
+			return
+		}
 		sendAPIError(w, r, httpErrCode(status), err.Error())
 		return
 	}
@@ -1232,6 +1239,24 @@ func mapAPIErrorCodeToHTTPStatus(code string) int {
 // Content negotiation (PART 16 "Text Response Format"): text/plain and .txt
 // callers get "ERROR: {code}: {message}"; everyone else gets the JSON envelope.
 func sendAPIError(w http.ResponseWriter, r *http.Request, code, message string) {
+	sendAPIErrorDetails(w, r, code, message, nil)
+}
+
+// validationError is a request-field validation failure. It is reported as
+// VALIDATION_FAILED with a structured details object naming the field and the
+// rule that failed (PART 14 "Error Response").
+type validationError struct {
+	field   string
+	rule    string
+	message string
+}
+
+func (e *validationError) Error() string { return e.message }
+
+// sendAPIErrorDetails is sendAPIError plus the optional structured `details`
+// object; details is omitted from the envelope when nil or empty. Plain-text
+// callers get the same one-line "ERROR: {code}: {message}" form.
+func sendAPIErrorDetails(w http.ResponseWriter, r *http.Request, code, message string, details map[string]interface{}) {
 	status := mapAPIErrorCodeToHTTPStatus(code)
 	if httputil.GetAPIResponseFormat(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -1239,11 +1264,15 @@ func sendAPIError(w http.ResponseWriter, r *http.Request, code, message string) 
 		fmt.Fprintf(w, "ERROR: %s: %s\n", code, message)
 		return
 	}
-	writeJSON(w, status, map[string]interface{}{
+	body := map[string]interface{}{
 		"ok":      false,
 		"error":   code,
 		"message": message,
-	})
+	}
+	if len(details) > 0 {
+		body["details"] = details
+	}
+	writeJSON(w, status, body)
 }
 
 // ─── Expiry parsing ───────────────────────────────────────────────────────────

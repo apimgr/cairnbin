@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -435,4 +436,67 @@ func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	http.Redirect(w, r, dest, http.StatusSeeOther)
+}
+
+// handlePreferencesSetAPI is the JSON mirror of the preferences form
+// (`POST /api/{api_version}/server/preferences`, PART 14): a partial update of
+// the guest UI preferences. The body may carry `theme`, `lang`, and a `prefs`
+// object of app-specific keys. Only the fields present are written, each with
+// the same validation as the web form; invalid values are reported in
+// `ignored` rather than failing the whole request. It sets the same UI
+// cookies as the form and accepts no credential, so there is no ambient
+// authority to forge.
+func (s *Server) handlePreferencesSetAPI(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Theme *string           `json:"theme"`
+		Lang  *string           `json:"lang"`
+		Prefs map[string]string `json:"prefs"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok": false, "error": "BAD_REQUEST", "message": "invalid JSON",
+		})
+		return
+	}
+
+	applied := map[string]interface{}{}
+	ignored := []string{}
+
+	if body.Theme != nil {
+		theme := strings.TrimSpace(*body.Theme)
+		if validThemes[theme] {
+			s.setPreferenceCookie(w, r, "theme", theme)
+			applied["theme"] = theme
+		} else {
+			ignored = append(ignored, "theme")
+		}
+	}
+	if body.Lang != nil {
+		lang := strings.ToLower(strings.TrimSpace(*body.Lang))
+		if i18n.IsSupported(lang) {
+			s.setPreferenceCookie(w, r, "lang", lang)
+			applied["lang"] = lang
+		} else {
+			ignored = append(ignored, "lang")
+		}
+	}
+	appliedPrefs := map[string]string{}
+	for key, value := range body.Prefs {
+		value = strings.TrimSpace(value)
+		if !prefKeyPattern.MatchString(key) || !prefValuePattern.MatchString(value) || !validAppPrefValue(key, value) {
+			ignored = append(ignored, "prefs."+sanitizeReportText(key))
+			continue
+		}
+		s.setPreferenceCookie(w, r, prefCookiePrefix+key, value)
+		appliedPrefs[key] = value
+	}
+	if len(appliedPrefs) > 0 {
+		applied["prefs"] = appliedPrefs
+	}
+	sort.Strings(ignored)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":   true,
+		"data": map[string]interface{}{"applied": applied, "ignored": ignored},
+	})
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -244,5 +245,62 @@ func TestPreferencesPageRenders(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("preferences.html missing %q", want)
 		}
+	}
+}
+
+func postPrefsAPI(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	s := newCSRFServer()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.handlePreferencesSetAPI(rec, req)
+	return rec
+}
+
+// TestPreferencesSetAPI_AppliesValidFields verifies a partial update sets the
+// matching cookies and reports what was applied and ignored.
+func TestPreferencesSetAPI_AppliesValidFields(t *testing.T) {
+	rec := postPrefsAPI(t, `{"theme":"light","lang":"es","prefs":{"sort":"name","order":"bogus"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	cookies := map[string]string{}
+	for _, c := range rec.Result().Cookies() {
+		cookies[c.Name] = c.Value
+	}
+	if cookies["theme"] != "light" || cookies["lang"] != "es" || cookies[prefCookiePrefix+"sort"] != "name" {
+		t.Errorf("cookies = %v, want theme=light lang=es sort=name", cookies)
+	}
+	if _, set := cookies[prefCookiePrefix+"order"]; set {
+		t.Error("invalid pref value must not be stored")
+	}
+	var out struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Applied map[string]any `json:"applied"`
+			Ignored []string       `json:"ignored"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !out.OK || out.Data.Applied["theme"] != "light" {
+		t.Errorf("applied = %v", out.Data.Applied)
+	}
+	if len(out.Data.Ignored) != 1 || out.Data.Ignored[0] != "prefs.order" {
+		t.Errorf("ignored = %v, want [prefs.order]", out.Data.Ignored)
+	}
+}
+
+// TestPreferencesSetAPI_OnlyWritesSubmittedFields verifies absent fields are
+// left alone and bad input is reported without failing the request.
+func TestPreferencesSetAPI_OnlyWritesSubmittedFields(t *testing.T) {
+	rec := postPrefsAPI(t, `{"theme":"neon","lang":"xx"}`)
+	if rec.Code != http.StatusOK || len(rec.Result().Cookies()) != 0 {
+		t.Errorf("status=%d cookies=%d, want 200 with no cookies for invalid values", rec.Code, len(rec.Result().Cookies()))
+	}
+	if rec := postPrefsAPI(t, `{bad`); rec.Code != http.StatusBadRequest {
+		t.Errorf("bad JSON status = %d, want 400", rec.Code)
 	}
 }

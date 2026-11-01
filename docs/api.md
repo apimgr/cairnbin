@@ -143,6 +143,22 @@ GET https://pste.us/server/healthz
 
 Content negotiated: HTML for browsers, JSON for API clients, plain text for CLI.
 
+## Guest Preferences
+
+Guest UI preferences (theme, language, list preferences) are cookie-based. The JSON mirror of the preferences form:
+
+```bash
+# Current preferences
+curl -H 'Accept: application/json' https://pste.us/api/v1/server/preferences
+
+# Partial update: only the fields you send are changed
+curl -X POST https://pste.us/api/v1/server/preferences \
+  -H 'Content-Type: application/json' \
+  -d '{"theme":"light","lang":"es","prefs":{"sort":"name"}}'
+```
+
+The response is `{"ok":true,"data":{"applied":{...},"ignored":[...]}}`. Invalid values are listed in `ignored` instead of failing the request, and the same cookies as the web form are set.
+
 ## OpenAPI / Swagger
 
 Interactive API docs at `https://pste.us/api/v1/server/swagger`.
