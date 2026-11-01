@@ -1132,6 +1132,7 @@ func (s *Server) setupRoutes() {
 	r.Use(middleware.CleanPath)
 	r.Use(s.noTrailingSlash)
 	r.Use(s.requestIDMiddleware)
+	r.Use(s.authFailureFloorMiddleware)
 	r.Use(s.pathSecurityMiddleware)
 	r.Use(s.securityHeadersMiddleware)
 	r.Use(s.secFetchMiddleware)
@@ -2285,7 +2286,7 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 				// API and non-interactive clients get the canonical CSRF_FAILED envelope
 				// (AI.md PART 14 error table); browsers get the themed error page
 				// (PART 16 error-page rules). Both share csrfFailureResponse.
-				s.csrfFailureResponse(w, r)
+				s.csrfFailureResponse(w, r, reason, hasCookie)
 				return
 			}
 		}
@@ -2320,13 +2321,24 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 // negotiation (PART 14 + PART 16): API and non-interactive clients get the
 // canonical CSRF_FAILED JSON envelope; browser clients get the themed error
 // page. Never a bare unstyled body.
-func (s *Server) csrfFailureResponse(w http.ResponseWriter, r *http.Request) {
+func (s *Server) csrfFailureResponse(w http.ResponseWriter, r *http.Request, reason string, hasCookie bool) {
 	if detectClientType(r) != "html" {
-		writeJSON(w, http.StatusForbidden, map[string]interface{}{
+		body := map[string]interface{}{
 			"ok":      false,
 			"error":   "CSRF_FAILED",
 			"message": "CSRF token validation failed",
-		})
+		}
+		// Tier 3 diagnostics (PART 11): which check tripped is only revealed in
+		// debug mode; production responses never carry the _debug field.
+		if mode.IsDebugEnabled() {
+			body["_debug"] = map[string]interface{}{
+				"check":          reason,
+				"cookie_present": hasCookie,
+				"origin":         r.Header.Get("Origin"),
+				"fix_hint":       "send the csrf_token cookie value in the X-CSRF-Token header or csrf_token form field, or call the API with an Authorization header",
+			}
+		}
+		writeJSON(w, http.StatusForbidden, body)
 		return
 	}
 	s.renderErrorPage(w, r, http.StatusForbidden, "CSRF token validation failed. Please reload the page and try again.")

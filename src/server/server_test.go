@@ -24,6 +24,7 @@ import (
 	"github.com/apimgr/pastebin/src/database"
 	"github.com/apimgr/pastebin/src/handler"
 	"github.com/apimgr/pastebin/src/handler/compat"
+	"github.com/apimgr/pastebin/src/mode"
 	"github.com/apimgr/pastebin/src/model"
 	"github.com/apimgr/pastebin/src/tor"
 	"github.com/go-chi/chi/v5"
@@ -451,7 +452,7 @@ func TestCSRFFailureBrowserGetsHTML(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "http://example.com/pastes", nil)
 			r.Header.Set("Accept", tc.accept)
 			r.Header.Set("User-Agent", tc.ua)
-			s.csrfFailureResponse(rec, r)
+			s.csrfFailureResponse(rec, r, "token absent", false)
 
 			gotCT := rec.Header().Get("Content-Type")
 			body := rec.Body.String()
@@ -5080,5 +5081,37 @@ func TestCSRFMiddleware_BuiltinExemptPaths(t *testing.T) {
 		if called != tc.wantOK {
 			t.Errorf("POST %s: handler reached = %v, want %v (status %d)", tc.path, called, tc.wantOK, rec.Code)
 		}
+	}
+}
+
+// TestCSRFFailureDebugField verifies the Tier 3 _debug diagnostics appear only
+// when debug is enabled and are always stripped in production (PART 11).
+func TestCSRFFailureDebugField(t *testing.T) {
+	s := newCSRFServer()
+	call := func() map[string]any {
+		rec := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "http://example.com/create", nil)
+		r.Header.Set("Accept", "application/json")
+		s.csrfFailureResponse(rec, r, "token absent", false)
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode: %v (%s)", err, rec.Body.String())
+		}
+		return body
+	}
+
+	mode.SetDebug(false)
+	if _, ok := call()["_debug"]; ok {
+		t.Error("_debug present with debug off")
+	}
+
+	mode.SetDebug(true)
+	t.Cleanup(func() { mode.SetDebug(false) })
+	dbg, ok := call()["_debug"].(map[string]any)
+	if !ok {
+		t.Fatal("_debug missing with debug on")
+	}
+	if dbg["check"] != "token absent" {
+		t.Errorf("_debug.check = %v, want %q", dbg["check"], "token absent")
 	}
 }
