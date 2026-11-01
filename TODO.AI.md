@@ -38,7 +38,7 @@ same pass gets its own line item here.
 - [x] PART 8 Server binary CLI (startup order/privilege drop gap logged below)
 - [x] PART 9 Error handling & caching
 - [x] PART 10 Database
-- [ ] PART 11 Security & logging
+- [x] PART 11 Security & logging (gaps logged below)
 - [ ] PART 12 Server configuration
 - [ ] PART 13 Health & versioning
 - [ ] PART 14 API structure
@@ -105,11 +105,12 @@ same pass gets its own line item here.
   fetches (GeoIP, blocklist, CVE, update check) each use ad-hoc retry; and no
   cache warming (`config:server`, `security:blocklist`, `geoip:info`) at
   startup. Decide the callers before adding either, so neither ships unused.
-- PART 12 config layout vs AI.md: `rate_limit` is a top-level key (AI.md:
-  `server.rate_limit`), and the AES-256-GCM `encryption_key` lives under
-  `web.security.encryption_key` (AI.md PART 11: `server.security.encryption_key`).
-  Verify the rest of `src/config/config.go` against the PART 12 schema and
-  migrate keys with a backward-compatible loader.
+- PART 12 config layout vs AI.md: the AES-256-GCM `encryption_key` and the
+  other secret/abuse/allowlist settings live under `web.security.*`
+  (AI.md PART 11: `server.security.*`; only the security.txt fields belong to
+  `web.security`). Split `SecurityConfig` accordingly and migrate keys with
+  `migrateLegacyKeys`. (`rate_limit` and `compression` already moved to
+  `server.*`; the legacy top-level `rate_limit` is still read.)
 - PART 8/CSRF: `POST /pastes` (browser form route) still requires a CSRF token,
   so a plain `curl -d content=... {base}/pastes` is rejected; API/compat routes
   are exempt via `config.CSRFBuiltinExemptPaths`. Confirm this split with the

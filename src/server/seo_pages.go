@@ -99,7 +99,7 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&b, "## API\n")
 	fmt.Fprintf(&b, "Base URL: %s/api/%s\n", base, apiVersion)
 	fmt.Fprintf(&b, "Authentication: Bearer token (server token from server.yml, or resource owner token issued on paste creation)\n")
-	fmt.Fprintf(&b, "Rate limit: %d requests/minute\n", cfg.RateLimit.Read.Requests)
+	fmt.Fprintf(&b, "Rate limit: %d requests/minute\n", cfg.Server.RateLimit.Read.Requests)
 	if cfg.Server.MCP.Enabled {
 		fmt.Fprintf(&b, "MCP: %s/mcp (Streamable HTTP; same Bearer token as the API)\n", base)
 	}

@@ -2109,15 +2109,15 @@ func TestBlocklistMiddleware(t *testing.T) {
 func TestOnConfigChange(t *testing.T) {
 	t.Run("rate limiters updated on change", func(t *testing.T) {
 		cfg := &config.Config{}
-		cfg.RateLimit.Write.Requests = 10
-		cfg.RateLimit.Read.Requests = 120
+		cfg.Server.RateLimit.Write.Requests = 10
+		cfg.Server.RateLimit.Read.Requests = 120
 		s := newMinimalServer(cfg)
 		s.writeLimiter = newRateLimiter(10, time.Minute)
 		s.readLimiter = newRateLimiter(120, time.Minute)
 
 		next := &config.Config{}
-		next.RateLimit.Write.Requests = 20
-		next.RateLimit.Read.Requests = 60
+		next.Server.RateLimit.Write.Requests = 20
+		next.Server.RateLimit.Read.Requests = 60
 		s.OnConfigChange(next)
 
 		if s.writeLimiter.limit != 20 {
@@ -3869,9 +3869,9 @@ func TestNewWithToken(t *testing.T) {
 func TestNewWithRateLimitEnabled(t *testing.T) {
 	db := &stubDB{}
 	cfg := config.DefaultConfig()
-	cfg.RateLimit.Enabled = true
-	cfg.RateLimit.Write.Requests = 5
-	cfg.RateLimit.Read.Requests = 60
+	cfg.Server.RateLimit.Enabled = true
+	cfg.Server.RateLimit.Write.Requests = 5
+	cfg.Server.RateLimit.Read.Requests = 60
 	s := New(db, cfg, nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
 	if s.writeLimiter == nil {
 		t.Error("writeLimiter should be non-nil when rate limiting enabled")

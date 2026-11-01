@@ -29,11 +29,10 @@ import (
 
 // Config is the top-level configuration for the pastebin server.
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Database  DatabaseConfig  `yaml:"database"`
-	Paste     PasteConfig     `yaml:"paste"`
-	RateLimit RateLimitConfig `yaml:"rate_limit"`
-	Web       WebConfig       `yaml:"web"`
+	Server   ServerConfig   `yaml:"server"`
+	Database DatabaseConfig `yaml:"database"`
+	Paste    PasteConfig    `yaml:"paste"`
+	Web      WebConfig      `yaml:"web"`
 	// FirstRun is true when Load() created server.yml because none existed.
 	// Runtime-only — never persisted (startup step 20, AI.md:10631).
 	FirstRun bool `yaml:"-"`
@@ -121,6 +120,10 @@ type ServerConfig struct {
 	Healthz HealthzConfig `yaml:"healthz"`
 	// MCP controls the Model Context Protocol endpoint (PART 11 "MCP Endpoint").
 	MCP MCPConfig `yaml:"mcp"`
+	// RateLimit controls per-IP request throttling (PART 12 "Rate Limiting").
+	RateLimit RateLimitConfig `yaml:"rate_limit"`
+	// Compression controls response compression (PART 12).
+	Compression CompressionConfig `yaml:"compression"`
 	// Compliance toggles per-standard regulatory behavior (AI.md Compliance).
 	// All standards are disabled by default; enabled individually. When more
 	// than one is enabled, the strictest requirement wins on overlap.
@@ -931,6 +934,15 @@ type AbuseDetectionConfig struct {
 	AutoAlert bool `yaml:"auto_alert"`
 }
 
+// CompressionConfig controls response compression (PART 12).
+type CompressionConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// Level is the compression level, 1-9.
+	Level int `yaml:"level"`
+	// Types lists the MIME types that are compressed.
+	Types []string `yaml:"types"`
+}
+
 // MCPConfig controls the Model Context Protocol endpoint. It reuses the API's
 // Bearer tokens; there is no MCP-specific token or scope.
 type MCPConfig struct {
@@ -1507,8 +1519,20 @@ func DefaultConfig() *Config {
 				AllowCredentials: true,
 				MaxAge:           86400,
 			},
-			Healthz:    HealthzConfig{},
-			MCP:        MCPConfig{Enabled: true},
+			Healthz: HealthzConfig{},
+			MCP:     MCPConfig{Enabled: true},
+			RateLimit: RateLimitConfig{
+				Enabled:     true,
+				Read:        RateLimitEndpoint{Requests: 120, Window: 60},
+				Write:       RateLimitEndpoint{Requests: 10, Window: 60},
+				Health:      RateLimitEndpoint{Requests: 120, Window: 60},
+				GlobalBurst: 240,
+			},
+			Compression: CompressionConfig{
+				Enabled: true,
+				Level:   5,
+				Types:   []string{"text/html", "text/css", "text/javascript", "application/json", "application/xml", "text/plain"},
+			},
 			Compliance: ComplianceConfig{},
 			GeoIP: GeoIPConfig{
 				Enabled: true,
@@ -1818,13 +1842,6 @@ func DefaultConfig() *Config {
 			MaxBurnAfter:    9999,
 			AllowUnlisted:   true,
 		},
-		RateLimit: RateLimitConfig{
-			Enabled:     true,
-			Read:        RateLimitEndpoint{Requests: 120, Window: 60},
-			Write:       RateLimitEndpoint{Requests: 10, Window: 60},
-			Health:      RateLimitEndpoint{Requests: 120, Window: 60},
-			GlobalBurst: 240,
-		},
 		Web: WebConfig{
 			SiteTitle: "Pastebin",
 			Theme:     "dark",
@@ -1936,6 +1953,7 @@ func Load(path string) (*Config, error) {
 	// creation over a single typo (PART 5: never fail on invalid config —
 	// warn and use the default). A real syntax error is still returned as-is.
 	var decodeErr error
+	data = migrateLegacyKeys(data)
 	if err := decodeConfig(data, cfg); err != nil {
 		var typeErr *yaml.TypeError
 		if !errors.As(err, &typeErr) {
@@ -2654,6 +2672,14 @@ func Validate(cfg *Config) {
 		cfg.Server.Tokens.CookieMaxAge = d.Server.Tokens.CookieMaxAge
 	}
 
+	if cfg.Server.Compression.Level < 1 || cfg.Server.Compression.Level > 9 {
+		log.Printf("[config] WARNING: invalid server.compression.level %d, using default 5", cfg.Server.Compression.Level)
+		cfg.Server.Compression.Level = 5
+	}
+	if len(cfg.Server.Compression.Types) == 0 {
+		cfg.Server.Compression.Types = d.Server.Compression.Types
+	}
+
 	ad := &cfg.Web.Security.AbuseDetection.RequestFlood
 	if ad.Multiplier < 1 {
 		log.Printf("[config] WARNING: invalid abuse_detection.request_flood.multiplier %d, using default 10", ad.Multiplier)
@@ -2793,25 +2819,25 @@ func Validate(cfg *Config) {
 	cfg.Web.Announcements.Messages = validAnnouncements
 
 	// Rate limit counts must be non-negative (zero means "disabled for this class").
-	if cfg.RateLimit.Read.Requests < 0 {
+	if cfg.Server.RateLimit.Read.Requests < 0 {
 		log.Printf("[config] WARNING: rate_limit.read.requests < 0, using default %d",
-			d.RateLimit.Read.Requests)
-		cfg.RateLimit.Read.Requests = d.RateLimit.Read.Requests
+			d.Server.RateLimit.Read.Requests)
+		cfg.Server.RateLimit.Read.Requests = d.Server.RateLimit.Read.Requests
 	}
-	if cfg.RateLimit.Write.Requests < 0 {
+	if cfg.Server.RateLimit.Write.Requests < 0 {
 		log.Printf("[config] WARNING: rate_limit.write.requests < 0, using default %d",
-			d.RateLimit.Write.Requests)
-		cfg.RateLimit.Write.Requests = d.RateLimit.Write.Requests
+			d.Server.RateLimit.Write.Requests)
+		cfg.Server.RateLimit.Write.Requests = d.Server.RateLimit.Write.Requests
 	}
-	if cfg.RateLimit.Health.Requests < 0 {
+	if cfg.Server.RateLimit.Health.Requests < 0 {
 		log.Printf("[config] WARNING: rate_limit.health.requests < 0, using default %d",
-			d.RateLimit.Health.Requests)
-		cfg.RateLimit.Health.Requests = d.RateLimit.Health.Requests
+			d.Server.RateLimit.Health.Requests)
+		cfg.Server.RateLimit.Health.Requests = d.Server.RateLimit.Health.Requests
 	}
-	if cfg.RateLimit.GlobalBurst < 0 {
+	if cfg.Server.RateLimit.GlobalBurst < 0 {
 		log.Printf("[config] WARNING: rate_limit.global_burst < 0, using default %d",
-			d.RateLimit.GlobalBurst)
-		cfg.RateLimit.GlobalBurst = d.RateLimit.GlobalBurst
+			d.Server.RateLimit.GlobalBurst)
+		cfg.Server.RateLimit.GlobalBurst = d.Server.RateLimit.GlobalBurst
 	}
 
 	// Paste size must be a valid human-readable size ("10mb", "1gb", ...); zero
@@ -3313,11 +3339,11 @@ func (m *ConfigManager) applyHotSettings(prev, next *Config) {
 		log.Printf("[config] hot-reload: logging.level %s → %s",
 			prev.Server.Logging.Level, next.Server.Logging.Level)
 	}
-	if prev.RateLimit.Enabled != next.RateLimit.Enabled ||
-		prev.RateLimit.Read != next.RateLimit.Read ||
-		prev.RateLimit.Write != next.RateLimit.Write ||
-		prev.RateLimit.Health != next.RateLimit.Health ||
-		prev.RateLimit.GlobalBurst != next.RateLimit.GlobalBurst {
+	if prev.Server.RateLimit.Enabled != next.Server.RateLimit.Enabled ||
+		prev.Server.RateLimit.Read != next.Server.RateLimit.Read ||
+		prev.Server.RateLimit.Write != next.Server.RateLimit.Write ||
+		prev.Server.RateLimit.Health != next.Server.RateLimit.Health ||
+		prev.Server.RateLimit.GlobalBurst != next.Server.RateLimit.GlobalBurst {
 		log.Printf("[config] hot-reload: rate_limit settings updated")
 	}
 	if !slices.Equal(prev.Server.Cors.AllowedOrigins, next.Server.Cors.AllowedOrigins) ||
@@ -3370,4 +3396,44 @@ func (c *Config) StartupBaseURL() string {
 		return proto + "://" + fqdn + ":" + port
 	}
 	return proto + "://" + fqdn
+}
+
+// legacyKeyMoves lists top-level config keys that older releases wrote outside
+// `server:`; each is read from server.<key> now (AI.md location).
+var legacyKeyMoves = []string{"rate_limit"}
+
+// migrateLegacyKeys rewrites an older server.yml so keys that moved are read
+// from their new location, never overwriting a value already set there. A
+// document that does not parse as a YAML mapping is returned unchanged so the
+// normal decode reports the syntax error.
+func migrateLegacyKeys(data []byte) []byte {
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil || doc == nil {
+		return data
+	}
+	changed := false
+	for _, key := range legacyKeyMoves {
+		val, ok := doc[key]
+		if !ok {
+			continue
+		}
+		server, _ := doc["server"].(map[string]any)
+		if server == nil {
+			server = map[string]any{}
+		}
+		if _, exists := server[key]; !exists {
+			server[key] = val
+		}
+		doc["server"] = server
+		delete(doc, key)
+		changed = true
+	}
+	if !changed {
+		return data
+	}
+	out, err := yaml.Marshal(doc)
+	if err != nil {
+		return data
+	}
+	return out
 }

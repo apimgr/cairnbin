@@ -179,12 +179,12 @@ func (s *Server) abuseMiddleware(next http.Handler) http.Handler {
 		}
 
 		ad := cfg.Web.Security.AbuseDetection
-		limit := cfg.RateLimit.Read.Requests
+		limit := cfg.Server.RateLimit.Read.Requests
 		if limit < 1 {
 			limit = 1
 		}
 		threshold := limit * ad.RequestFlood.Multiplier
-		if cfg.RateLimit.Enabled && ad.AutoBlockIP && s.ipBlocks.hit(ipStr, now, threshold) {
+		if cfg.Server.RateLimit.Enabled && ad.AutoBlockIP && s.ipBlocks.hit(ipStr, now, threshold) {
 			dur, err := time.ParseDuration(ad.RequestFlood.BlockDuration)
 			if err != nil || dur <= 0 {
 				dur = time.Hour

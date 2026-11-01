@@ -151,7 +151,7 @@ func TestApplyHotSettings_AllChanges(t *testing.T) {
 	prev.Database.Type = "sqlite"
 	prev.Server.Tor.Binary = ""
 	prev.Server.Logging.Level = "info"
-	prev.RateLimit.Enabled = true
+	prev.Server.RateLimit.Enabled = true
 	prev.Server.Cors.AllowedOrigins = []string{"*"}
 	prev.Web.SiteTitle = "Before"
 
@@ -162,7 +162,7 @@ func TestApplyHotSettings_AllChanges(t *testing.T) {
 	next.Database.Path = "/tmp/new.db"
 	next.Server.Tor.Binary = "/usr/bin/tor"
 	next.Server.Logging.Level = "debug"
-	next.RateLimit.Enabled = false
+	next.Server.RateLimit.Enabled = false
 	next.Server.Cors.AllowedOrigins = []string{"https://example.com"}
 	next.Web.SiteTitle = "After"
 

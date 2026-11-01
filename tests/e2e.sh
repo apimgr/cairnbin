@@ -84,6 +84,12 @@ E2E_ARTIFACT_DIR="${E2E_TEMP_DIR}/artifacts"
 mkdir -p "${E2E_ARTIFACT_DIR}"
 cat >"${E2E_TEMP_DIR}/volumes/config/pastebin/server.yml" <<'EOF'
 server:
+  rate_limit:
+    enabled: true
+    write:
+      requests: 1000
+      window: 60
+    global_burst: 2000
   token: e2e-operator-token-only
   geoip:
     enabled: true
@@ -116,12 +122,6 @@ web:
       enabled: true
       file: e2e-cves.json
       source: http://pastebin-e2e-runner:64980/cve
-rate_limit:
-  enabled: true
-  write:
-    requests: 1000
-    window: 60
-  global_burst: 2000
 EOF
 chmod 600 "${E2E_TEMP_DIR}/volumes/config/pastebin/server.yml"
 __info "Temp dir: ${E2E_TEMP_DIR}"

@@ -597,46 +597,46 @@ func TestValidate(t *testing.T) {
 
 	t.Run("negative_rate_limit_write_gets_defaulted", func(t *testing.T) {
 		cfg := fresh()
-		cfg.RateLimit.Write.Requests = -5
+		cfg.Server.RateLimit.Write.Requests = -5
 		config.Validate(cfg)
-		if cfg.RateLimit.Write.Requests != 10 {
-			t.Errorf("expected Write.Requests reset to 10, got %d", cfg.RateLimit.Write.Requests)
+		if cfg.Server.RateLimit.Write.Requests != 10 {
+			t.Errorf("expected Write.Requests reset to 10, got %d", cfg.Server.RateLimit.Write.Requests)
 		}
 	})
 
 	t.Run("negative_rate_limit_read_gets_defaulted", func(t *testing.T) {
 		cfg := fresh()
-		cfg.RateLimit.Read.Requests = -1
+		cfg.Server.RateLimit.Read.Requests = -1
 		config.Validate(cfg)
-		if cfg.RateLimit.Read.Requests != 120 {
-			t.Errorf("expected Read.Requests reset to 120, got %d", cfg.RateLimit.Read.Requests)
+		if cfg.Server.RateLimit.Read.Requests != 120 {
+			t.Errorf("expected Read.Requests reset to 120, got %d", cfg.Server.RateLimit.Read.Requests)
 		}
 	})
 
 	t.Run("negative_rate_limit_health_gets_defaulted", func(t *testing.T) {
 		cfg := fresh()
-		cfg.RateLimit.Health.Requests = -99
+		cfg.Server.RateLimit.Health.Requests = -99
 		config.Validate(cfg)
-		if cfg.RateLimit.Health.Requests != 120 {
-			t.Errorf("expected Health.Requests reset to 120, got %d", cfg.RateLimit.Health.Requests)
+		if cfg.Server.RateLimit.Health.Requests != 120 {
+			t.Errorf("expected Health.Requests reset to 120, got %d", cfg.Server.RateLimit.Health.Requests)
 		}
 	})
 
 	t.Run("negative_global_burst_gets_defaulted", func(t *testing.T) {
 		cfg := fresh()
-		cfg.RateLimit.GlobalBurst = -1
+		cfg.Server.RateLimit.GlobalBurst = -1
 		config.Validate(cfg)
-		if cfg.RateLimit.GlobalBurst != 240 {
-			t.Errorf("expected GlobalBurst reset to 240, got %d", cfg.RateLimit.GlobalBurst)
+		if cfg.Server.RateLimit.GlobalBurst != 240 {
+			t.Errorf("expected GlobalBurst reset to 240, got %d", cfg.Server.RateLimit.GlobalBurst)
 		}
 	})
 
 	t.Run("zero_rate_limit_not_changed", func(t *testing.T) {
 		cfg := fresh()
-		cfg.RateLimit.Write.Requests = 0
+		cfg.Server.RateLimit.Write.Requests = 0
 		config.Validate(cfg)
-		if cfg.RateLimit.Write.Requests != 0 {
-			t.Errorf("zero rate limit was changed to %d; zero is valid (disables limiting)", cfg.RateLimit.Write.Requests)
+		if cfg.Server.RateLimit.Write.Requests != 0 {
+			t.Errorf("zero rate limit was changed to %d; zero is valid (disables limiting)", cfg.Server.RateLimit.Write.Requests)
 		}
 	})
 
@@ -1340,5 +1340,58 @@ func TestStartupBaseURL(t *testing.T) {
 		if got := cfg.StartupBaseURL(); got != tc.want {
 			t.Errorf("%s: StartupBaseURL() = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+// TestLoad_LegacyTopLevelRateLimitMigrates verifies an older server.yml that
+// kept rate_limit at the top level still loads: the block is read from its
+// AI.md location (server.rate_limit) and the file loads without errors.
+func TestLoad_LegacyTopLevelRateLimitMigrates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	in := "rate_limit:\n  enabled: false\n  read:\n    requests: 7\n    window: 30\n"
+	if err := os.WriteFile(path, []byte(in), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.RateLimit.Enabled {
+		t.Error("legacy rate_limit.enabled=false not applied")
+	}
+	if cfg.Server.RateLimit.Read.Requests != 7 || cfg.Server.RateLimit.Read.Window != 30 {
+		t.Errorf("legacy read limit not applied: %+v", cfg.Server.RateLimit.Read)
+	}
+}
+
+// TestLoad_ServerRateLimitWinsOverLegacy verifies the new location is never
+// overwritten by a stale top-level block.
+func TestLoad_ServerRateLimitWinsOverLegacy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	in := "rate_limit:\n  read:\n    requests: 1\n    window: 60\nserver:\n  rate_limit:\n    read:\n      requests: 99\n      window: 60\n"
+	if err := os.WriteFile(path, []byte(in), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Server.RateLimit.Read.Requests; got != 99 {
+		t.Errorf("read requests = %d, want 99 from server.rate_limit", got)
+	}
+}
+
+// TestValidate_CompressionDefaults verifies invalid compression settings fall
+// back to the defaults instead of failing.
+func TestValidate_CompressionDefaults(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Compression.Level = 42
+	cfg.Server.Compression.Types = nil
+	config.Validate(cfg)
+	if cfg.Server.Compression.Level != 5 {
+		t.Errorf("level = %d, want default 5", cfg.Server.Compression.Level)
+	}
+	if len(cfg.Server.Compression.Types) == 0 {
+		t.Error("types not restored to defaults")
 	}
 }

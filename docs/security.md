@@ -38,8 +38,9 @@
 
 ## Rate Limiting
 
-- Default: 30 paste creations per IP per minute
-- Configurable via `rate_limit.create_per_minute` in `server.yml`
+- Defaults, per IP per minute: 120 reads, 10 writes (create/delete), 120 health checks, 240 total (global burst)
+- Configurable under `server.rate_limit` (`read`, `write`, `health`, `global_burst`) in `server.yml`
+- A client that sends more than 10x the read limit in a minute is blocked for an hour (`server.security.abuse_detection`)
 - Rate limiting protects the server against abuse — it is not a usage cap
 
 ## Tor Privacy

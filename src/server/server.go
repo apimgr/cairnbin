@@ -622,10 +622,10 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	// the create path so the operator-set limit is actually enforced.
 	s.pasteHandler.SetMaxSize(cfg.Paste.MaxSizeBytes)
 
-	if cfg.RateLimit.Enabled {
-		readReqs := cfg.RateLimit.Read.Requests
-		writeReqs := cfg.RateLimit.Write.Requests
-		healthReqs := cfg.RateLimit.Health.Requests
+	if cfg.Server.RateLimit.Enabled {
+		readReqs := cfg.Server.RateLimit.Read.Requests
+		writeReqs := cfg.Server.RateLimit.Write.Requests
+		healthReqs := cfg.Server.RateLimit.Health.Requests
 		if readReqs <= 0 {
 			readReqs = 120
 		}
@@ -635,9 +635,9 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		if healthReqs <= 0 {
 			healthReqs = 120
 		}
-		readWin := time.Duration(cfg.RateLimit.Read.Window) * time.Second
-		writeWin := time.Duration(cfg.RateLimit.Write.Window) * time.Second
-		healthWin := time.Duration(cfg.RateLimit.Health.Window) * time.Second
+		readWin := time.Duration(cfg.Server.RateLimit.Read.Window) * time.Second
+		writeWin := time.Duration(cfg.Server.RateLimit.Write.Window) * time.Second
+		healthWin := time.Duration(cfg.Server.RateLimit.Health.Window) * time.Second
 		if readWin <= 0 {
 			readWin = time.Minute
 		}
@@ -647,7 +647,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		if healthWin <= 0 {
 			healthWin = time.Minute
 		}
-		burstReqs := cfg.RateLimit.GlobalBurst
+		burstReqs := cfg.Server.RateLimit.GlobalBurst
 		if burstReqs <= 0 {
 			burstReqs = 240
 		}
@@ -876,17 +876,17 @@ func fmtUserDate(t time.Time) string {
 // OnConfigChange is called by the ConfigManager after each successful hot-reload.
 // It updates rate limiter thresholds and tracks restart-required key changes.
 func (s *Server) OnConfigChange(next *config.Config) {
-	if s.readLimiter != nil && next.RateLimit.Read.Requests > 0 {
-		s.readLimiter.UpdateLimit(next.RateLimit.Read.Requests)
+	if s.readLimiter != nil && next.Server.RateLimit.Read.Requests > 0 {
+		s.readLimiter.UpdateLimit(next.Server.RateLimit.Read.Requests)
 	}
-	if s.writeLimiter != nil && next.RateLimit.Write.Requests > 0 {
-		s.writeLimiter.UpdateLimit(next.RateLimit.Write.Requests)
+	if s.writeLimiter != nil && next.Server.RateLimit.Write.Requests > 0 {
+		s.writeLimiter.UpdateLimit(next.Server.RateLimit.Write.Requests)
 	}
-	if s.healthLimiter != nil && next.RateLimit.Health.Requests > 0 {
-		s.healthLimiter.UpdateLimit(next.RateLimit.Health.Requests)
+	if s.healthLimiter != nil && next.Server.RateLimit.Health.Requests > 0 {
+		s.healthLimiter.UpdateLimit(next.Server.RateLimit.Health.Requests)
 	}
-	if s.burstLimiter != nil && next.RateLimit.GlobalBurst > 0 {
-		s.burstLimiter.UpdateLimit(next.RateLimit.GlobalBurst)
+	if s.burstLimiter != nil && next.Server.RateLimit.GlobalBurst > 0 {
+		s.burstLimiter.UpdateLimit(next.Server.RateLimit.GlobalBurst)
 	}
 
 	// Detect restart-required changes and record them for healthz. Settings
@@ -1221,16 +1221,11 @@ func (s *Server) setupRoutes() {
 	// URL in the request so GetAPIResponseFormat can detect the text-format intent.
 	r.Use(s.txtExtensionMiddleware)
 
-	// Response compression (PART 12) — compresses text/html, text/css, text/javascript,
-	// application/json, and application/xml at level 5.
-	r.Use(middleware.Compress(5,
-		"text/html",
-		"text/css",
-		"text/javascript",
-		"application/json",
-		"application/xml",
-		"text/plain",
-	))
+	// Response compression (PART 12): level and MIME types come from
+	// server.compression; skipped entirely when enabled is false.
+	if comp := s.cfg.Server.Compression; comp.Enabled {
+		r.Use(middleware.Compress(comp.Level, comp.Types...))
+	}
 
 	// Maintenance mode (PART 20) — after metrics/logging so blocked requests are
 	// still recorded; rejects write methods with HTTP 503 while healthz/metrics and
