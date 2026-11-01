@@ -125,9 +125,8 @@ same pass gets its own line item here.
   sections, audit log events, compliance modes, abuse detection, IP blocks.
 - PART 11 audit events still not emitted (spec "Audit Log Events"):
   `backup.deleted` (retention removals in src/task/backup_guard.go),
-  `security.ip_blocked`/`ip_unblocked`/`ip_allowlisted`/`ip_allowlist_removed`
-  and `security.suspicious_activity` (no IP block management or abuse
-  detection exists yet), `config.*_updated`/`ssl_expired` (config hot-reload
+  `security.ip_allowlisted`/`ip_allowlist_removed` (allowlist is config-only;
+  would need a diff on hot reload), `config.*_updated`/`ssl_expired` (config hot-reload
   does not diff and emit), `server.updated`, and the rotation events below.
 - PART 11 `--maintenance secret rotate installation_secret|encryption_key` is
   not implemented (listed in the spec's maintenance subcommands): operator
@@ -139,4 +138,9 @@ same pass gets its own line item here.
   `rate_limit_per_ip_burst`) is fixed in code (60/min per IP); expose it in
   config. `nel` and other report groups are accepted and discarded, not
   logged.
+- PART 11 abuse detection: only the request-flood detector + temporary/permanent
+  IP blocks exist (src/server/abuse.go). Not implemented: API-abuse throttling,
+  database-anomaly (injection pattern) blocking, config-tampering rollback.
+  Allowlist/blocked_ips are plain string lists; AI.md uses `{cidr, description}`
+  objects. Temporary blocks are in-memory only (lost on restart).
 

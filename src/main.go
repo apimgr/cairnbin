@@ -1186,6 +1186,13 @@ Examples:
 	srv.SetAuditWriter(auditW)
 	srv.SetLogManager(logMgr)
 
+	// Temporary IP blocks auto-release when their duration expires (PART 11):
+	// checked every minute by the scheduler.
+	logSchedErr(sched.Register("ip_block_release", "IP Block Release", "@every 1m", true, func(ctx context.Context) error {
+		srv.SweepIPBlocks()
+		return nil
+	}))
+
 	// Weekly GeoIP database refresh (Sunday 03:00).
 	logSchedErr(sched.Register("geoip_update", "GeoIP Update", "0 3 * * 0", srv.GeoIPEnabled(), func(ctx context.Context) error {
 		if err := srv.UpdateGeoIP(); err != nil {

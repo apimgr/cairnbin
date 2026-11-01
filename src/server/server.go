@@ -204,16 +204,18 @@ type SchedulerAPI interface {
 
 // Server owns the HTTP router and all handler dependencies.
 type Server struct {
-	router             *chi.Mux
-	db                 database.DB
-	cacheStore         cache.Cache
-	cfg                *config.Config
-	cfgMgr             *config.ConfigManager
-	templates          map[string]*template.Template
-	pasteHandler       *handler.PasteHandler
-	compatHandler      *compat.Handler
-	swaggerHandler     *swagger.Handler
-	mcpHandler         *mcp.Handler
+	router         *chi.Mux
+	db             database.DB
+	cacheStore     cache.Cache
+	cfg            *config.Config
+	cfgMgr         *config.ConfigManager
+	templates      map[string]*template.Template
+	pasteHandler   *handler.PasteHandler
+	compatHandler  *compat.Handler
+	swaggerHandler *swagger.Handler
+	mcpHandler     *mcp.Handler
+	// ipBlocks holds temporary (auto) IP blocks and flood counters (PART 11).
+	ipBlocks           *ipBlocks
 	graphqlHandler     *graphql.Handler
 	metricsCollector   *metric.Collector
 	geoipDB            *geoip.DB
@@ -441,6 +443,7 @@ func (s *Server) apiVersion() string {
 // cfgMgr may be nil (e.g. in tests); when set, hot-reloadable settings are read live.
 func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, version, commitID, buildDate, configDir, dataDir string) *Server {
 	s := &Server{
+		ipBlocks:  newIPBlocks(),
 		router:    chi.NewRouter(),
 		db:        db,
 		cfg:       cfg,
@@ -1196,6 +1199,7 @@ func (s *Server) setupRoutes() {
 	r.Use(s.compatModeGate)
 	r.Use(s.allowlistMiddleware)
 	r.Use(s.blocklistMiddleware)
+	r.Use(s.abuseMiddleware)
 	// Step 7 — global burst ceiling across every endpoint class (AI.md:16187).
 	// Tighter per-class read/write/health quotas stay attached to their routes
 	// via maybeReadRateLimit / maybeRateLimit / maybeHealthRateLimit.

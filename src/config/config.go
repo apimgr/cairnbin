@@ -914,6 +914,23 @@ type FooterConfig struct {
 	CustomHTML string `yaml:"custom_html"`
 }
 
+// RequestFloodConfig tunes request-flood detection.
+type RequestFloodConfig struct {
+	Multiplier    int    `yaml:"multiplier"`
+	BlockDuration string `yaml:"block_duration"`
+}
+
+// AbuseDetectionConfig configures automated abuse detection (PART 11).
+type AbuseDetectionConfig struct {
+	// RequestFlood triggers when one IP sends more than Multiplier times the
+	// read rate limit within a minute.
+	RequestFlood RequestFloodConfig `yaml:"request_flood"`
+	// AutoBlockIP blocks a flooding IP for RequestFlood.BlockDuration.
+	AutoBlockIP bool `yaml:"auto_block_ip"`
+	// AutoAlert emails the operator when an IP is auto-blocked.
+	AutoAlert bool `yaml:"auto_alert"`
+}
+
 // MCPConfig controls the Model Context Protocol endpoint. It reuses the API's
 // Bearer tokens; there is no MCP-specific token or scope.
 type MCPConfig struct {
@@ -1095,6 +1112,11 @@ type SecurityConfig struct {
 	// rate limiting, and geoip checks. Auth checks are never bypassed.
 	// Single IPs are automatically expanded to /32 (IPv4) or /128 (IPv6).
 	Allowlist []string `yaml:"allowlist"`
+	// BlockedIPs are permanent blocks (IP or CIDR): config-file entries only,
+	// released manually by removing the entry (PART 11 "IP Block Management").
+	BlockedIPs []string `yaml:"blocked_ips"`
+	// AbuseDetection configures automatic detection and temporary IP blocking.
+	AbuseDetection AbuseDetectionConfig `yaml:"abuse_detection"`
 	// Blocklists configures the IP/domain blocklist sources downloaded daily by
 	// the scheduler into {data_dir}/security/blocklists/ (PART 18/19).
 	Blocklists BlocklistsConfig `yaml:"blocklists"`
@@ -1813,6 +1835,11 @@ func DefaultConfig() *Config {
 			Security: SecurityConfig{
 				// auto-generated on first run
 				EncryptionKey: "",
+				AbuseDetection: AbuseDetectionConfig{
+					RequestFlood: RequestFloodConfig{Multiplier: 10, BlockDuration: "1h"},
+					AutoBlockIP:  true,
+					AutoAlert:    true,
+				},
 				Blocklists: BlocklistsConfig{
 					Enabled: true,
 					Sources: []BlocklistSource{
@@ -2625,6 +2652,16 @@ func Validate(cfg *Config) {
 	if age, ok := ownerCookieMaxAge(cfg.Server.Tokens.CookieMaxAge); !ok || age <= 0 {
 		log.Printf("[config] WARNING: invalid server.tokens.cookie_max_age %q, using default %s", cfg.Server.Tokens.CookieMaxAge, d.Server.Tokens.CookieMaxAge)
 		cfg.Server.Tokens.CookieMaxAge = d.Server.Tokens.CookieMaxAge
+	}
+
+	ad := &cfg.Web.Security.AbuseDetection.RequestFlood
+	if ad.Multiplier < 1 {
+		log.Printf("[config] WARNING: invalid abuse_detection.request_flood.multiplier %d, using default 10", ad.Multiplier)
+		ad.Multiplier = 10
+	}
+	if dur, err := time.ParseDuration(ad.BlockDuration); err != nil || dur <= 0 {
+		log.Printf("[config] WARNING: invalid abuse_detection.request_flood.block_duration %q, using default 1h", ad.BlockDuration)
+		ad.BlockDuration = "1h"
 	}
 
 	// Database driver aliases normalize to their canonical form (AI.md 7722):
