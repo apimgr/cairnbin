@@ -4,11 +4,34 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+// lenientTempDir returns a temp dir whose cleanup retries removal for a short
+// while. A just-terminated fake i2pd child can still be creating files under
+// the dir when t.TempDir's single RemoveAll runs, which makes that fail with
+// "directory not empty".
+func lenientTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "i2p-test-")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if os.RemoveAll(dir) == nil || time.Now().After(deadline) {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	})
+	return dir
+}
 
 // fakeSAMListener starts a real TCP listener and drives every accepted
 // connection through fakeSAMServer (defined in i2p_test.go), so
@@ -123,7 +146,7 @@ func TestManager_Monitor_ExitsOnContextCancel(t *testing.T) {
 
 func TestManager_Monitor_RestartsDeadI2PdProcess(t *testing.T) {
 	bin := fakeI2PdScriptWithDestination(t)
-	tmp := t.TempDir()
+	tmp := lenientTempDir(t)
 	cfg := Config{
 		Enabled:          true,
 		Binary:           bin,
