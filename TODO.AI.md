@@ -34,8 +34,8 @@ same pass gets its own line item here.
 - [x] PART 4 OS-specific paths
 - [x] PART 5 Configuration
 - [x] PART 6 Application modes
-- [ ] PART 7 Binary requirements
-- [ ] PART 8 Server binary CLI
+- [x] PART 7 Binary requirements
+- [x] PART 8 Server binary CLI (startup order/privilege drop gap logged below)
 - [ ] PART 9 Error handling & caching
 - [ ] PART 10 Database
 - [ ] PART 11 Security & logging

@@ -125,7 +125,12 @@ func SafeFilePath(baseDir, userPath string) (string, error) {
 // containerCheck and rootCheck are overridable in tests so that non-container
 // and privileged code-paths can be exercised from any environment.
 var containerCheck = isContainer
-var rootCheck = isRoot
+
+// startedElevated is captured once at process start, before any privilege
+// drop, so the system-vs-user directory mode never changes mid-run (PART 8).
+var startedElevated = isRoot()
+
+var rootCheck = func() bool { return startedElevated }
 
 // detectedOS holds the current GOOS — overridable in tests to exercise
 // platform-specific branches without running on the target OS.
@@ -221,29 +226,77 @@ func GetBackupDir(appName string) string {
 		return filepath.Join("/data", "backups", appName)
 	}
 
-	if rootCheck() {
-		switch detectedOS {
-		case "darwin":
-			return filepath.Join("/Library", "Backups", orgName, appName)
-		case "windows":
-			return filepath.Join(os.Getenv("ProgramData"), "Backups", orgName, appName)
-		case "freebsd", "openbsd", "netbsd":
-			return filepath.Join("/var", "backups", orgName, appName)
-		default:
-			return filepath.Join("/mnt", "Backups", orgName, appName)
-		}
+	// Prefer the system backup dir when it is writable or can be created.
+	sys := systemBackupDir(appName)
+	if writableCheck(sys) {
+		return sys
 	}
 
+	// System mode falls back inside the data dir — never a $HOME-derived path,
+	// because the service account's HOME is the data dir after the drop.
+	if rootCheck() {
+		return filepath.Join(GetDataDir(appName), "backup")
+	}
+
+	return userBackupDir(appName)
+}
+
+// writableCheck is overridable in tests so backup-dir selection is hermetic.
+var writableCheck = isWritable
+
+// systemBackupDir returns the OS-level backup directory.
+func systemBackupDir(appName string) string {
 	switch detectedOS {
 	case "darwin":
-		home, _ := os.UserHomeDir()
+		return filepath.Join("/Library", "Backups", orgName, appName)
+	case "windows":
+		return filepath.Join(os.Getenv("ProgramData"), "Backups", orgName, appName)
+	case "freebsd", "openbsd", "netbsd":
+		return filepath.Join("/var", "backups", orgName, appName)
+	default:
+		return filepath.Join("/mnt", "Backups", orgName, appName)
+	}
+}
+
+// userBackupDir returns the per-user backup directory (user mode only).
+func userBackupDir(appName string) string {
+	home, _ := os.UserHomeDir()
+	switch detectedOS {
+	case "darwin":
 		return filepath.Join(home, "Library", "Backups", orgName, appName)
 	case "windows":
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Backups", orgName, appName)
 	default:
-		home, _ := os.UserHomeDir()
 		return filepath.Join(home, ".local", "share", "Backups", orgName, appName)
 	}
+}
+
+// isWritable reports whether dir is writable or can be created: it walks up
+// to the nearest existing ancestor and probes it with a temporary file.
+func isWritable(dir string) bool {
+	probe := dir
+	for {
+		info, err := os.Stat(probe)
+		if err == nil {
+			if !info.IsDir() {
+				return false
+			}
+			break
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			return false
+		}
+		probe = parent
+	}
+	f, err := os.CreateTemp(probe, ".write_test_")
+	if err != nil {
+		return false
+	}
+	name := f.Name()
+	f.Close()
+	os.Remove(name)
+	return true
 }
 
 // GetPIDFile returns the platform-correct PID file path for appName.

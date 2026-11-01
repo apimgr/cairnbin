@@ -26,13 +26,16 @@ func applyEnv(t *testing.T, e pathEnv) {
 	oldC := containerCheck
 	oldR := rootCheck
 	oldOS := detectedOS
+	oldW := writableCheck
 	containerCheck = func() bool { return e.isContainer }
 	rootCheck = func() bool { return e.isRoot }
 	detectedOS = e.goos
+	writableCheck = func(string) bool { return true }
 	t.Cleanup(func() {
 		containerCheck = oldC
 		rootCheck = oldR
 		detectedOS = oldOS
+		writableCheck = oldW
 	})
 }
 
@@ -213,6 +216,7 @@ func TestGetLogsDir_LinuxUser_Home(t *testing.T) {
 
 func TestGetBackupDir_LinuxUser_Home(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "linux"})
+	writableCheck = func(string) bool { return false }
 	os.Unsetenv("BACKUP_DIR")
 	home, _ := os.UserHomeDir()
 	want := filepath.Join(home, ".local", "share", "Backups", "apimgr", "pastebin")
@@ -321,6 +325,7 @@ func TestGetCacheDir_DarwinUser(t *testing.T) {
 
 func TestGetBackupDir_DarwinUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "darwin"})
+	writableCheck = func(string) bool { return false }
 	os.Unsetenv("BACKUP_DIR")
 	home, _ := os.UserHomeDir()
 	want := filepath.Join(home, "Library", "Backups", "apimgr", "pastebin")
@@ -402,6 +407,7 @@ func TestGetCacheDir_WindowsUser(t *testing.T) {
 
 func TestGetBackupDir_WindowsUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "windows"})
+	writableCheck = func(string) bool { return false }
 	os.Unsetenv("BACKUP_DIR")
 	t.Setenv("LOCALAPPDATA", "C:\\Users\\test\\AppData\\Local")
 	want := filepath.Join("C:\\Users\\test\\AppData\\Local", "Backups", "apimgr", "pastebin")
@@ -492,5 +498,56 @@ func TestGetDBPath_DarwinRoot(t *testing.T) {
 	want := filepath.Join("/Library", "Application Support", "apimgr", "pastebin", "db", "server.db")
 	if got := GetDBPath("pastebin"); got != want {
 		t.Errorf("GetDBPath darwin root: got %q, want %q", got, want)
+	}
+}
+
+// TestGetBackupDir_RootFallsBackToDataDir verifies system mode never falls
+// back to a $HOME-derived path when the system backup dir is not writable.
+func TestGetBackupDir_RootFallsBackToDataDir(t *testing.T) {
+	t.Setenv("BACKUP_DIR", "")
+	t.Setenv("DATA_DIR", "/var/lib/apimgr/pastebin")
+	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
+	writableCheck = func(string) bool { return false }
+
+	want := "/var/lib/apimgr/pastebin/backup"
+	if got := GetBackupDir("pastebin"); got != want {
+		t.Errorf("GetBackupDir root, system dir unwritable: got %q, want %q", got, want)
+	}
+}
+
+// TestGetBackupDir_UserPrefersWritableSystemDir verifies user mode uses the
+// system backup dir when writable and its own dir otherwise.
+func TestGetBackupDir_UserPrefersWritableSystemDir(t *testing.T) {
+	t.Setenv("BACKUP_DIR", "")
+	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "linux"})
+
+	if got, want := GetBackupDir("pastebin"), "/mnt/Backups/apimgr/pastebin"; got != want {
+		t.Errorf("writable system dir: got %q, want %q", got, want)
+	}
+
+	writableCheck = func(string) bool { return false }
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".local", "share", "Backups", "apimgr", "pastebin")
+	if got := GetBackupDir("pastebin"); got != want {
+		t.Errorf("unwritable system dir: got %q, want %q", got, want)
+	}
+}
+
+// TestIsWritable verifies existing writable dirs, creatable paths under them,
+// and non-directories.
+func TestIsWritable(t *testing.T) {
+	dir := t.TempDir()
+	if !isWritable(dir) {
+		t.Error("existing temp dir should be writable")
+	}
+	if !isWritable(filepath.Join(dir, "a", "b")) {
+		t.Error("not-yet-created path under a writable dir should be writable")
+	}
+	file := filepath.Join(dir, "f")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if isWritable(filepath.Join(file, "sub")) {
+		t.Error("path under a regular file must not be writable")
 	}
 }
