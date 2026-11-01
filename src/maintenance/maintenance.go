@@ -100,6 +100,9 @@ func Backup(opts BackupOptions) error {
 	if filename == "" {
 		filename = fmt.Sprintf("%s_backup_%s%s", projectName, ts, ext)
 	}
+	if filename != filepath.Base(filename) || strings.Contains(filename, "..") {
+		return fmt.Errorf("invalid backup filename %q: must not contain path components", filename)
+	}
 	destPath := filepath.Join(opts.BackupDir, filename)
 
 	// Collect files to archive.

@@ -430,3 +430,27 @@ func TestAllPathFunctions_ReturnAbsolutePaths(t *testing.T) {
 		})
 	}
 }
+
+// TestSafeFilePath verifies containment: valid sub-paths resolve inside the
+// base, traversal and invalid segments are rejected.
+func TestSafeFilePath(t *testing.T) {
+	base := t.TempDir()
+
+	got, err := path.SafeFilePath(base, "/my//dir/file")
+	if err != nil {
+		t.Fatalf("valid path rejected: %v", err)
+	}
+	if want := filepath.Join(base, "my", "dir", "file"); got != want {
+		t.Errorf("path.SafeFilePath = %q, want %q", got, want)
+	}
+
+	if got, err := path.SafeFilePath(base, ""); err != nil || got != base {
+		t.Errorf("empty path = (%q, %v), want (%q, nil)", got, err, base)
+	}
+
+	for _, bad := range []string{"../etc", "a/../../b", "Upper", "a/<script>"} {
+		if _, err := path.SafeFilePath(base, bad); err == nil {
+			t.Errorf("path.SafeFilePath(%q) accepted, want error", bad)
+		}
+	}
+}

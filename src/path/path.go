@@ -94,6 +94,32 @@ func SafePath(input string) (string, error) {
 	return normalizePath(input), nil
 }
 
+// SafeFilePath joins userPath onto baseDir after SafePath validation and
+// verifies the resolved absolute path stays within baseDir. Per AI.md PART 5
+// (File Path Security).
+func SafeFilePath(baseDir, userPath string) (string, error) {
+	safe, err := SafePath(userPath)
+	if err != nil {
+		return "", err
+	}
+
+	absPath, err := filepath.Abs(filepath.Join(baseDir, safe))
+	if err != nil {
+		return "", err
+	}
+
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
+		return "", ErrPathTraversal
+	}
+
+	return absPath, nil
+}
+
 // containerCheck and rootCheck are overridable in tests so that non-container
 // and privileged code-paths can be exercised from any environment.
 var containerCheck = isContainer

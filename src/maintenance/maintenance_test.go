@@ -220,6 +220,23 @@ func TestBackupAndVerify_CustomFilename(t *testing.T) {
 	}
 }
 
+func TestBackup_RejectsTraversalFilename(t *testing.T) {
+	cfgDir, dataDir, bkpDir := makeTestDirs(t)
+
+	for _, name := range []string{"../escape.tar.gz", "sub/dir.tar.gz", "..", "a..b/../c"} {
+		err := maintenance.Backup(maintenance.BackupOptions{
+			ConfigDir:  cfgDir,
+			DataDir:    dataDir,
+			BackupDir:  bkpDir,
+			AppVersion: "v1.0.0",
+			Filename:   name,
+		})
+		if err == nil {
+			t.Errorf("Backup accepted filename %q, want error", name)
+		}
+	}
+}
+
 func TestVerifyBackup_Nonexistent(t *testing.T) {
 	if err := maintenance.VerifyBackup("/nonexistent/backup.tar.gz", ""); err == nil {
 		t.Error("expected error for nonexistent file, got nil")

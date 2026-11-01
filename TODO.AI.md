@@ -32,7 +32,7 @@ same pass gets its own line item here.
 - [x] PART 2 License & attribution
 - [x] PART 3 Project structure
 - [x] PART 4 OS-specific paths
-- [ ] PART 5 Configuration
+- [x] PART 5 Configuration
 - [ ] PART 6 Application modes
 - [ ] PART 7 Binary requirements
 - [ ] PART 8 Server binary CLI
@@ -76,3 +76,12 @@ same pass gets its own line item here.
   and user, but the macOS user data dir has no `data/` segment. Callers join
   `{data_dir}/security` directly; add a `security` path helper and migrate
   GeoIP/blocklist/CVE/Trivy callers when auditing PART 19.
+- PART 5 config-file booleans: yaml.v3 decodes only YAML 1.1 `yes/no/on/off`
+  into `bool` fields; spec requires the full truthy/falsy set (`enable`,
+  `oui`, ...) for config values via `config.ParseBool`. Needs a flexible bool
+  type or a pre-decode normalization pass across all `bool` fields in
+  `src/config/config.go`.
+- PART 5 `SafePath` (src/path) validates lowercase `[a-z0-9_-]` segments and
+  strips the leading slash, so it cannot validate absolute operator paths
+  (`--data`, `--config`) or dotted filenames as the AI.md examples imply.
+  `SafeFilePath` is added; backup filenames use a base-name/`..` guard instead.
