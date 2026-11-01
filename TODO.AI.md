@@ -36,8 +36,8 @@ same pass gets its own line item here.
 - [x] PART 6 Application modes
 - [x] PART 7 Binary requirements
 - [x] PART 8 Server binary CLI (startup order/privilege drop gap logged below)
-- [ ] PART 9 Error handling & caching
-- [ ] PART 10 Database
+- [x] PART 9 Error handling & caching
+- [x] PART 10 Database
 - [ ] PART 11 Security & logging
 - [ ] PART 12 Server configuration
 - [ ] PART 13 Health & versioning
@@ -100,4 +100,9 @@ same pass gets its own line item here.
 - PART 8 test helper `TestSelfPIDHelper` (src/pid/pid_internal_test.go) uses
   os.Exit(3)/os.Exit(4), outside the standard exit-code ranges; switch to
   in-range codes and update the parent test's expectations.
+- PART 9 gaps: no shared `withRetry`/`isRetryable` exponential-backoff helper
+  (0s,1s,2s,4s,8s, cap 30s; retry only network/timeout/503) — outbound
+  fetches (GeoIP, blocklist, CVE, update check) each use ad-hoc retry; and no
+  cache warming (`config:server`, `security:blocklist`, `geoip:info`) at
+  startup. Decide the callers before adding either, so neither ships unused.
 

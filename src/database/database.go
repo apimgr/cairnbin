@@ -153,6 +153,9 @@ const (
 	dbReadTimeout = 5 * time.Second
 	// dbWriteTimeout is for INSERT, UPDATE, DELETE.
 	dbWriteTimeout = 10 * time.Second
+	// dbTxTimeout bounds a whole multi-statement transaction, BeginTx through
+	// Commit/Rollback, rather than a single statement.
+	dbTxTimeout = 30 * time.Second
 	// dbComplexTimeout is for multi-step or JOIN queries.
 	dbComplexTimeout = 15 * time.Second
 	// dbBulkTimeout is for bulk delete operations.
@@ -604,7 +607,7 @@ func preparePaste(p *model.Paste) {
 // and the owner's primary token row.
 func (s *SQLiteDB) CreatePasteWithPrimaryToken(p *model.Paste, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error {
 	preparePaste(p)
-	ctx, cancel := dbCtx(dbWriteTimeout)
+	ctx, cancel := dbCtx(dbTxTimeout)
 	defer cancel()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -807,7 +810,7 @@ func escapeLikeTerm(s string) string {
 // have (multiple concurrent readers all passing a stale threshold check).
 // Returns the paste's new view count and whether it was burned (deleted).
 func (s *SQLiteDB) IncrementViewsAndCheckBurn(id string) (views int, burned bool, err error) {
-	ctx, cancel := dbCtx(dbWriteTimeout)
+	ctx, cancel := dbCtx(dbTxTimeout)
 	defer cancel()
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -1148,7 +1151,7 @@ func (s *SQLiteDB) CreateAPIToken(tokenHash, tokenPrefix, resourceType, resource
 
 // CreateOwnerWithPrimaryToken atomically creates an anonymous owner and its primary credential.
 func (s *SQLiteDB) CreateOwnerWithPrimaryToken(ownerID, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error {
-	ctx, cancel := dbCtx(dbWriteTimeout)
+	ctx, cancel := dbCtx(dbTxTimeout)
 	defer cancel()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

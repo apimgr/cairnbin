@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/apimgr/pastebin/src/config"
@@ -130,5 +131,29 @@ func TestAccessLogMiddleware_NonHealthzAlwaysLogged(t *testing.T) {
 
 	if out := readAccessLog(t, dir); out == "" {
 		t.Error("expected non-healthz request to be logged, got nothing")
+	}
+}
+
+// TestAccessLogMiddleware_5xxLogsErrorContext verifies a 5xx response writes
+// error.log with error_code, http_status and request_id (PART 9 "Error
+// Logging").
+func TestAccessLogMiddleware_5xxLogsErrorContext(t *testing.T) {
+	s, dir := newAccessLogTestServer(t, false)
+	h := s.accessLogMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Request-ID", "req-123")
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/boom", nil))
+	s.logManager.Close()
+
+	data, err := os.ReadFile(filepath.Join(dir, "error.log"))
+	if err != nil {
+		t.Fatalf("read error.log: %v", err)
+	}
+	out := string(data)
+	for _, want := range []string{"SERVER_ERROR", "500"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("error.log missing %q: %s", want, out)
+		}
 	}
 }

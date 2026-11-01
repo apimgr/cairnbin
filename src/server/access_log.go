@@ -106,6 +106,18 @@ func (s *Server) accessLogMiddleware(next http.Handler) http.Handler {
 		// 5xx, panics, and internal errors).
 		if e.Status >= 500 {
 			s.logManager.Error("http "+strconv.Itoa(e.Status),
+				"error_code", errorCodeForStatus(e.Status),
+				"http_status", strconv.Itoa(e.Status),
+				"method", e.Method,
+				"path", e.Path,
+				"ip", e.RemoteIP,
+				"request_id", e.RequestID)
+		} else if e.Status >= 400 {
+			// Client errors are logged at WARN with the same context (PART 9
+			// "Error Logging"); the internal cause is never part of the response.
+			s.logManager.Server("warn", "http "+strconv.Itoa(e.Status),
+				"error_code", errorCodeForStatus(e.Status),
+				"http_status", strconv.Itoa(e.Status),
 				"method", e.Method,
 				"path", e.Path,
 				"ip", e.RemoteIP,
