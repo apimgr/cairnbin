@@ -13,8 +13,10 @@ command -v go-licenses >/dev/null 2>&1 || {
     exit 1
 }
 
+# Capture first - a scanner failure must abort (set -e), never read as "no match"
 echo "Scanning dependencies..."
-if go-licenses csv ./... | grep -iE 'GPL|AGPL|LGPL'; then
+licenses=$(go-licenses csv ./...)
+if echo "$licenses" | grep -iE 'GPL|AGPL|LGPL'; then
     echo "ERROR: Copyleft license detected!"
     echo "Remove the dependency or find an alternative."
     exit 1
@@ -24,7 +26,8 @@ echo "All licenses are compatible"
 
 echo "Generating license report..."
 go-licenses csv ./... > licenses.csv
-go-licenses save ./... --save_path=third_party_licenses
+# modernc.org/mathutil is BSD-3-Clause but its license text is not classifiable by go-licenses; it is attributed in LICENSE.md
+go-licenses save ./... --force --ignore modernc.org/mathutil --save_path=third_party_licenses
 
 echo "License report saved to licenses.csv and third_party_licenses/"
 echo ""

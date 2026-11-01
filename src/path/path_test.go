@@ -187,19 +187,20 @@ func skipIfRoot(t *testing.T) {
 	}
 }
 
-// TestGetConfigDir_XDG verifies that XDG_CONFIG_HOME is respected when
+// TestGetConfigDir_IgnoresXDG verifies that XDG_CONFIG_HOME is NOT honored (PART 4) when
 // CONFIG_DIR is not set and we are not running as root or in a container.
-func TestGetConfigDir_XDG(t *testing.T) {
+func TestGetConfigDir_IgnoresXDG(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
 	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-config")
 	os.Unsetenv("CONFIG_DIR")
 
+	home, _ := os.UserHomeDir()
 	got := path.GetConfigDir("pastebin")
-	want := "/tmp/xdg-config/apimgr/pastebin"
+	want := filepath.Join(home, ".config", "apimgr", "pastebin")
 	if got != want {
-		t.Errorf("GetConfigDir with XDG: got %q, want %q", got, want)
+		t.Errorf("GetConfigDir with XDG set: got %q, want %q", got, want)
 	}
 }
 
@@ -224,19 +225,20 @@ func TestGetConfigDir_HomeDefault(t *testing.T) {
 	}
 }
 
-// TestGetDataDir_XDG verifies that XDG_DATA_HOME is respected when DATA_DIR is
+// TestGetDataDir_IgnoresXDG verifies that XDG_DATA_HOME is NOT honored (PART 4) when DATA_DIR is
 // not set and we are not root or in a container.
-func TestGetDataDir_XDG(t *testing.T) {
+func TestGetDataDir_IgnoresXDG(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
 	t.Setenv("XDG_DATA_HOME", "/tmp/xdg-data")
 	os.Unsetenv("DATA_DIR")
 
+	home, _ := os.UserHomeDir()
 	got := path.GetDataDir("pastebin")
-	want := "/tmp/xdg-data/apimgr/pastebin"
+	want := filepath.Join(home, ".local", "share", "apimgr", "pastebin")
 	if got != want {
-		t.Errorf("GetDataDir with XDG: got %q, want %q", got, want)
+		t.Errorf("GetDataDir with XDG set: got %q, want %q", got, want)
 	}
 }
 
@@ -325,19 +327,23 @@ func TestGetPIDFile_UserPath(t *testing.T) {
 	}
 }
 
-// TestGetCacheDir_XDG verifies that XDG_CACHE_HOME is respected when CACHE_DIR
-// is not set and we are not root or in a container.
-func TestGetCacheDir_XDG(t *testing.T) {
+// TestGetCacheDir_IgnoresXDG verifies XDG_CACHE_HOME is not honored (AI.md PART 4
+// fixes the user cache path at ~/.cache/{org}/{app}/).
+func TestGetCacheDir_IgnoresXDG(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
 	t.Setenv("XDG_CACHE_HOME", "/tmp/xdg-cache")
 	os.Unsetenv("CACHE_DIR")
 
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("UserHomeDir unavailable: %v", err)
+	}
 	got := path.GetCacheDir("pastebin")
-	want := "/tmp/xdg-cache/apimgr/pastebin"
+	want := filepath.Join(home, ".cache", "apimgr", "pastebin")
 	if got != want {
-		t.Errorf("GetCacheDir with XDG: got %q, want %q", got, want)
+		t.Errorf("GetCacheDir with XDG set: got %q, want %q", got, want)
 	}
 }
 

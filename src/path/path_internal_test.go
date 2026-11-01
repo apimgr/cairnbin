@@ -163,35 +163,41 @@ func TestGetDBPath_LinuxRoot(t *testing.T) {
 	}
 }
 
-// ── Linux non-root paths (XDG and home) ──────────────────────────────────────
+// ── Linux non-root paths (home) ──────────────────────────────────────
 
-func TestGetConfigDir_LinuxUser_XDG(t *testing.T) {
+// XDG overrides are not part of AI.md PART 4; the fixed home path always wins.
+func TestGetConfigDir_LinuxUser_IgnoresXDG(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "linux"})
 	os.Unsetenv("CONFIG_DIR")
-	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-cfg")
-	want := "/tmp/xdg-cfg/apimgr/pastebin"
+	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-ignored")
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".config", "apimgr", "pastebin")
 	if got := GetConfigDir("pastebin"); got != want {
-		t.Errorf("GetConfigDir linux user XDG: got %q, want %q", got, want)
+		t.Errorf("GetConfigDir linux user with XDG set: got %q, want %q", got, want)
 	}
 }
 
-func TestGetDataDir_LinuxUser_XDG(t *testing.T) {
+// XDG overrides are not part of AI.md PART 4; the fixed home path always wins.
+func TestGetDataDir_LinuxUser_IgnoresXDG(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "linux"})
 	os.Unsetenv("DATA_DIR")
-	t.Setenv("XDG_DATA_HOME", "/tmp/xdg-data")
-	want := "/tmp/xdg-data/apimgr/pastebin"
+	t.Setenv("XDG_DATA_HOME", "/tmp/xdg-ignored")
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".local", "share", "apimgr", "pastebin")
 	if got := GetDataDir("pastebin"); got != want {
-		t.Errorf("GetDataDir linux user XDG: got %q, want %q", got, want)
+		t.Errorf("GetDataDir linux user with XDG set: got %q, want %q", got, want)
 	}
 }
 
-func TestGetCacheDir_LinuxUser_XDG(t *testing.T) {
+// XDG overrides are not part of AI.md PART 4; the fixed home path always wins.
+func TestGetCacheDir_LinuxUser_IgnoresXDG(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "linux"})
 	os.Unsetenv("CACHE_DIR")
-	t.Setenv("XDG_CACHE_HOME", "/tmp/xdg-cache")
-	want := "/tmp/xdg-cache/apimgr/pastebin"
+	t.Setenv("XDG_CACHE_HOME", "/tmp/xdg-ignored")
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".cache", "apimgr", "pastebin")
 	if got := GetCacheDir("pastebin"); got != want {
-		t.Errorf("GetCacheDir linux user XDG: got %q, want %q", got, want)
+		t.Errorf("GetCacheDir linux user with XDG set: got %q, want %q", got, want)
 	}
 }
 
@@ -452,5 +458,39 @@ func TestEnsureDir_NonRoot(t *testing.T) {
 	}
 	if !info.IsDir() {
 		t.Error("EnsureDir: result is not a directory")
+	}
+}
+
+// ── Windows privileged paths (PART 4) ─────────────────────────────────────────
+
+func TestWindowsRootPaths(t *testing.T) {
+	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "windows"})
+	for _, k := range []string{"CONFIG_DIR", "DATA_DIR", "CACHE_DIR", "LOG_DIR", "LOGS_DIR", "DATABASE_DIR", "DB_PATH"} {
+		os.Unsetenv(k)
+	}
+	t.Setenv("ProgramData", "C:\\ProgramData")
+	base := filepath.Join("C:\\ProgramData", "apimgr", "pastebin")
+	cases := map[string][2]string{
+		"config": {GetConfigDir("pastebin"), base},
+		"data":   {GetDataDir("pastebin"), filepath.Join(base, "data")},
+		"cache":  {GetCacheDir("pastebin"), filepath.Join(base, "cache")},
+		"logs":   {GetLogsDir("pastebin"), filepath.Join(base, "logs")},
+		"db":     {GetDBPath("pastebin"), filepath.Join(base, "db", "server.db")},
+	}
+	for name, c := range cases {
+		if c[0] != c[1] {
+			t.Errorf("windows root %s: got %q, want %q", name, c[0], c[1])
+		}
+	}
+}
+
+func TestGetDBPath_DarwinRoot(t *testing.T) {
+	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "darwin"})
+	os.Unsetenv("DATA_DIR")
+	os.Unsetenv("DATABASE_DIR")
+	os.Unsetenv("DB_PATH")
+	want := filepath.Join("/Library", "Application Support", "apimgr", "pastebin", "db", "server.db")
+	if got := GetDBPath("pastebin"); got != want {
+		t.Errorf("GetDBPath darwin root: got %q, want %q", got, want)
 	}
 }

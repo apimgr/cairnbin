@@ -35,6 +35,7 @@ from the modules actually linked into the shipped binaries (`go list -deps`).
 | github.com/AdamSLevy/jsonrpc2/v14 | v14.1.0 | MIT | 2018 Adam S Levy |
 | github.com/akamai/AkamaiOPEN-edgegrid-golang/v13 | v13.1.0 | Apache-2.0 | See upstream LICENSE |
 | github.com/alecthomas/chroma/v2 | v2.24.1 | MIT | 2017 Alec Thomas |
+| github.com/alexbrainman/sspi | v0.0.0-20180613141037-e580b900e9f5 | BSD-3-Clause | 2012 The Go Authors |
 | github.com/alibabacloud-go/alibabacloud-gateway-spi | v0.0.5 | Apache-2.0 | See upstream LICENSE |
 | github.com/alibabacloud-go/darabonba-openapi/v2 | v2.1.16 | Apache-2.0 | See upstream LICENSE |
 | github.com/alibabacloud-go/debug | v1.0.1 | Apache-2.0 | See upstream LICENSE |
@@ -99,6 +100,7 @@ from the modules actually linked into the shipped binaries (`go list -deps`).
 | github.com/clipperhouse/uax29/v2 | v2.5.0 | MIT | 2020 Matt Sherman |
 | github.com/cloudflare/circl | v1.6.3 | BSD-3-Clause | 2019 Cloudflare |
 | github.com/coder/websocket | v1.8.12 | ISC | 2023 Anmol Sethi <hi@nhooyr.io> |
+| github.com/coregx/signals | v0.1.1 | MIT | 2025 Andy Goryachev |
 | github.com/cretz/bine | v0.2.0 | MIT | 2018 Chad Retz |
 | github.com/davecgh/go-spew | v1.1.2-0.20180830191138-d8f796af33cc | ISC | 2012-2016 Dave Collins <dave@davec.name> |
 | github.com/dgryski/go-rendezvous | v0.0.0-20200823014737-9f7001d12a5f | MIT | 2017-2020 Damian Gryski <damian@gryski.com> |
@@ -106,6 +108,7 @@ from the modules actually linked into the shipped binaries (`go list -deps`).
 | github.com/dlclark/regexp2 | v1.12.0 | MIT | Doug Clark |
 | github.com/dnsimple/dnsimple-go/v4 | v4.0.0 | MIT | 2014-2024 DNSimple Corporation |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | 2005-2008  Dustin Sallings <dustin@spy.net> |
+| github.com/erikgeiser/coninput | v0.0.0-20211004153227-1c3628e74d0f | MIT | 2021 Erik G. |
 | github.com/exoscale/egoscale/v3 | v3.1.34 | Apache-2.0 | See upstream LICENSE |
 | github.com/fatih/structs | v1.1.0 | MIT | 2014 Fatih Arslan |
 | github.com/felixge/httpsnoop | v1.0.4 | MIT | 2016 Felix Geisendörfer (felix@debuggable.com) |
@@ -129,9 +132,17 @@ from the modules actually linked into the shipped binaries (`go list -deps`).
 | github.com/go-playground/validator/v10 | v10.23.0 | MIT | 2015 Dean Karn |
 | github.com/go-resty/resty/v2 | v2.17.2 | MIT | 2015-2024 Jeevanandam M., https://myjeeva.com <jeeva@myjeeva.com> |
 | github.com/go-viper/mapstructure/v2 | v2.5.0 | MIT | 2013 Mitchell Hashimoto |
+| github.com/go-webgpu/goffi | v0.6.3 | MIT | 2025-2026 Andrey Kolkov and GoGPU Contributors |
 | github.com/goccy/go-yaml | v1.19.2 | MIT | 2019 Masaaki Goshima |
 | github.com/gofrs/flock | v0.13.0 | BSD-3-Clause | 2018-2025, The Gofrs |
 | github.com/gofrs/uuid | v4.4.0+incompatible | MIT | 2013-2018 by Maxim Bublis <b@codemonkey.ru> |
+| github.com/gogpu/gg | v0.52.3 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/gogpu | v0.53.0 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/gpucontext | v0.28.0 | MIT | 2026 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/gputypes | v0.5.2 | MIT | 2026 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/naga | v0.19.0 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/ui | v0.1.54 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
+| github.com/gogpu/wgpu | v0.31.4 | MIT | 2025 Andrey Kolkov and GoGPU Contributors |
 | github.com/golang-jwt/jwt/v4 | v4.5.2 | MIT | 2012 Dave Grijalva |
 | github.com/golang-jwt/jwt/v5 | v5.3.1 | MIT | 2012 Dave Grijalva |
 | github.com/golang/protobuf | v1.5.4 | BSD-3-Clause | 2010 The Go Authors |
@@ -172,6 +183,7 @@ from the modules actually linked into the shipped binaries (`go list -deps`).
 | github.com/lucasb-eyer/go-colorful | v1.3.0 | MIT | 2013 Lucas Beyer |
 | github.com/magiconair/properties | v1.8.7 | BSD-2-Clause | 2013-2020, Frank Schroeder |
 | github.com/mattn/go-isatty | v0.0.21 | MIT | Yasuhiro MATSUMOTO <mattn.jp@gmail.com> |
+| github.com/mattn/go-localereader | v0.0.1 | MIT | Yasuhiro Matsumoto |
 | github.com/mattn/go-runewidth | v0.0.19 | MIT | 2016 Yasuhiro Matsumoto |
 | github.com/microcosm-cc/bluemonday | v1.0.27 | BSD-3-Clause | 2014, David Kitchen <david@buro9.com> |
 | github.com/miekg/dns | v1.1.72 | BSD-3-Clause | 2009, The Go Authors. Extensions copyright (c) 2011, Miek Gieben |
@@ -258,25 +270,27 @@ from the modules actually linked into the shipped binaries (`go list -deps`).
 | go.mongodb.org/mongo-driver | v1.17.9 | Apache-2.0 | See upstream LICENSE |
 | go.opentelemetry.io/auto/sdk | v1.2.1 | Apache-2.0 | See upstream LICENSE |
 | go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp | v0.67.0 | Apache-2.0 | See upstream LICENSE |
-| go.opentelemetry.io/otel | v1.43.0 | Apache-2.0 | See upstream LICENSE |
-| go.opentelemetry.io/otel/metric | v1.43.0 | Apache-2.0 | See upstream LICENSE |
-| go.opentelemetry.io/otel/trace | v1.43.0 | Apache-2.0 | See upstream LICENSE |
+| go.opentelemetry.io/otel | v1.44.0 | Apache-2.0 | See upstream LICENSE |
+| go.opentelemetry.io/otel/metric | v1.44.0 | Apache-2.0 | See upstream LICENSE |
+| go.opentelemetry.io/otel/trace | v1.44.0 | Apache-2.0 | See upstream LICENSE |
 | go.uber.org/multierr | v1.11.0 | MIT | 2017-2021 Uber Technologies, Inc |
 | go.uber.org/ratelimit | v0.3.1 | MIT | 2016 Uber Technologies, Inc |
 | go.uber.org/zap | v1.27.0 | MIT | 2016-2017 Uber Technologies, Inc |
 | go.yaml.in/yaml/v2 | v2.4.2 | Apache-2.0 | See upstream LICENSE |
-| golang.org/x/crypto | v0.53.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/net | v0.56.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/crypto | v0.57.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/exp | v0.0.0-20260410095643-746e56fc9e2f | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/image | v0.45.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/net | v0.60.0 | BSD-3-Clause | 2009 The Go Authors |
 | golang.org/x/oauth2 | v0.36.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/sync | v0.21.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/sys | v0.46.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/term | v0.44.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/text | v0.39.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/sync | v0.23.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/sys | v0.48.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/term | v0.46.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/text | v0.42.0 | BSD-3-Clause | 2009 The Go Authors |
 | golang.org/x/time | v0.15.0 | BSD-3-Clause | 2009 The Go Authors |
 | google.golang.org/api | v0.276.0 | BSD-3-Clause | 2011 Google Inc |
-| google.golang.org/genproto/googleapis/api | v0.0.0-20260414002931-afd174a4e478 | Apache-2.0 | See upstream LICENSE |
-| google.golang.org/genproto/googleapis/rpc | v0.0.0-20260414002931-afd174a4e478 | Apache-2.0 | See upstream LICENSE |
-| google.golang.org/grpc | v1.82.1 | Apache-2.0 | See upstream LICENSE |
+| google.golang.org/genproto/googleapis/api | v0.0.0-20260526163538-3dc84a4a5aaa | Apache-2.0 | See upstream LICENSE |
+| google.golang.org/genproto/googleapis/rpc | v0.0.0-20260526163538-3dc84a4a5aaa | Apache-2.0 | See upstream LICENSE |
+| google.golang.org/grpc | v1.83.2 | Apache-2.0 | See upstream LICENSE |
 | google.golang.org/protobuf | v1.36.11 | BSD-3-Clause | 2018 The Go Authors |
 | gopkg.in/ini.v1 | v1.67.1 | Apache-2.0 | See upstream LICENSE |
 | gopkg.in/ns1/ns1-go.v2 | v2.17.2 | Apache-2.0 | See upstream LICENSE |
@@ -298,6 +312,7 @@ clause applies to each of them:
 > may be used to endorse or promote products derived from this software
 > without specific prior written permission.
 
+- github.com/alexbrainman/sspi
 - github.com/antlr4-go/antlr/v4
 - github.com/atotto/clipboard
 - github.com/bodgit/tsig
@@ -320,6 +335,8 @@ clause applies to each of them:
 - github.com/sagikazarmark/slog-shim
 - github.com/spf13/pflag
 - golang.org/x/crypto
+- golang.org/x/exp
+- golang.org/x/image
 - golang.org/x/net
 - golang.org/x/oauth2
 - golang.org/x/sync

@@ -83,3 +83,34 @@ func TestCronDayAdvanceKeepsLocation(t *testing.T) {
 		t.Errorf("Next(%v) = %v, want %v", from, got, want)
 	}
 }
+
+// TestCronNextDSTFallBack guards against Next never terminating (or moving
+// backwards) on the US fall-back day, when 01:00-02:00 occurs twice.
+func TestCronNextDSTFallBack(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skipf("tzdata unavailable: %v", err)
+	}
+	cases := []struct {
+		name string
+		expr string
+		from time.Time
+		want time.Time
+	}{
+		{"daily after midnight", "@daily", time.Date(2026, 11, 1, 8, 0, 0, 0, loc), time.Date(2026, 11, 2, 0, 0, 0, 0, loc)},
+		{"hour match across transition", "0 3 * * *", time.Date(2026, 11, 1, 0, 10, 0, 0, loc), time.Date(2026, 11, 1, 3, 0, 0, 0, loc)},
+		{"minute inside repeated hour", "30 * * * *", time.Date(2026, 11, 1, 1, 45, 0, 0, loc).Add(time.Hour), time.Date(2026, 11, 1, 2, 30, 0, 0, loc)},
+		{"hour miss late in day", "0 1 * * *", time.Date(2026, 11, 1, 23, 30, 0, 0, loc), time.Date(2026, 11, 2, 1, 0, 0, 0, loc)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mustParse(t, tc.expr).Next(tc.from)
+			if !got.After(tc.from) {
+				t.Fatalf("Next(%v) = %v, not after input", tc.from, got)
+			}
+			if !got.Equal(tc.want) {
+				t.Errorf("Next(%v) = %v, want %v", tc.from, got, tc.want)
+			}
+		})
+	}
+}

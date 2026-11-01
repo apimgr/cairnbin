@@ -190,34 +190,44 @@ func advanceToMonth(t time.Time, f *fieldSet) time.Time {
 	return t.Add(365 * 24 * time.Hour)
 }
 
-func advanceToHour(t time.Time, f *fieldSet) time.Time {
-	h := t.Hour() + 1
-	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-	for i := 0; i < 24; i++ {
-		if h >= 24 {
-			return day.Add(24 * time.Hour)
-		}
-		if f.contains(h) {
-			return day.Add(time.Duration(h) * time.Hour)
-		}
-		h++
-	}
-	return day.Add(24 * time.Hour)
+// startOfHour returns the beginning of t's wall-clock hour using only
+// duration arithmetic, so it stays on t's own side of a DST transition.
+func startOfHour(t time.Time) time.Time {
+	return t.Add(-(time.Duration(t.Minute())*time.Minute +
+		time.Duration(t.Second())*time.Second +
+		time.Duration(t.Nanosecond())))
 }
 
-func advanceToMinute(t time.Time, f *fieldSet) time.Time {
-	m := t.Minute() + 1
-	hour := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), 0, 0, 0, t.Location())
-	for i := 0; i < 60; i++ {
-		if m >= 60 {
-			return hour.Add(time.Hour)
+// advanceToHour returns the first later time whose hour is in f, or local
+// midnight of the next day when none remains today. Candidates are built by
+// adding whole hours to t (never by rebuilding a wall-clock date), so the
+// result is always strictly after t, including on DST fall-back days.
+func advanceToHour(t time.Time, f *fieldSet) time.Time {
+	base := startOfHour(t)
+	for i := 1; i <= 25; i++ {
+		cand := base.Add(time.Duration(i) * time.Hour)
+		if cand.Day() != t.Day() {
+			break
 		}
-		if f.contains(m) {
-			return hour.Add(time.Duration(m) * time.Minute)
+		if f.contains(cand.Hour()) {
+			return cand
 		}
-		m++
 	}
-	return hour.Add(time.Hour)
+	return time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, t.Location())
+}
+
+// advanceToMinute returns the first later time whose minute is in f, or the
+// start of the next hour when none remains in this hour. It advances by
+// duration from t so the result is always strictly after t, including inside
+// the repeated hour of a DST fall-back transition.
+func advanceToMinute(t time.Time, f *fieldSet) time.Time {
+	base := startOfHour(t)
+	for m := t.Minute() + 1; m < 60; m++ {
+		if f.contains(m) {
+			return base.Add(time.Duration(m) * time.Minute)
+		}
+	}
+	return base.Add(time.Hour)
 }
 
 // parseCron parses a 5-field cron expression.
