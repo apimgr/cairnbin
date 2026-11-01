@@ -170,6 +170,8 @@ type I2PInfo struct {
 	Running  bool   `json:"running"`
 	Status   string `json:"status"`
 	Hostname string `json:"hostname"`
+	// Provider is the active backend: "i2pd", "sam", or "none".
+	Provider string `json:"provider"`
 }
 
 // ChecksInfo reports component health as "ok" or "error".
@@ -3051,7 +3053,7 @@ func (s *Server) buildTorInfo() TorInfo {
 // buildI2PInfo returns the I2PInfo block for health responses.
 func (s *Server) buildI2PInfo() I2PInfo {
 	if s.i2pManager == nil {
-		return I2PInfo{Enabled: false, Running: false, Status: "disabled", Hostname: ""}
+		return I2PInfo{Enabled: false, Running: false, Status: "disabled", Hostname: "", Provider: "none"}
 	}
 	running := s.i2pManager.Running()
 	addr := s.i2pManager.Address()
@@ -3064,6 +3066,7 @@ func (s *Server) buildI2PInfo() I2PInfo {
 		Running:  running,
 		Status:   status,
 		Hostname: addr,
+		Provider: s.i2pManager.Provider().String(),
 	}
 }
 
@@ -3161,6 +3164,7 @@ func writeHealthText(w http.ResponseWriter, hr HealthResponse) {
 	fmt.Fprintf(w, "features.i2p.running: %t\n", hr.Features.I2P.Running)
 	if hr.Features.I2P.Status != "" {
 		fmt.Fprintf(w, "features.i2p.status: %s\n", hr.Features.I2P.Status)
+		fmt.Fprintf(w, "features.i2p.provider: %s\n", hr.Features.I2P.Provider)
 	}
 	if hr.Features.I2P.Hostname != "" {
 		fmt.Fprintf(w, "features.i2p.hostname: %s\n", hr.Features.I2P.Hostname)

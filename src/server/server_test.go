@@ -5115,3 +5115,12 @@ func TestCSRFFailureDebugField(t *testing.T) {
 		t.Errorf("_debug.check = %v, want %q", dbg["check"], "token absent")
 	}
 }
+
+// TestBuildI2PInfoDisabledReportsNoneProvider verifies the health block for a
+// server with I2P off carries provider "none" (PART 13 I2PInfo).
+func TestBuildI2PInfoDisabledReportsNoneProvider(t *testing.T) {
+	info := (&Server{}).buildI2PInfo()
+	if info.Enabled || info.Status != "disabled" || info.Provider != "none" {
+		t.Errorf("disabled I2P info = %+v, want disabled/none", info)
+	}
+}

@@ -374,6 +374,19 @@ func (m *Manager) Address() string {
 	return ""
 }
 
+// String returns the provider name used in health responses: "i2pd", "sam",
+// or "none".
+func (p Provider) String() string {
+	switch p {
+	case ProviderI2Pd:
+		return "i2pd"
+	case ProviderSAM:
+		return "sam"
+	default:
+		return "none"
+	}
+}
+
 // Provider returns which backend the running Manager is using.
 func (m *Manager) Provider() Provider {
 	m.mu.Lock()

@@ -13,6 +13,20 @@ import (
 	"time"
 )
 
+// TestProviderString verifies the provider names reported in /server/healthz.
+func TestProviderString(t *testing.T) {
+	cases := map[Provider]string{
+		ProviderNone: "none",
+		ProviderI2Pd: "i2pd",
+		ProviderSAM:  "sam",
+	}
+	for p, want := range cases {
+		if got := p.String(); got != want {
+			t.Errorf("Provider(%d).String() = %q, want %q", p, got, want)
+		}
+	}
+}
+
 // ─── FindBinary ─────────────────────────────────────────────────────────────
 
 func TestFindBinary_ConfiguredPathExisting(t *testing.T) {
