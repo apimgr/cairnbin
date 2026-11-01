@@ -144,7 +144,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&i2pFlag, "i2p", false, "Enable the optional I2P eepsite (opt-in; PART 31.2)")
 	fs.StringVar(&portFlag, "port", "", "Listen port")
 	fs.StringVar(&addressFlag, "address", "", "Listen address")
-	fs.StringVar(&modeFlag, "mode", "", "Application mode (production|development)")
+	fs.StringVar(&modeFlag, "mode", "", "Application mode (production|development|debug)")
 	fs.StringVar(&configFlag, "config", "", "Config directory")
 	fs.StringVar(&dataFlag, "data", "", "Data directory")
 	fs.StringVar(&logFlag, "log", "", "Log directory")
@@ -210,7 +210,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	if shellCmd != "" {
 		switch shellCmd {
-		case "--help":
+		case "--help", "help":
 			shell.PrintHelp(binaryName)
 		case "completions":
 			if err := shell.PrintCompletions(binaryName, shellArg); err != nil {
@@ -234,7 +234,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	if serviceCmd != "" {
 		switch serviceCmd {
-		case "--help":
+		case "--help", "help":
 			service.PrintHelp(binaryName)
 		case "start":
 			if err := service.Start(); err != nil {
@@ -303,7 +303,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		}
 
 		switch maintenanceCmd {
-		case "--help":
+		case "--help", "help":
 			maintenance.PrintHelp(binaryName)
 		case "backup":
 			// "backup test" is a dry-run verification of the security keypair,
@@ -583,7 +583,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		}
 
 		switch {
-		case updateCmd == "--help":
+		case updateCmd == "--help" || updateCmd == "help":
 			fmt.Fprintf(stdout, `Update: %s --update [command]
 
 Commands:
@@ -674,7 +674,7 @@ Examples:
 
 	// ── Daemon ────────────────────────────────────────────────────────────────
 
-	if daemonFlag {
+	if daemon.ShouldDaemonize(daemonFlag, false) {
 		if err := daemon.Daemonize(activeLang); err != nil {
 			log.Printf("daemon: %v", err)
 			// EX_OSERR
@@ -803,6 +803,16 @@ Examples:
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		log.Printf("warning: config load: %v", err)
+	}
+
+	// server.daemonize applies to manual starts only (PART 8): the --daemon flag
+	// was handled above, and a service-manager or container start never
+	// daemonizes. The re-exec'd child sees _DAEMON_CHILD and continues.
+	if !daemonFlag && daemon.ShouldDaemonize(false, cfg.Server.Daemonize) {
+		if err := daemon.Daemonize(activeLang); err != nil {
+			log.Printf("daemon: %v", err)
+			os.Exit(71)
+		}
 	}
 
 	// PART 17: custom email templates override embedded defaults from
@@ -1971,10 +1981,10 @@ Information:
 Shell Integration:
       --shell completions [SHELL]   Print shell completions
       --shell init [SHELL]          Print shell init command
-      --shell --help                Show shell help
+      --shell help                  Show shell help
 
 Server Configuration:
-      --mode {production|development}  Application mode (default: production)
+      --mode {production|development|debug}  Application mode (default: production)
       --config DIR                  Config directory
       --data DIR                    Data directory
       --cache DIR                   Cache directory

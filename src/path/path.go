@@ -3,10 +3,12 @@ package path
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -387,7 +389,18 @@ func IsContainer() bool {
 
 // isContainer reports whether the process is running inside a Linux container.
 func isContainer() bool {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
+	for _, f := range []string{"/.dockerenv", "/run/.containerenv", "/dev/lxc"} {
+		if _, err := os.Stat(f); err == nil {
+			return true
+		}
+	}
+
+	if os.Getenv("container") != "" || os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		return true
+	}
+
+	switch parentProcessName() {
+	case "tini", "dumb-init", "s6-svscan", "runsv", "runsvdir", "catatonit", projectBinaryName:
 		return true
 	}
 
@@ -395,10 +408,29 @@ func isContainer() bool {
 		content := string(data)
 		if strings.Contains(content, "docker") ||
 			strings.Contains(content, "kubepods") ||
-			strings.Contains(content, "containerd") {
+			strings.Contains(content, "containerd") ||
+			strings.Contains(content, "lxc") {
 			return true
 		}
 	}
 
 	return false
+}
+
+// projectBinaryName is the hardcoded project name used to recognise a parent
+// process that is our own entrypoint wrapper.
+const projectBinaryName = "pastebin"
+
+// parentProcessName returns the command name of the parent process, read from
+// /proc on Linux and via ps elsewhere. It returns "" when it cannot be found.
+func parentProcessName() string {
+	ppid := os.Getppid()
+	if data, err := os.ReadFile("/proc/" + strconv.Itoa(ppid) + "/comm"); err == nil {
+		return strings.TrimSpace(string(data))
+	}
+	out, err := exec.Command("ps", "-p", strconv.Itoa(ppid), "-o", "comm=").Output()
+	if err != nil {
+		return ""
+	}
+	return filepath.Base(strings.TrimSpace(string(out)))
 }

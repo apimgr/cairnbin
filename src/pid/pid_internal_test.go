@@ -131,3 +131,32 @@ func TestIsProcessRunning_InvalidPID(t *testing.T) {
 		t.Error("isProcessRunning(99999999): expected false")
 	}
 }
+
+// TestIsOurBinaryName verifies exact matching: the project binary and the
+// running (possibly renamed) executable match, while "-cli" siblings and
+// unrelated names do not.
+func TestIsOurBinaryName(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"project name", "pastebin", true},
+		{"absolute path", "/usr/local/bin/pastebin", true},
+		{"ps output with newline", "pastebin\n", true},
+		{"cli sibling", "pastebin-cli", false},
+		{"cli sibling path", "/usr/bin/pastebin-cli", false},
+		{"unrelated", "nginx", false},
+		{"empty", "", false},
+		{"running executable", self, true},
+	}
+	for _, tc := range cases {
+		if got := isOurBinaryName(tc.in); got != tc.want {
+			t.Errorf("%s: isOurBinaryName(%q) = %v, want %v", tc.name, tc.in, got, tc.want)
+		}
+	}
+}

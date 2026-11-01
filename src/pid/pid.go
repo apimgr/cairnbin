@@ -5,9 +5,37 @@ package pid
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
+
+// projectBinaryName is the hardcoded project name; a PID is "ours" only when
+// the process image name matches it exactly (or the running binary's own,
+// possibly renamed, name) — never by substring, which would also match
+// "pastebin-cli".
+const projectBinaryName = "pastebin"
+
+// isOurBinaryName reports whether an executable path or name refers to this
+// server binary. Comparison is exact on the base name, case-insensitive, with
+// a Windows ".exe" suffix ignored.
+func isOurBinaryName(nameOrPath string) bool {
+	norm := func(s string) string {
+		s = strings.ToLower(filepath.Base(strings.TrimSpace(s)))
+		return strings.TrimSuffix(s, ".exe")
+	}
+	got := norm(nameOrPath)
+	if got == "" || got == "." {
+		return false
+	}
+	if got == projectBinaryName {
+		return true
+	}
+	if self, err := os.Executable(); err == nil {
+		return got == norm(self)
+	}
+	return false
+}
 
 // CheckPIDFile checks whether a PID file exists and whether the recorded
 // process is still running and belongs to our binary.

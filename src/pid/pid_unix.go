@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 )
 
@@ -34,7 +32,7 @@ func isOurProcess(pid int) bool {
 	if err != nil {
 		return isOurProcessDarwin(pid)
 	}
-	return strings.Contains(filepath.Base(exePath), "pastebin")
+	return isOurBinaryName(exePath)
 }
 
 // isOurProcessDarwin checks the running process name via ps on macOS/BSD.
@@ -44,5 +42,5 @@ func isOurProcessDarwin(pid int) bool {
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(output), "pastebin")
+	return isOurBinaryName(string(output))
 }

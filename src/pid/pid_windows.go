@@ -3,9 +3,6 @@
 package pid
 
 import (
-	"path/filepath"
-	"strings"
-
 	"golang.org/x/sys/windows"
 )
 
@@ -42,5 +39,5 @@ func isOurProcess(pid int) bool {
 		return false
 	}
 	exePath := windows.UTF16ToString(buf[:size])
-	return strings.Contains(strings.ToLower(filepath.Base(exePath)), "pastebin")
+	return isOurBinaryName(exePath)
 }

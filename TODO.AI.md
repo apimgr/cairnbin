@@ -91,3 +91,13 @@ same pass gets its own line item here.
   tied to the debug flag exist. Also missing: DB-query and cache-operation
   debug logging (`debugLogDB`, `debugLogCache`) and the expvar counters
   (`requests_total`, `errors_total`, `uptime_seconds`, ...) from the spec.
+- PART 8 startup order: AI.md steps 8a-8i require creating dirs, binding
+  privileged ports, spawning Tor with service-user setuid credentials, then
+  dropping privileges BEFORE logging, PID file, config load and DB init. The
+  code drops privileges inside `server.bindAndDrop` (after DB/config/logging
+  already ran as root and were chowned), and Tor/I2P children are started
+  without `SysProcAttr.Credential`. Needs a restructure of `src/main.go`.
+- PART 8 test helper `TestSelfPIDHelper` (src/pid/pid_internal_test.go) uses
+  os.Exit(3)/os.Exit(4), outside the standard exit-code ranges; switch to
+  in-range codes and update the parent test's expectations.
+

@@ -74,6 +74,21 @@ func TestRunShellHelp(t *testing.T) {
 	}
 }
 
+// TestRunHelpWordAliases verifies the "help" word form (as shown in the
+// server --help output) is accepted alongside "--help" for each command.
+func TestRunHelpWordAliases(t *testing.T) {
+	for _, args := range [][]string{
+		{"--shell", "help"},
+		{"--service", "help"},
+		{"--maintenance", "help"},
+		{"--update", "help"},
+	} {
+		if code, _, errOut := runCapture(args...); code != 0 {
+			t.Errorf("%v: exit %d, want 0 (stderr %q)", args, code, errOut)
+		}
+	}
+}
+
 // TestRunShellCompletionsBash verifies --shell completions bash exits 0.
 // The completions are written to os.Stdout directly by shell.PrintCompletions,
 // not to the captured writer, so we only check the exit code here.
