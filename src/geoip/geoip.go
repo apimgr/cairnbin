@@ -118,6 +118,9 @@ func Open(cfg Config) (*DB, error) {
 	if err := os.MkdirAll(cfg.Dir, 0o750); err != nil {
 		return nil, fmt.Errorf("geoip: create dir: %w", err)
 	}
+	if skipInitialDownload() {
+		return d, nil
+	}
 
 	if cfg.EnableASN {
 		path := filepath.Join(cfg.Dir, "asn.mmdb")

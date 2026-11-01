@@ -51,7 +51,9 @@ func newTestDB(t *testing.T) database.DB {
 func newTestHandler(t *testing.T) (*handler.PasteHandler, database.DB) {
 	t.Helper()
 	db := newTestDB(t)
-	return handler.NewPasteHandler(db, "", [32]byte{}), db
+	h := handler.NewPasteHandler(db, "", [32]byte{})
+	h.SetTokenEncryptionKey(bytes.Repeat([]byte{1}, 32))
+	return h, db
 }
 
 // withID injects a chi URL param "id" into the request context so that

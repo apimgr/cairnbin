@@ -25,6 +25,7 @@ import (
 	"github.com/apimgr/pastebin/src/handler"
 	"github.com/apimgr/pastebin/src/handler/compat"
 	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/pastebin/src/tor"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -2180,6 +2181,14 @@ func TestBuildTorInfo(t *testing.T) {
 		}
 		if info.Status != "disabled" {
 			t.Errorf("TorInfo.Status = %q, want disabled", info.Status)
+		}
+	})
+	t.Run("missing binary reports disabled", func(t *testing.T) {
+		s := newMinimalServer(&config.Config{})
+		s.torManager = tor.NewManager(context.Background(), 0, tor.Config{Binary: "/__pastebin_test__/missing-tor"}, nil)
+		info := s.buildTorInfo()
+		if info.Enabled || info.Running || info.Status != "disabled" {
+			t.Errorf("missing Tor binary status = %+v, want disabled", info)
 		}
 	})
 }
@@ -4993,6 +5002,49 @@ func TestValidPathPrefix(t *testing.T) {
 	for _, p := range invalid {
 		if validPathPrefix(p) {
 			t.Errorf("validPathPrefix(%q) = true, want false", p)
+		}
+	}
+}
+
+func TestOwnerCredentialStrictRateLimiterIsPerIP(t *testing.T) {
+	s := &Server{strictLimiter: newRateLimiter(1, time.Minute)}
+	hits := 0
+	h := s.maybeStrictRateLimit(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	for i, remoteAddr := range []string{"192.0.2.10:1000", "192.0.2.10:1001", "192.0.2.11:1000"} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/server/preferences/token/reveal", nil)
+		r.RemoteAddr = remoteAddr
+		h(w, r)
+		want := http.StatusNoContent
+		if i == 1 {
+			want = http.StatusTooManyRequests
+		}
+		if w.Code != want {
+			t.Errorf("request %d status = %d, want %d", i+1, w.Code, want)
+		}
+	}
+	if hits != 2 {
+		t.Errorf("strict-limited handler ran %d times, want 2", hits)
+	}
+}
+
+func TestOwnerRestoreFailuresAreCountedPerIP(t *testing.T) {
+	s := &Server{restoreFailLimiter: newRateLimiter(2, time.Minute)}
+	for i, remoteAddr := range []string{"192.0.2.20:1000", "192.0.2.20:1001", "192.0.2.20:1002", "192.0.2.21:1000"} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/server/preferences/token/restore", nil)
+		r.RemoteAddr = remoteAddr
+		limited := s.ownerRestoreFailureLimited(w, r)
+		wantLimited := i == 2
+		if limited != wantLimited {
+			t.Errorf("failure request %d limited = %t, want %t", i+1, limited, wantLimited)
+		}
+		if wantLimited && w.Code != http.StatusTooManyRequests {
+			t.Errorf("blocked restore status = %d, want 429", w.Code)
 		}
 	}
 }

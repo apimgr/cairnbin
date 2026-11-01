@@ -84,10 +84,38 @@ E2E_ARTIFACT_DIR="${E2E_TEMP_DIR}/artifacts"
 mkdir -p "${E2E_ARTIFACT_DIR}"
 cat >"${E2E_TEMP_DIR}/volumes/config/pastebin/server.yml" <<'EOF'
 server:
+  token: e2e-operator-token-only
   geoip:
-    enabled: false
+    enabled: true
+    databases:
+      asn: true
+      country: true
+      city: true
   tor:
     binary: /__pastebin_e2e__/tor
+  contact:
+    admin:
+      email: e2e-admin@example.test
+  notifications:
+    email:
+      enabled: true
+      smtp:
+        host: pastebin-e2e-runner
+        port: 64981
+        tls: none
+      events:
+        scheduler_error: true
+web:
+  security:
+    blocklists:
+      enabled: true
+      sources:
+        - file: e2e-blocklist.txt
+          url: http://pastebin-e2e-runner:64980/blocklist
+    cve:
+      enabled: true
+      file: e2e-cves.json
+      source: http://pastebin-e2e-runner:64980/cve
 rate_limit:
   enabled: true
   write:
@@ -152,7 +180,7 @@ if (
     TEST_PKGS="./tests/e2e/..." \
     TEST_RUN="-count=1" \
     TEST_COVERAGE=0 \
-    EXTRA_ENV="--network pastebin-test -e E2E_BASE_URL=${E2E_BASE_URL} -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
+    EXTRA_ENV="--network pastebin-test --network-alias=pastebin-e2e-runner -e PASTEBIN_E2E_UPDATE_API_URL=http://pastebin-e2e-runner:64980/update -e E2E_BASE_URL=${E2E_BASE_URL} -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
 ); then
     __pass "E2E tiers 1–3"
 else

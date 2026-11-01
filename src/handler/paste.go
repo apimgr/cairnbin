@@ -27,6 +27,7 @@ import (
 
 	"github.com/apimgr/pastebin/src/cache"
 	"github.com/apimgr/pastebin/src/common/httputil"
+	"github.com/apimgr/pastebin/src/common/secretbox"
 	"github.com/apimgr/pastebin/src/database"
 	"github.com/apimgr/pastebin/src/metric"
 	"github.com/apimgr/pastebin/src/model"
@@ -67,7 +68,8 @@ type PasteHandler struct {
 	maxSizeBytes int64
 	// maxSizeSet reports whether SetMaxSize has been called, distinguishing
 	// "operator configured unlimited (0)" from "never configured".
-	maxSizeSet bool
+	maxSizeSet         bool
+	tokenEncryptionKey []byte
 }
 
 // defaultMaxSizeBytes mirrors config.go's Paste.MaxSizeBytes default so
@@ -109,6 +111,11 @@ func NewPasteHandler(db database.DB, baseURL string, operatorTokenHash [32]byte)
 // chain instead of a simplified copy.
 func (h *PasteHandler) SetBaseURLResolver(fn func(*http.Request) string) {
 	h.baseURLFn = fn
+}
+
+// SetTokenEncryptionKey supplies the configured at-rest key for recoverable owner credentials.
+func (h *PasteHandler) SetTokenEncryptionKey(key []byte) {
+	h.tokenEncryptionKey = append([]byte(nil), key...)
 }
 
 // SetCache injects the server's shared cache driver (PART 9/12) so paste reads
@@ -254,6 +261,13 @@ func extractToken(r *http.Request) string {
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
 		if v := r.PostFormValue("owner_token"); v != "" {
 			return v
+		}
+	}
+	// Browser cookie fallback is restricted to web forms; API routes never
+	// receive ambient authority from cookies.
+	if !strings.HasPrefix(r.URL.Path, "/api/") {
+		if cookie, err := r.Cookie("pastebin_owner_token_rU3uW5Ze"); err == nil && cookie.Value != "" {
+			return cookie.Value
 		}
 	}
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
@@ -516,9 +530,22 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 	// so web-UI users who paste a stale token from CLI still get a working paste.
 	var plainToken string
 	var tokenHash [32]byte
-	if incoming := extractToken(r); incoming != "" {
+	var ownerID string
+	newOwner := false
+	ownerDB, supportsOwners := h.db.(database.OwnerDB)
+	if incoming := extractOwnerToken(r); incoming != "" {
 		inHash := sha256.Sum256([]byte(incoming))
-		if err := h.db.ValidateAPIToken(inHash, "paste"); err == nil {
+		var lookupErr error
+		if supportsOwners {
+			var tokenRec *database.APITokenRecord
+			tokenRec, lookupErr = ownerDB.GetOwnerTokenByHash(inHash)
+			if lookupErr == nil {
+				ownerID = tokenRec.OwnerID
+			}
+		} else {
+			lookupErr = h.db.ValidateAPIToken(inHash, "paste")
+		}
+		if lookupErr == nil {
 			plainToken = incoming
 			tokenHash = inHash
 		}
@@ -529,10 +556,19 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 		if err != nil {
 			return nil, http.StatusInternalServerError, fmt.Errorf("failed to generate token")
 		}
+		ownerID, err = generateID()
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("failed to generate owner identity")
+		}
+		newOwner = true
+	}
+	if supportsOwners && ownerID == "" {
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to resolve owner identity")
 	}
 
 	paste := &model.Paste{
 		ID:          pasteID,
+		OwnerID:     ownerID,
 		Title:       req.Title,
 		Content:     req.Content,
 		ContentType: req.ContentType,
@@ -544,22 +580,38 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 		Views:       0,
 	}
 
-	if err := h.db.CreatePaste(paste); err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("failed to create paste")
-	}
-	metric.PastesCreatedTotal.Inc()
-
-	// Store the token in api_tokens. token_prefix = first 12 chars of raw token.
-	tokenHashHex := hex.EncodeToString(tokenHash[:])
+	// A new owner's primary credential is stored with an encrypted recoverable copy.
 	tokenPrefix := plainToken
 	if len(tokenPrefix) > 12 {
 		tokenPrefix = tokenPrefix[:12]
 	}
-	if err := h.db.CreateAPIToken(tokenHashHex, tokenPrefix, "paste", pasteID, expiresAt); err != nil {
-		// Non-fatal: paste is already created; log and continue.
-		// The owner token won't work for deletion, but the paste itself is intact.
-		log.Printf("warning: create api_token for paste %s: %v", pasteID, err)
+	tokenEnc := ""
+	if newOwner && supportsOwners {
+		if len(h.tokenEncryptionKey) != 32 {
+			return nil, http.StatusInternalServerError, fmt.Errorf("owner token encryption is unavailable")
+		}
+		sealed, err := secretbox.Seal(h.tokenEncryptionKey, []byte(plainToken))
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("failed to encrypt owner token")
+		}
+		tokenEnc = base64.StdEncoding.EncodeToString(sealed)
+		if err := ownerDB.CreatePasteWithPrimaryToken(paste, hex.EncodeToString(tokenHash[:]), tokenPrefix, plainToken[len(plainToken)-4:], tokenEnc); err != nil {
+			log.Printf("warning: create owner and paste %s: %v", pasteID, err)
+			return nil, http.StatusInternalServerError, fmt.Errorf("failed to create owner identity")
+		}
 	} else {
+		if err := h.db.CreatePaste(paste); err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("failed to create paste")
+		}
+	}
+	metric.PastesCreatedTotal.Inc()
+
+	if newOwner && !supportsOwners {
+		if err := h.db.CreateAPIToken(hex.EncodeToString(tokenHash[:]), tokenPrefix, "paste", pasteID, expiresAt); err != nil {
+			log.Printf("warning: create legacy api_token for paste %s: %v", pasteID, err)
+		}
+		h.refreshActiveTokenGauge()
+	} else if supportsOwners {
 		h.refreshActiveTokenGauge()
 	}
 
@@ -575,7 +627,12 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 		Views:      0,
 		CreatedAt:  paste.CreatedAt,
 		Link:       link,
-		OwnerToken: plainToken,
+		OwnerToken: func() string {
+			if newOwner {
+				return plainToken
+			}
+			return ""
+		}(),
 	}
 	return resp, 0, nil
 }
@@ -838,7 +895,7 @@ func (h *PasteHandler) ListPastes(w http.ResponseWriter, r *http.Request) {
 func (h *PasteHandler) DeletePaste(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	token := extractToken(r)
+	token := extractOwnerToken(r)
 	if token == "" {
 		sendAPIError(w, r, "UNAUTHORIZED", "owner token required (Authorization: Bearer tok_...)")
 		return
@@ -884,6 +941,20 @@ func (h *PasteHandler) DeletePaste(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"message": "paste deleted"}})
+}
+
+// extractOwnerToken enforces the PART 11 credential boundary: native API
+// routes use an Authorization bearer token only; web forms may use a token
+// field or the project owner cookie.
+func extractOwnerToken(r *http.Request) string {
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		auth := r.Header.Get("Authorization")
+		if strings.HasPrefix(auth, "Bearer ") {
+			return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+		}
+		return ""
+	}
+	return extractToken(r)
 }
 
 // ─── Web view helpers ─────────────────────────────────────────────────────────

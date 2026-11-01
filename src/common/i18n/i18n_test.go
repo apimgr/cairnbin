@@ -57,6 +57,13 @@ func TestTranslate(t *testing.T) {
 	}{
 		{"en_known_key", "en", "common.save", "Save"},
 		{"fr_known_key", "fr", "common.save", "Enregistrer"},
+		{"owner_tokens_en", "en", "preferences.owner_tokens", "Owner tokens"},
+		{"owner_tokens_es", "es", "preferences.owner_tokens", "Tokens de propietario"},
+		{"owner_tokens_fr", "fr", "preferences.owner_tokens", "Jetons du propriétaire"},
+		{"owner_tokens_de", "de", "preferences.owner_tokens", "Eigentümer-Tokens"},
+		{"owner_tokens_ja", "ja", "preferences.owner_tokens", "所有者トークン"},
+		{"owner_tokens_zh", "zh", "preferences.owner_tokens", "所有者令牌"},
+		{"owner_tokens_ar", "ar", "preferences.owner_tokens", "رموز المالك"},
 		{"en_nav_home", "en", "nav.home", "Home"},
 		{"unsupported_lang_falls_back_to_en", "xx", "common.save", "Save"},
 		{"unknown_key_returns_key", "en", "no.such.key", "no.such.key"},

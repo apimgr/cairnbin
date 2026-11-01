@@ -1058,3 +1058,126 @@ func TestNewDatabase_DefaultType(t *testing.T) {
 		t.Errorf("Ping: %v", err)
 	}
 }
+
+func TestOwnerTokenLifecycle(t *testing.T) {
+	db := newTestDB(t)
+	ownerDB, ok := db.(database.OwnerDB)
+	if !ok {
+		t.Fatal("SQLite database does not implement OwnerDB")
+	}
+	_, primaryHash, primaryHashHex, primaryPrefix := makeToken(t)
+	if err := ownerDB.CreateOwnerWithPrimaryToken("owner-one", primaryHashHex, primaryPrefix, "test", "encrypted-primary"); err != nil {
+		t.Fatal(err)
+	}
+	primary, err := ownerDB.GetOwnerTokenByHash(primaryHash)
+	if err != nil || primary.Kind != "primary" || primary.OwnerID != "owner-one" {
+		t.Fatalf("primary token lookup = %#v, %v", primary, err)
+	}
+	expiry := time.Now().Add(24 * time.Hour)
+	_, linkedHash, linkedHashHex, linkedPrefix := makeToken(t)
+	linkedID, err := ownerDB.CreateLinkedToken("owner-one", linkedHashHex, linkedPrefix, "test", "automation", "encrypted-linked", &expiry, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, overLimitHashHex, overLimitPrefix := makeToken(t)
+	if _, err := ownerDB.CreateLinkedToken("owner-one", overLimitHashHex, overLimitPrefix, "more", "over-limit", "encrypted", nil, 1); err == nil {
+		t.Fatal("linked token limit was not enforced")
+	}
+	listed, err := ownerDB.ListOwnerTokens("owner-one")
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("ListOwnerTokens = %d records, %v", len(listed), err)
+	}
+	for _, token := range listed {
+		if token.TokenEnc != "" {
+			t.Fatal("encrypted token copy leaked from owner token listing")
+		}
+		if token.TokenSuffix == "" {
+			t.Fatal("token suffix missing from owner listing")
+		}
+	}
+	detailed, err := ownerDB.GetOwnerTokenByID("owner-one", linkedID)
+	if err != nil || detailed.TokenEnc != "encrypted-linked" {
+		t.Fatalf("scoped token detail lookup = %#v, %v", detailed, err)
+	}
+	if _, err := ownerDB.GetOwnerTokenByHash(linkedHash); err != nil {
+		t.Fatalf("linked token lookup: %v", err)
+	}
+	_, rotatedHash, rotatedHashHex, rotatedPrefix := makeToken(t)
+	if err := ownerDB.RotateOwnerToken("owner-one", linkedID, rotatedHashHex, rotatedPrefix, "test", "rotated-linked"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ownerDB.GetOwnerTokenByHash(linkedHash); err == nil {
+		t.Fatal("old linked token remained valid after rotation")
+	}
+	if _, err := ownerDB.GetOwnerTokenByHash(rotatedHash); err != nil {
+		t.Fatalf("rotated token lookup: %v", err)
+	}
+	if err := ownerDB.UpdateOwnerToken("owner-one", linkedID, "renamed", nil, 25); err != nil {
+		t.Fatal(err)
+	}
+	if err := ownerDB.RevokeOwnerToken("owner-one", linkedID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ownerDB.GetOwnerTokenByHash(rotatedHash); err == nil {
+		t.Fatal("revoked linked token remained valid")
+	}
+}
+
+func TestCreatePasteWithPrimaryTokenIsAtomic(t *testing.T) {
+	db := newTestDB(t)
+	ownerDB := db.(database.OwnerDB)
+	_, _, hashHex, prefix := makeToken(t)
+	paste := samplePaste("owned-paste")
+	paste.OwnerID = "owner-atomic"
+	if err := ownerDB.CreatePasteWithPrimaryToken(paste, hashHex, prefix, "test", "encrypted"); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := db.GetPasteByID(paste.ID)
+	if err != nil || stored == nil || stored.OwnerID != "owner-atomic" {
+		t.Fatalf("stored paste = %#v, %v", stored, err)
+	}
+	_, _, secondHashHex, secondPrefix := makeToken(t)
+	second := samplePaste("rolled-back-paste")
+	second.OwnerID = "owner-atomic"
+	if err := ownerDB.CreatePasteWithPrimaryToken(second, secondHashHex, secondPrefix, "test", "encrypted"); err == nil {
+		t.Fatal("duplicate owner create unexpectedly succeeded")
+	}
+	rolledBack, err := db.GetPasteByID(second.ID)
+	if err != nil || rolledBack != nil {
+		t.Fatalf("failed owner transaction persisted paste: %#v, %v", rolledBack, err)
+	}
+}
+
+func TestLegacyTokenMigrationAssignsPasteOwner(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "legacy.db")
+	db, err := database.NewDatabase("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := samplePaste("legacy-paste")
+	if err := db.CreatePaste(p); err != nil {
+		t.Fatal(err)
+	}
+	_, hash, hashHex, prefix := makeToken(t)
+	if err := db.CreateAPIToken(hashHex, prefix, "paste", p.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = database.NewDatabase("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	upgraded, err := db.GetPasteByID(p.ID)
+	if err != nil || upgraded == nil || upgraded.OwnerID == "" {
+		t.Fatalf("paste owner migration = %#v, %v", upgraded, err)
+	}
+	ownerDB := db.(database.OwnerDB)
+	credential, err := ownerDB.GetOwnerTokenByHash(hash)
+	if err != nil || credential.OwnerID != upgraded.OwnerID || credential.Kind != "primary" {
+		t.Fatalf("legacy credential migration = %#v, %v", credential, err)
+	}
+}

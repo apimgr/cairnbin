@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,8 +31,13 @@ func newTorControlServer(t *testing.T, withManager bool) *Server {
 	s.configDir = filepath.Join(root, "config")
 	s.dataDir = filepath.Join(root, "data")
 	if withManager {
+		torBinary := filepath.Join(root, "fake-tor")
+		if err := os.WriteFile(torBinary, []byte("test placeholder"), 0o700); err != nil {
+			t.Fatal(err)
+		}
 		torCfg := tor.Config{
 			VirtualPort: 80,
+			Binary:      torBinary,
 			ConfigDir:   s.configDir,
 			DataDir:     s.dataDir,
 		}

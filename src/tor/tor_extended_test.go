@@ -10,6 +10,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/cretz/bine/control"
+	binettor "github.com/cretz/bine/tor"
 )
 
 // ─── waitForHostname ──────────────────────────────────────────────────────────
@@ -341,6 +344,57 @@ func TestRestart_NoTorBinary(t *testing.T) {
 	}
 	if m.Running() {
 		t.Error("manager should not report running with no Tor binary")
+	}
+}
+
+type successfulTorRuntime struct{ closed bool }
+
+func (f *successfulTorRuntime) Close() error                              { f.closed = true; return nil }
+func (f *successfulTorRuntime) EnableNetwork(context.Context, bool) error { return nil }
+func (f *successfulTorRuntime) Dialer(context.Context, *binettor.DialConf) (*binettor.Dialer, error) {
+	return nil, nil
+}
+func (f *successfulTorRuntime) GetInfo(...string) ([]*control.KeyVal, error) {
+	return []*control.KeyVal{{Key: "version", Val: "fixture"}}, nil
+}
+
+func TestManager_SuccessfulLifecycleWithTorDouble(t *testing.T) {
+	tmp := t.TempDir()
+	bin := filepath.Join(tmp, "tor")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configDir, dataDir := filepath.Join(tmp, "config"), filepath.Join(tmp, "data")
+	fixture := &successfulTorRuntime{}
+	originalStart := startTorRuntime
+	startTorRuntime = func(_ context.Context, conf *binettor.StartConf) (managedTor, error) {
+		hostname := filepath.Join(conf.DataDir, "site", "hostname")
+		if err := os.WriteFile(hostname, []byte("fixtureonionaddress.onion\n"), 0o600); err != nil {
+			return nil, err
+		}
+		return fixture, nil
+	}
+	t.Cleanup(func() { startTorRuntime = originalStart })
+
+	manager := NewManager(context.Background(), 8080, Config{
+		Binary: bin, ConfigDir: configDir, DataDir: dataDir, VirtualPort: 80,
+	}, http.NewServeMux())
+	t.Cleanup(manager.Close)
+	if err := manager.Start(); err != nil {
+		t.Fatalf("Start with successful Tor double: %v", err)
+	}
+	if !manager.Running() {
+		t.Fatal("manager did not report the started Tor service")
+	}
+	if got := manager.OnionAddress(); got != "fixtureonionaddress.onion" {
+		t.Fatalf("onion address = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "tor", "torrc")); err != nil {
+		t.Fatalf("generated torrc: %v", err)
+	}
+	manager.Close()
+	if manager.Running() || !fixture.closed {
+		t.Fatal("Close did not stop the manager and Tor process double")
 	}
 }
 

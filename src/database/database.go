@@ -21,7 +21,12 @@ import (
 // The raw token is never stored — only the SHA-256 hex digest.
 type APITokenRecord struct {
 	ID            int64
+	OwnerID       string
+	Kind          string
+	Name          string
 	TokenPrefix   string
+	TokenSuffix   string
+	TokenEnc      string
 	ResourceType  string
 	ResourceID    string
 	CreatedAt     time.Time
@@ -104,7 +109,6 @@ type DB interface {
 	// FindResourceIDByToken reverse-looks-up the resource a token grants
 	// access to (see implementation doc comment for details).
 	FindResourceIDByToken(tokenHash [32]byte, resourceType string) (string, error)
-
 	// App secrets — server-wide HMAC / signing keys stored in the DB (PART 11).
 	// EnsureAppSecret returns the raw bytes for key, generating 32 random bytes on
 	// first call. The value is stored base64-encoded and never returned in API responses.
@@ -125,6 +129,22 @@ type DB interface {
 	// themselves live on disk; only fingerprint/expiry/publish state is stored.
 	GetSecurityKeypair() (*SecurityKeypair, error)
 	UpsertSecurityKeypair(kp *SecurityKeypair) error
+}
+
+// OwnerDB provides the owner and linked-token lifecycle without expanding the
+// general database contract used by services that do not manage credentials.
+type OwnerDB interface {
+	ListAllAPITokens() ([]*APITokenRecord, error)
+	PurgeIdleOwners(days int) (int64, error)
+	CreatePasteWithPrimaryToken(paste *model.Paste, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error
+	CreateOwnerWithPrimaryToken(ownerID, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error
+	GetOwnerTokenByHash(tokenHash [32]byte) (*APITokenRecord, error)
+	GetOwnerTokenByID(ownerID string, id int64) (*APITokenRecord, error)
+	CreateLinkedToken(ownerID, tokenHash, tokenPrefix, tokenSuffix, name, tokenEnc string, expiresAt *time.Time, maxActive int) (int64, error)
+	ListOwnerTokens(ownerID string) ([]*APITokenRecord, error)
+	RotateOwnerToken(ownerID string, id int64, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error
+	UpdateOwnerToken(ownerID string, id int64, name string, expiresAt *time.Time, maxActive int) error
+	RevokeOwnerToken(ownerID string, id int64) error
 }
 
 // Query timeout constants per PART 10.
@@ -237,6 +257,7 @@ func ensureSchema(db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS pastes (
 			id               TEXT PRIMARY KEY,
+			owner_id         TEXT NOT NULL DEFAULT '',
 			title            TEXT NOT NULL DEFAULT 'Untitled',
 			content          TEXT NOT NULL,
 			language         TEXT NOT NULL DEFAULT 'text',
@@ -366,8 +387,13 @@ func ensureSchema(db *sql.DB) error {
 		// The server.token (server.yml) is NOT stored here — validated directly from config.
 		`CREATE TABLE IF NOT EXISTS api_tokens (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			owner_id      TEXT NOT NULL DEFAULT '',
+			kind          TEXT NOT NULL DEFAULT 'primary',
+			name          TEXT,
 			token_hash    TEXT NOT NULL UNIQUE,
 			token_prefix  TEXT NOT NULL,
+			token_suffix  TEXT NOT NULL DEFAULT '',
+			token_enc     TEXT NOT NULL DEFAULT '',
 			resource_type TEXT NOT NULL,
 			resource_id   TEXT NOT NULL,
 			created_at    INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
@@ -380,6 +406,11 @@ func ensureSchema(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_api_tokens_prefix   ON api_tokens(token_prefix)`,
 		`CREATE INDEX IF NOT EXISTS idx_api_tokens_resource ON api_tokens(resource_type, resource_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_api_tokens_active   ON api_tokens(revoked_at) WHERE revoked_at IS NULL`,
+		`CREATE TABLE IF NOT EXISTS owners (
+			id           TEXT PRIMARY KEY,
+			created_at   INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+			last_seen_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+		)`,
 
 		// Coordinated-disclosure security reports (PART 11). The vulnerability
 		// content lives only in encrypted_body (PGP or AES-256-GCM); the other
@@ -420,11 +451,18 @@ func ensureSchema(db *sql.DB) error {
 
 	// Schema updates — idempotent; ignore "already exists" errors.
 	updates := []string{
+		`ALTER TABLE pastes ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE pastes ADD COLUMN burn_after INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pastes ADD COLUMN delete_token_hash TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE pastes ADD COLUMN content_type TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE pastes ADD COLUMN is_link INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE security_reports ADD COLUMN token_last_used DATETIME`,
+		`ALTER TABLE api_tokens ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE api_tokens ADD COLUMN kind TEXT NOT NULL DEFAULT 'primary'`,
+		`ALTER TABLE api_tokens ADD COLUMN name TEXT`,
+		`ALTER TABLE api_tokens ADD COLUMN token_enc TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE api_tokens ADD COLUMN token_suffix TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE api_tokens ADD COLUMN rotated_at INTEGER`,
 	}
 
 	ctx, cancel := dbCtx(dbMigrationTimeout)
@@ -443,7 +481,71 @@ func ensureSchema(db *sql.DB) error {
 			}
 		}
 	}
+	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_api_tokens_owner ON api_tokens(owner_id)`); err != nil {
+		return fmt.Errorf("schema owner index: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_owner_name ON api_tokens(owner_id, name) WHERE kind = 'linked' AND name IS NOT NULL`); err != nil {
+		return fmt.Errorf("schema owner token name index: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_owner_primary ON api_tokens(owner_id) WHERE kind = 'primary' AND owner_id <> ''`); err != nil {
+		return fmt.Errorf("schema owner primary index: %w", err)
+	}
+	if err := migrateLegacyOwners(ctx, db); err != nil {
+		return fmt.Errorf("schema owner migration: %w", err)
+	}
 
+	return nil
+}
+
+// migrateLegacyOwners upgrades resource-bound tokens to stable anonymous owners.
+// Each legacy token becomes the primary token for its former resource; existing
+// paste rows retain access through the newly assigned owner_id.
+func migrateLegacyOwners(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, resource_type, resource_id FROM api_tokens WHERE owner_id = ''`)
+	if err != nil {
+		return err
+	}
+	type legacyToken struct {
+		id           int64
+		resourceType string
+		resourceID   string
+	}
+	var records []legacyToken
+	for rows.Next() {
+		var rec legacyToken
+		if err := rows.Scan(&rec.id, &rec.resourceType, &rec.resourceID); err != nil {
+			rows.Close()
+			return err
+		}
+		records = append(records, rec)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, rec := range records {
+		ownerID := fmt.Sprintf("legacy-%d", rec.id)
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO owners(id) VALUES (?)`, ownerID); err == nil {
+			_, err = tx.ExecContext(ctx, `UPDATE api_tokens SET owner_id = ?, kind = 'primary', resource_type = 'owner', resource_id = ? WHERE id = ?`, ownerID, ownerID, rec.id)
+		}
+		if err == nil && rec.resourceType == "paste" {
+			_, err = tx.ExecContext(ctx, `UPDATE pastes SET owner_id = ? WHERE id = ? AND owner_id = ''`, ownerID, rec.resourceID)
+		}
+		if err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -472,6 +574,20 @@ func (s *SQLiteDB) Ping() error {
 
 // CreatePaste inserts a new paste.
 func (s *SQLiteDB) CreatePaste(p *model.Paste) error {
+	preparePaste(p)
+	ctx, cancel := dbCtx(dbWriteTimeout)
+	defer cancel()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO pastes
+			(id, owner_id, title, content, language, content_type, visibility, is_link, expires_at, burn_after, delete_token_hash, views, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.OwnerID, p.Title, p.Content, p.Language, p.ContentType, p.Visibility, p.IsLink, p.ExpiresAt,
+		p.BurnAfter, p.DeleteTokenHash, p.Views, p.CreatedAt, p.UpdatedAt,
+	)
+	return err
+}
+
+func preparePaste(p *model.Paste) {
 	now := time.Now()
 	p.CreatedAt = now
 	p.UpdatedAt = now
@@ -482,16 +598,31 @@ func (s *SQLiteDB) CreatePaste(p *model.Paste) error {
 		p.Language = "text"
 	}
 
+}
+
+// CreatePasteWithPrimaryToken atomically creates a paste, its anonymous owner,
+// and the owner's primary token row.
+func (s *SQLiteDB) CreatePasteWithPrimaryToken(p *model.Paste, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error {
+	preparePaste(p)
 	ctx, cancel := dbCtx(dbWriteTimeout)
 	defer cancel()
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO pastes
-			(id, title, content, language, content_type, visibility, is_link, expires_at, burn_after, delete_token_hash, views, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, p.Title, p.Content, p.Language, p.ContentType, p.Visibility, p.IsLink, p.ExpiresAt,
-		p.BurnAfter, p.DeleteTokenHash, p.Views, p.CreatedAt, p.UpdatedAt,
-	)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, `INSERT INTO pastes (id, owner_id, title, content, language, content_type, visibility, is_link, expires_at, burn_after, delete_token_hash, views, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, p.ID, p.OwnerID, p.Title, p.Content, p.Language, p.ContentType, p.Visibility, p.IsLink, p.ExpiresAt, p.BurnAfter, p.DeleteTokenHash, p.Views, p.CreatedAt, p.UpdatedAt)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO owners(id) VALUES (?)`, p.OwnerID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO api_tokens(owner_id, kind, token_hash, token_prefix, token_suffix, token_enc, resource_type, resource_id) VALUES (?, 'primary', ?, ?, ?, ?, 'owner', ?)`, p.OwnerID, tokenHash, tokenPrefix, tokenSuffix, tokenEnc, p.OwnerID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // GetPasteByID retrieves a paste by ID without touching views.
@@ -502,9 +633,9 @@ func (s *SQLiteDB) GetPasteByID(id string) (*model.Paste, error) {
 	ctx, cancel := dbCtx(dbReadTimeout)
 	defer cancel()
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, title, content, language, content_type, visibility, is_link, expires_at, burn_after, delete_token_hash, views, created_at, updated_at
+		`SELECT id, owner_id, title, content, language, content_type, visibility, is_link, expires_at, burn_after, delete_token_hash, views, created_at, updated_at
 		 FROM pastes WHERE id = ?`, id,
-	).Scan(&p.ID, &p.Title, &p.Content, &p.Language, &p.ContentType, &p.Visibility, &p.IsLink,
+	).Scan(&p.ID, &p.OwnerID, &p.Title, &p.Content, &p.Language, &p.ContentType, &p.Visibility, &p.IsLink,
 		&expiresAt, &p.BurnAfter, &p.DeleteTokenHash, &p.Views, &p.CreatedAt, &p.UpdatedAt)
 
 	if err == sql.ErrNoRows {
@@ -1015,6 +1146,193 @@ func (s *SQLiteDB) CreateAPIToken(tokenHash, tokenPrefix, resourceType, resource
 	return err
 }
 
+// CreateOwnerWithPrimaryToken atomically creates an anonymous owner and its primary credential.
+func (s *SQLiteDB) CreateOwnerWithPrimaryToken(ownerID, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error {
+	ctx, cancel := dbCtx(dbWriteTimeout)
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `INSERT INTO owners(id) VALUES (?)`, ownerID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO api_tokens(owner_id, kind, token_hash, token_prefix, token_suffix, token_enc, resource_type, resource_id) VALUES (?, 'primary', ?, ?, ?, ?, 'owner', ?)`, ownerID, tokenHash, tokenPrefix, tokenSuffix, tokenEnc, ownerID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// GetOwnerTokenByHash validates and returns an active token and touches its owner.
+func (s *SQLiteDB) GetOwnerTokenByHash(tokenHash [32]byte) (*APITokenRecord, error) {
+	hashHex := hex.EncodeToString(tokenHash[:])
+	now := time.Now().Unix()
+	ctx, cancel := dbCtx(dbWriteTimeout)
+	defer cancel()
+	rec := &APITokenRecord{}
+	var stored string
+	var expires, lastUsed, revoked sql.NullInt64
+	var created int64
+	err := s.db.QueryRowContext(ctx, `SELECT id, owner_id, kind, COALESCE(name,''), token_prefix, token_enc, resource_type, resource_id, token_hash, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE token_hash = ?`, hashHex).Scan(&rec.ID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &stored, &created, &expires, &lastUsed, &revoked)
+	if err != nil {
+		return nil, err
+	}
+	if subtle.ConstantTimeCompare([]byte(stored), []byte(hashHex)) != 1 || revoked.Valid || (expires.Valid && expires.Int64 <= now) {
+		return nil, fmt.Errorf("token not found")
+	}
+	rec.CreatedAt = time.Unix(created, 0)
+	if expires.Valid {
+		t := time.Unix(expires.Int64, 0)
+		rec.ExpiresAt = &t
+	}
+	if lastUsed.Valid {
+		t := time.Unix(lastUsed.Int64, 0)
+		rec.LastUsedAt = &t
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE api_tokens SET last_used_at = CASE WHEN last_used_at IS NULL OR last_used_at <= ? THEN ? ELSE last_used_at END WHERE id = ?`, now-60, now, rec.ID); err != nil {
+		return nil, err
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE owners SET last_seen_at = ? WHERE id = ?`, now, rec.OwnerID); err != nil {
+		return nil, err
+	}
+	return rec, nil
+}
+
+// GetOwnerTokenByID loads one owner's token, including its encrypted copy for
+// a primary-authorized reveal action. ListOwnerTokens never returns ciphertext.
+func (s *SQLiteDB) GetOwnerTokenByID(ownerID string, id int64) (*APITokenRecord, error) {
+	ctx, cancel := dbCtx(dbReadTimeout)
+	defer cancel()
+	rec := &APITokenRecord{}
+	var created int64
+	var expires, used, revoked sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT id, owner_id, kind, COALESCE(name,''), token_prefix, token_suffix, token_enc, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, COALESCE(revoked_reason,'') FROM api_tokens WHERE owner_id = ? AND id = ?`, ownerID, id).Scan(&rec.ID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenSuffix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &created, &expires, &used, &revoked, &rec.RevokedReason)
+	if err != nil {
+		return nil, err
+	}
+	rec.CreatedAt = time.Unix(created, 0)
+	if expires.Valid {
+		v := time.Unix(expires.Int64, 0)
+		rec.ExpiresAt = &v
+	}
+	if used.Valid {
+		v := time.Unix(used.Int64, 0)
+		rec.LastUsedAt = &v
+	}
+	if revoked.Valid {
+		v := time.Unix(revoked.Int64, 0)
+		rec.RevokedAt = &v
+	}
+	return rec, nil
+}
+
+// CreateLinkedToken stores an encrypted linked credential for an owner.
+func (s *SQLiteDB) CreateLinkedToken(ownerID, tokenHash, tokenPrefix, tokenSuffix, name, tokenEnc string, expiresAt *time.Time, maxActive int) (int64, error) {
+	if maxActive <= 0 {
+		return 0, fmt.Errorf("linked token limit reached")
+	}
+	var expiry any
+	if expiresAt != nil {
+		expiry = expiresAt.Unix()
+	}
+	ctx, cancel := dbCtx(dbWriteTimeout)
+	defer cancel()
+	res, err := s.db.ExecContext(ctx, `INSERT INTO api_tokens(owner_id, kind, name, token_hash, token_prefix, token_suffix, token_enc, resource_type, resource_id, expires_at) SELECT ?, 'linked', ?, ?, ?, ?, ?, 'owner', ?, ? WHERE (SELECT COUNT(*) FROM api_tokens WHERE owner_id = ? AND kind = 'linked' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > strftime('%s','now'))) < ?`, ownerID, name, tokenHash, tokenPrefix, tokenSuffix, tokenEnc, ownerID, expiry, ownerID, maxActive)
+	if err != nil {
+		return 0, err
+	}
+	if count, _ := res.RowsAffected(); count == 0 {
+		return 0, fmt.Errorf("linked token limit reached")
+	}
+	return res.LastInsertId()
+}
+
+// ListOwnerTokens lists credential metadata without hashes or encrypted copies.
+func (s *SQLiteDB) ListOwnerTokens(ownerID string) ([]*APITokenRecord, error) {
+	ctx, cancel := dbCtx(dbReadTimeout)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `SELECT id, owner_id, kind, COALESCE(name,''), token_prefix, token_suffix, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, COALESCE(revoked_reason,'') FROM api_tokens WHERE owner_id = ? ORDER BY kind, created_at`, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*APITokenRecord
+	for rows.Next() {
+		rec := &APITokenRecord{}
+		var created int64
+		var expires, lastUsed, revoked sql.NullInt64
+		if err := rows.Scan(&rec.ID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenSuffix, &rec.ResourceType, &rec.ResourceID, &created, &expires, &lastUsed, &revoked, &rec.RevokedReason); err != nil {
+			return nil, err
+		}
+		rec.CreatedAt = time.Unix(created, 0)
+		if expires.Valid {
+			v := time.Unix(expires.Int64, 0)
+			rec.ExpiresAt = &v
+		}
+		if lastUsed.Valid {
+			v := time.Unix(lastUsed.Int64, 0)
+			rec.LastUsedAt = &v
+		}
+		if revoked.Valid {
+			v := time.Unix(revoked.Int64, 0)
+			rec.RevokedAt = &v
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// RotateOwnerToken replaces a token's hash and encrypted copy in place.
+func (s *SQLiteDB) RotateOwnerToken(ownerID string, id int64, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error {
+	ctx, cancel := dbCtx(dbWriteTimeout)
+	defer cancel()
+	res, err := s.db.ExecContext(ctx, `UPDATE api_tokens SET token_hash = ?, token_prefix = ?, token_suffix = ?, token_enc = ?, rotated_at = strftime('%s','now') WHERE id = ? AND owner_id = ? AND revoked_at IS NULL`, tokenHash, tokenPrefix, tokenSuffix, tokenEnc, id, ownerID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("token not found")
+	}
+	return nil
+}
+
+// UpdateOwnerToken changes linked-token metadata without changing its credential.
+func (s *SQLiteDB) UpdateOwnerToken(ownerID string, id int64, name string, expiresAt *time.Time, maxActive int) error {
+	var expiry any
+	if expiresAt != nil {
+		expiry = expiresAt.Unix()
+	}
+	ctx, cancel := dbCtx(dbWriteTimeout)
+	defer cancel()
+	res, err := s.db.ExecContext(ctx, `UPDATE api_tokens SET name = ?, expires_at = ? WHERE id = ? AND owner_id = ? AND kind = 'linked' AND revoked_at IS NULL AND ((? IS NOT NULL AND ? <= strftime('%s','now')) OR (SELECT COUNT(*) FROM api_tokens WHERE owner_id = ? AND kind = 'linked' AND id <> ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > strftime('%s','now'))) < ?)`, name, expiry, id, ownerID, expiry, expiry, ownerID, id, maxActive)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("token not found or linked token limit reached")
+	}
+	return nil
+}
+
+// RevokeOwnerToken permanently revokes a linked token.
+func (s *SQLiteDB) RevokeOwnerToken(ownerID string, id int64) error {
+	ctx, cancel := dbCtx(dbWriteTimeout)
+	defer cancel()
+	res, err := s.db.ExecContext(ctx, `UPDATE api_tokens SET revoked_at = strftime('%s','now'), revoked_reason = 'owner revoked' WHERE id = ? AND owner_id = ? AND kind = 'linked' AND revoked_at IS NULL`, id, ownerID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("token not found")
+	}
+	return nil
+}
+
 // VerifyAPIToken checks that the token hash matches an active, non-expired row for the
 // given resource, then updates last_used_at. Constant-time hash comparison prevents
 // timing oracle attacks.
@@ -1029,11 +1347,16 @@ func (s *SQLiteDB) VerifyAPIToken(tokenHash [32]byte, resourceType, resourceID s
 	var expiresAt sql.NullInt64
 	var revokedAt sql.NullInt64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, token_hash, expires_at, revoked_at
-		 FROM api_tokens
-		 WHERE token_hash = ? AND resource_type = ? AND resource_id = ?`,
-		hashHex, resourceType, resourceID,
+		`SELECT t.id, t.token_hash, t.expires_at, t.revoked_at
+		 FROM api_tokens t JOIN pastes p ON p.id = ?
+		 WHERE t.token_hash = ? AND t.owner_id = p.owner_id AND t.owner_id <> ''`,
+		resourceID, hashHex,
 	).Scan(&id, &storedHash, &expiresAt, &revokedAt)
+	// Compatibility for direct legacy rows and older database-level callers;
+	// startup migration converts persisted rows before requests are served.
+	if err == sql.ErrNoRows {
+		err = s.db.QueryRowContext(ctx, `SELECT id, token_hash, expires_at, revoked_at FROM api_tokens WHERE token_hash = ? AND owner_id = '' AND resource_type = ? AND resource_id = ?`, hashHex, resourceType, resourceID).Scan(&id, &storedHash, &expiresAt, &revokedAt)
+	}
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("paste not found or invalid token")
 	}
@@ -1055,9 +1378,8 @@ func (s *SQLiteDB) VerifyAPIToken(tokenHash [32]byte, resourceType, resourceID s
 	// so the error is intentionally not propagated.
 	wCtx, wCancel := dbCtx(dbWriteTimeout)
 	defer wCancel()
-	_, _ = s.db.ExecContext(wCtx,
-		`UPDATE api_tokens SET last_used_at = ? WHERE id = ?`, now, id,
-	)
+	_, _ = s.db.ExecContext(wCtx, `UPDATE api_tokens SET last_used_at = CASE WHEN last_used_at IS NULL OR last_used_at <= ? THEN ? ELSE last_used_at END WHERE id = ?`, now-60, now, id)
+	_, _ = s.db.ExecContext(wCtx, `UPDATE owners SET last_seen_at = ? WHERE id = (SELECT owner_id FROM api_tokens WHERE id = ?)`, now, id)
 	return nil
 }
 
@@ -1065,35 +1387,21 @@ func (s *SQLiteDB) VerifyAPIToken(tokenHash [32]byte, resourceType, resourceID s
 // any row with the given resource_type. Used to verify a reusable owner token
 // before linking it to a new paste via CreateAPIToken.
 func (s *SQLiteDB) ValidateAPIToken(tokenHash [32]byte, resourceType string) error {
+	if _, err := s.GetOwnerTokenByHash(tokenHash); err == nil {
+		return nil
+	}
 	hashHex := hex.EncodeToString(tokenHash[:])
 	now := time.Now().Unix()
-
 	ctx, cancel := dbCtx(dbReadTimeout)
 	defer cancel()
-	var storedHash string
-	var expiresAt sql.NullInt64
-	var revokedAt sql.NullInt64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT token_hash, expires_at, revoked_at
-		 FROM api_tokens
-		 WHERE token_hash = ? AND resource_type = ?
-		 ORDER BY created_at DESC LIMIT 1`,
-		hashHex, resourceType,
-	).Scan(&storedHash, &expiresAt, &revokedAt)
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("token not found")
-	}
+	var stored string
+	var expires, revoked sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT token_hash, expires_at, revoked_at FROM api_tokens WHERE token_hash = ? AND owner_id = '' AND resource_type = ? LIMIT 1`, hashHex, resourceType).Scan(&stored, &expires, &revoked)
 	if err != nil {
 		return err
 	}
-	if subtle.ConstantTimeCompare([]byte(storedHash), []byte(hashHex)) != 1 {
-		return fmt.Errorf("token not found")
-	}
-	if revokedAt.Valid {
-		return fmt.Errorf("token has been revoked")
-	}
-	if expiresAt.Valid && expiresAt.Int64 <= now {
-		return fmt.Errorf("token has expired")
+	if subtle.ConstantTimeCompare([]byte(stored), []byte(hashHex)) != 1 || revoked.Valid || (expires.Valid && expires.Int64 <= now) {
+		return fmt.Errorf("token is not active")
 	}
 	return nil
 }
@@ -1115,11 +1423,8 @@ func (s *SQLiteDB) FindResourceIDByToken(tokenHash [32]byte, resourceType string
 	var expiresAt sql.NullInt64
 	var revokedAt sql.NullInt64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT resource_id, expires_at, revoked_at
-		 FROM api_tokens
-		 WHERE token_hash = ? AND resource_type = ?
-		 ORDER BY created_at DESC LIMIT 1`,
-		hashHex, resourceType,
+		`SELECT p.id, t.expires_at, t.revoked_at FROM api_tokens t JOIN pastes p ON p.owner_id = t.owner_id
+		 WHERE t.token_hash = ? AND t.owner_id <> '' ORDER BY p.created_at DESC LIMIT 1`, hashHex,
 	).Scan(&resourceID, &expiresAt, &revokedAt)
 	if err == sql.ErrNoRows {
 		return "", nil
@@ -1138,11 +1443,21 @@ func (s *SQLiteDB) RevokeAPIToken(prefix, reason string) error {
 	now := time.Now().Unix()
 	ctx, cancel := dbCtx(dbWriteTimeout)
 	defer cancel()
-	result, err := s.db.ExecContext(ctx,
-		`UPDATE api_tokens SET revoked_at = ?, revoked_reason = ?
-		 WHERE token_prefix = ? AND revoked_at IS NULL`,
-		now, reason, prefix,
-	)
+	var ownerID, kind string
+	err := s.db.QueryRowContext(ctx, `SELECT owner_id, kind FROM api_tokens WHERE token_prefix = ? AND revoked_at IS NULL LIMIT 1`, prefix).Scan(&ownerID, &kind)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("token not found or already revoked")
+	}
+	if err != nil {
+		return err
+	}
+	query := `UPDATE api_tokens SET revoked_at = ?, revoked_reason = ? WHERE token_prefix = ? AND revoked_at IS NULL`
+	args := []any{now, reason, prefix}
+	if kind == "primary" && ownerID != "" {
+		query = `UPDATE api_tokens SET revoked_at = ?, revoked_reason = ? WHERE owner_id = ? AND revoked_at IS NULL`
+		args = []any{now, reason, ownerID}
+	}
+	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -1151,6 +1466,74 @@ func (s *SQLiteDB) RevokeAPIToken(prefix, reason string) error {
 		return fmt.Errorf("token not found or already revoked")
 	}
 	return nil
+}
+
+// ListAllAPITokens returns active, expired, and revoked credential metadata
+// for the operator maintenance command. Hashes and encrypted copies are omitted.
+func (s *SQLiteDB) ListAllAPITokens() ([]*APITokenRecord, error) {
+	ctx, cancel := dbCtx(dbReadTimeout)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, `SELECT id, owner_id, kind, COALESCE(name,''), token_prefix, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, COALESCE(revoked_reason,'') FROM api_tokens ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*APITokenRecord
+	for rows.Next() {
+		rec := &APITokenRecord{}
+		var created int64
+		var expires, used, revoked sql.NullInt64
+		if err := rows.Scan(&rec.ID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.ResourceType, &rec.ResourceID, &created, &expires, &used, &revoked, &rec.RevokedReason); err != nil {
+			return nil, err
+		}
+		rec.CreatedAt = time.Unix(created, 0)
+		if expires.Valid {
+			v := time.Unix(expires.Int64, 0)
+			rec.ExpiresAt = &v
+		}
+		if used.Valid {
+			v := time.Unix(used.Int64, 0)
+			rec.LastUsedAt = &v
+		}
+		if revoked.Valid {
+			v := time.Unix(revoked.Int64, 0)
+			rec.RevokedAt = &v
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// PurgeIdleOwners removes token rows and owners with no pastes and no valid
+// token use for the configured idle period. A zero or negative value disables it.
+func (s *SQLiteDB) PurgeIdleOwners(days int) (int64, error) {
+	if days <= 0 {
+		return 0, nil
+	}
+	now := time.Now().Unix()
+	cutoff := now - int64(days)*24*60*60
+	ctx, cancel := dbCtx(dbBulkTimeout)
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM api_tokens WHERE owner_id IN (SELECT o.id FROM owners o WHERE o.last_seen_at <= ? AND NOT EXISTS (SELECT 1 FROM pastes p WHERE p.owner_id = o.id))`, cutoff); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM owners WHERE last_seen_at <= ? AND NOT EXISTS (SELECT 1 FROM pastes p WHERE p.owner_id = owners.id)`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // ListAPITokens returns all non-revoked token records, ordered newest first.
@@ -1162,7 +1545,7 @@ func (s *SQLiteDB) ListAPITokens() ([]*APITokenRecord, error) {
 		`SELECT id, token_prefix, resource_type, resource_id,
 		        created_at, expires_at, last_used_at
 		 FROM api_tokens
-		 WHERE revoked_at IS NULL
+		 WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > strftime('%s', 'now'))
 		 ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -1235,8 +1618,8 @@ func (s *SQLiteDB) DeleteExpiredAPITokens() (int64, error) {
 	defer cancel()
 	result, err := s.db.ExecContext(ctx,
 		`DELETE FROM api_tokens
-		 WHERE revoked_at IS NOT NULL
-		    OR (expires_at IS NOT NULL AND expires_at <= ?)`,
+		 WHERE owner_id = '' AND (revoked_at IS NOT NULL
+		    OR (expires_at IS NOT NULL AND expires_at <= ?))`,
 		now,
 	)
 	if err != nil {

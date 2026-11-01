@@ -278,6 +278,17 @@ func (s *Server) preferencesPageData(r *http.Request, theme, lang string) map[st
 		ccpaOptedOut = true
 	}
 	data["CCPAOptedOut"] = ccpaOptedOut
+	if primary, db, ok := s.requireOwnerForPage(r); ok {
+		data["HasOwnerPrimary"] = true
+		tokens, err := db.ListOwnerTokens(primary.OwnerID)
+		if err == nil {
+			items := make([]map[string]any, 0, len(tokens))
+			for _, token := range tokens {
+				items = append(items, tokenSummary(token))
+			}
+			data["OwnerTokens"] = items
+		}
+	}
 	return data
 }
 

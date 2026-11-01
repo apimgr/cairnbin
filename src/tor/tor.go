@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cretz/bine/control"
 	bineprocess "github.com/cretz/bine/process"
 	binettor "github.com/cretz/bine/tor"
 	"github.com/pires/go-proxyproto"
@@ -198,12 +199,40 @@ type Config struct {
 
 // service holds a running Tor instance.
 type service struct {
-	t             *binettor.Tor
+	t             managedTor
 	onionAddress  string
 	serverPort    int
 	dialer        *binettor.Dialer
 	backendLn     net.Listener
 	backendServer *http.Server
+}
+
+type managedTor interface {
+	Close() error
+	EnableNetwork(context.Context, bool) error
+	Dialer(context.Context, *binettor.DialConf) (*binettor.Dialer, error)
+	GetInfo(...string) ([]*control.KeyVal, error)
+}
+
+type bineTor struct{ tor *binettor.Tor }
+
+func (t bineTor) Close() error { return t.tor.Close() }
+func (t bineTor) EnableNetwork(ctx context.Context, wait bool) error {
+	return t.tor.EnableNetwork(ctx, wait)
+}
+func (t bineTor) Dialer(ctx context.Context, conf *binettor.DialConf) (*binettor.Dialer, error) {
+	return t.tor.Dialer(ctx, conf)
+}
+func (t bineTor) GetInfo(keys ...string) ([]*control.KeyVal, error) {
+	return t.tor.Control.GetInfo(keys...)
+}
+
+var startTorRuntime = func(ctx context.Context, conf *binettor.StartConf) (managedTor, error) {
+	t, err := binettor.Start(ctx, conf)
+	if err != nil {
+		return nil, err
+	}
+	return bineTor{tor: t}, nil
 }
 
 // Manager owns the Tor process lifecycle.
@@ -307,7 +336,7 @@ func (m *Manager) startLocked() error {
 	}
 
 	log.Printf("Starting Tor hidden service...")
-	t, err := binettor.Start(m.ctx, conf)
+	t, err := startTorRuntime(m.ctx, conf)
 	if err != nil {
 		removeTorPIDFile(m.cfg.DataDir)
 		_ = backendServer.Close()
@@ -453,6 +482,11 @@ func (m *Manager) Running() bool {
 	return m.svc != nil
 }
 
+// Enabled reports whether a Tor binary is available for the managed service.
+func (m *Manager) Enabled() bool {
+	return m != nil && FindBinary(m.cfg.Binary) != ""
+}
+
 // OnionAddress returns the full .onion address, or empty string if not running.
 func (m *Manager) OnionAddress() string {
 	if !m.mu.TryLock() {
@@ -571,7 +605,7 @@ func (m *Manager) Monitor() {
 			if svc == nil {
 				continue
 			}
-			if _, err := svc.t.Control.GetInfo("version"); err != nil {
+			if _, err := svc.t.GetInfo("version"); err != nil {
 				log.Printf("Tor: control connection lost, restarting")
 				m.mu.Lock()
 				// Another path (Restart/UpdateConfig) may have already replaced

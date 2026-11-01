@@ -246,6 +246,9 @@ make dev
 
 # Run unit tests
 make test
+
+# Run the manual browser E2E suite (requires Docker and Chromium sidecar)
+bash tests/e2e.sh
 ```
 
 ### Usage (local build)

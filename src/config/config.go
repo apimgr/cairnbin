@@ -69,7 +69,8 @@ type ServerConfig struct {
 	Scheduler SchedulerConfig `yaml:"scheduler"`
 	// Token is the operator token (server.token). Auto-generated on first run.
 	// All operator-protected API endpoints require: Authorization: Bearer <token>
-	Token string `yaml:"token"`
+	Token  string            `yaml:"token"`
+	Tokens OwnerTokensConfig `yaml:"tokens"`
 	// DataDir is the runtime data directory. Resolved at startup by main from path.GetDataDir.
 	// Used by middleware (blocklist) and tasks that need access to security databases.
 	DataDir       string              `yaml:"data_dir"`
@@ -122,6 +123,13 @@ type ServerConfig struct {
 	// All standards are disabled by default; enabled individually. When more
 	// than one is enabled, the strictest requirement wins on overlap.
 	Compliance ComplianceConfig `yaml:"compliance"`
+}
+
+// OwnerTokensConfig controls anonymous owner credentials (AI.md PART 11).
+type OwnerTokensConfig struct {
+	MaxLinked     int    `yaml:"max_linked"`
+	CookieMaxAge  string `yaml:"cookie_max_age"`
+	IdlePurgeDays int    `yaml:"idle_purge_days"`
 }
 
 // ContactConfig is the unified notification-recipient tree (PART 12). Each role
@@ -1397,6 +1405,7 @@ func DefaultConfig() *Config {
 			FQDN:       "",
 			Mode:       "production",
 			APIVersion: "v1",
+			Tokens:     OwnerTokensConfig{MaxLinked: 25, CookieMaxAge: "1y"},
 			Branding: BrandingConfig{
 				Title:       "Pastebin",
 				Tagline:     defaultBrandingTagline,
@@ -2570,6 +2579,18 @@ func validateLogFile(name string, c *LogFileConfig, def LogFileConfig, formats .
 // must always start with sane defaults even if the config file is malformed (PART 12).
 func Validate(cfg *Config) {
 	d := DefaultConfig()
+	if cfg.Server.Tokens.MaxLinked <= 0 {
+		log.Printf("[config] WARNING: invalid server.tokens.max_linked %d, using default %d", cfg.Server.Tokens.MaxLinked, d.Server.Tokens.MaxLinked)
+		cfg.Server.Tokens.MaxLinked = d.Server.Tokens.MaxLinked
+	}
+	if cfg.Server.Tokens.IdlePurgeDays < 0 {
+		log.Printf("[config] WARNING: invalid server.tokens.idle_purge_days %d, using default 0", cfg.Server.Tokens.IdlePurgeDays)
+		cfg.Server.Tokens.IdlePurgeDays = 0
+	}
+	if age, ok := ownerCookieMaxAge(cfg.Server.Tokens.CookieMaxAge); !ok || age <= 0 {
+		log.Printf("[config] WARNING: invalid server.tokens.cookie_max_age %q, using default %s", cfg.Server.Tokens.CookieMaxAge, d.Server.Tokens.CookieMaxAge)
+		cfg.Server.Tokens.CookieMaxAge = d.Server.Tokens.CookieMaxAge
+	}
 
 	// Database driver aliases normalize to their canonical form (AI.md 7722):
 	// sqlite/sqlite2/sqlite3 -> sqlite; libsql/turso -> libsql.
@@ -2848,6 +2869,23 @@ func Validate(cfg *Config) {
 		log.Printf("[config] WARNING: invalid web.footer.custom_html (%v), using default branding", err)
 		cfg.Web.Footer.CustomHTML = d.Web.Footer.CustomHTML
 	}
+}
+
+func ownerCookieMaxAge(value string) (time.Duration, bool) {
+	if strings.HasSuffix(value, "y") || strings.HasSuffix(value, "d") {
+		unit := value[len(value)-1]
+		n, err := strconv.Atoi(value[:len(value)-1])
+		if err != nil || n <= 0 || n > 36500 {
+			return 0, false
+		}
+		days := int64(n)
+		if unit == 'y' {
+			days *= 365
+		}
+		return time.Duration(days) * 24 * time.Hour, true
+	}
+	d, err := time.ParseDuration(value)
+	return d, err == nil
 }
 
 // ValidateTracking validates the analytics tracking configuration (PART 31).

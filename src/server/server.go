@@ -203,29 +203,31 @@ type SchedulerAPI interface {
 
 // Server owns the HTTP router and all handler dependencies.
 type Server struct {
-	router           *chi.Mux
-	db               database.DB
-	cacheStore       cache.Cache
-	cfg              *config.Config
-	cfgMgr           *config.ConfigManager
-	templates        map[string]*template.Template
-	pasteHandler     *handler.PasteHandler
-	compatHandler    *compat.Handler
-	swaggerHandler   *swagger.Handler
-	graphqlHandler   *graphql.Handler
-	metricsCollector *metric.Collector
-	geoipDB          *geoip.DB
-	torManager       *tor.Manager
-	i2pManager       *i2p.Manager
-	readLimiter      *rateLimiter
-	writeLimiter     *rateLimiter
-	healthLimiter    *rateLimiter
-	burstLimiter     *rateLimiter
-	version          string
-	commitID         string
-	buildDate        string
-	configDir        string
-	dataDir          string
+	router             *chi.Mux
+	db                 database.DB
+	cacheStore         cache.Cache
+	cfg                *config.Config
+	cfgMgr             *config.ConfigManager
+	templates          map[string]*template.Template
+	pasteHandler       *handler.PasteHandler
+	compatHandler      *compat.Handler
+	swaggerHandler     *swagger.Handler
+	graphqlHandler     *graphql.Handler
+	metricsCollector   *metric.Collector
+	geoipDB            *geoip.DB
+	torManager         *tor.Manager
+	i2pManager         *i2p.Manager
+	readLimiter        *rateLimiter
+	writeLimiter       *rateLimiter
+	healthLimiter      *rateLimiter
+	burstLimiter       *rateLimiter
+	strictLimiter      *rateLimiter
+	restoreFailLimiter *rateLimiter
+	version            string
+	commitID           string
+	buildDate          string
+	configDir          string
+	dataDir            string
 	// logDir is the runtime logs directory, set by main via SetLogDir. Used by
 	// the security.log writer (PART 11 Coordinated Disclosure Pipeline).
 	logDir string
@@ -463,6 +465,9 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	}
 
 	s.pasteHandler = handler.NewPasteHandler(db, cfg.Server.BaseURL, s.operatorTokenHash)
+	if key, err := cfg.EncryptionKey(); err == nil {
+		s.pasteHandler.SetTokenEncryptionKey(key)
+	}
 	s.pasteHandler.SetBaseURLResolver(s.baseURL)
 	s.compatHandler = compat.New(s.pasteHandler, db, version)
 	s.swaggerHandler = swagger.New(cfg.Web.SiteTitle+" API", version, cfg.Server.BaseURL, cfg.Server.APIVersion)
@@ -632,6 +637,10 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		// tighter per-class quotas.
 		s.burstLimiter = newRateLimiter(burstReqs, time.Minute)
 	}
+	// Token disclosure, rotation, and identity restoration are login-like
+	// operations and use a stricter per-IP limit than ordinary writes.
+	s.strictLimiter = newRateLimiter(10, 15*time.Minute)
+	s.restoreFailLimiter = newRateLimiter(5, 15*time.Minute)
 
 	tmpl, err := s.buildTemplates()
 	if err != nil {
@@ -791,7 +800,7 @@ const userDateLayout = "January 2, 2006"
 // resource-owner token cookie (and, in app.js, the matching localStorage key).
 // Per AI.md PART 11 "Naming": both MUST share this exact {project_name}_owner_token_XXXXXX
 // name — fixed suffix recorded in IDEA.md (`owner_token: pastebin_owner_token_rU3uW5Ze`).
-const ownerTokenCookieName = "pastebin_owner_token_rU3uW5Ze"
+const ownerTokenCookieName = ownerCookieName
 
 // fmtUserTime renders t in the canonical user-facing timestamp format in the
 // server's local timezone. The zero time renders as an empty string so callers
@@ -1061,6 +1070,15 @@ func (s *Server) maybeRateLimit(h http.HandlerFunc) http.HandlerFunc {
 	return mw(h).ServeHTTP
 }
 
+// maybeStrictRateLimit protects login-like operations that disclose or replace
+// owner credentials, independently of the general rate-limit setting.
+func (s *Server) maybeStrictRateLimit(h http.HandlerFunc) http.HandlerFunc {
+	if s.strictLimiter == nil {
+		return h
+	}
+	return rateLimitMiddleware(s.strictLimiter, "strict")(h).ServeHTTP
+}
+
 // maybeDeleteRateLimit wraps h with the write rate limiter (DELETE is a write operation, PART 12).
 func (s *Server) maybeDeleteRateLimit(h http.HandlerFunc) http.HandlerFunc {
 	if s.writeLimiter == nil {
@@ -1139,6 +1157,7 @@ func (s *Server) setupRoutes() {
 	// Step 9 — authentication: resolve any presented token into the request
 	// context. Per-route handlers perform authorization against that result.
 	r.Use(s.authMiddleware)
+	r.Use(s.ownerCookieMiddleware)
 	r.Use(s.accessLogMiddleware)
 	r.Use(s.countRequests)
 	r.Use(s.metricsCollector.Middleware())
@@ -1287,6 +1306,14 @@ func (s *Server) setupRoutes() {
 	// Canonical route is POST /server/preferences (AI.md "Theme Toggle" HTML
 	// Structure example, line 22641) — not a standalone /theme path.
 	r.Post("/server/preferences", s.handlePreferencesSet)
+	r.Post("/server/preferences/token/restore", s.maybeStrictRateLimit(s.handleOwnerTokenRestore))
+	r.Post("/server/preferences/token/reveal", s.maybeStrictRateLimit(s.handleOwnerTokenRevealWeb))
+	r.Post("/server/preferences/token/rotate", s.maybeStrictRateLimit(s.handleOwnerTokenRotateWeb))
+	r.Post("/server/preferences/tokens", s.maybeRateLimit(s.handleLinkedTokenCreate))
+	r.Post("/server/preferences/tokens/{id}/reveal", s.maybeStrictRateLimit(s.handleLinkedTokenReveal))
+	r.Post("/server/preferences/tokens/{id}/rotate", s.maybeStrictRateLimit(s.handleLinkedTokenRotate))
+	r.Post("/server/preferences/tokens/{id}/update", s.maybeRateLimit(s.handleLinkedTokenUpdate))
+	r.Post("/server/preferences/tokens/{id}/revoke", s.maybeRateLimit(s.handleLinkedTokenRevoke))
 	r.Get("/server/terms", s.handleTerms)
 	// Cross-device preference sync (AI.md 23503-23513): stateless export/import
 	// of the theme/lang cookies — no account, no preferences table. Same
@@ -1406,6 +1433,14 @@ func (s *Server) setupRoutes() {
 		// Cross-device preference sync API mirror (AI.md 23509-23512) — same
 		// handlers as the web routes above; each content-negotiates JSON here.
 		r.Get("/server/preferences", s.handlePreferences)
+		r.Get("/server/preferences/tokens", s.handleOwnerTokensAPI)
+		r.Post("/server/preferences/tokens/primary/reveal", s.maybeStrictRateLimit(s.handleOwnerTokenRevealAPI))
+		r.Post("/server/preferences/tokens/primary/rotate", s.maybeStrictRateLimit(s.handleOwnerTokenRotateAPI))
+		r.Post("/server/preferences/tokens", s.maybeRateLimit(s.handleLinkedTokenCreate))
+		r.Post("/server/preferences/tokens/{id}/reveal", s.maybeStrictRateLimit(s.handleLinkedTokenReveal))
+		r.Post("/server/preferences/tokens/{id}/rotate", s.maybeStrictRateLimit(s.handleLinkedTokenRotate))
+		r.Patch("/server/preferences/tokens/{id}", s.maybeRateLimit(s.handleLinkedTokenUpdate))
+		r.Delete("/server/preferences/tokens/{id}", s.maybeRateLimit(s.handleLinkedTokenRevoke))
 		r.Get("/server/preferences/export", s.handlePreferencesExport)
 		r.Get("/server/preferences/import", s.handlePreferencesImport)
 		r.Get("/server/swagger", s.swaggerHandler.ServeSpec)
@@ -2931,7 +2966,7 @@ func (s *Server) buildHealthResponse() HealthResponse {
 
 // buildTorInfo returns the TorInfo block for health responses.
 func (s *Server) buildTorInfo() TorInfo {
-	if s.torManager == nil {
+	if s.torManager == nil || !s.torManager.Enabled() {
 		return TorInfo{Enabled: false, Running: false, Status: "disabled", Hostname: ""}
 	}
 	running := s.torManager.Running()
@@ -3293,22 +3328,11 @@ func (s *Server) handleWebCreate(w http.ResponseWriter, r *http.Request) {
 	// JS heap; SameSite=Strict + POST-only mutations provide CSRF protection.
 	// Secure is set when the connection is TLS; for HTTP dev environments the
 	// cookie is still set so the delete form works locally.
-	// 2-year default for tokens with no expiry
-	maxAge := 730 * 24 * 60 * 60
-	if resp.ExpiresAt != nil {
-		if secs := int(time.Until(*resp.ExpiresAt).Seconds()); secs > 0 {
-			maxAge = secs
-		}
+	// Newly issued primary tokens receive a one-year cookie. Reused identities
+	// keep the existing sliding cookie untouched.
+	if resp.OwnerToken != "" {
+		s.setOwnerCookie(w, r, resp.OwnerToken)
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     ownerTokenCookieName,
-		Value:    resp.OwnerToken,
-		Path:     "/",
-		MaxAge:   maxAge,
-		HttpOnly: true,
-		Secure:   r.TLS != nil,
-		SameSite: http.SameSiteStrictMode,
-	})
 
 	s.renderTemplate(w, r, "create.html", data)
 }

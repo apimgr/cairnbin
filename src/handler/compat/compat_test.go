@@ -45,6 +45,7 @@ func newCompatHandler(t *testing.T) (*Handler, database.DB) {
 	t.Helper()
 	db := newCompatTestDB(t)
 	ph := handler.NewPasteHandler(db, "", [32]byte{})
+	ph.SetTokenEncryptionKey([]byte(strings.Repeat("x", 32)))
 	return New(ph, db, "test-version"), db
 }
 

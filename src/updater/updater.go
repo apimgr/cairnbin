@@ -46,9 +46,9 @@ func CheckForUpdate(ctx context.Context, currentVersion, branch string, buildEpo
 	var apiURL string
 	switch branch {
 	case "stable", "":
-		apiURL = apiBase + "/latest"
+		apiURL = configuredAPIBase() + "/latest"
 	default:
-		apiURL = apiBase
+		apiURL = configuredAPIBase()
 	}
 	return CheckForUpdateURL(ctx, currentVersion, branch, buildEpoch, apiURL)
 }

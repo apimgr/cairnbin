@@ -123,7 +123,7 @@ from the modules actually linked into the shipped binaries (`go list -deps`).
 | github.com/go-acme/tencentedgdeone | v1.3.38 | Apache-2.0 | See upstream LICENSE |
 | github.com/go-chi/chi/v5 | v5.0.11 | MIT | 2015-present Peter Kieltyka (https://github.com/pkieltyka), Google Inc |
 | github.com/go-errors/errors | v1.0.1 | MIT | 2015 Conrad Irwin <conrad@bugsnag.com> |
-| github.com/go-jose/go-jose/v4 | v4.1.4 | Apache-2.0 | See upstream LICENSE |
+| github.com/go-jose/go-jose/v4 | v4.1.6 | Apache-2.0 | See upstream LICENSE |
 | github.com/go-logr/logr | v1.4.3 | Apache-2.0 | See upstream LICENSE |
 | github.com/go-logr/stdr | v1.2.2 | Apache-2.0 | See upstream LICENSE |
 | github.com/go-ozzo/ozzo-validation/v4 | v4.3.0 | MIT | 2016, Qiang Xue |
@@ -277,15 +277,15 @@ from the modules actually linked into the shipped binaries (`go list -deps`).
 | go.uber.org/ratelimit | v0.3.1 | MIT | 2016 Uber Technologies, Inc |
 | go.uber.org/zap | v1.27.0 | MIT | 2016-2017 Uber Technologies, Inc |
 | go.yaml.in/yaml/v2 | v2.4.2 | Apache-2.0 | See upstream LICENSE |
-| golang.org/x/crypto | v0.57.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/crypto | v0.58.0 | BSD-3-Clause | 2009 The Go Authors |
 | golang.org/x/exp | v0.0.0-20260410095643-746e56fc9e2f | BSD-3-Clause | 2009 The Go Authors |
 | golang.org/x/image | v0.45.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/net | v0.60.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/net | v0.62.0 | BSD-3-Clause | 2009 The Go Authors |
 | golang.org/x/oauth2 | v0.36.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/sync | v0.23.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/sys | v0.48.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/term | v0.46.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/text | v0.42.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/sync | v0.24.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/sys | v0.49.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/term | v0.47.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/text | v0.43.0 | BSD-3-Clause | 2009 The Go Authors |
 | golang.org/x/time | v0.15.0 | BSD-3-Clause | 2009 The Go Authors |
 | google.golang.org/api | v0.276.0 | BSD-3-Clause | 2011 Google Inc |
 | google.golang.org/genproto/googleapis/api | v0.0.0-20260526163538-3dc84a4a5aaa | Apache-2.0 | See upstream LICENSE |

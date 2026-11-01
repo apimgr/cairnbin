@@ -468,7 +468,12 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 			switch maintenanceArg {
 			case "list":
-				tokens, err := tkDB.ListAPITokens()
+				ownerDB, ok := tkDB.(database.OwnerDB)
+				if !ok {
+					fmt.Fprintf(stderr, "%s: token list: owner token storage unavailable\n", binaryName)
+					return 1
+				}
+				tokens, err := ownerDB.ListAllAPITokens()
 				if err != nil {
 					fmt.Fprintf(stderr, "%s: token list: %v\n", binaryName, err)
 					return 1
@@ -476,19 +481,20 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				if len(tokens) == 0 {
 					fmt.Fprintln(stdout, "No active tokens.")
 				} else {
-					fmt.Fprintf(stdout, "%-14s %-8s %-14s %-24s %-24s\n",
-						"PREFIX", "TYPE", "RESOURCE", "CREATED", "EXPIRES")
-					fmt.Fprintf(stdout, "%-14s %-8s %-14s %-24s %-24s\n",
-						"--------------", "--------", "--------------",
-						"------------------------", "------------------------")
+					fmt.Fprintf(stdout, "%-14s %-8s %-14s %-18s %-24s %-24s %-10s\n", "PREFIX", "KIND", "OWNER", "NAME", "CREATED", "LAST USED", "STATUS")
+					fmt.Fprintf(stdout, "%-14s %-8s %-14s %-18s %-24s %-24s %-10s\n", "--------------", "--------", "--------------", "------------------", "------------------------", "------------------------", "----------")
 					for _, t := range tokens {
-						expires := "never"
-						if t.ExpiresAt != nil {
-							expires = t.ExpiresAt.Format("2006-01-02 15:04:05")
+						status := "active"
+						if t.RevokedAt != nil {
+							status = "revoked"
+						} else if t.ExpiresAt != nil && !t.ExpiresAt.After(time.Now()) {
+							status = "expired"
 						}
-						fmt.Fprintf(stdout, "%-14s %-8s %-14s %-24s %-24s\n",
-							t.TokenPrefix, t.ResourceType, t.ResourceID,
-							t.CreatedAt.Format("2006-01-02 15:04:05"), expires)
+						lastUsed := "never"
+						if t.LastUsedAt != nil {
+							lastUsed = t.LastUsedAt.Format("2006-01-02 15:04:05")
+						}
+						fmt.Fprintf(stdout, "%-14s %-8s %-14s %-18s %-24s %-24s %-10s\n", t.TokenPrefix, t.Kind, t.OwnerID, t.Name, t.CreatedAt.Format("2006-01-02 15:04:05"), lastUsed, status)
 					}
 				}
 			case "revoke":
@@ -1075,6 +1081,17 @@ Examples:
 		}
 		if n > 0 {
 			log.Printf("scheduler: removed %d expired/revoked API tokens", n)
+		}
+		if cfg.Server.Tokens.IdlePurgeDays > 0 {
+			if ownerDB, ok := db.(database.OwnerDB); ok {
+				purged, err := ownerDB.PurgeIdleOwners(cfg.Server.Tokens.IdlePurgeDays)
+				if err != nil {
+					return err
+				}
+				if purged > 0 {
+					log.Printf("scheduler: purged %d idle owners", purged)
+				}
+			}
 		}
 		return nil
 	}))

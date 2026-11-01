@@ -14,8 +14,9 @@ const (
 
 // Paste represents a stored paste/snippet.
 type Paste struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
+	ID      string `json:"id"`
+	OwnerID string `json:"-"`
+	Title   string `json:"title"`
 	// omitted in list views; redirect target URL when IsLink
 	Content string `json:"content,omitempty"`
 	// detected MIME type; empty = plain text
@@ -46,8 +47,7 @@ type PasteListItem struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
-// CreateResponse is returned once on paste creation and includes the plaintext owner token.
-// The OwnerToken is the raw tok_... value shown exactly once — it is never retrievable again.
+// CreateResponse includes a plaintext owner token only when creation issued a new owner identity.
 type CreateResponse struct {
 	ID         string     `json:"id"`
 	Title      string     `json:"title"`
@@ -59,8 +59,8 @@ type CreateResponse struct {
 	Views      int        `json:"views"`
 	CreatedAt  time.Time  `json:"created_at"`
 	Link       string     `json:"link"`
-	// plaintext tok_... shown once, never retrievable again
-	OwnerToken string `json:"owner_token"`
+	// Plaintext tok_... returned only when a new owner identity is issued.
+	OwnerToken string `json:"owner_token,omitempty"`
 }
 
 // ToListItem converts a Paste to its minimal list representation.
