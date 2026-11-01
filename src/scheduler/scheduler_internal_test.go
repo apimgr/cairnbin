@@ -375,3 +375,18 @@ func TestStop_DrainsRunningTask(t *testing.T) {
 		t.Errorf("task finished count = %d, want 1", atomic.LoadInt32(&finished))
 	}
 }
+
+// TestExecute_PanicIsolated verifies a panicking task is recorded as failed
+// and does not propagate the panic out of execute().
+func TestExecute_PanicIsolated(t *testing.T) {
+	s := New(nil)
+	e := failEntry(t, "panicky", "x", false, time.Minute, 0)
+	e.fn = func(ctx context.Context) error { panic("boom") }
+	err := s.execute(e)
+	if err == nil || e.lastStatus != "failed" {
+		t.Fatalf("expected failed run, got err=%v status=%q", err, e.lastStatus)
+	}
+	if e.failCount != 1 || e.nextRun.IsZero() {
+		t.Errorf("state not updated: failCount=%d next=%v", e.failCount, e.nextRun)
+	}
+}

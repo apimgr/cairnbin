@@ -44,8 +44,8 @@ same pass gets its own line item here.
 - [x] PART 14 API structure
 - [x] PART 15 SSL/TLS & Let's Encrypt
 - [x] PART 16 Web frontend (sampled; gaps logged below)
-- [ ] PART 17 Email & notifications
-- [ ] PART 18 Scheduler
+- [x] PART 17 Email & notifications (gaps logged below)
+- [x] PART 18 Scheduler
 - [ ] PART 19 GeoIP
 - [ ] PART 20 Metrics
 - [ ] PART 21 Backup & restore
@@ -153,4 +153,5 @@ same pass gets its own line item here.
   cookie banner and footer sections were not individually re-verified.
   Template policy (no inline handlers/styles/scripts, no alert/confirm/prompt)
   is now enforced by src/server/template_policy_test.go.
-
+- PART 17: AI.md references `{project_name} email test` (lines 28164, 48828) but the server flag set (PART 7) has no `email` command; resolve by routing it through `--maintenance` or confirming the CLI client owns it. Save-time template validation (unknown variable, empty subject/body) has no caller because there is no admin UI; add a validator for custom files in `{config_dir}/template/email/` at load.
+- PART 18: spec lists CLI `scheduler list|show|run|enable|disable|history` (client); no `scheduler` command exists in src/client or the server. Add to the client against the server scheduler API.

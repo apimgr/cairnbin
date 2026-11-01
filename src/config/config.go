@@ -1395,7 +1395,6 @@ type UpdateConfig struct {
 // SchedulerConfig configures the built-in task scheduler (PART 12/18).
 // Tasks maps a task name to its per-task settings; absent entries use code defaults.
 type SchedulerConfig struct {
-	Enabled bool `yaml:"enabled"`
 	// Timezone for cron expressions (default: America/New_York, override with TZ).
 	Timezone string `yaml:"timezone"`
 	// CatchUpWindow re-runs missed tasks on startup if due within this duration
@@ -1480,8 +1479,7 @@ func DefaultConfig() *Config {
 				},
 			},
 			Scheduler: SchedulerConfig{
-				Enabled: true,
-				Tasks:   map[string]SchedulerTask{},
+				Tasks: map[string]SchedulerTask{},
 			},
 			Metrics: MetricsConfig{
 				Enabled:        true,

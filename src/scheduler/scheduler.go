@@ -368,6 +368,18 @@ func (s *Scheduler) tick() {
 }
 
 // execute runs the task function and updates state.
+// runIsolated runs fn behind a recover boundary so a panicking task is
+// reported as a failed run and never takes down the scheduler or server.
+func runIsolated(ctx context.Context, id string, fn TaskFunc) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("scheduler: task %s panicked: %v", id, r)
+			err = fmt.Errorf("task panicked: %v", r)
+		}
+	}()
+	return fn(ctx)
+}
+
 func (s *Scheduler) execute(e *taskEntry) error {
 	start := time.Now()
 	log.Printf("scheduler: running %s", e.id)
@@ -380,7 +392,7 @@ func (s *Scheduler) execute(e *taskEntry) error {
 	}
 
 	metric.SchedulerTasksRunning.WithLabelValues(e.id).Inc()
-	taskErr := e.fn(ctx)
+	taskErr := runIsolated(ctx, e.id, e.fn)
 	metric.SchedulerTasksRunning.WithLabelValues(e.id).Dec()
 
 	finished := time.Now()
