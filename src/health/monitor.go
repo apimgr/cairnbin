@@ -98,6 +98,7 @@ type Monitor struct {
 	checker       Checker
 	cleaner       Cleaner
 	notifier      Notifier
+	onTransition  func(entered bool, reason string)
 }
 
 // New constructs a Monitor in the Starting state.
@@ -134,6 +135,14 @@ func (m *Monitor) SetCleaner(c Cleaner) {
 func (m *Monitor) SetNotifier(n Notifier) {
 	m.mu.Lock()
 	m.notifier = n
+	m.mu.Unlock()
+}
+
+// SetTransitionHook registers a callback fired on every maintenance enter and
+// exit regardless of the notification settings (used for audit events).
+func (m *Monitor) SetTransitionHook(fn func(entered bool, reason string)) {
+	m.mu.Lock()
+	m.onTransition = fn
 	m.mu.Unlock()
 }
 
@@ -190,8 +199,13 @@ func (m *Monitor) Enter(reason, message string) {
 	m.nextAttempt = m.since.Add(m.retryInterval)
 	notify := m.notifier
 	fire := m.notifyOnEnter
+	hook := m.onTransition
 	snap := m.snapshotLocked()
 	m.mu.Unlock()
+
+	if hook != nil {
+		hook(true, reason)
+	}
 
 	log.Printf("maintenance: entering maintenance mode (reason=%s): %s", reason, message)
 	if notify != nil && fire {
@@ -208,6 +222,7 @@ func (m *Monitor) Exit() {
 		return
 	}
 	dur := time.Since(m.since).Round(time.Second)
+	reason := m.reason
 	m.state = StateNormal
 	m.reason = ""
 	m.message = ""
@@ -215,8 +230,13 @@ func (m *Monitor) Exit() {
 	m.nextAttempt = time.Time{}
 	notify := m.notifier
 	fire := m.notifyOnExit
+	hook := m.onTransition
 	snap := m.snapshotLocked()
 	m.mu.Unlock()
+
+	if hook != nil {
+		hook(false, reason)
+	}
 
 	log.Printf("maintenance: issue resolved, exiting maintenance mode (downtime=%s)", dur)
 	if notify != nil && fire {

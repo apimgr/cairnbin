@@ -103,6 +103,40 @@ func (rl *rateLimiter) gc() {
 	}
 }
 
+// onRateLimited, when set, is called once per client IP per minute when that
+// client is rate limited, so the audit log records security.rate_limit_exceeded
+// without a flood of identical entries.
+var onRateLimited func(r *http.Request, endpointClass string)
+
+var (
+	rateLimitAuditMu   sync.Mutex
+	rateLimitAuditLast = map[string]time.Time{}
+)
+
+// auditRateLimited invokes onRateLimited at most once per IP per minute.
+func auditRateLimited(r *http.Request, ip, endpointClass string) {
+	if onRateLimited == nil {
+		return
+	}
+	rateLimitAuditMu.Lock()
+	last := rateLimitAuditLast[ip]
+	now := time.Now()
+	if now.Sub(last) < time.Minute {
+		rateLimitAuditMu.Unlock()
+		return
+	}
+	rateLimitAuditLast[ip] = now
+	if len(rateLimitAuditLast) > 4096 {
+		for k, t := range rateLimitAuditLast {
+			if now.Sub(t) >= time.Minute {
+				delete(rateLimitAuditLast, k)
+			}
+		}
+	}
+	rateLimitAuditMu.Unlock()
+	onRateLimited(r, endpointClass)
+}
+
 // rateLimitMiddleware returns a middleware that enforces the given rate limiter.
 // On rejection it returns 429 with a Retry-After header. The ratelimit_* metrics
 // (PART 20) use the fixed "per_ip" limit-type label; per-IP detail is never
@@ -125,6 +159,7 @@ func rateLimitMiddleware(rl *rateLimiter, endpointClass string) func(http.Handle
 			if !rl.allow(ip) {
 				metric.RateLimitRequestsTotal.WithLabelValues("per_ip", "limited").Inc()
 				metric.RateLimitBlockedTotal.WithLabelValues("per_ip").Inc()
+				auditRateLimited(r, ip, endpointClass)
 
 				retryAfter := int(rl.window.Seconds())
 				w.Header().Set("Retry-After", fmt.Sprint(retryAfter))

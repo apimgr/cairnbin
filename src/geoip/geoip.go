@@ -342,6 +342,10 @@ func (d *DB) countryMode() string {
 	return "none"
 }
 
+// OnBlocked, when set, is called for every request blocked by the country
+// policy so the server can record a security.country_blocked audit event.
+var OnBlocked func(r *http.Request, country string)
+
 // IsBlocked returns true if the IP should be blocked based on country policy.
 //
 // Blocking logic (from spec PART 19):
@@ -422,6 +426,9 @@ func (d *DB) Middleware() func(http.Handler) http.Handler {
 					cc = info.CountryCode
 				}
 				log.Printf("geoip_block: ip=[redacted], country=%s", cc)
+				if OnBlocked != nil {
+					OnBlocked(r, cc)
+				}
 				http.Error(w, "access denied: your region is not permitted", http.StatusForbidden)
 				return
 			}

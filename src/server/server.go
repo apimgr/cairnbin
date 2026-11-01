@@ -708,6 +708,36 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	s.maintenance.SetChecker(s.criticalCheck)
 	s.maintenance.SetCleaner(s.maintenanceCleanup)
 	s.maintenance.SetNotifier(s.maintenanceNotify)
+	s.maintenance.SetTransitionHook(func(entered bool, reason string) {
+		event := "server.maintenance_exited"
+		if entered {
+			event = "server.maintenance_entered"
+		}
+		s.auditLog(nil, audit.Entry{
+			Event:    event,
+			Severity: audit.SeverityWarn,
+			Result:   audit.ResultSuccess,
+			Reason:   reason,
+		})
+	})
+	onRateLimited = func(r *http.Request, class string) {
+		s.auditLog(r, audit.Entry{
+			Event:    "security.rate_limit_exceeded",
+			Severity: audit.SeverityWarn,
+			Result:   audit.ResultFailure,
+			Target:   &audit.Target{Type: "endpoint", ID: r.URL.Path},
+			Details:  map[string]any{"limit": class},
+		})
+	}
+	geoip.OnBlocked = func(r *http.Request, country string) {
+		s.auditLog(r, audit.Entry{
+			Event:    "security.country_blocked",
+			Severity: audit.SeverityWarn,
+			Result:   audit.ResultFailure,
+			Target:   &audit.Target{Type: "endpoint", ID: r.URL.Path},
+			Details:  map[string]any{"country": country},
+		})
+	}
 
 	// Domain-learning subsystem (PART 12 url_detection).
 	s.domainLearner = newDomainLearner(&cfg.Server.URLDetection)
@@ -1466,6 +1496,7 @@ func (s *Server) setupRoutes() {
 		r.Get("/server/preferences/import", s.handlePreferencesImport)
 		r.Get("/server/swagger", s.swaggerHandler.ServeSpec)
 		r.Handle("/server/mcp", s.mcpHandler)
+		r.Post("/server/reports/{name}", s.handleReports)
 		// /api/v1/server/graphql — versioned GraphQL endpoint (PART 14)
 		r.Handle("/server/graphql", s.graphqlHandler)
 

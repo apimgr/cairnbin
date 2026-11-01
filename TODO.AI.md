@@ -123,4 +123,20 @@ same pass gets its own line item here.
   has no `--maintenance`/docs surface beyond config. Also PART 11 still to
   review: Output Sanitization Pipeline chokepoint (stages 1-4), logging
   sections, audit log events, compliance modes, abuse detection, IP blocks.
+- PART 11 audit events still not emitted (spec "Audit Log Events"):
+  `backup.deleted` (retention removals in src/task/backup_guard.go),
+  `security.ip_blocked`/`ip_unblocked`/`ip_allowlisted`/`ip_allowlist_removed`
+  and `security.suspicious_activity` (no IP block management or abuse
+  detection exists yet), `config.*_updated`/`ssl_expired` (config hot-reload
+  does not diff and emit), `server.updated`, and the rotation events below.
+- PART 11 `--maintenance secret rotate installation_secret|encryption_key` is
+  not implemented (listed in the spec's maintenance subcommands): operator
+  re-prompt + audit `security.*_rotated`; installation_secret rotation must
+  re-wrap the PGP private key and keep the previous secret 7 days for
+  in-flight `{security_id}` URLs; encryption_key rotation must re-encrypt
+  `api_tokens.token_enc` and report bodies and keep the previous key 30 days.
+- PART 11 reports config (`server.security.reports.rate_limit_per_minute`,
+  `rate_limit_per_ip_burst`) is fixed in code (60/min per IP); expose it in
+  config. `nel` and other report groups are accepted and discarded, not
+  logged.
 
