@@ -119,6 +119,8 @@ type ServerConfig struct {
 	// Healthz controls the optional root-level /healthz alias (PART 13). Moved
 	// from the legacy web.healthz location.
 	Healthz HealthzConfig `yaml:"healthz"`
+	// MCP controls the Model Context Protocol endpoint (PART 11 "MCP Endpoint").
+	MCP MCPConfig `yaml:"mcp"`
 	// Compliance toggles per-standard regulatory behavior (AI.md Compliance).
 	// All standards are disabled by default; enabled individually. When more
 	// than one is enabled, the strictest requirement wins on overlap.
@@ -912,6 +914,14 @@ type FooterConfig struct {
 	CustomHTML string `yaml:"custom_html"`
 }
 
+// MCPConfig controls the Model Context Protocol endpoint. It reuses the API's
+// Bearer tokens; there is no MCP-specific token or scope.
+type MCPConfig struct {
+	// Enabled serves /api/{api_version}/server/mcp (plus /api/mcp and /mcp).
+	// Default true; when false every MCP route answers 404.
+	Enabled bool `yaml:"enabled"`
+}
+
 // HealthzConfig controls the optional /healthz root alias (PART 13).
 // The canonical route is always /server/healthz; this alias is opt-in only.
 type HealthzConfig struct {
@@ -989,9 +999,10 @@ type CSRFConfig struct {
 // (curl, CI scripts, pastebin.com / lenpaste / microbin / stikked / hastebin /
 // dpaste / 0x0.st / sprunge / ix.io tooling): every /api/* route (API routes
 // never accept cookie auth, so there is no ambient authority to forge),
-// hastebin's POST /documents, microbin's POST /upload, and the curl-upload
+// hastebin's POST /documents, microbin's POST /upload, the Bearer-only MCP
+// endpoint at /mcp, and the curl-upload
 // family's POST /. Browser forms post to /pastes and keep full CSRF validation.
-var CSRFBuiltinExemptPaths = []string{"/api/*", "/documents", "/upload", "/"}
+var CSRFBuiltinExemptPaths = []string{"/api/*", "/documents", "/upload", "/mcp", "/"}
 
 // NotificationsConfig holds email notification settings.
 type NotificationsConfig struct {
@@ -1475,6 +1486,7 @@ func DefaultConfig() *Config {
 				MaxAge:           86400,
 			},
 			Healthz:    HealthzConfig{},
+			MCP:        MCPConfig{Enabled: true},
 			Compliance: ComplianceConfig{},
 			GeoIP: GeoIPConfig{
 				Enabled: true,

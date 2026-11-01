@@ -50,6 +50,7 @@ tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and m
 - CLI client (`pastebin-cli`) — full API access from the terminal
 - OpenAPI/Swagger docs
 - GraphQL read-only query interface (create and delete are REST-only)
+- MCP (Model Context Protocol) endpoint so AI clients can use the paste API as tools: Streamable HTTP JSON-RPC at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`), on by default (`server.mcp.enabled`), same Bearer tokens as the API (no MCP-specific token), tools generated from the API routes (create/get/list/delete paste, health, version); an anonymous create tool call returns the `owner_token` exactly like the REST API; token management is never exposed as a tool
 - Drop-in compat layer for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP listener, enabled by default; disable via `server.termbin.enabled: false` or `TERMBIN_ENABLED=false`) — compat routes use their own delete-token mechanism (stored in paste row) separate from the owner token system
 - Two-tier operator token: server operator may set a `server.token` in `server.yml`; this operator token allows deleting any paste unconditionally
 - i18n: 7 supported locales (en, es, fr, de, zh, ar, ja); automatic language selection via `Accept-Language` header; RTL layout for Arabic (`dir="rtl"` on `<html>`); fallback to English when locale unknown

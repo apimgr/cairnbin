@@ -99,7 +99,11 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&b, "## API\n")
 	fmt.Fprintf(&b, "Base URL: %s/api/%s\n", base, apiVersion)
 	fmt.Fprintf(&b, "Authentication: Bearer token (server token from server.yml, or resource owner token issued on paste creation)\n")
-	fmt.Fprintf(&b, "Rate limit: %d requests/minute\n\n", cfg.RateLimit.Read.Requests)
+	fmt.Fprintf(&b, "Rate limit: %d requests/minute\n", cfg.RateLimit.Read.Requests)
+	if cfg.Server.MCP.Enabled {
+		fmt.Fprintf(&b, "MCP: %s/mcp (Streamable HTTP; same Bearer token as the API)\n", base)
+	}
+	fmt.Fprintf(&b, "\n")
 
 	fmt.Fprintf(&b, "## Endpoints\n")
 	fmt.Fprintf(&b, "- GET /server/healthz - Health check (no auth)\n")
@@ -107,7 +111,11 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&b, "- GET /api/%s/pastes - List public pastes (no auth)\n", apiVersion)
 	fmt.Fprintf(&b, "- POST /api/%s/pastes - Create a paste (returns id + owner token)\n", apiVersion)
 	fmt.Fprintf(&b, "- GET /api/%s/pastes/{id} - Fetch a paste (no auth)\n", apiVersion)
-	fmt.Fprintf(&b, "- DELETE /api/%s/pastes/{id} - Delete a paste (owner token or operator auth)\n\n", apiVersion)
+	fmt.Fprintf(&b, "- DELETE /api/%s/pastes/{id} - Delete a paste (owner token or operator auth)\n", apiVersion)
+	if cfg.Server.MCP.Enabled {
+		fmt.Fprintf(&b, "- POST /api/%s/server/mcp - Model Context Protocol endpoint (JSON-RPC 2.0; tools mirror the API)\n", apiVersion)
+	}
+	fmt.Fprintf(&b, "\n")
 
 	fmt.Fprintf(&b, "## Capabilities\n")
 	fmt.Fprintf(&b, "- Create, fetch, list, and delete public pastes\n")

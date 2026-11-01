@@ -117,4 +117,10 @@ same pass gets its own line item here.
 - PART 25/27 build info: `src/main.go` derives `BuildDate` from `BuildEpoch` in
   `init()`; AI.md requires `Version`, `CommitID`, `BuildDate`, `OfficialSite`
   all set directly via `-ldflags -X` in the Makefile and every CI workflow.
+- PART 11 MCP follow-ups: operator-only tool mechanism exists but no operator
+  API route is annotated yet; audit `source: mcp` is set via request context
+  (verify it reaches paste create/delete audit events); `server.mcp.enabled`
+  has no `--maintenance`/docs surface beyond config. Also PART 11 still to
+  review: Output Sanitization Pipeline chokepoint (stages 1-4), logging
+  sections, audit log events, compliance modes, abuse detection, IP blocks.
 

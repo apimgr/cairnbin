@@ -47,6 +47,25 @@ curl -X POST https://pste.us/api/v1/new \
   -d "text=hello+world"
 ```
 
+## MCP (AI clients)
+
+AI clients (Claude, IDE agents, other MCP clients) can use the paste API as tools through the Model Context Protocol endpoint. It is Streamable HTTP, JSON-RPC 2.0 over `POST`:
+
+| Route | Notes |
+|-------|-------|
+| `POST https://pste.us/api/v1/server/mcp` | Canonical endpoint |
+| `POST https://pste.us/api/mcp`, `POST https://pste.us/mcp` | Aliases, same handler |
+
+- Authentication is the API's own `Authorization: Bearer tok_...` header. There is no MCP token. Create a linked token on `/server/preferences` for each MCP client so it can be revoked on its own.
+- Tools are generated from the API routes: `postApiV1Pastes`, `getApiV1Pastes`, `getApiV1PastesId`, `deleteApiV1PastesId`, `getApiV1PastesIdRaw`, `getApiV1ServerHealthz`, `getApiV1ServerVersion`. Token management is never a tool.
+- An anonymous `postApiV1Pastes` call returns the `owner_token` in the tool result; store it to keep control of the paste.
+- `GET` and `DELETE` return `405`. Disable with `server.mcp.enabled: false` (every MCP route then returns `404`).
+
+```bash
+curl -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
 ## CLI Tool
 
 See the [CLI Reference](cli.md) for the `pastebin-cli` tool.

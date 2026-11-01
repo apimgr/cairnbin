@@ -47,6 +47,7 @@ import (
 	"github.com/apimgr/pastebin/src/health"
 	"github.com/apimgr/pastebin/src/i2p"
 	"github.com/apimgr/pastebin/src/logging"
+	"github.com/apimgr/pastebin/src/mcp"
 	"github.com/apimgr/pastebin/src/metric"
 	"github.com/apimgr/pastebin/src/mode"
 	"github.com/apimgr/pastebin/src/model"
@@ -212,6 +213,7 @@ type Server struct {
 	pasteHandler       *handler.PasteHandler
 	compatHandler      *compat.Handler
 	swaggerHandler     *swagger.Handler
+	mcpHandler         *mcp.Handler
 	graphqlHandler     *graphql.Handler
 	metricsCollector   *metric.Collector
 	geoipDB            *geoip.DB
@@ -308,6 +310,16 @@ func (s *Server) auditLog(r *http.Request, e audit.Entry) {
 	}
 	if e.Actor.UserAgent == "" && r != nil {
 		e.Actor.UserAgent = r.UserAgent()
+	}
+	// Requests dispatched by the MCP endpoint are distinguishable in the audit
+	// trail (PART 11: the audit `source` is `mcp`).
+	if r != nil && mcp.FromContext(r.Context()) {
+		details := make(map[string]any, len(e.Details)+1)
+		for k, v := range e.Details {
+			details[k] = v
+		}
+		details["source"] = "mcp"
+		e.Details = details
 	}
 	s.auditLogger.Log(e)
 }
@@ -475,6 +487,14 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	s.swaggerHandler.SetAssetPrefixResolver(s.assetPrefix)
 	s.swaggerHandler.SetThemeResolver(s.themeFromRequest)
 	s.swaggerHandler.SetCSRFTokenResolver(s.csrfTokenFromRequest)
+	s.mcpHandler = mcp.New(mcp.Config{
+		APIVersion:    s.apiVersion(),
+		ServerName:    cfg.Web.SiteTitle,
+		ServerVersion: version,
+		Dispatch:      s.router,
+		Enabled:       func() bool { return s.liveCfg().Server.MCP.Enabled },
+		OriginAllowed: s.mcpOriginAllowed,
+	})
 	s.graphqlHandler = graphql.New(db, cfg.Web.SiteTitle)
 	s.graphqlHandler.SetAssetPrefixResolver(s.assetPrefix)
 	s.graphqlHandler.SetThemeResolver(s.themeFromRequest)
@@ -1445,6 +1465,7 @@ func (s *Server) setupRoutes() {
 		r.Get("/server/preferences/export", s.handlePreferencesExport)
 		r.Get("/server/preferences/import", s.handlePreferencesImport)
 		r.Get("/server/swagger", s.swaggerHandler.ServeSpec)
+		r.Handle("/server/mcp", s.mcpHandler)
 		// /api/v1/server/graphql — versioned GraphQL endpoint (PART 14)
 		r.Handle("/server/graphql", s.graphqlHandler)
 
@@ -1470,6 +1491,9 @@ func (s *Server) setupRoutes() {
 	// Unversioned aliases — same handler as versioned, served directly (no redirect) per PART 14.
 	r.Get("/api/swagger", s.swaggerHandler.ServeSpec)
 	r.Handle("/api/graphql", s.graphqlHandler)
+	// MCP: the same handler at all three paths, never a redirect (PART 11).
+	r.Handle("/api/mcp", s.mcpHandler)
+	r.Handle("/mcp", s.mcpHandler)
 	r.Get("/api/healthz", s.maybeHealthRateLimit(s.handleHealthzJSON))
 	// PART 20: unversioned machine-friendly metrics alias, same handlers.
 	if s.cfg.Server.Metrics.Enabled {
@@ -2111,6 +2135,7 @@ var reservedSlugs = map[string]struct{}{
 	"robots.txt":    {},
 	"sitemap.xml":   {},
 	"llms.txt":      {},
+	"mcp":           {},
 	"favicon.ico":   {},
 	".well-known":   {},
 	"raw":           {},
@@ -5889,4 +5914,19 @@ func (s *Server) langCookieMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// mcpOriginAllowed validates an MCP request's Origin header against the
+// request's own resolved origin (DNS-rebinding protection, PART 11): the Origin
+// host must equal the host this request was served on.
+func (s *Server) mcpOriginAllowed(r *http.Request) bool {
+	u, err := url.Parse(r.Header.Get("Origin"))
+	if err != nil || u.Host == "" {
+		return false
+	}
+	own, err := url.Parse(s.baseURL(r))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Host, own.Host)
 }
