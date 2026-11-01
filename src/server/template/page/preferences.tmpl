@@ -88,7 +88,7 @@
                         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                         <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_reveal"}}</button>
                     </form>
-                    <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/rotate" class="pref-option-form" onsubmit="return confirm('{{t $.Lang "preferences.owner_confirm_rotate"}}');">
+                    <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/rotate" class="pref-option-form" data-confirm="{{t $.Lang "preferences.owner_confirm_rotate"}}">
                         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                         <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_rotate"}}</button>
                     </form>
@@ -99,7 +99,7 @@
                         <label class="form-label">{{t $.Lang "preferences.owner_expiry"}}</label><input type="date" name="expires_date" class="form-input">
                         <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_save"}}</button>
                     </form>
-                    <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/revoke" class="pref-option-form" onsubmit="return confirm('{{t $.Lang "preferences.owner_confirm_revoke"}}');">
+                    <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/revoke" class="pref-option-form" data-confirm="{{t $.Lang "preferences.owner_confirm_revoke"}}">
                         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                         <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_revoke"}}</button>
                     </form>
@@ -118,7 +118,7 @@
                         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                         <button type="submit" class="btn btn-secondary">{{t .Lang "preferences.owner_reveal"}} {{t .Lang "preferences.owner_primary"}}</button>
                     </form>
-                    <form method="post" action="{{.AssetPrefix}}/server/preferences/token/rotate" class="pref-form" onsubmit="return confirm('{{t .Lang "preferences.owner_confirm_rotate_primary"}}');">
+                    <form method="post" action="{{.AssetPrefix}}/server/preferences/token/rotate" class="pref-form" data-confirm="{{t .Lang "preferences.owner_confirm_rotate_primary"}}">
                         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                         <button type="submit" class="btn btn-secondary">{{t .Lang "preferences.owner_rotate"}} {{t .Lang "preferences.owner_primary"}}</button>
                     </form>

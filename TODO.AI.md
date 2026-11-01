@@ -42,8 +42,8 @@ same pass gets its own line item here.
 - [x] PART 12 Server configuration (web.security split logged below)
 - [x] PART 13 Health & versioning
 - [x] PART 14 API structure
-- [ ] PART 15 SSL/TLS & Let's Encrypt
-- [ ] PART 16 Web frontend
+- [x] PART 15 SSL/TLS & Let's Encrypt
+- [x] PART 16 Web frontend (sampled; gaps logged below)
 - [ ] PART 17 Email & notifications
 - [ ] PART 18 Scheduler
 - [ ] PART 19 GeoIP
@@ -144,4 +144,13 @@ same pass gets its own line item here.
   database-anomaly (injection pattern) blocking, config-tampering rollback.
   Allowlist/blocked_ips are plain string lists; AI.md uses `{cidr, description}`
   objects. Temporary blocks are in-memory only (lost on restart).
+- PART 16 frontend (sampled via a rule scan, not a line-by-line read): the
+  prefers-reduced-motion block in static/css/common.css.tmpl uses
+  `!important`, which AI.md allows only in print styles (needs durations driven
+  by CSS custom properties instead); physical `margin-left/right` and
+  `padding-left/right` remain in ~10 rules (spec: CSS logical properties for
+  RTL); the `/server/*` standard pages, empty states, PWA, themes, branding/SEO,
+  cookie banner and footer sections were not individually re-verified.
+  Template policy (no inline handlers/styles/scripts, no alert/confirm/prompt)
+  is now enforced by src/server/template_policy_test.go.
 

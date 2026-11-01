@@ -797,6 +797,7 @@
     "os_arch": "OS/Arch : {goos}/{goarch}"
   },
   "confirm": {
+    "action_title": "Veuillez confirmer",
     "delete_title": "Confirmer la suppression",
     "delete_message": "Êtes-vous sûr de vouloir supprimer cet élément ?",
     "action_irreversible": "Cette action est irréversible."

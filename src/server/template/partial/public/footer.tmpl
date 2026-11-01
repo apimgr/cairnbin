@@ -57,6 +57,14 @@
         <button type="submit" class="btn btn-secondary">{{t .Lang "common.close"}}</button>
     </form>
 </dialog>
+<dialog id="confirm-dialog" class="install-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message">
+    <h2 id="confirm-dialog-title" class="install-dialog-title">{{t .Lang "confirm.action_title"}}</h2>
+    <p id="confirm-dialog-message" class="confirm-dialog-message"></p>
+    <form method="dialog" class="install-dialog-actions">
+        <button type="submit" value="cancel" class="btn btn-secondary">{{t .Lang "common.cancel"}}</button>
+        <button type="submit" value="confirm" class="btn btn-danger">{{t .Lang "common.confirm"}}</button>
+    </form>
+</dialog>
 {{if trackingEnabled}}
 <template id="pb-tracking-snippet">{{trackingScript}}</template>
 {{end}}

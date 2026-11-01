@@ -293,6 +293,34 @@ function installApp() {
     if (dlg && typeof dlg.showModal === 'function') dlg.showModal();
 }
 
+// Destructive-action confirmation (PART 16: native <dialog>, never confirm()).
+// A form carrying data-confirm="message" is intercepted on submit, the shared
+// #confirm-dialog is shown with that message, and the form is re-submitted only
+// when the user picks Confirm. Without JavaScript the form submits directly;
+// the server enforces authorization either way.
+document.addEventListener('submit', function (event) {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-confirm')) return;
+    if (form.dataset.confirmed === 'true') {
+        delete form.dataset.confirmed;
+        return;
+    }
+    const dlg = document.getElementById('confirm-dialog');
+    if (!dlg || typeof dlg.showModal !== 'function') return;
+    event.preventDefault();
+    const message = document.getElementById('confirm-dialog-message');
+    if (message) message.textContent = form.getAttribute('data-confirm');
+    dlg.returnValue = '';
+    dlg.addEventListener('close', function onClose() {
+        dlg.removeEventListener('close', onClose);
+        if (dlg.returnValue === 'confirm') {
+            form.dataset.confirmed = 'true';
+            form.requestSubmit();
+        }
+    });
+    dlg.showModal();
+});
+
 // Capture the install prompt; never show the browser default automatically.
 window.addEventListener('beforeinstallprompt', function (event) {
     event.preventDefault();

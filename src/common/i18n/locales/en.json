@@ -926,6 +926,7 @@
     "os_arch": "OS/Arch: {goos}/{goarch}"
   },
   "confirm": {
+    "action_title": "Please confirm",
     "delete_title": "Confirm deletion",
     "delete_message": "Are you sure you want to delete this item?",
     "action_irreversible": "This action cannot be undone."

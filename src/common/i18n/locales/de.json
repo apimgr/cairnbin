@@ -797,6 +797,7 @@
     "os_arch": "BS/Arch: {goos}/{goarch}"
   },
   "confirm": {
+    "action_title": "Bitte bestätigen",
     "delete_title": "Löschen bestätigen",
     "delete_message": "Sind Sie sicher, dass Sie dieses Element löschen möchten?",
     "action_irreversible": "Diese Aktion kann nicht rückgängig gemacht werden."

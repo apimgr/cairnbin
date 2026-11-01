@@ -926,6 +926,7 @@
     "os_arch": "النظام/البنية: {goos}/{goarch}"
   },
   "confirm": {
+    "action_title": "يرجى التأكيد",
     "delete_title": "تأكيد الحذف",
     "delete_message": "هل أنت متأكد أنك تريد حذف هذا العنصر؟",
     "action_irreversible": "لا يمكن التراجع عن هذا الإجراء."
