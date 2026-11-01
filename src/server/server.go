@@ -1858,7 +1858,7 @@ func (s *Server) buildCSP(r *http.Request) (header string, reportOnly bool) {
 	)
 
 	policy := strings.Join(directives, "; ")
-	isReportOnly := csp.Mode == "report-only" || cfg.Server.Mode == "development"
+	isReportOnly := csp.Mode == "report-only" || cfg.Server.Mode == "development" || cfg.Server.Mode == "debug"
 	return policy, isReportOnly
 }
 

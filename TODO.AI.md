@@ -33,7 +33,7 @@ same pass gets its own line item here.
 - [x] PART 3 Project structure
 - [x] PART 4 OS-specific paths
 - [x] PART 5 Configuration
-- [ ] PART 6 Application modes
+- [x] PART 6 Application modes
 - [ ] PART 7 Binary requirements
 - [ ] PART 8 Server binary CLI
 - [ ] PART 9 Error handling & caching
@@ -85,3 +85,9 @@ same pass gets its own line item here.
   strips the leading slash, so it cannot validate absolute operator paths
   (`--data`, `--config`) or dotted filenames as the AI.md examples imply.
   `SafeFilePath` is added; backup filenames use a base-name/`..` guard instead.
+- PART 6 `server.debug.*` config block (pprof, log_queries, log_cache,
+  log_bodies, max_body_log_size, block_profile_rate, mutex_profile_fraction,
+  runtime_endpoints) is not implemented; only the fixed on/off profiling rates
+  tied to the debug flag exist. Also missing: DB-query and cache-operation
+  debug logging (`debugLogDB`, `debugLogCache`) and the expvar counters
+  (`requests_total`, `errors_total`, `uptime_seconds`, ...) from the spec.

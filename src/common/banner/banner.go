@@ -86,7 +86,7 @@ func colorize(text, ansiCode string) string {
 
 // modeIcon returns the mode indicator icon: 🔧 development, 🔒 otherwise (AI.md:19845-19850).
 func modeIcon(appMode string) string {
-	if appMode == "development" {
+	if appMode == "development" || appMode == "debug" {
 		return "🔧"
 	}
 	return "🔒"

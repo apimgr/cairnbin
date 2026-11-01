@@ -837,7 +837,7 @@ Examples:
 	// mode.Get() already resolved flag+env; a config-file mode applies only when neither was set.
 	switch {
 	case modeFlag != "":
-		cfg.Server.Mode = modeFlag
+		cfg.Server.Mode = mode.Get().String()
 	case os.Getenv("MODE") != "":
 		cfg.Server.Mode = mode.Get().String()
 	case cfg.Server.Mode != "":

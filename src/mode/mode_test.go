@@ -10,6 +10,7 @@ package mode_test
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/apimgr/pastebin/src/mode"
@@ -45,6 +46,8 @@ func TestParseMode(t *testing.T) {
 		{"leading space", " dev", mode.Development, false},
 		{"trailing space", "dev ", mode.Development, false},
 		{"surrounding spaces", " Dev ", mode.Development, false},
+		{"debug is its own mode", "debug", mode.Debug, false},
+		{"uppercase DEBUG", "DEBUG", mode.Debug, false},
 		{"empty string", "", mode.Mode(""), true},
 		{"invalid value", "staging", mode.Mode(""), true},
 		{"whitespace only", "   ", mode.Mode(""), true},
@@ -137,6 +140,7 @@ func TestIsDevelopment(t *testing.T) {
 		want bool
 	}{
 		{"dev mode → true", "dev", true},
+		{"debug mode → true (as development)", "debug", true},
 		{"production mode → false", "production", false},
 	}
 	for _, tc := range cases {
@@ -238,11 +242,11 @@ func TestApplyModeAndDebug(t *testing.T) {
 	}{
 		{"defaults", "", false, "", "", false, mode.Production, false},
 		{"cli mode only", "development", false, "", "", false, mode.Development, false},
-		{"cli mode debug alias defaults debug on", "debug", false, "", "", false, mode.Development, true},
-		{"cli mode debug alias beaten by explicit DEBUG=false", "debug", false, "", "false", true, mode.Development, false},
-		{"env MODE=debug alias beaten by explicit DEBUG=false", "", false, "debug", "false", true, mode.Development, false},
-		{"env MODE=debug alias defaults debug on when DEBUG unset", "", false, "debug", "", false, mode.Development, true},
-		{"cli --debug beats explicit DEBUG=false", "debug", true, "", "false", true, mode.Development, true},
+		{"cli mode debug defaults debug on", "debug", false, "", "", false, mode.Debug, true},
+		{"cli mode debug beaten by explicit DEBUG=false", "debug", false, "", "false", true, mode.Debug, false},
+		{"env MODE=debug beaten by explicit DEBUG=false", "", false, "debug", "false", true, mode.Debug, false},
+		{"env MODE=debug defaults debug on when DEBUG unset", "", false, "debug", "", false, mode.Debug, true},
+		{"cli --debug beats explicit DEBUG=false", "debug", true, "", "false", true, mode.Debug, true},
 		{"env DEBUG=true with production mode", "production", false, "", "true", true, mode.Production, true},
 	}
 	for _, tc := range cases {
@@ -530,7 +534,7 @@ func TestModeString(t *testing.T) {
 	}
 }
 
-// TestModeValidate verifies that only Production and Development are valid.
+// TestModeValidate verifies that Production, Development and Debug are valid.
 func TestModeValidate(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -539,6 +543,7 @@ func TestModeValidate(t *testing.T) {
 	}{
 		{"production valid", mode.Production, false},
 		{"development valid", mode.Development, false},
+		{"debug valid", mode.Debug, false},
 		{"empty invalid", mode.Mode(""), true},
 		{"arbitrary string invalid", mode.Mode("staging"), true},
 	}
@@ -582,5 +587,34 @@ func TestShouldShowDebugEndpoints(t *testing.T) {
 				t.Errorf("ShouldShowDebugEndpoints() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestIsDebugMode verifies IsDebugMode is true only for MODE=debug.
+func TestIsDebugMode(t *testing.T) {
+	for set, want := range map[string]bool{"debug": true, "dev": false, "production": false} {
+		resetMode(t)
+		if err := mode.Set(set); err != nil {
+			t.Fatalf("Set(%q): %v", set, err)
+		}
+		if got := mode.IsDebugMode(); got != want {
+			t.Errorf("IsDebugMode() after Set(%q) = %v, want %v", set, got, want)
+		}
+	}
+}
+
+// TestSetDebugTogglesMutexProfiling verifies the debug flag turns mutex
+// profiling on and off (PART 6, updateAppModeProfilingSettings).
+func TestSetDebugTogglesMutexProfiling(t *testing.T) {
+	resetMode(t)
+
+	mode.SetDebug(true)
+	if got := runtime.SetMutexProfileFraction(-1); got != 1 {
+		t.Errorf("mutex profile fraction with debug on = %d, want 1", got)
+	}
+
+	mode.SetDebug(false)
+	if got := runtime.SetMutexProfileFraction(-1); got != 0 {
+		t.Errorf("mutex profile fraction with debug off = %d, want 0", got)
 	}
 }

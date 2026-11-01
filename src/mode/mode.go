@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -18,6 +19,9 @@ const (
 	Production Mode = "production"
 	// Development mode - optimized for debugging and development
 	Development Mode = "development"
+	// Debug mode - explicit opt-in only; development behavior with the debug
+	// flag defaulting to on and minimal output sanitization (PART 6).
+	Debug Mode = "debug"
 )
 
 var (
@@ -38,7 +42,7 @@ func Get() Mode {
 
 // Set sets the application mode
 // Valid values: "production", "prod", "development", "dev", "devel", "debug"
-// "debug" is an alias for development mode + debug on; an explicit
+// "debug" selects debug mode, which defaults the debug flag to on; an explicit
 // --debug flag or DEBUG env var applied after this call still wins.
 func Set(mode string) error {
 	parsed, err := ParseMode(mode)
@@ -71,9 +75,9 @@ func ParseMode(s string) (Mode, error) {
 	case "development", "dev", "devel":
 		return Development, nil
 	case "debug":
-		// Alias: development mode + debug on (an explicit --debug flag or
-		// DEBUG env var applied after this still wins).
-		return Development, nil
+		// Debug mode: explicit opt-in only; defaults the debug flag on (an
+		// explicit --debug flag or DEBUG env var applied after this wins).
+		return Debug, nil
 	case "production", "prod":
 		return Production, nil
 	default:
@@ -81,9 +85,16 @@ func ParseMode(s string) (Mode, error) {
 	}
 }
 
-// IsDevelopment returns true if the current mode is Development
+// IsDevelopment returns true if the current mode applies development
+// behavior: Development, and Debug (which is "as Development Mode" per PART 6).
 func IsDevelopment() bool {
-	return Get() == Development
+	m := Get()
+	return m == Development || m == Debug
+}
+
+// IsDebugMode returns true only when the mode itself is "debug" (MODE=debug).
+func IsDebugMode() bool {
+	return Get() == Debug
 }
 
 // IsProduction returns true if the current mode is Production
@@ -112,10 +123,10 @@ func Initialize(cliMode string) error {
 
 // FromEnv reads the MODE and DEBUG environment variables and applies them
 // (PART 6, AI.md line 9068). Priority: CLI flag overrides already applied
-// before this call take precedence. Setting the MODE env var to "debug" is
-// an alias for development mode with debug on, but an explicitly set DEBUG
-// env var (truthy or falsy) always wins over that alias, so a falsy DEBUG
-// still runs development mode with debug off. The --debug CLI flag (applied
+// before this call take precedence. Setting the MODE env var to "debug"
+// selects debug mode with the debug flag defaulting on, but an explicitly set
+// DEBUG env var (truthy or falsy) always wins over that default, so a falsy
+// DEBUG still runs debug mode with the debug flag off. The --debug CLI flag (applied
 // after this) wins over both.
 func FromEnv() {
 	if envMode := os.Getenv("MODE"); envMode != "" {
@@ -166,6 +177,20 @@ func SetDebug(enabled bool) {
 	mu.Lock()
 	defer mu.Unlock()
 	debugEnabled = enabled
+	updateProfilingSettings(enabled)
+}
+
+// updateProfilingSettings enables block and mutex profiling when debug is on
+// and disables them when it is off, so /debug/pprof/block and /mutex report
+// data only while debugging (PART 6).
+func updateProfilingSettings(enabled bool) {
+	if enabled {
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(1)
+		return
+	}
+	runtime.SetBlockProfileRate(0)
+	runtime.SetMutexProfileFraction(0)
 }
 
 // SetDebugEnabled is the spec-required alias for SetDebug (PART 6, AI.md line 9020).
@@ -278,7 +303,7 @@ func (m Mode) String() string {
 // Validate returns an error if the mode is not valid
 func (m Mode) Validate() error {
 	switch m {
-	case Production, Development:
+	case Production, Development, Debug:
 		return nil
 	default:
 		return errors.New("invalid mode")
