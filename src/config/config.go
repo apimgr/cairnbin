@@ -85,6 +85,8 @@ type ServerConfig struct {
 	Backup BackupConfig `yaml:"backup"`
 	// Update controls the self-update channel and scheduling behaviour (PART 22).
 	Update UpdateConfig `yaml:"update"`
+	// CLI controls how this server distributes the companion CLI binaries (PART 32).
+	CLI CLIDistConfig `yaml:"cli"`
 	// I18n controls language availability, defaults and the language cookie (PART 30).
 	I18n I18nConfig `yaml:"i18n"`
 	// Cache configures the in-process or remote cache driver (PART 9/12).
@@ -3527,6 +3529,17 @@ func validateBackupRetention(r *BackupRetentionConfig) {
 	if r.KeepYearly > 2 {
 		log.Printf("[config] WARNING: keep_yearly: %d exceeds recommended 2", r.KeepYearly)
 	}
+}
+
+// CLIDistConfig is the server.cli block (PART 32 CLI Auto-Update).
+type CLIDistConfig struct {
+	BinaryDownload CLIBinaryDownloadConfig `yaml:"binary_download"`
+}
+
+// CLIBinaryDownloadConfig gates GET /cli/binaries/{name}. The default is a
+// public download so new users can install the CLI before they hold a token.
+type CLIBinaryDownloadConfig struct {
+	RequireAuth bool `yaml:"require_auth"`
 }
 
 // I18nConfig is the server.i18n block (PART 30 Configuration).

@@ -131,6 +131,18 @@ Channels are cumulative: `beta` also sees stable releases, and `devel` also
 sees beta and stable. `--update branch {name}` writes `server.update.branch`.
 Updates are verified against the release's `sha256.txt` before install.
 
+### CLI distribution (`server.cli`)
+
+The server hands out `pastebin-cli` builds for CLI self-update. `/api/autodiscover`
+lists each available build under `cli_versions` (`{os}-{arch}` → `version` and
+`sha256`), and `GET /cli/binaries/pastebin-cli-{os}-{arch}[.exe]` streams it.
+Builds come from `{data_dir}/cli/binaries/` plus the `pastebin-cli` installed
+next to the server binary (the container image ships it).
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `binary_download.require_auth` | `false` | Require the server token (bearer) for `/cli/binaries/*`; public by default so new users can install the CLI first |
+
 ### Backups (`server.backup`)
 
 Retention keys under `backup.retention`:

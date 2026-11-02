@@ -413,6 +413,25 @@ type autodiscoverResponse struct {
 	CLIMinVersion string                    `json:"cli_min_version"`
 }
 
+// UnmarshalJSON accepts both the canonical envelope {"ok":true,"data":{...}}
+// (PART 14) and a flat object, so older servers keep working.
+func (d *autodiscoverResponse) UnmarshalJSON(b []byte) error {
+	type flat autodiscoverResponse
+	var env struct {
+		Data *flat `json:"data"`
+		flat
+	}
+	if err := json.Unmarshal(b, &env); err != nil {
+		return err
+	}
+	if env.Data != nil {
+		*d = autodiscoverResponse(*env.Data)
+		return nil
+	}
+	*d = autodiscoverResponse(env.flat)
+	return nil
+}
+
 type cliVersionInfo struct {
 	Version string `json:"version"`
 	SHA256  string `json:"sha256"`

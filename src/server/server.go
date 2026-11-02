@@ -1538,6 +1538,8 @@ func (s *Server) setupRoutes() {
 	}
 	// autodiscover is non-versioned by design (PART 32/14): clients use it before knowing the version.
 	r.Get("/api/autodiscover", s.handleAutodiscover)
+	// CLI binary distribution (PART 32): public unless server.cli.binary_download.require_auth.
+	r.Get("/cli/binaries/{name}", s.handleCLIBinary)
 
 	// ── Web: main pages ──────────────────────────────────────────────────────
 	r.Get("/", s.handleHome)
@@ -3261,10 +3263,9 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 			"base_url":    base,
 
 			// CLI update metadata (PART 32).
-			// cli_versions maps os-arch → {version, sha256} for each available binary.
-			// Empty map = no CLI binaries hosted by this server; clients stay on their
-			// installed version. Operators can populate via the release workflow.
-			"cli_versions":    map[string]interface{}{},
+			// cli_versions maps os-arch → {version, sha256} for each CLI binary this
+			// server hosts at /cli/binaries/{name}; empty when none are available.
+			"cli_versions":    s.cliVersionsPayload(),
 			"cli_min_version": s.liveCfg().Server.Update.CLIMinVersion,
 
 			// Feature flags visible to clients
