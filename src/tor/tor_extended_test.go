@@ -494,7 +494,7 @@ func TestGetTorConfig_TableDriven(t *testing.T) {
 			port: 1000,
 			want: []string{"SocksPort 0"},
 			notWant: []string{
-				"SocksPort auto",
+				"SocksPort 127.0.0.1:auto",
 				"AccountingMax",
 			},
 		},
@@ -507,7 +507,7 @@ func TestGetTorConfig_TableDriven(t *testing.T) {
 				MaxMonthlyBandwidth: "50 GB",
 			},
 			port: 2000,
-			want: []string{"SocksPort auto", "AccountingMax 50 GB"},
+			want: []string{"SocksPort 127.0.0.1:auto", "AccountingMax 50 GB"},
 		},
 		{
 			name: "safe logging disabled",

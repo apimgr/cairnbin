@@ -244,8 +244,8 @@ func TestGetTorConfig_SocksPortAutoWhenNetworkEnabled(t *testing.T) {
 		BandwidthBurst: "2 MB",
 	}
 	out := getTorConfig(cfg, 9999)
-	if !strings.Contains(out, "SocksPort auto") {
-		t.Errorf("expected 'SocksPort auto' when UseNetwork=true, got:\n%s", out)
+	if !strings.Contains(out, "SocksPort 127.0.0.1:auto") {
+		t.Errorf("expected 'SocksPort 127.0.0.1:auto' when UseNetwork=true, got:\n%s", out)
 	}
 }
 
@@ -447,5 +447,34 @@ func TestMigrateLegacyKey_UnexpectedSize_LeftUntouched(t *testing.T) {
 	}
 	if string(got) != string(odd) {
 		t.Error("migrateLegacyKey must leave an unrecognized-size file untouched")
+	}
+}
+
+func TestGetTorConfig_RelayHardeningAndTuning(t *testing.T) {
+	cfg := &Config{VirtualPort: 80, DataDir: "/d", SafeLogging: true, BandwidthRate: "1 MB", BandwidthBurst: "2 MB",
+		UseNetwork: true, NumIntroPoints: 5, MaxStreamsPerCircuit: 100, CloseCircuitOnStreamLimit: true}
+	out := getTorConfig(cfg, 4242)
+	for _, want := range []string{
+		"SocksPort 127.0.0.1:auto", "SocksPolicy accept 127.0.0.1", "PublishServerDescriptor 0",
+		"ExitRelay 0", "ExitPolicy reject *:*", "ORPort 0", "DirPort 0",
+		"HiddenServiceNumIntroductionPoints 5", "HiddenServiceMaxStreams 100", "HiddenServiceMaxStreamsCloseCircuit 1",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("torrc missing %q", want)
+		}
+	}
+	off := getTorConfig(&Config{VirtualPort: 80, DataDir: "/d", NumIntroPoints: 99}, 1)
+	if strings.Contains(off, "SocksPolicy") || strings.Contains(off, "HiddenServiceNumIntroductionPoints") || !strings.Contains(off, "SocksPort 0") {
+		t.Errorf("hardening/tuning leaked into default torrc:\n%s", off)
+	}
+}
+
+func TestGetTorConfig_LogFile(t *testing.T) {
+	out := getTorConfig(&Config{VirtualPort: 80, DataDir: "/d", LogDir: "/var/log/apimgr/pastebin"}, 1)
+	if !strings.Contains(out, "Log notice file /var/log/apimgr/pastebin/tor.log") {
+		t.Errorf("torrc missing tor.log directive:\n%s", out)
+	}
+	if strings.Contains(getTorConfig(&Config{VirtualPort: 80, DataDir: "/d"}, 1), "Log notice file") {
+		t.Error("log directive emitted without LogDir")
 	}
 }

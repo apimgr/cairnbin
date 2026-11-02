@@ -195,6 +195,8 @@ type Config struct {
 	ConfigDir string
 	// {data_dir} — Tor data + hidden service keys
 	DataDir string
+	// {log_dir} — tor.log is written here (empty disables the Tor log file)
+	LogDir string
 }
 
 // service holds a running Tor instance.
@@ -287,7 +289,7 @@ func (m *Manager) startLocked() error {
 		return nil
 	}
 
-	if err := ensureTorDirs(m.cfg.ConfigDir, m.cfg.DataDir); err != nil {
+	if err := ensureTorDirsWithLog(m.cfg.ConfigDir, m.cfg.DataDir, m.cfg.LogDir); err != nil {
 		return fmt.Errorf("tor dirs: %w", err)
 	}
 
@@ -539,12 +541,13 @@ func (m *Manager) RegenerateAddress() (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	siteDir := filepath.Join(m.cfg.DataDir, "tor", "site")
+	// Stop Tor first so it cannot rewrite the key material while it is deleted (PART 31.1).
+	m.closeSvcLocked()
 	for _, name := range []string{"hs_ed25519_secret_key", "hs_ed25519_public_key", "hostname"} {
 		if err := os.Remove(filepath.Join(siteDir, name)); err != nil && !os.IsNotExist(err) {
 			return "", fmt.Errorf("remove %s: %w", name, err)
 		}
 	}
-	m.closeSvcLocked()
 	if err := m.startLocked(); err != nil {
 		return "", err
 	}
@@ -566,6 +569,8 @@ func (m *Manager) ApplyKeys(keyData []byte) (string, error) {
 		return "", fmt.Errorf("applykeys: expected %d-byte native ed25519 secret key file with valid header", nativeKeyFileLen)
 	}
 	siteDir := filepath.Join(m.cfg.DataDir, "tor", "site")
+	// Stop Tor before replacing its key material (PART 31.1 ApplyKeys).
+	m.closeSvcLocked()
 	if err := os.MkdirAll(siteDir, 0o700); err != nil {
 		return "", fmt.Errorf("applykeys mkdir: %w", err)
 	}
@@ -579,7 +584,6 @@ func (m *Manager) ApplyKeys(keyData []byte) (string, error) {
 			return "", fmt.Errorf("remove stale %s: %w", name, err)
 		}
 	}
-	m.closeSvcLocked()
 	if err := m.startLocked(); err != nil {
 		return "", err
 	}
@@ -629,6 +633,16 @@ func (m *Manager) Monitor() {
 // directories already existed. Chown failures are fatal on non-Windows;
 // Windows has no chown and relies on inherited ACLs from the user profile.
 func ensureTorDirs(configDir, dataDir string) error {
+	return ensureTorDirsWithLog(configDir, dataDir, "")
+}
+
+// ensureTorDirsWithLog is ensureTorDirs plus the log directory that holds tor.log.
+func ensureTorDirsWithLog(configDir, dataDir, logDir string) error {
+	if logDir != "" {
+		if err := os.MkdirAll(logDir, 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", logDir, err)
+		}
+	}
 	dirs := []string{
 		filepath.Join(configDir, "tor"),
 		filepath.Join(dataDir, "tor"),
@@ -682,7 +696,23 @@ func writeSecureTorFile(path string, content []byte) error {
 func getTorConfig(cfg *Config, backendPort int) string {
 	socksLine := "SocksPort 0"
 	if cfg.UseNetwork {
-		socksLine = "SocksPort auto"
+		// Loopback only, runtime-chosen port: never reachable from the hidden-service listener.
+		socksLine = "SocksPort 127.0.0.1:auto\nSocksPolicy accept 127.0.0.1"
+	}
+	// Hidden-service tuning derived from server.tor.* (omitted when unset or out of range).
+	logLine := ""
+	if cfg.LogDir != "" {
+		logLine = fmt.Sprintf("\n# Tor log file ({log_dir}/tor.log)\nLog notice file %s\n", filepath.Join(cfg.LogDir, "tor.log"))
+	}
+	hsTuning := ""
+	if n := cfg.NumIntroPoints; n >= 3 && n <= 10 {
+		hsTuning += fmt.Sprintf("HiddenServiceNumIntroductionPoints %d\n", n)
+	}
+	if n := cfg.MaxStreamsPerCircuit; n > 0 && n <= 65535 {
+		hsTuning += fmt.Sprintf("HiddenServiceMaxStreams %d\n", n)
+		if cfg.CloseCircuitOnStreamLimit {
+			hsTuning += "HiddenServiceMaxStreamsCloseCircuit 1\n"
+		}
 	}
 	safeLog := "1"
 	if !cfg.SafeLogging {
@@ -708,7 +738,7 @@ HiddenServiceDir %s
 HiddenServiceVersion 3
 HiddenServicePort %d 127.0.0.1:%d
 HiddenServiceExportCircuitID haproxy
-VanguardsLiteEnabled 1
+%sVanguardsLiteEnabled 1
 HiddenServiceSingleHopMode 0
 
 # Security
@@ -722,15 +752,17 @@ BandwidthRate %s
 BandwidthBurst %s
 %s
 
+%s
 # Not a relay or exit
 ExitRelay 0
 ExitPolicy reject *:*
 ORPort 0
 DirPort 0
+PublishServerDescriptor 0
 
 # Startup optimization
 FetchDirInfoEarly 1
 FetchDirInfoExtraEarly 1
 DisableDebuggerAttachment 1
-`, socksLine, filepath.Join(cfg.DataDir, "tor", "site"), cfg.VirtualPort, backendPort, safeLog, cfg.BandwidthRate, cfg.BandwidthBurst, accounting)
+`, socksLine, filepath.Join(cfg.DataDir, "tor", "site"), cfg.VirtualPort, backendPort, hsTuning, safeLog, cfg.BandwidthRate, cfg.BandwidthBurst, accounting, logLine)
 }

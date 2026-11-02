@@ -156,8 +156,8 @@ func TestGetTorConfig_UseNetwork(t *testing.T) {
 		BandwidthBurst: "2 MB",
 	}
 	out := getTorConfig(cfg, 1234)
-	if !strings.Contains(out, "SocksPort auto") {
-		t.Errorf("expected 'SocksPort auto' when UseNetwork=true, got:\n%s", out)
+	if !strings.Contains(out, "SocksPort 127.0.0.1:auto") {
+		t.Errorf("expected 'SocksPort 127.0.0.1:auto' when UseNetwork=true, got:\n%s", out)
 	}
 }
 

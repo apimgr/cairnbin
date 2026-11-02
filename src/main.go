@@ -1633,6 +1633,7 @@ func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer) i
 		VirtualPort:               tcCfg.Server.Tor.VirtualPort,
 		ConfigDir:                 tcConfigDir,
 		DataDir:                   tcDataDir,
+		LogDir:                    path.GetLogsDir(appName),
 	}
 
 	baseURL, serverUp := torServerBaseURL(tcConfigDir)

@@ -72,6 +72,7 @@ func (s *Server) torControlConfig() tor.Config {
 		VirtualPort:               cfg.Server.Tor.VirtualPort,
 		ConfigDir:                 s.configDir,
 		DataDir:                   s.dataDir,
+		LogDir:                    path.GetLogsDir("pastebin"),
 	}
 }
 

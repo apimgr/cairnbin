@@ -38,6 +38,7 @@ import (
 	"github.com/apimgr/pastebin/src/common/email"
 	"github.com/apimgr/pastebin/src/common/httputil"
 	"github.com/apimgr/pastebin/src/common/i18n"
+	"github.com/apimgr/pastebin/src/path"
 	"github.com/apimgr/pastebin/src/config"
 	"github.com/apimgr/pastebin/src/database"
 	"github.com/apimgr/pastebin/src/geoip"
@@ -571,6 +572,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		VirtualPort:               cfg.Server.Tor.VirtualPort,
 		ConfigDir:                 configDir,
 		DataDir:                   dataDir,
+		LogDir:                    path.GetLogsDir("pastebin"),
 	}
 	// Forward the hidden service to the server's real HTTP listener. Port may be a
 	// dual "http,https" value (PART 5/15); the onion maps :virtual → the plaintext
