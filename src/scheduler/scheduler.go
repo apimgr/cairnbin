@@ -408,7 +408,13 @@ func (s *Scheduler) execute(e *taskEntry) error {
 		log.Printf("scheduler: task %s completed (%dms)", e.id, durationMS)
 	}
 
-	metric.SchedulerTasksTotal.WithLabelValues(e.id, status).Inc()
+	// PART 20 defines the scheduler_tasks_total status label values as
+	// success|error, while persisted run state keeps "failed".
+	metricStatus := status
+	if taskErr != nil {
+		metricStatus = "error"
+	}
+	metric.SchedulerTasksTotal.WithLabelValues(e.id, metricStatus).Inc()
 	metric.SchedulerTaskDuration.WithLabelValues(e.id).Observe(finished.Sub(start).Seconds())
 	metric.SchedulerLastRunTimestamp.WithLabelValues(e.id).Set(float64(finished.Unix()))
 

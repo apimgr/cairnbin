@@ -11,6 +11,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/apimgr/pastebin/src/metric"
 )
 
 // TestTick_NoTasksDue verifies that tick() on an empty scheduler does not
@@ -385,6 +389,9 @@ func TestExecute_PanicIsolated(t *testing.T) {
 	err := s.execute(e)
 	if err == nil || e.lastStatus != "failed" {
 		t.Fatalf("expected failed run, got err=%v status=%q", err, e.lastStatus)
+	}
+	if got := testutil.ToFloat64(metric.SchedulerTasksTotal.WithLabelValues("panicky", "error")); got != 1 {
+		t.Errorf("scheduler_tasks_total{status=error} = %v, want 1", got)
 	}
 	if e.failCount != 1 || e.nextRun.IsZero() {
 		t.Errorf("state not updated: failCount=%d next=%v", e.failCount, e.nextRun)
