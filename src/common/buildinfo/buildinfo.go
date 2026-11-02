@@ -14,7 +14,7 @@ import (
 
 const (
 	// defaultVersion stands in for an un-stamped local build (no -ldflags).
-	defaultVersion = "dev"
+	defaultVersion = "devel"
 	// defaultCommit stands in for a build with no resolvable commit id.
 	defaultCommit = "0000000"
 	// shortCommitLen is the conventional git short-SHA length.
@@ -80,7 +80,7 @@ func stampFor(version, commit string) string {
 // the known "unknown" placeholder the build vars default to.
 func sanitize(value, fallback string) string {
 	v := stampUnsafe.ReplaceAllString(strings.TrimSpace(value), "")
-	if v == "" || strings.EqualFold(v, "unknown") {
+	if v == "" || strings.EqualFold(v, "unknown") || strings.EqualFold(v, "N/A") {
 		return fallback
 	}
 	return v

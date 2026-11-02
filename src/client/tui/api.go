@@ -134,4 +134,4 @@ func deletePaste(server, lang, id, token string) error {
 // clientVersion is set at build time; the TUI uses it in User-Agent.
 // It mirrors the Version var in main.go which is injected via ldflags.
 // We use a package-level var so tests can override it without forking the binary.
-var clientVersion = "dev"
+var clientVersion = "devel"

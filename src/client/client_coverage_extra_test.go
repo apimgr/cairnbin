@@ -547,9 +547,9 @@ func TestDetectLocale_EmptyLCALLUsesLANG(t *testing.T) {
 // ─── version constant checks ─────────────────────────────────────────────────
 
 func TestVersionConstants_Default(t *testing.T) {
-	// Version should be "dev" when not overridden by ldflags
+	// Version should be "devel" when not overridden by ldflags
 	// This documents the expected default value
-	if Version != "dev" && Version != "unknown" && !strings.Contains(Version, ".") {
+	if Version != "devel" && Version != "dev" && Version != "unknown" && !strings.Contains(Version, ".") {
 		t.Logf("Version = %q (may be overridden by ldflags)", Version)
 	}
 }

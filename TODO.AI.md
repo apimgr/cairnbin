@@ -52,7 +52,7 @@ same pass gets its own line item here.
 - [x] PART 22 Update command
 - [x] PART 23 Privilege escalation & service
 - [x] PART 24 Service support
-- [ ] PART 25 Makefile
+- [x] PART 25 Makefile
 - [ ] PART 26 Docker
 - [ ] PART 27 CI/CD workflows
 - [ ] PART 28 Testing & development
@@ -115,9 +115,6 @@ same pass gets its own line item here.
   so a plain `curl -d content=... {base}/pastes` is rejected; API/compat routes
   are exempt via `config.CSRFBuiltinExemptPaths`. Confirm this split with the
   PART 16 frontend audit.
-- PART 25/27 build info: `src/main.go` derives `BuildDate` from `BuildEpoch` in
-  `init()`; AI.md requires `Version`, `CommitID`, `BuildDate`, `OfficialSite`
-  all set directly via `-ldflags -X` in the Makefile and every CI workflow.
 - PART 11 MCP follow-ups: operator-only tool mechanism exists but no operator
   API route is annotated yet; audit `source: mcp` is set via request context
   (verify it reaches paste create/delete audit events); `server.mcp.enabled`

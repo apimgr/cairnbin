@@ -379,7 +379,7 @@ func TestCheckCLIUpdate_EmptyServerReturnsNil(t *testing.T) {
 
 func TestCheckCLIUpdate_DevVersionReturnsNil(t *testing.T) {
 	orig := Version
-	Version = "dev"
+	Version = "devel"
 	defer func() { Version = orig }()
 
 	if err := checkCLIUpdate("https://example.com", ""); err != nil {

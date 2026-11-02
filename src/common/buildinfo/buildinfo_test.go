@@ -9,8 +9,8 @@ func TestStampForDefaultsAndTruncation(t *testing.T) {
 		commit  string
 		want    string
 	}{
-		{"empty falls back", "", "", "dev-0000000"},
-		{"unknown falls back", "unknown", "UNKNOWN", "dev-0000000"},
+		{"empty falls back", "", "", "devel-0000000"},
+		{"unknown falls back", "unknown", "UNKNOWN", "devel-0000000"},
 		{"commit truncated to short sha", "1.2.3", "abcdef0123456789", "1.2.3-abcdef0"},
 		{"unsafe characters stripped", "1.2.3 rc/1", "ab cd ef0", "1.2.3rc1-abcdef0"},
 		{"short commit kept as-is", "2.0.0", "abc", "2.0.0-abc"},

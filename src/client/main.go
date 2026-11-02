@@ -48,10 +48,10 @@ import (
 // -ldflags. BuildDate is NOT an ldflag itself — it is derived from BuildEpoch in
 // init(), matching the server binary's pattern (see src/main.go).
 var (
-	Version  = "dev"
-	CommitID = "unknown"
-	// BuildDate is derived from BuildEpoch in init(); stays "unknown" when BuildEpoch is unset.
-	BuildDate = "unknown"
+	Version  = "devel"
+	CommitID = "N/A"
+	// BuildDate is derived from BuildEpoch in init(); stays "N/A" when BuildEpoch is unset.
+	BuildDate = "N/A"
 	// BuildEpoch is the Unix build timestamp (seconds, UTC) set via -ldflags; "0" when unset.
 	BuildEpoch   = "0"
 	OfficialSite = ""
@@ -462,7 +462,7 @@ func printVersionInfo(serverURL string) {
 	compat := t("version_compatible")
 	cliMajor := strings.SplitN(Version, ".", 2)[0]
 	serverMajor := strings.SplitN(payload.Data.Version, ".", 2)[0]
-	if Version != "dev" && payload.Data.Version != "unknown" && cliMajor != serverMajor {
+	if Version != "devel" && payload.Data.Version != "unknown" && cliMajor != serverMajor {
 		compat = t("version_incompatible")
 	}
 
@@ -523,7 +523,7 @@ func normalizeExpiry(value string) (string, error) {
 // (cli.yml update.auto defaults to false for the CLI per PART 32).
 // Returns an error only when Version < cli_min_version (must refuse further requests).
 func checkCLIUpdate(serverURL, lang string) error {
-	if serverURL == "" || Version == "dev" {
+	if serverURL == "" || Version == "devel" {
 		return nil
 	}
 
@@ -573,7 +573,7 @@ func checkCLIUpdate(serverURL, lang string) error {
 // Compares MAJOR.MINOR.PATCH numerically so "0.9.0" < "0.10.0" is correct.
 // Returns false for non-numeric or special versions (dev, unknown).
 func versionLessThan(a, b string) bool {
-	if a == "dev" || b == "dev" || a == "unknown" || b == "unknown" {
+	if a == "devel" || b == "devel" || a == "dev" || b == "dev" || a == "unknown" || b == "unknown" {
 		return false
 	}
 	aParts := strings.SplitN(a, ".", 3)

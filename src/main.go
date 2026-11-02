@@ -47,10 +47,10 @@ import (
 // -ldflags. BuildDate is NOT an ldflag itself — it is derived from BuildEpoch in
 // init() below (AI.md PART 25 "Embedded Build Info").
 var (
-	Version  = "dev"
-	CommitID = "unknown"
-	// BuildDate is derived from BuildEpoch in init(); stays "unknown" when BuildEpoch is unset.
-	BuildDate = "unknown"
+	Version  = "devel"
+	CommitID = "N/A"
+	// BuildDate is derived from BuildEpoch in init(); stays "N/A" when BuildEpoch is unset.
+	BuildDate = "N/A"
 	// BuildEpoch is the Unix build timestamp (seconds, UTC) set via -ldflags; "0" when unset.
 	BuildEpoch   = "0"
 	OfficialSite = ""

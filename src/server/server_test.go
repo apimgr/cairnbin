@@ -1311,7 +1311,7 @@ func TestHandleServiceWorker(t *testing.T) {
 		wantStamp string
 	}{
 		{"with version", "1.2.3", "1.2.3-abcdef0"},
-		{"empty version uses dev", "", "dev-abcdef0"},
+		{"empty version uses devel", "", "devel-abcdef0"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
