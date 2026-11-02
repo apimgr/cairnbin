@@ -66,6 +66,30 @@ curl -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
+## Discovery & Protocol Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/api/autodiscover` | Unversioned client bootstrap: server name, version, API version, base URL, feature flags and `cli_min_version` |
+| `/server/docs/swagger`, `/server/docs/graphql` | Swagger UI and GraphiQL |
+| `/api/swagger`, `/api/graphql`, `/api/healthz` | Unversioned aliases of the versioned `/api/v1/server/*` routes (served directly, never redirected) |
+| `/.well-known/llms.txt`, `/llms.txt` | AI-agent discovery document |
+| `/sitemap.xml`, `/robots.txt`, `/manifest.json`, `/sw.js` | Search, crawler and PWA metadata |
+| `9999/tcp` | termbin/fiche raw-TCP listener (`echo text \| nc host 9999`); disable with `server.termbin.enabled: false` or `TERMBIN_ENABLED=false` |
+
+## External Identity
+
+None enabled. The service has no user accounts, no federated or machine-to-machine identity flows; ownership of a paste is proven with its owner token only.
+
+## Platform Integrations
+
+None enabled: no Android App Links, Apple Universal Links, WebFinger, OpenID Provider metadata, MTA-STS, inbound webhooks or federation. Outbound operator notifications (email and chat webhooks) are optional and configured only under `server.notifications` in `server.yml`.
+
+## Operator Notes
+
+- Everything above is on by default except the optional pieces: PGP publishing, the `/healthz` root alias, metrics, MCP (`server.mcp.enabled`) and operator notifications.
+- Nothing needs to be configured before use; each optional integration is switched on in `server.yml` and picked up by live reload (listen address and port need a restart).
+
 ## CLI Tool
 
 See the [CLI Reference](cli.md) for the `pastebin-cli` tool.

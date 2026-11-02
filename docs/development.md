@@ -33,7 +33,7 @@ src/
   database/        — SQLite database layer
   handler/         — HTTP request handlers
   model/           — data models
-  paths/           — platform-aware path resolution
+  path/            — platform-aware path resolution
   pid/             — PID file management
   scheduler/       — built-in cron scheduler
   server/          — HTTP server and routing

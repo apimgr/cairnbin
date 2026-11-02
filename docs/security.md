@@ -43,6 +43,30 @@
 - A client that sends more than 10x the read limit in a minute is blocked for an hour (`server.security.abuse_detection`)
 - Rate limiting protects the server against abuse — it is not a usage cap
 
+## Public Security Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/.well-known/security.txt` | RFC 9116 contact and policy file (canonical path only; bare `/security.txt` returns 404) |
+| `/.well-known/pgp-key.asc` | Coordinated-disclosure PGP public key; `404` until a keypair exists and publishing is enabled |
+| `/.well-known/llms.txt` (alias `/llms.txt`) | Generated description of the service for AI agents |
+| `/server/security` | Human-readable overview of `security.txt` and how to report |
+| `/server/security/policy` | Disclosure policy |
+| `/server/healthz` | Health page (HTML, text or JSON by content negotiation) |
+| `/api/v1/server/healthz`, `/api/healthz` | Health as JSON (same handler, no redirect) |
+
+Health responses report only `ok`/`error` per check and never include connection strings, paths or configuration. `/healthz` is an optional root alias for `/server/healthz`, mounted only when `server.healthz.root.enabled: true`. `/server/metrics` and `/metrics` are internal only; restrict them at the firewall or reverse proxy and protect them with the per-service bearer tokens under `server.metrics`.
+
+## Security Reporting
+
+- Researchers read `/.well-known/security.txt` for the contact address, policy link and PGP key.
+- `/server/contact?security_id=...` opens the contact form pre-filled as a security report; the submitter receives a tracking id and can follow progress at `/server/security/report/{tracking_id}`.
+- `/server/security` explains the process in plain language and `/server/security/policy` states the disclosure policy.
+
+## Well-Known Namespace
+
+Only these `/.well-known/*` entries are served: `security.txt`, `pgp-key.asc` (when enabled) and `llms.txt`. Every other path under `/.well-known/` returns `404`. WebFinger, OpenID Provider metadata, Android App Links, Apple app-site association and MTA-STS are not enabled.
+
 ## Tor Privacy
 
 Requests whose `Host` matches the configured `tor.onion_address` are

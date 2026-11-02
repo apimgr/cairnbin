@@ -19,17 +19,30 @@ Available platforms: `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64
 ```bash
 docker run -d \
   --name pastebin \
-  -p 64580:80 \
+  -p 172.17.0.1:64580:80 \
+  -p 9999:9999 \
   -v pastebin-data:/data \
   ghcr.io/apimgr/pastebin:latest
 ```
 
 ## Docker Compose
 
+Copy `docker/docker-compose.yml` into a deployment directory of your choice (never run it from a source checkout) and start it there; `./volumes/config` and `./volumes/data` are created next to the file.
+
 ```bash
-cd docker/
-docker compose up -d
+mkdir -p /srv/pastebin && cp docker/docker-compose.yml /srv/pastebin/
+cd /srv/pastebin && docker compose up -d
 ```
+
+## Systemd Service
+
+```bash
+sudo ./pastebin --service --install
+sudo systemctl start pastebin
+sudo systemctl enable pastebin
+```
+
+On first start the binary creates the `pastebin` service account, its directories, binds its port and then drops privileges. Other init systems (OpenRC, SysVinit, runit, rc.d, launchd and Windows services) are installed by the same `--service --install` command.
 
 ## Build from Source
 

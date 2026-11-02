@@ -139,9 +139,11 @@ Returns paginated list of public (non-unlisted) pastes.
 
 ```
 GET https://pste.us/server/healthz
+GET https://pste.us/api/v1/server/healthz
+GET https://pste.us/api/healthz
 ```
 
-Content negotiated: HTML for browsers, JSON for API clients, plain text for CLI.
+`/server/healthz` is content negotiated: HTML for browsers, JSON for API clients, plain text for CLI. The two API routes always return JSON; `/api/healthz` is a direct alias (no redirect). An optional `/healthz` alias exists when `server.healthz.root.enabled: true`.
 
 ## Guest Preferences
 
@@ -161,7 +163,7 @@ The response is `{"ok":true,"data":{"applied":{...},"ignored":[...]}}`. Invalid 
 
 ## OpenAPI / Swagger
 
-Interactive API docs at `https://pste.us/api/v1/server/swagger`.
+Interactive API docs (Swagger UI) at `https://pste.us/server/docs/swagger`. The OpenAPI document is served at `https://pste.us/api/v1/server/swagger` with the unversioned alias `https://pste.us/api/swagger`.
 
 ## GraphQL
 

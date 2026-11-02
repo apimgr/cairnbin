@@ -16,7 +16,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never`, or custom seconds
 - Burn after N reads — paste deleted once view count reaches threshold
 - Public and unlisted visibility
-- Delete token — cryptographically random, returned once at creation, stored as SHA-256 hash
+- Owner token — cryptographically random, returned once at creation, stored as SHA-256 hash
 - QR code generation at `/qr/{id}`
 - View count tracking with automatic background cleanup
 - Full web frontend (dark/light/auto theme, PWA, mobile-first)
@@ -29,18 +29,34 @@ uses it as the default server; use `--server <url>` to target your own instance.
 ## Quick Start
 
 ```bash
-./pastebin
+# Docker
+docker run --name "pastebin-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -p 172.17.0.1:64580:80 ghcr.io/apimgr/pastebin:latest
+
+# Binary
+./pastebin-linux-amd64
 ```
 
 On first run the server binds all interfaces on a random port in the 64000-64999 range and prints the URL to the console. Open that URL in your browser, or pass `--port` to pin a specific port.
 
+## Documentation
+
+- [Installation](installation.md) - How to install and run
+- [Configuration](configuration.md) - All configuration options
+- [API Reference](api.md) - REST API, Swagger, GraphQL
+- [CLI Reference](cli.md) - `pastebin-cli` flags and commands
+- [Compatibility](compat.md) - pastebin.com, microbin, lenpaste and more
+- [Security](security.md) - Auth, public endpoints, reporting, and hardening behavior
+- [Integrations](integrations.md) - Discovery, protocol endpoints, and platform integrations
+- [Development](development.md) - Contributing guide
+
 ## Links
 
 - [Official Site](https://pste.us)
-- [Installation](installation.md)
-- [Configuration](configuration.md)
-- [API Reference](api.md)
-- [CLI Reference](cli.md)
-- [Compatibility](compat.md)
-- [Security](security.md)
+- [Live Demo](https://pste.us)
+- [API Documentation](https://pste.us/server/docs/swagger) (Swagger UI)
+- [GraphQL Playground](https://pste.us/server/docs/graphql)
 - [Source on GitHub](https://github.com/apimgr/pastebin)
+
+## License
+
+MIT - See [LICENSE.md](https://github.com/apimgr/pastebin/blob/main/LICENSE.md)

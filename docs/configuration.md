@@ -8,9 +8,9 @@ The server reads `server.yml` from the config directory on startup. First run cr
 |----------|------|
 | Linux    | `/etc/apimgr/pastebin/server.yml` |
 | macOS    | `/Library/Application Support/apimgr/pastebin/server.yml` |
-| Docker   | `/config/server.yml` |
+| Docker   | `/config/pastebin/server.yml` |
 
-Override with: `--config /path/to/server.yml`
+Override the directory with: `--config /path/to/config-dir` (the file inside is always `server.yml`)
 
 ## CLI Flags
 

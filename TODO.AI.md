@@ -56,7 +56,7 @@ same pass gets its own line item here.
 - [x] PART 26 Docker
 - [x] PART 27 CI/CD workflows
 - [x] PART 28 Testing & development
-- [ ] PART 29 ReadTheDocs documentation
+- [x] PART 29 ReadTheDocs documentation
 - [ ] PART 30 I18N & A11Y
 - [ ] PART 31 Overlay networks (Tor & I2P)
 - [ ] PART 32 Client
