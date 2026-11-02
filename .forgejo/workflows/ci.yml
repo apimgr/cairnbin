@@ -48,7 +48,8 @@ jobs:
           mkdir -p "/tmp/${{ gitea.repository_owner }}"
           COVDIR=$(mktemp -d "/tmp/${{ gitea.repository_owner }}/$(basename "${{ gitea.repository }}")-XXXXXX")
           echo "COVDIR=$COVDIR" >> "$GITEA_ENV"
-          go test -buildvcs=false -v -cover -timeout 30m -coverprofile="$COVDIR/coverage.out" ./...
+          mkdir -p "$COVDIR/tmp"
+          TMPDIR="$COVDIR/tmp" go test -buildvcs=false -v -cover -timeout 30m -coverprofile="$COVDIR/coverage.out" ./...
       - name: Enforce coverage threshold
         run: |
           THRESHOLD=60

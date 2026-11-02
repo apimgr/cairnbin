@@ -201,6 +201,7 @@ test:
 		mkdir -p \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)\" && \
 		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)/$(INTERNAL_NAME)-XXXXXX\") && \
 		go mod download && \
+		mkdir -p \"\$$COVDIR/tmp\" && export TMPDIR=\"\$$COVDIR/tmp\" && \
 		if [ '$(TEST_COVERAGE)' = '1' ]; then \
 			go test -v $(TEST_TAGS) $(TEST_RUN) -cover -coverprofile=\$$COVDIR/coverage.out $(TEST_PKGS) && \
 			COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \

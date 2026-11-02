@@ -559,7 +559,7 @@ func VerifyBackup(path, password string) error {
 	contentHash := sha256.New()
 	var manifestFound bool
 	var manifestChecksum string
-	tmpDir, err := os.MkdirTemp("", "pastebin-verify-*")
+	tmpDir, err := orgTempDir()
 	if err != nil {
 		return fmt.Errorf("verify: temp dir: %w", err)
 	}
@@ -920,4 +920,15 @@ func addDataDir(addFile func(src, name string), dataDir, backupDir string) {
 		addFile(path, filepath.Join("data", rel))
 		return nil
 	})
+}
+
+// orgTempDir creates a scratch directory under {tmp}/{org}/{name}-XXXXXX so
+// every temporary path is identifiable and never lands in the bare temp root
+// (PART 28 Temporary Directory Structure).
+func orgTempDir() (string, error) {
+	base := filepath.Join(os.TempDir(), orgName)
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(base, projectName+"-")
 }

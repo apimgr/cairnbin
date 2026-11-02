@@ -288,8 +288,9 @@ __check_status "GET /.well-known/security.txt -> 200" GET "${INCUS_BASE}/.well-k
 
 # ── Binary rename tests ───────────────────────────────────────────────────────
 __info "--- Binary rename tests ---"
-__vm "cp /usr/local/bin/${INCUS_PROJECT_NAME} /tmp/renamed-server && chmod +x /tmp/renamed-server"
-if __vm "/tmp/renamed-server --help" 2>&1 | grep -q -- "renamed-server"; then
+INCUS_RENAME_DIR="/tmp/${INCUS_PROJECT_ORG}/${INCUS_PROJECT_NAME}-rename"
+__vm "mkdir -p ${INCUS_RENAME_DIR} && cp /usr/local/bin/${INCUS_PROJECT_NAME} ${INCUS_RENAME_DIR}/renamed-server && chmod +x ${INCUS_RENAME_DIR}/renamed-server"
+if __vm "${INCUS_RENAME_DIR}/renamed-server --help" 2>&1 | grep -q -- "renamed-server"; then
     __pass "Server binary rename works (--help shows actual name)"
 else
     __fail "Server --help does not show renamed binary name"
@@ -302,8 +303,8 @@ if __vm "test -f /usr/local/bin/${INCUS_PROJECT_NAME}-cli" 2>/dev/null; then
     __vm "${INCUS_PROJECT_NAME}-cli --help" >/dev/null || __fail "CLI --help failed"
     __pass "CLI version/help"
 
-    __vm "cp /usr/local/bin/${INCUS_PROJECT_NAME}-cli /tmp/renamed-cli && chmod +x /tmp/renamed-cli"
-    if __vm "/tmp/renamed-cli --help" 2>&1 | grep -q -- "renamed-cli"; then
+    __vm "cp /usr/local/bin/${INCUS_PROJECT_NAME}-cli ${INCUS_RENAME_DIR}/renamed-cli && chmod +x ${INCUS_RENAME_DIR}/renamed-cli"
+    if __vm "${INCUS_RENAME_DIR}/renamed-cli --help" 2>&1 | grep -q -- "renamed-cli"; then
         __pass "CLI binary rename works"
     else
         __fail "CLI --help does not show renamed binary name"
