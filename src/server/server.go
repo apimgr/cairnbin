@@ -1294,7 +1294,7 @@ func (s *Server) setupRoutes() {
 		if endpoint == "" {
 			endpoint = "/metrics"
 		}
-		r.With(s.metricsIPAllowlistMiddleware).Handle(endpoint, s.metricsCollector.Handler())
+		r.Handle(endpoint, s.metricsCollector.Handler())
 
 		// PART 20: the bare /metrics root alias is gated on
 		// server.metrics.root.enabled (default true, since Prometheus scrapers
@@ -1302,7 +1302,7 @@ func (s *Server) setupRoutes() {
 		// redirect — redirects break scrapers. Skipped when the configured
 		// endpoint already is /metrics, since that registration covers it.
 		if s.cfg.Server.Metrics.Root.Enabled && endpoint != "/metrics" {
-			r.With(s.metricsIPAllowlistMiddleware).Handle("/metrics", s.metricsCollector.Handler())
+			r.Handle("/metrics", s.metricsCollector.Handler())
 			// Per-service subpaths on the root alias too, so an operator can
 			// point grafana or loki at /metrics/grafana. Only mounted when the
 			// bare path was mounted above, so the two never collide.
@@ -2004,10 +2004,6 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 // bearer token via ServiceHandler. When withBare is true the bare base path is
 // also registered as the prometheus service.
 //
-// Every route is wrapped in metricsIPAllowlistMiddleware, so the per-service
-// paths are no more exposed than the bare /metrics path is — they are not a way
-// around the allowlist.
-//
 // An unrecognized service name is 404 rather than falling back to prometheus,
 // so a typo in a scraper config fails loudly instead of silently returning the
 // wrong payload.
@@ -2017,54 +2013,20 @@ func (s *Server) mountMetricsServices(r chi.Router, base string, withBare bool) 
 	}
 
 	if withBare {
-		r.With(s.metricsIPAllowlistMiddleware).Handle(base, handlerFor(metric.ServicePrometheus))
+		r.Handle(base, handlerFor(metric.ServicePrometheus))
 	}
 
-	r.With(s.metricsIPAllowlistMiddleware).Handle(base+"/prometheus", handlerFor(metric.ServicePrometheus))
-	r.With(s.metricsIPAllowlistMiddleware).Handle(base+"/grafana", handlerFor(metric.ServiceGrafana))
-	r.With(s.metricsIPAllowlistMiddleware).Handle(base+"/loki", handlerFor(metric.ServiceLoki))
+	r.Handle(base+"/prometheus", handlerFor(metric.ServicePrometheus))
+	r.Handle(base+"/grafana", handlerFor(metric.ServiceGrafana))
+	r.Handle(base+"/loki", handlerFor(metric.ServiceLoki))
 
 	// Catch-all for the service segment so an unknown name 404s with the
 	// canonical PART 14 envelope instead of chi's bare-text default.
-	r.With(s.metricsIPAllowlistMiddleware).HandleFunc(base+"/{service}", func(w http.ResponseWriter, r *http.Request) {
+	r.HandleFunc(base+"/{service}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{
 			"ok":      false,
 			"error":   "NOT_FOUND",
 			"message": "unknown metrics service: " + chi.URLParam(r, "service"),
-		})
-	})
-}
-
-// metricsIPAllowlistMiddleware restricts /metrics to loopback addresses plus any
-// IPs or CIDRs listed in cfg.Server.Metrics.AllowedIPs (PART 20).
-// Loopback (127.0.0.1, ::1) is always permitted regardless of the configured list.
-// When AllowedIPs is empty the endpoint is loopback-only; add CIDRs to permit
-// additional internal networks (e.g. "10.0.0.0/8").
-func (s *Server) metricsIPAllowlistMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			host = r.RemoteAddr
-		}
-		ip := net.ParseIP(host)
-		// Always allow loopback so monitoring on the same host works without config.
-		if ip != nil && ip.IsLoopback() {
-			next.ServeHTTP(w, r)
-			return
-		}
-		cfg := s.liveCfg()
-		allowed := cfg.Server.Metrics.AllowedIPs
-		if len(allowed) > 0 {
-			al := newAllowlistSet(allowed)
-			if ip != nil && al.contains(ip) {
-				next.ServeHTTP(w, r)
-				return
-			}
-		}
-		writeJSON(w, http.StatusForbidden, map[string]interface{}{
-			"ok":      false,
-			"error":   "FORBIDDEN",
-			"message": "metrics access denied",
 		})
 	})
 }

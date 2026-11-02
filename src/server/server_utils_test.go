@@ -2,7 +2,7 @@ package server
 
 // Tests for server utility functions: fmtUserDate, fmtUserTime,
 // handlePreferencesSet, assetPrefix, resolveCORSOrigin,
-// txtExtensionMiddleware, metricsIPAllowlistMiddleware.
+// txtExtensionMiddleware.
 
 import (
 	"net/http"
@@ -372,78 +372,6 @@ func TestTxtExtensionMiddleware_APIPathNoTxt_PassThrough(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), r)
 	if gotPath != "/api/v1/pastes/abc123" {
 		t.Errorf("path = %q, want /api/v1/pastes/abc123", gotPath)
-	}
-}
-
-// ─── metricsIPAllowlistMiddleware ─────────────────────────────────────────────
-
-func TestMetricsIPAllowlist_LoopbackAllowed(t *testing.T) {
-	s := newMinimalServer(config.DefaultConfig())
-	called := false
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	})
-	h := s.metricsIPAllowlistMiddleware(next)
-	r := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	r.RemoteAddr = "127.0.0.1:12345"
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	if !called {
-		t.Error("loopback should be allowed through")
-	}
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestMetricsIPAllowlist_PublicIP_Denied(t *testing.T) {
-	s := newMinimalServer(config.DefaultConfig())
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	h := s.metricsIPAllowlistMiddleware(next)
-	r := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	r.RemoteAddr = "8.8.8.8:12345"
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	if w.Code != http.StatusForbidden {
-		t.Errorf("public IP status = %d, want 403", w.Code)
-	}
-}
-
-func TestMetricsIPAllowlist_AllowedIP_Passes(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Server.Metrics.AllowedIPs = []string{"203.0.113.5"}
-	s := newMinimalServer(cfg)
-	called := false
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	})
-	h := s.metricsIPAllowlistMiddleware(next)
-	r := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	r.RemoteAddr = "203.0.113.5:9100"
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	if !called {
-		t.Error("allowlisted IP should pass through")
-	}
-}
-
-func TestMetricsIPAllowlist_IPv6Loopback_Allowed(t *testing.T) {
-	s := newMinimalServer(config.DefaultConfig())
-	called := false
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-	})
-	h := s.metricsIPAllowlistMiddleware(next)
-	r := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	r.RemoteAddr = "[::1]:9100"
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	if !called {
-		t.Error("IPv6 loopback should be allowed through")
 	}
 }
 

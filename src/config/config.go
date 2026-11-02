@@ -706,10 +706,6 @@ type MetricsConfig struct {
 	DurationBuckets []float64 `yaml:"duration_buckets"`
 	// SizeBuckets overrides the http_request_size_bytes / http_response_size_bytes buckets.
 	SizeBuckets []float64 `yaml:"size_buckets"`
-	// AllowedIPs lists additional IPs or CIDRs that may reach /metrics (PART 20).
-	// Loopback (127.0.0.1, ::1) is always allowed. Non-loopback requests from IPs
-	// not in this list are rejected with 403 before the bearer-token check.
-	AllowedIPs []string `yaml:"allowed_ips"`
 }
 
 // LoggingConfig is the `server.logs` block (AI.md "Logging"): the global log
@@ -1510,7 +1506,6 @@ func DefaultConfig() *Config {
 				},
 				DurationBuckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 				SizeBuckets:     []float64{100, 1000, 10000, 100000, 1000000, 10000000},
-				AllowedIPs:      []string{},
 			},
 			Cors: CORSConfig{
 				AllowedOrigins:   []string{"*"},
