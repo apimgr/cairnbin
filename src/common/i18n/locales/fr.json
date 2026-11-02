@@ -665,6 +665,8 @@
       "help_flag_title": "Titre du paste (facultatif)",
       "help_flag_link": "Créer un lien — l'argument ou l'entrée doit être une URL",
       "help_flag_link_cont": "http:// ou https:// ; le paste redirige alors en 302",
+      "help_flag_file": "Forcer le mode fichier : coller le contenu de ce fichier",
+      "help_flag_text": "Forcer le mode texte : coller ce texte littéral (jamais un nom de fichier)",
       "help_head_list_flags": "Options de list :",
       "help_flag_limit": "Nombre de pastes par page (par défaut : 20)",
       "help_flag_page": "Numéro de page (par défaut : 1)",

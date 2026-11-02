@@ -253,7 +253,7 @@ func TestCmdCreate_AllFlagsAtOnce(t *testing.T) {
 	if burn, _ := received["burn_after"].(float64); burn != 5 {
 		t.Errorf("burn_after = %v; want 5", burn)
 	}
-	if vis, _ := received["visibility"].(float64); vis != 1 {
+	if vis, _ := received["visibility"].(string); vis != "unlisted" {
 		t.Errorf("visibility = %v; want 1", vis)
 	}
 	if title, _ := received["title"].(string); title != "My Rust Code" {

@@ -677,6 +677,11 @@ func main() {
 	// flag.Parse accepts it and --help lists it.
 	flag.String("config", "", "config profile name or path (default: cli.yml)")
 
+	// --file / --text force create's input mode when given before any command
+	// (PART 32 Smart Argument Detection: explicit flags override detection).
+	globalFile := flag.String("file", "", "force file mode: paste the content of this file")
+	globalText := flag.String("text", "", "force text mode: paste this literal text")
+
 	// --shell takes a sub-command (completions|init|help) that follows as the
 	// next argument; declared as a bool so flag.Parse accepts it.
 	shellFlag := flag.Bool("shell", false, "shell integration: completions, init, help")
@@ -732,6 +737,11 @@ func main() {
 	}
 
 	args := flag.Args()
+	if *globalText != "" {
+		args = append([]string{"create", "--text", *globalText}, args...)
+	} else if *globalFile != "" {
+		args = append([]string{"create", "--file", *globalFile}, args...)
+	}
 	if len(args) == 0 && !term.IsTerminal(int(os.Stdin.Fd())) {
 		args = []string{"create"}
 	}
@@ -1168,8 +1178,10 @@ func (c *client) cmdCreate(args []string) {
 	title := fs.String("title", "", "paste title")
 	outputFlag := fs.String("output", c.outputFormat, "output format: json, yaml, table, plain, csv")
 	jsonFlag := fs.Bool("json", false, "alias for --output json")
+	fileFlag := fs.String("file", "", "force file mode: read the paste from this file")
+	textFlag := fs.String("text", "", "force text mode: use this literal text (never treated as a file name)")
 	asLink := fs.Bool("link", false, "create as a link — content/arg must be an absolute http:// or https:// URL; server issues a 302 redirect instead of rendering")
-	if err := fs.Parse(reorderCommandArgs(args, "--lang", "--syntax", "--expire", "--expiry", "--burn", "--public", "--title", "--output")); err != nil {
+	if err := fs.Parse(reorderCommandArgs(args, "--lang", "--syntax", "--expire", "--expiry", "--burn", "--public", "--title", "--output", "--file", "--text")); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_flags", "command", "create", "error", err))
 		os.Exit(exitUsage)
 	}
@@ -1180,7 +1192,22 @@ func (c *client) cmdCreate(args []string) {
 	effLang := *lang
 	effTitle := *title
 
-	if fs.NArg() > 0 {
+	if *textFlag != "" {
+		// Explicit flags override argument detection (PART 32 Smart Argument Detection).
+		content = []byte(*textFlag)
+	} else if *fileFlag != "" {
+		content, err = os.ReadFile(*fileFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_read_file", "error", err))
+			os.Exit(exitGeneral)
+		}
+		if effLang == "text" || effLang == "auto" {
+			effLang = detectLang(*fileFlag)
+		}
+		if effTitle == "" {
+			effTitle = *fileFlag
+		}
+	} else if fs.NArg() > 0 {
 		if *asLink {
 			// Link mode: the positional arg is the target URL itself, not a
 			// file path — never read it off disk.
@@ -1240,7 +1267,7 @@ func (c *client) cmdCreate(args []string) {
 		"language":   effLang,
 		"expires_in": expiryValue,
 		"burn_after": *burn,
-		"visibility": vis,
+		"visibility": visibilityName(vis),
 	}
 
 	if *asLink {
@@ -2051,6 +2078,15 @@ func stringValue(value interface{}) string {
 	return valueString
 }
 
+// visibilityName maps the internal 0/1 visibility to the API's request value
+// ("public" | "unlisted").
+func visibilityName(vis int) string {
+	if vis == 1 {
+		return "unlisted"
+	}
+	return "public"
+}
+
 func parseVisibility(value string) (int, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "public":
@@ -2176,6 +2212,8 @@ func writeCreateFlags(w io.Writer) {
 	helpRow(w, "--unlisted", t("help_flag_unlisted"))
 	helpRow(w, "--title TITLE", t("help_flag_title"))
 	helpRow(w, "--link", t("help_flag_link")+" "+t("help_flag_link_cont"))
+	helpRow(w, "--file PATH", t("help_flag_file"))
+	helpRow(w, "--text TEXT", t("help_flag_text"))
 }
 
 func writeListFlags(w io.Writer) {

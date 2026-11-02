@@ -41,3 +41,9 @@ func TestPrintCommandHelp(t *testing.T) {
 		t.Error("unknown command must report false and print nothing")
 	}
 }
+
+func TestVisibilityName(t *testing.T) {
+	if visibilityName(0) != "public" || visibilityName(1) != "unlisted" {
+		t.Errorf("visibilityName mapping wrong: %q %q", visibilityName(0), visibilityName(1))
+	}
+}

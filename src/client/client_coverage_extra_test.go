@@ -308,8 +308,8 @@ func TestCmdCreate_DefaultVisibilityIsUnlisted(t *testing.T) {
 	c.cmdCreate([]string{f})
 
 	// Anonymous pastes default to unlisted, so they do not appear in recent listings.
-	if vis, ok := received["visibility"].(float64); !ok || vis != 1 {
-		t.Errorf("visibility = %v; want 1 (unlisted)", received["visibility"])
+	if vis, ok := received["visibility"].(string); !ok || vis != "unlisted" {
+		t.Errorf("visibility = %v; want \"unlisted\"", received["visibility"])
 	}
 }
 

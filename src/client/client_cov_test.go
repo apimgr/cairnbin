@@ -261,8 +261,8 @@ func TestCmdCreate_RequestBodyFields(t *testing.T) {
 	if received == nil {
 		t.Fatal("server received no body")
 	}
-	if vis, ok := received["visibility"].(float64); !ok || vis != 1 {
-		t.Errorf("visibility = %v; want 1", received["visibility"])
+	if vis, ok := received["visibility"].(string); !ok || vis != "unlisted" {
+		t.Errorf("visibility = %v; want \"unlisted\"", received["visibility"])
 	}
 	if burn, ok := received["burn_after"].(float64); !ok || burn != 3 {
 		t.Errorf("burn_after = %v; want 3", received["burn_after"])

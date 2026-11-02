@@ -665,6 +665,8 @@
       "help_flag_title": "Titel des Pastes (optional)",
       "help_flag_link": "Als Link erstellen — Argument/Eingabe muss eine http:// oder",
       "help_flag_link_cont": "https://-URL sein; der Paste leitet dann per 302 dorthin weiter",
+      "help_flag_file": "Dateimodus erzwingen: Inhalt dieser Datei einfügen",
+      "help_flag_text": "Textmodus erzwingen: diesen Text wörtlich einfügen (nie ein Dateiname)",
       "help_head_list_flags": "Optionen für list:",
       "help_flag_limit": "Anzahl Pastes pro Seite (Standard: 20)",
       "help_flag_page": "Seitennummer (Standard: 1)",

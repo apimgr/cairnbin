@@ -665,6 +665,8 @@
       "help_flag_title": "paste のタイトル (任意)",
       "help_flag_link": "リンクとして作成 — 引数/標準入力は http:// または",
       "help_flag_link_cont": "https:// の URL である必要があり、paste は 302 で転送します",
+      "help_flag_file": "ファイルモードを強制: このファイルの内容を貼り付け",
+      "help_flag_text": "テキストモードを強制: この文字列をそのまま貼り付け（ファイル名として扱わない）",
       "help_head_list_flags": "list のオプション:",
       "help_flag_limit": "1 ページあたりの paste 数 (既定: 20)",
       "help_flag_page": "ページ番号 (既定: 1)",

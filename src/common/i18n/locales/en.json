@@ -794,6 +794,8 @@
       "help_flag_title": "Paste title (optional)",
       "help_flag_link": "Create as a link — arg/stdin must be an http:// or",
       "help_flag_link_cont": "https:// URL; visiting the paste 302-redirects there",
+      "help_flag_file": "Force file mode: paste the content of this file",
+      "help_flag_text": "Force text mode: paste this literal text (never a file name)",
       "help_head_list_flags": "List flags:",
       "help_flag_limit": "Number of pastes per page (default: 20)",
       "help_flag_page": "Page number (default: 1)",

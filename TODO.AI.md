@@ -59,7 +59,7 @@ same pass gets its own line item here.
 - [x] PART 29 ReadTheDocs documentation
 - [x] PART 30 I18N & A11Y
 - [x] PART 31 Overlay networks (Tor & I2P)
-- [ ] PART 32 Client
+- [x] PART 32 Client
 - [ ] PART 33 IDEA.md reference
 
 ### Follow-ups found during the alignment pass
@@ -160,3 +160,4 @@ same pass gets its own line item here.
 - PART 28: tests/e2e (42 tests) and tests/docker.sh / incus.sh were checked for presence and structure only, not re-run or mapped feature-by-feature to IDEA.md. Confirm Universal Coverage items (responsive 375x812, Swagger/GraphiQL pages, MCP tools/call with owner/linked/no token, i18n switching, static asset 200s) each have a named test; run `./tests/e2e.sh` on demand.
 - PART 30: not verified line-by-line: hardcoded user-facing strings in Go handlers (`http.Error`/JSON messages must use `errors.*` keys), Swagger/GraphQL/email translation by request language, and the CLI/TUI/GUI `--help` text per language; the reduced-motion `!important` block is tracked under PART 16. `meta.direction`-driven `dir` and logical CSS properties are tracked under PART 16 as well.
 - PART 31: Tor and I2P were checked at the config/torrc/lifecycle level only (no live Tor or i2pd run); verify against a real Tor in `tests/incus.sh`: bootstrap, key migration, RegenerateAddress/ApplyKeys, `Log notice file` tor.log permissions, and the I2P Model A tunnels.conf / Model B SAM paths. The 15 outbound-Tor use cases and the app-scoped-only SSRF rule (no inbound-supplied URL ever fetched via the Tor client) were not audited.
+- PART 32: reviewed so far: server-side CLI binary hosting and cli_versions, autodiscover envelope, --help/--version/--shell/<command> help, smart argument detection (--file/--text), exit codes 3/5/64, extended --version, cli.yml 0600, create wire format. NOT yet reviewed line by line: CLI auto-update flow end to end (prompt vs update.auto, cli.update_* audit events, re-exec), TUI/GUI mode detection and setup wizard, SSH/Mosh/container rules, theming and responsive layouts, shell completions content, URL-encoding helper usage, Flag-to-Config save rules, token-revoked (401 TOKEN_REVOKED) handling, list `pagination` lacking page/limit. Server also never emits the cli.* audit events.

@@ -665,6 +665,8 @@
       "help_flag_title": "paste 标题（可选）",
       "help_flag_link": "创建为链接 — 参数或标准输入必须是 http:// 或",
       "help_flag_link_cont": "https:// URL；访问该 paste 会 302 跳转",
+      "help_flag_file": "强制文件模式：粘贴该文件的内容",
+      "help_flag_text": "强制文本模式：粘贴此字面文本（不作为文件名）",
       "help_head_list_flags": "list 选项：",
       "help_flag_limit": "每页 paste 数量（默认：20）",
       "help_flag_page": "页码（默认：1）",
