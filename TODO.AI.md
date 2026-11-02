@@ -51,7 +51,7 @@ same pass gets its own line item here.
 - [x] PART 21 Backup & restore
 - [x] PART 22 Update command
 - [x] PART 23 Privilege escalation & service
-- [ ] PART 24 Service support
+- [x] PART 24 Service support
 - [ ] PART 25 Makefile
 - [ ] PART 26 Docker
 - [ ] PART 27 CI/CD workflows
@@ -156,3 +156,5 @@ same pass gets its own line item here.
 - PART 17: AI.md references `{project_name} email test` (lines 28164, 48828) but the server flag set (PART 7) has no `email` command; resolve by routing it through `--maintenance` or confirming the CLI client owns it. Save-time template validation (unknown variable, empty subject/body) has no caller because there is no admin UI; add a validator for custom files in `{config_dir}/template/email/` at load.
 - PART 18: spec lists CLI `scheduler list|show|run|enable|disable|history` (client); no `scheduler` command exists in src/client or the server. Add to the client against the server scheduler API.
 - PART 21: no restore API or WebUI exists (spec forbids an admin UI); the 400 VALIDATION_FAILED encrypted-restore API response is therefore not applicable until a restore endpoint is specified.
+- PART 24: the spec systemd unit sets `ProtectSystem=strict` with `ReadWritePaths` limited to the four app dirs, but PART 23 has the binary create the service user (useradd/groupadd write `/etc/passwd`, `/etc/group`) at normal startup. Under the spec unit `/etc` is read-only, so first-start account creation can fail when launched by systemd. The unit now matches the spec exactly (previous extras `ReadWritePaths=/etc`, `NoNewPrivileges`, `RuntimeDirectory` removed); confirm the startup path degrades safely (or pre-creates the user during `--service --install`) once PART 8 startup order is done.
+- PART 24: Windows service (VSA, `svc.Run`) and launchd/runit/rc.d/OpenRC/SysV templates now generated from `src/service/templates.go` and matched to spec; Windows path not exercised in Docker (needs a Windows runner).

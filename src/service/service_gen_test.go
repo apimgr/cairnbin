@@ -12,55 +12,32 @@ import (
 // ─── Systemd Unit File Content Verification ──────────────────────────────────
 // Tests that the generated systemd unit file contains all required directives
 // as specified in PART 24: Type=simple, RestartSec=5, Restart=on-failure,
-// NoNewPrivileges=yes, ProtectSystem=strict, PrivateTmp=yes.
+// ProtectSystem=strict, ProtectHome=yes, PrivateTmp=yes.
 
 func TestSystemdUnitContent_RequiredDirectives(t *testing.T) {
-	// Build the expected unit content by calling the same format string used in installSystemd
-	binaryPath := GetBinaryPath()
-	serviceContent := fmt.Sprintf(`[Unit]
-Description=Pastebin API Server
-Documentation=https://apimgr.github.io/pastebin
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=%s
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-# Security hardening (binary drops privileges after port binding)
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-RuntimeDirectory=%s
-ReadWritePaths=/etc
-ReadWritePaths=/etc/%s/%s
-ReadWritePaths=/var/lib/%s/%s
-ReadWritePaths=/var/cache/%s/%s
-ReadWritePaths=/var/log/%s/%s
-
-[Install]
-WantedBy=multi-user.target
-`, binaryPath, orgName, orgName, appName, orgName, appName, orgName, appName, orgName, appName)
+	serviceContent := buildSystemdUnit(GetBinaryPath())
 
 	requiredDirectives := []string{
+		"Description=" + appName + " service",
 		"Type=simple",
 		"RestartSec=5",
 		"Restart=on-failure",
-		"NoNewPrivileges=yes",
+		"StandardOutput=journal",
+		"StandardError=journal",
 		"ProtectSystem=strict",
+		"ProtectHome=yes",
 		"PrivateTmp=yes",
-		"RuntimeDirectory=" + orgName,
-		"ReadWritePaths=/etc",
+		"WantedBy=multi-user.target",
 	}
-
 	for _, directive := range requiredDirectives {
 		if !strings.Contains(serviceContent, directive) {
 			t.Errorf("systemd unit missing required directive %q", directive)
+		}
+	}
+
+	for _, extra := range []string{"NoNewPrivileges", "RuntimeDirectory", "ReadWritePaths=/etc\n", "User="} {
+		if strings.Contains(serviceContent, extra) {
+			t.Errorf("systemd unit has directive outside PART 24: %q", extra)
 		}
 	}
 }
@@ -141,40 +118,6 @@ func TestEnsureSystemdWritablePathsCreatesDirectories(t *testing.T) {
 	}
 }
 
-// buildSystemdUnit returns the systemd unit content string for testing.
-// This is a helper that mirrors the format string in installSystemd().
-func buildSystemdUnit(binaryPath string) string {
-	return fmt.Sprintf(`[Unit]
-Description=Pastebin API Server
-Documentation=https://apimgr.github.io/pastebin
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=%s
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-# Security hardening (binary drops privileges after port binding)
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-RuntimeDirectory=%s
-ReadWritePaths=/etc
-ReadWritePaths=/etc/%s/%s
-ReadWritePaths=/var/lib/%s/%s
-ReadWritePaths=/var/cache/%s/%s
-ReadWritePaths=/var/log/%s/%s
-
-[Install]
-WantedBy=multi-user.target
-`, binaryPath, orgName, orgName, appName, orgName, appName, orgName, appName, orgName, appName)
-}
-
 // ─── Launchd Plist Content Verification ──────────────────────────────────────
 
 func TestLaunchdPlistContent_RequiredKeys(t *testing.T) {
@@ -242,31 +185,6 @@ func TestLaunchdPlistContent_HasXMLHeader(t *testing.T) {
 	if !strings.Contains(plistContent, "<!DOCTYPE plist") {
 		t.Error("launchd plist missing DOCTYPE")
 	}
-}
-
-// buildLaunchdPlist returns the launchd plist content string for testing.
-func buildLaunchdPlist(binaryPath string) string {
-	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>%s</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>%s</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>/var/log/%s/%s/stdout.log</string>
-    <key>StandardErrorPath</key>
-    <string>/var/log/%s/%s/stderr.log</string>
-</dict>
-</plist>
-`, launchdLabel, binaryPath, orgName, appName, orgName, appName)
 }
 
 // ─── OpenRC Init Script Content Verification ─────────────────────────────────
@@ -342,35 +260,6 @@ func TestOpenRCScriptContent_HasCheckpathCalls(t *testing.T) {
 	if !strings.Contains(rcContent, expectedLogCheck) {
 		t.Errorf("OpenRC script missing start_pre checkpath for /var/log/%s/%s", orgName, appName)
 	}
-}
-
-// buildOpenRCScript returns the OpenRC init script content string for testing.
-// It mirrors the production template in installOpenRC() (PART 24).
-func buildOpenRCScript(binaryPath string) string {
-	return fmt.Sprintf(`#!/sbin/openrc-run
-
-name="%s"
-description="Pastebin API Server"
-command="%s"
-command_args=""
-command_user="%s:%s"
-pidfile="/var/run/%s/%s.pid"
-command_background=true
-output_log="/var/log/%s/%s/server.log"
-error_log="/var/log/%s/%s/error.log"
-
-depend() {
-	need net
-	after firewall
-	use dns logger
-}
-
-start_pre() {
-	checkpath -d -m 0755 -o %s:%s /var/run/%s
-	checkpath -d -m 0755 -o %s:%s /var/log/%s/%s
-}
-`, appName, binaryPath, serviceUser, serviceUser, orgName, appName, orgName, appName, orgName, appName,
-		serviceUser, serviceUser, orgName, serviceUser, serviceUser, orgName, appName)
 }
 
 // ─── SysV Init Script Content Verification ───────────────────────────────────
@@ -470,63 +359,6 @@ func TestSysVScriptContent_HasRunlevels(t *testing.T) {
 	}
 }
 
-// buildSysVScript returns the SysV init script content string for testing.
-// It mirrors the production template in installSysV() (PART 24).
-func buildSysVScript(binaryPath string) string {
-	return fmt.Sprintf(`#!/bin/sh
-### BEGIN INIT INFO
-# Provides:          %s
-# Required-Start:    $network $remote_fs $syslog
-# Required-Stop:     $network $remote_fs $syslog
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# Short-Description: Pastebin API Server
-# Description:       Pastebin API Server daemon
-### END INIT INFO
-
-NAME=%s
-DAEMON=%s
-DAEMON_USER=%s
-PIDFILE=/var/run/%s/%s.pid
-LOGFILE=/var/log/%s/%s/server.log
-
-case "$1" in
-    start)
-        echo "Starting $NAME..."
-        mkdir -p $(dirname $PIDFILE) $(dirname $LOGFILE)
-        chown -R $DAEMON_USER:$DAEMON_USER $(dirname $PIDFILE) $(dirname $LOGFILE)
-        start-stop-daemon --start --quiet --background --make-pidfile \
-            --pidfile $PIDFILE --chuid $DAEMON_USER --exec $DAEMON \
-            --no-close >> $LOGFILE 2>&1
-        ;;
-    stop)
-        echo "Stopping $NAME..."
-        start-stop-daemon --stop --quiet --pidfile $PIDFILE --retry 30
-        rm -f $PIDFILE
-        ;;
-    restart)
-        $0 stop
-        sleep 1
-        $0 start
-        ;;
-    status)
-        if [ -f $PIDFILE ] && kill -0 $(cat $PIDFILE) 2>/dev/null; then
-            echo "$NAME is running (pid $(cat $PIDFILE))"
-            exit 0
-        else
-            echo "$NAME is stopped"
-            exit 3
-        fi
-        ;;
-    *)
-        echo "Usage: $0 {start|stop|restart|status}"
-        exit 1
-        ;;
-esac
-exit 0
-`, appName, appName, binaryPath, serviceUser, orgName, appName, orgName, appName)
-}
-
 // ─── BSD rc.d Script Content Verification ────────────────────────────────────
 
 func TestBSDRCScriptContent_RequiredElements(t *testing.T) {
@@ -542,7 +374,6 @@ func TestBSDRCScriptContent_RequiredElements(t *testing.T) {
 		"name=",
 		"rcvar=",
 		"command=",
-		"pidfile=",
 		"load_rc_config",
 		"run_rc_command",
 	}
@@ -568,32 +399,12 @@ func TestBSDRCScriptContent_HasEnableVar(t *testing.T) {
 	binaryPath := GetBinaryPath()
 	rcContent := buildBSDRCScript(binaryPath)
 
-	expectedEnable := fmt.Sprintf(`${%s_enable:="NO"}`, appName)
-	if !strings.Contains(rcContent, expectedEnable) {
-		t.Errorf("BSD rc.d script missing %s_enable default", appName)
+	if want := fmt.Sprintf(`rcvar="%s_enable"`, appName); !strings.Contains(rcContent, want) {
+		t.Errorf("BSD rc.d script missing %s", want)
 	}
-}
-
-// buildBSDRCScript returns the BSD rc.d script content string for testing.
-func buildBSDRCScript(binaryPath string) string {
-	return fmt.Sprintf(`#!/bin/sh
-
-# PROVIDE: %s
-# REQUIRE: NETWORKING
-# KEYWORD: shutdown
-
-. /etc/rc.subr
-
-name="%s"
-rcvar="%s_enable"
-command="%s"
-pidfile="/var/run/%s.pid"
-
-load_rc_config $name
-: ${%s_enable:="NO"}
-
-run_rc_command "$1"
-`, appName, appName, appName, binaryPath, appName, appName)
+	if strings.Contains(rcContent, "pidfile=") {
+		t.Error("BSD rc.d script has pidfile outside PART 24")
+	}
 }
 
 // ─── Runit Run Script Content Verification ───────────────────────────────────
@@ -622,20 +433,6 @@ func TestRunitLogRunScriptContent_HasSvlogd(t *testing.T) {
 	if !strings.Contains(logRunScript, "exec ") {
 		t.Error("runit log run script missing exec directive")
 	}
-}
-
-// buildRunitRunScript returns the runit run script content string for testing.
-func buildRunitRunScript(binaryPath string) string {
-	return fmt.Sprintf(`#!/bin/sh
-exec %s 2>&1
-`, binaryPath)
-}
-
-// buildRunitLogRunScript returns the runit log run script content string.
-func buildRunitLogRunScript() string {
-	return `#!/bin/sh
-exec svlogd -tt ./main
-`
 }
 
 // ─── reserved IDs ────────────────────────────────────────────────────────────

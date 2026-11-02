@@ -530,42 +530,9 @@ func installSystemd() error {
 		return fmt.Errorf("failed to prepare systemd writable paths: %w", err)
 	}
 
-	serviceContent := fmt.Sprintf(`[Unit]
-Description=%s service
-Documentation=https://apimgr.github.io/pastebin
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=%s
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-# Security hardening (binary drops privileges after port binding)
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-RuntimeDirectory=%s
-ReadWritePaths=/etc
-ReadWritePaths=/etc/%s/%s
-ReadWritePaths=/var/lib/%s/%s
-ReadWritePaths=/var/cache/%s/%s
-ReadWritePaths=/var/log/%s/%s
-
-[Install]
-WantedBy=multi-user.target
-`, appName, binaryPath, orgName, orgName, appName, orgName, appName, orgName, appName, orgName, appName)
+	serviceContent := buildSystemdUnit(binaryPath)
 
 	servicePath := fmt.Sprintf("/etc/systemd/system/%s.service", appName)
-
-	// systemd requires ReadWritePaths to exist before it creates the restricted
-	// mount namespace. /etc is writable only during root startup so the binary
-	// can create its service account; the process drops privileges immediately
-	// afterward (PART 23, Server Startup Sequence step 8).
 
 	// Write service file
 	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
@@ -628,30 +595,7 @@ func installOpenRC() error {
 	binaryPath := GetBinaryPath()
 	rcPath := fmt.Sprintf("/etc/init.d/%s", appName)
 
-	rcContent := fmt.Sprintf(`#!/sbin/openrc-run
-
-name="%s"
-description="%s service"
-command="%s"
-command_args=""
-command_user="%s:%s"
-pidfile="/var/run/%s/%s.pid"
-command_background=true
-output_log="/var/log/%s/%s/server.log"
-error_log="/var/log/%s/%s/error.log"
-
-depend() {
-	need net
-	after firewall
-	use dns logger
-}
-
-start_pre() {
-	checkpath -d -m 0755 -o %s:%s /var/run/%s
-	checkpath -d -m 0755 -o %s:%s /var/log/%s/%s
-}
-`, appName, appName, binaryPath, serviceUser, serviceUser, orgName, appName, orgName, appName, orgName, appName,
-		serviceUser, serviceUser, orgName, serviceUser, serviceUser, orgName, appName)
+	rcContent := buildOpenRCScript(binaryPath)
 
 	if err := os.WriteFile(rcPath, []byte(rcContent), 0755); err != nil {
 		return fmt.Errorf("failed to write OpenRC init script: %w", err)
@@ -694,58 +638,7 @@ func installSysV() error {
 	binaryPath := GetBinaryPath()
 	initPath := fmt.Sprintf("/etc/init.d/%s", appName)
 
-	initContent := fmt.Sprintf(`#!/bin/sh
-### BEGIN INIT INFO
-# Provides:          %s
-# Required-Start:    $network $remote_fs $syslog
-# Required-Stop:     $network $remote_fs $syslog
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# Short-Description: %s service
-# Description:       %s service daemon
-### END INIT INFO
-
-NAME=%s
-DAEMON=%s
-DAEMON_USER=%s
-PIDFILE=/var/run/%s/%s.pid
-LOGFILE=/var/log/%s/%s/server.log
-
-case "$1" in
-    start)
-        echo "Starting $NAME..."
-        mkdir -p $(dirname $PIDFILE) $(dirname $LOGFILE)
-        chown -R $DAEMON_USER:$DAEMON_USER $(dirname $PIDFILE) $(dirname $LOGFILE)
-        start-stop-daemon --start --quiet --background --make-pidfile \
-            --pidfile $PIDFILE --chuid $DAEMON_USER --exec $DAEMON \
-            --no-close >> $LOGFILE 2>&1
-        ;;
-    stop)
-        echo "Stopping $NAME..."
-        start-stop-daemon --stop --quiet --pidfile $PIDFILE --retry 30
-        rm -f $PIDFILE
-        ;;
-    restart)
-        $0 stop
-        sleep 1
-        $0 start
-        ;;
-    status)
-        if [ -f $PIDFILE ] && kill -0 $(cat $PIDFILE) 2>/dev/null; then
-            echo "$NAME is running (pid $(cat $PIDFILE))"
-            exit 0
-        else
-            echo "$NAME is stopped"
-            exit 3
-        fi
-        ;;
-    *)
-        echo "Usage: $0 {start|stop|restart|status}"
-        exit 1
-        ;;
-esac
-exit 0
-`, appName, appName, appName, appName, binaryPath, serviceUser, orgName, appName, orgName, appName)
+	initContent := buildSysVScript(binaryPath)
 
 	if err := os.WriteFile(initPath, []byte(initContent), 0755); err != nil {
 		return fmt.Errorf("failed to write SysV init script: %w", err)
@@ -812,9 +705,7 @@ func installRunit() error {
 		return fmt.Errorf("failed to create service directory: %w", err)
 	}
 
-	runScript := fmt.Sprintf(`#!/bin/sh
-exec %s 2>&1
-`, binaryPath)
+	runScript := buildRunitRunScript(binaryPath)
 
 	runPath := filepath.Join(svDir, "run")
 	if err := os.WriteFile(runPath, []byte(runScript), 0755); err != nil {
@@ -833,9 +724,7 @@ exec %s 2>&1
 		return fmt.Errorf("failed to create log destination: %w", err)
 	}
 
-	logRunScript := fmt.Sprintf(`#!/bin/sh
-exec svlogd -tt %s
-`, svlogdDir)
+	logRunScript := buildRunitLogRunScript()
 	logRunPath := filepath.Join(logDir, "run")
 	if err := os.WriteFile(logRunPath, []byte(logRunScript), 0755); err != nil {
 		return fmt.Errorf("failed to write log run script: %w", err)
@@ -934,27 +823,7 @@ func installLaunchd() error {
 	// service account and runtime directories are provisioned by the binary at
 	// normal startup (Server Startup Sequence step 8), never here.
 
-	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>%s</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>%s</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>/var/log/%s/%s/stdout.log</string>
-    <key>StandardErrorPath</key>
-    <string>/var/log/%s/%s/stderr.log</string>
-</dict>
-</plist>
-`, launchdLabel, binaryPath, orgName, appName, orgName, appName)
+	plistContent := buildLaunchdPlist(binaryPath)
 
 	// Write plist file
 	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
@@ -997,24 +866,7 @@ func installBSDRC() error {
 	binaryPath := GetBinaryPath()
 	rcPath := fmt.Sprintf("/usr/local/etc/rc.d/%s", appName)
 
-	rcContent := fmt.Sprintf(`#!/bin/sh
-
-# PROVIDE: %s
-# REQUIRE: NETWORKING
-# KEYWORD: shutdown
-
-. /etc/rc.subr
-
-name="%s"
-rcvar="%s_enable"
-command="%s"
-pidfile="/var/run/%s.pid"
-
-load_rc_config $name
-: ${%s_enable:="NO"}
-
-run_rc_command "$1"
-`, appName, appName, appName, binaryPath, appName, appName)
+	rcContent := buildBSDRCScript(binaryPath)
 
 	if err := os.WriteFile(rcPath, []byte(rcContent), 0755); err != nil {
 		return fmt.Errorf("failed to write rc.d script: %w", err)
