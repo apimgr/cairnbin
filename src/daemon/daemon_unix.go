@@ -45,7 +45,7 @@ func Daemonize(lang string) error {
 		return fmt.Errorf("starting daemon: %w", err)
 	}
 
-	fmt.Println(i18n.TranslateFormat(lang, "cli.daemon_started", "pid", cmd.Process.Pid))
+	fmt.Println(i18n.TranslateFormat(lang, "cli.daemon_started", i18n.Args("pid", cmd.Process.Pid)))
 	os.Exit(0)
 	// unreachable
 	return nil

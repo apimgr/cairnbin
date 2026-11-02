@@ -154,11 +154,16 @@ func parseAppPref(name, value string) (key string, val string, ok bool) {
 // Secure/SameSite/MaxAge shape as handlePreferencesSet and handleConsentSet
 // (AI.md 23489: "the server sets the same cookies on its POST endpoints").
 func (s *Server) setPreferenceCookie(w http.ResponseWriter, r *http.Request, name, value string) {
+	maxAge := 365 * 24 * 60 * 60
+	if name == "lang" {
+		name = i18n.CookieName()
+		maxAge = i18n.CookieMaxAge()
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    value,
 		Path:     "/",
-		MaxAge:   365 * 24 * 60 * 60,
+		MaxAge:   maxAge,
 		HttpOnly: false,
 		Secure:   s.cookieSecure(r),
 		SameSite: http.SameSiteLaxMode,

@@ -470,6 +470,7 @@
       "other": "{count} días"
     },
     "hours": {
+      "zero": "{count} horas",
       "one": "{count} hora",
       "two": "{count} horas",
       "few": "{count} horas",
@@ -477,6 +478,7 @@
       "other": "{count} horas"
     },
     "minutes": {
+      "zero": "{count} minutos",
       "one": "{count} minuto",
       "two": "{count} minutos",
       "few": "{count} minutos",

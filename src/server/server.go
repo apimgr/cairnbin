@@ -462,6 +462,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	// Publish the build identity used by every asset URL, cache header, and the
 	// version-change purge cookie (AI.md PART 9, "Asset Version-Busting").
 	buildinfo.Set(version, commitID)
+	applyI18nConfig(cfg)
 
 	// Validate configured SEO site-verification codes/custom tags at startup and
 	// log (never abort) on invalid format — invalid entries are simply never
@@ -773,7 +774,7 @@ func (s *Server) buildTemplates() (map[string]*template.Template, error) {
 			return i18n.Translate(lang, key)
 		},
 		"tf": func(lang, key string, args ...interface{}) string {
-			return i18n.TranslateFormat(lang, key, args...)
+			return i18n.TranslateFormat(lang, key, i18n.Args(args...))
 		},
 		"i18njs": func(lang string) template.JS {
 			return template.JS(i18n.JSBundle(lang))
@@ -878,6 +879,7 @@ func fmtUserDate(t time.Time) string {
 // OnConfigChange is called by the ConfigManager after each successful hot-reload.
 // It updates rate limiter thresholds and tracks restart-required key changes.
 func (s *Server) OnConfigChange(next *config.Config) {
+	applyI18nConfig(next)
 	if s.readLimiter != nil && next.Server.RateLimit.Read.Requests > 0 {
 		s.readLimiter.UpdateLimit(next.Server.RateLimit.Read.Requests)
 	}
@@ -5018,6 +5020,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	data["Lang"] = lang
 	// Inject text direction for RTL languages (Arabic) — templates access it as .Dir
 	data["Dir"] = i18n.Direction(lang)
+	data["AvailableLanguages"] = i18n.Languages()
 	// Inject the theme resolved from the server-readable `theme` cookie so every
 	// <html> renders class="theme-{{.Theme}}" with no init JS and no FOUC (AI.md 23474, 24552)
 	theme := s.themeFromRequest(r)
@@ -5108,6 +5111,7 @@ func (s *Server) renderTemplateToString(r *http.Request, name string, data map[s
 	lang := i18n.LangFromRequest(r)
 	data["Lang"] = lang
 	data["Dir"] = i18n.Direction(lang)
+	data["AvailableLanguages"] = i18n.Languages()
 	// Inject the theme resolved from the server-readable `theme` cookie (AI.md 23474)
 	theme := s.themeFromRequest(r)
 	data["Theme"] = theme
@@ -5337,6 +5341,7 @@ func (s *Server) renderErrorPage(w http.ResponseWriter, r *http.Request, status 
 	lang := i18n.LangFromRequest(r)
 	data["Lang"] = lang
 	data["Dir"] = i18n.Direction(lang)
+	data["AvailableLanguages"] = i18n.Languages()
 	theme := s.themeFromRequest(r)
 	data["Theme"] = theme
 	data["NextTheme"] = nextTheme(theme)
@@ -5898,6 +5903,20 @@ func (s *Server) domainObserveMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// applyI18nConfig pushes server.i18n into the shared i18n package so language
+// resolution, the selector and the language cookie follow the live config.
+func applyI18nConfig(cfg *config.Config) {
+	c := cfg.Server.I18n
+	i18n.Configure(i18n.Settings{
+		Enabled:            c.Enabled,
+		DefaultLanguage:    c.DefaultLanguage,
+		FallbackLanguage:   c.FallbackLanguage,
+		AvailableLanguages: c.AvailableLanguages,
+		CookieName:         c.CookieName,
+		CookieMaxAge:       c.I18nCookieSeconds(),
+	})
+}
+
 // langCookieMiddleware persists a valid `?lang=` query parameter as the
 // `lang` cookie on ordinary page navigation, mirroring setPreferenceCookie
 // (AI.md Client-Side Preferences: "?lang= sets a persistent cookie"). Only
@@ -5906,7 +5925,7 @@ func (s *Server) domainObserveMiddleware(next http.Handler) http.Handler {
 // i18n.LangFromRequest to silently fall back to "en" — never written here.
 func (s *Server) langCookieMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if lang := r.URL.Query().Get("lang"); lang != "" && i18n.IsSupported(lang) {
+		if lang := r.URL.Query().Get("lang"); lang != "" && i18n.IsAvailable(lang) {
 			s.setPreferenceCookie(w, r, "lang", strings.ToLower(lang))
 		}
 		next.ServeHTTP(w, r)

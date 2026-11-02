@@ -85,6 +85,8 @@ type ServerConfig struct {
 	Backup BackupConfig `yaml:"backup"`
 	// Update controls the self-update channel and scheduling behaviour (PART 22).
 	Update UpdateConfig `yaml:"update"`
+	// I18n controls language availability, defaults and the language cookie (PART 30).
+	I18n I18nConfig `yaml:"i18n"`
 	// Cache configures the in-process or remote cache driver (PART 9/12).
 	Cache CacheConfig `yaml:"cache"`
 	// Limits controls HTTP server request and body limits (PART 12).
@@ -1688,6 +1690,14 @@ func DefaultConfig() *Config {
 					},
 				},
 			},
+			I18n: I18nConfig{
+				Enabled:            true,
+				DefaultLanguage:    "en",
+				AvailableLanguages: []string{"en", "es", "zh", "fr", "ar", "de", "ja"},
+				FallbackLanguage:   "en",
+				CookieName:         "lang",
+				CookieMaxAge:       "365d",
+			},
 			Update: UpdateConfig{
 				Branch:      "stable",
 				AutoInstall: false,
@@ -2696,6 +2706,7 @@ func Validate(cfg *Config) {
 
 	validateRestoreLimits(&cfg.Server.Restore)
 	validateUpdate(&cfg.Server.Update)
+	validateI18n(&cfg.Server.I18n)
 	validateBackupRetention(&cfg.Server.Backup.Retention)
 	if cfg.Server.Compression.Level < 1 || cfg.Server.Compression.Level > 9 {
 		log.Printf("[config] WARNING: invalid server.compression.level %d, using default 5", cfg.Server.Compression.Level)
@@ -3516,6 +3527,78 @@ func validateBackupRetention(r *BackupRetentionConfig) {
 	if r.KeepYearly > 2 {
 		log.Printf("[config] WARNING: keep_yearly: %d exceeds recommended 2", r.KeepYearly)
 	}
+}
+
+// I18nConfig is the server.i18n block (PART 30 Configuration).
+type I18nConfig struct {
+	Enabled            bool     `yaml:"enabled"`
+	DefaultLanguage    string   `yaml:"default_language"`
+	AvailableLanguages []string `yaml:"available_languages"`
+	FallbackLanguage   string   `yaml:"fallback_language"`
+	CookieName         string   `yaml:"cookie_name"`
+	CookieMaxAge       string   `yaml:"cookie_max_age"`
+}
+
+// i18nSupported lists the languages embedded in every binary (PART 30).
+var i18nSupported = []string{"en", "es", "zh", "fr", "ar", "de", "ja"}
+
+// validateI18n keeps server.i18n usable: unknown codes are dropped, an empty
+// list means all languages, the default and fallback must be available, and
+// the cookie name/age must be sane. Invalid values warn and take the default.
+func validateI18n(c *I18nConfig) {
+	known := map[string]bool{}
+	for _, l := range i18nSupported {
+		known[l] = true
+	}
+	var avail []string
+	seen := map[string]bool{}
+	for _, l := range c.AvailableLanguages {
+		l = strings.ToLower(strings.TrimSpace(l))
+		if !known[l] {
+			log.Printf("[config] WARNING: unsupported server.i18n.available_languages entry %q ignored", l)
+			continue
+		}
+		if !seen[l] {
+			seen[l] = true
+			avail = append(avail, l)
+		}
+	}
+	if len(avail) == 0 {
+		avail = append([]string(nil), i18nSupported...)
+		seen = map[string]bool{}
+		for _, l := range avail {
+			seen[l] = true
+		}
+	}
+	c.AvailableLanguages = avail
+	c.DefaultLanguage = strings.ToLower(strings.TrimSpace(c.DefaultLanguage))
+	if !seen[c.DefaultLanguage] {
+		log.Printf("[config] WARNING: server.i18n.default_language %q not available, using en", c.DefaultLanguage)
+		c.DefaultLanguage = "en"
+		if !seen["en"] {
+			c.DefaultLanguage = avail[0]
+		}
+	}
+	c.FallbackLanguage = strings.ToLower(strings.TrimSpace(c.FallbackLanguage))
+	if !known[c.FallbackLanguage] {
+		c.FallbackLanguage = "en"
+	}
+	c.CookieName = strings.TrimSpace(c.CookieName)
+	if c.CookieName == "" || strings.ContainsAny(c.CookieName, " \t;=,\"") {
+		c.CookieName = "lang"
+	}
+	if age, ok := ownerCookieMaxAge(strings.TrimSpace(c.CookieMaxAge)); !ok || age <= 0 {
+		log.Printf("[config] WARNING: invalid server.i18n.cookie_max_age %q, using default 365d", c.CookieMaxAge)
+		c.CookieMaxAge = "365d"
+	}
+}
+
+// I18nCookieSeconds returns server.i18n.cookie_max_age in seconds (default one year).
+func (c I18nConfig) I18nCookieSeconds() int {
+	if age, ok := ownerCookieMaxAge(strings.TrimSpace(c.CookieMaxAge)); ok && age > 0 {
+		return int(age / time.Second)
+	}
+	return 365 * 24 * 60 * 60
 }
 
 // validateUpdate canonicalizes server.update.branch (devel aliases accepted)

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 )
 
 // localeFS embeds all locale JSON files at compile time
@@ -22,6 +24,122 @@ var supportedLangs = map[string]bool{
 	"zh": true,
 	"ar": true,
 	"ja": true,
+}
+
+// Runtime settings from server.i18n (PART 30 Configuration). The zero state is
+// the spec default: enabled, English default and fallback, every embedded
+// language available, cookie "lang" for one year.
+var (
+	settingsMu  sync.RWMutex
+	cfgEnabled  = true
+	cfgDefault  = "en"
+	cfgFallback = "en"
+	cfgAvail    map[string]bool
+	cfgCookie   = "lang"
+	cfgMaxAge   = 365 * 24 * 60 * 60
+)
+
+// Settings carries the server.i18n values applied by Configure.
+type Settings struct {
+	Enabled            bool
+	DefaultLanguage    string
+	FallbackLanguage   string
+	AvailableLanguages []string
+	CookieName         string
+	CookieMaxAge       int
+}
+
+// Configure applies server.i18n settings. Unsupported codes are ignored and an
+// empty or fully-invalid available list means every embedded language.
+func Configure(st Settings) {
+	settingsMu.Lock()
+	defer settingsMu.Unlock()
+	cfgEnabled = st.Enabled
+	cfgDefault, cfgFallback = "en", "en"
+	if d := strings.ToLower(strings.TrimSpace(st.DefaultLanguage)); supportedLangs[d] {
+		cfgDefault = d
+	}
+	if f := strings.ToLower(strings.TrimSpace(st.FallbackLanguage)); supportedLangs[f] {
+		cfgFallback = f
+	}
+	cfgAvail = nil
+	for _, l := range st.AvailableLanguages {
+		l = strings.ToLower(strings.TrimSpace(l))
+		if supportedLangs[l] {
+			if cfgAvail == nil {
+				cfgAvail = map[string]bool{}
+			}
+			cfgAvail[l] = true
+		}
+	}
+	cfgCookie = "lang"
+	if c := strings.TrimSpace(st.CookieName); c != "" {
+		cfgCookie = c
+	}
+	cfgMaxAge = 365 * 24 * 60 * 60
+	if st.CookieMaxAge > 0 {
+		cfgMaxAge = st.CookieMaxAge
+	}
+}
+
+// CookieName returns the language cookie name (default "lang").
+func CookieName() string {
+	settingsMu.RLock()
+	defer settingsMu.RUnlock()
+	return cfgCookie
+}
+
+// CookieMaxAge returns the language cookie lifetime in seconds.
+func CookieMaxAge() int {
+	settingsMu.RLock()
+	defer settingsMu.RUnlock()
+	return cfgMaxAge
+}
+
+// DefaultLanguage returns the language used when no preference is detected.
+func DefaultLanguage() string {
+	settingsMu.RLock()
+	defer settingsMu.RUnlock()
+	return cfgDefault
+}
+
+// IsAvailable reports whether lang is supported AND offered by server.i18n.
+func IsAvailable(lang string) bool {
+	lang = strings.ToLower(strings.TrimSpace(lang))
+	if !supportedLangs[lang] {
+		return false
+	}
+	settingsMu.RLock()
+	defer settingsMu.RUnlock()
+	return cfgAvail == nil || cfgAvail[lang]
+}
+
+// Language describes one selectable language for the UI selector.
+type Language struct {
+	Code       string
+	NativeName string
+	Direction  string
+}
+
+// Languages lists the available languages in code order, with the native
+// names read from each locale file's meta block.
+func Languages() []Language {
+	codes := make([]string, 0, len(supportedLangs))
+	for c := range supportedLangs {
+		if IsAvailable(c) {
+			codes = append(codes, c)
+		}
+	}
+	sort.Strings(codes)
+	out := make([]Language, 0, len(codes))
+	for _, c := range codes {
+		name := translations[c]["meta.native_name"]
+		if name == "" {
+			name = c
+		}
+		out = append(out, Language{Code: c, NativeName: name, Direction: Direction(c)})
+	}
+	return out
 }
 
 // translations holds flattened key→value maps per language
@@ -116,22 +234,41 @@ func Translate(lang, key string) string {
 	if val, ok := translations[lang][key]; ok {
 		return val
 	}
-	// fallback to English
+	// fallback language (server.i18n.fallback_language, English by default)
+	settingsMu.RLock()
+	fb := cfgFallback
+	settingsMu.RUnlock()
+	if val, ok := translations[fb][key]; ok {
+		return val
+	}
 	if val, ok := translations["en"][key]; ok {
 		return val
 	}
 	return key
 }
 
-// TranslateFormat translates key and substitutes {variable} placeholders.
-// args should be pairs of (variable, value) strings.
-func TranslateFormat(lang, key string, args ...interface{}) string {
+// TranslateFormat replaces named {token} placeholders in the translated string
+// with the supplied values. Interpolation is LITERAL string replacement - the
+// translation is never used as a fmt format string, so a stray '%' can never
+// corrupt output. Tokens without a supplied value stay visible as-is and extra
+// args are ignored (PART 30 "Template Usage").
+func TranslateFormat(lang, key string, args map[string]string) string {
 	s := Translate(lang, key)
-	for i := 0; i+1 < len(args); i += 2 {
-		placeholder := "{" + toString(args[i]) + "}"
-		s = strings.ReplaceAll(s, placeholder, toString(args[i+1]))
+	for k, v := range args {
+		s = strings.ReplaceAll(s, "{"+k+"}", v)
 	}
 	return s
+}
+
+// Args builds the token map for TranslateFormat from alternating name/value
+// pairs, e.g. Args("name", user, "count", n). A trailing unpaired name is
+// dropped.
+func Args(kv ...interface{}) map[string]string {
+	out := make(map[string]string, len(kv)/2)
+	for i := 0; i+1 < len(kv); i += 2 {
+		out[toString(kv[i])] = toString(kv[i+1])
+	}
+	return out
 }
 
 // TranslatePlural returns a pluralized translation for a count value.
@@ -193,21 +330,29 @@ func pluralForm(lang string, count int) string {
 }
 
 // LangFromRequest extracts the preferred language from an HTTP request.
-// Priority: ?lang= param → lang cookie → Accept-Language header → "en"
+// Priority: ?lang= param → lang cookie → Accept-Language header → default.
+// Unsupported or unavailable values silently fall back to the default; with
+// server.i18n.enabled=false the default language is always used.
 func LangFromRequest(r *http.Request) string {
+	settingsMu.RLock()
+	enabled, def, cookie := cfgEnabled, cfgDefault, cfgCookie
+	settingsMu.RUnlock()
+	if !enabled {
+		return def
+	}
 	// 1. Query parameter
 	if lang := r.URL.Query().Get("lang"); lang != "" {
-		if IsSupported(lang) {
-			return strings.ToLower(lang)
+		if IsAvailable(lang) {
+			return strings.ToLower(strings.TrimSpace(lang))
 		}
-		return "en"
+		return def
 	}
 	// 2. Cookie
-	if c, err := r.Cookie("lang"); err == nil && c.Value != "" {
-		if IsSupported(c.Value) {
-			return strings.ToLower(c.Value)
+	if c, err := r.Cookie(cookie); err == nil && c.Value != "" {
+		if IsAvailable(c.Value) {
+			return strings.ToLower(strings.TrimSpace(c.Value))
 		}
-		return "en"
+		return def
 	}
 	// 3. Accept-Language header
 	if accept := r.Header.Get("Accept-Language"); accept != "" {
@@ -215,7 +360,7 @@ func LangFromRequest(r *http.Request) string {
 			return lang
 		}
 	}
-	return "en"
+	return def
 }
 
 // parseBestMatch parses an Accept-Language header and returns the best supported match.
@@ -230,12 +375,12 @@ func parseBestMatch(header string) string {
 		}
 		lang := strings.ToLower(strings.TrimSpace(part))
 		// Try full tag first (e.g. "en-us"), then base (e.g. "en")
-		if IsSupported(lang) {
+		if IsAvailable(lang) {
 			return lang
 		}
 		if idx := strings.Index(lang, "-"); idx != -1 {
 			base := lang[:idx]
-			if IsSupported(base) {
+			if IsAvailable(base) {
 				return base
 			}
 		}
@@ -260,14 +405,23 @@ func GetLanguage(flagLang, configLang string) string {
 	}
 	// 3. LC_ALL env var
 	if lang := os.Getenv("LC_ALL"); lang != "" {
-		return validateLang(strings.Split(lang, "_")[0])
+		return validateLang(localeLang(lang))
 	}
 	// 3b. LANG env var
 	if lang := os.Getenv("LANG"); lang != "" {
-		return validateLang(strings.Split(lang, "_")[0])
+		return validateLang(localeLang(lang))
 	}
 	// 4. Default
 	return "en"
+}
+
+// localeLang extracts the language code from a system locale such as
+// "es_ES.UTF-8", "fr.UTF-8" or "de@euro".
+func localeLang(locale string) string {
+	if i := strings.IndexAny(locale, "_.@-"); i != -1 {
+		return locale[:i]
+	}
+	return locale
 }
 
 // validateLang returns lang if supported, otherwise "en".

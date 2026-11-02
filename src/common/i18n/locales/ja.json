@@ -470,6 +470,7 @@
       "other": "{count}日"
     },
     "hours": {
+      "zero": "{count}時間",
       "one": "時間",
       "two": "{count}時間",
       "few": "{count}時間",
@@ -477,6 +478,7 @@
       "other": "{count}時間"
     },
     "minutes": {
+      "zero": "{count}分",
       "one": "分",
       "two": "{count}分",
       "few": "{count}分",

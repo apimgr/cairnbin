@@ -94,9 +94,9 @@
                     </form>
                     <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/update" class="pref-form">
                         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                        <label class="form-label">{{t $.Lang "preferences.owner_rename"}}</label><input name="name" value="{{.name}}" maxlength="64" required class="form-input">
-                        <label class="form-label">{{t $.Lang "preferences.owner_expiry"}}</label><select name="expires" class="form-select"><option value="" selected>{{t $.Lang "preferences.owner_keep_expiry"}}</option><option value="never">{{t $.Lang "preferences.owner_never"}}</option><option value="7d">{{t $.Lang "preferences.owner_7_days"}}</option><option value="30d">{{t $.Lang "preferences.owner_30_days"}}</option><option value="90d">{{t $.Lang "preferences.owner_90_days"}}</option><option value="1y">{{t $.Lang "preferences.owner_1_year"}}</option></select>
-                        <label class="form-label">{{t $.Lang "preferences.owner_expiry"}}</label><input type="date" name="expires_date" class="form-input">
+                        <label class="form-label" for="tok-{{.id}}-name">{{t $.Lang "preferences.owner_rename"}}</label><input id="tok-{{.id}}-name" name="name" value="{{.name}}" maxlength="64" required class="form-input">
+                        <label class="form-label" for="tok-{{.id}}-expires">{{t $.Lang "preferences.owner_expiry"}}</label><select id="tok-{{.id}}-expires" name="expires" class="form-select"><option value="" selected>{{t $.Lang "preferences.owner_keep_expiry"}}</option><option value="never">{{t $.Lang "preferences.owner_never"}}</option><option value="7d">{{t $.Lang "preferences.owner_7_days"}}</option><option value="30d">{{t $.Lang "preferences.owner_30_days"}}</option><option value="90d">{{t $.Lang "preferences.owner_90_days"}}</option><option value="1y">{{t $.Lang "preferences.owner_1_year"}}</option></select>
+                        <label class="form-label" for="tok-{{.id}}-date">{{t $.Lang "preferences.owner_expiry"}}</label><input id="tok-{{.id}}-date" type="date" name="expires_date" class="form-input">
                         <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_save"}}</button>
                     </form>
                     <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/revoke" class="pref-option-form" data-confirm="{{t $.Lang "preferences.owner_confirm_revoke"}}">

@@ -293,6 +293,21 @@ function installApp() {
     if (dlg && typeof dlg.showModal === 'function') dlg.showModal();
 }
 
+// Language selector (PART 30): the footer form is a plain GET form that works
+// without JavaScript. As progressive enhancement, changing the select submits
+// it immediately and the Go button is hidden.
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form.lang-selector').forEach(function (form) {
+        const select = form.querySelector('select[name="lang"]');
+        const go = form.querySelector('.lang-selector-go');
+        if (!select) return;
+        if (go) go.hidden = true;
+        select.addEventListener('change', function () {
+            form.requestSubmit();
+        });
+    });
+});
+
 // Destructive-action confirmation (PART 16: native <dialog>, never confirm()).
 // A form carrying data-confirm="message" is intercepted on submit, the shared
 // #confirm-dialog is shown with that message, and the form is re-submitted only

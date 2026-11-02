@@ -28,5 +28,5 @@ func t(key string) string {
 // tf translates a "cli.gui.*" key, substituting {variable} placeholders
 // from the given (name, value) pairs.
 func tf(key string, args ...interface{}) string {
-	return i18n.TranslateFormat(uiLang, "cli.gui."+key, args...)
+	return i18n.TranslateFormat(uiLang, "cli.gui."+key, i18n.Args(args...))
 }

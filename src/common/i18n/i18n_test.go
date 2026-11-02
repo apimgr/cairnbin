@@ -1,6 +1,7 @@
 package i18n
 
 import (
+	"regexp"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -136,7 +137,7 @@ func TestTranslateFormat(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := TranslateFormat(tc.lang, tc.key, tc.args...)
+			got := TranslateFormat(tc.lang, tc.key, Args(tc.args...))
 			if got != tc.want {
 				t.Errorf("TranslateFormat(%q, %q, %v) = %q, want %q", tc.lang, tc.key, tc.args, got, tc.want)
 			}
@@ -506,5 +507,132 @@ func TestDirection(t *testing.T) {
 				t.Errorf("Direction(%q) = %q; want %q", tc.lang, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestNoFormatVerbsInLocales enforces PART 30: translations use named {token}
+// placeholders only; printf verbs and positional {0} placeholders are forbidden.
+func TestNoFormatVerbsInLocales(t *testing.T) {
+	verb := regexp.MustCompile(`%[-+# 0-9.]*[a-zA-Z]|\{[0-9]+\}`)
+	for lang, table := range translations {
+		for key, val := range table {
+			if verb.MatchString(val) {
+				t.Errorf("%s: key %q has a format verb or positional placeholder: %q", lang, key, val)
+			}
+		}
+	}
+}
+
+func TestArgsAndLocaleLang(t *testing.T) {
+	got := Args("a", 1, "b", "x", "dangling")
+	if len(got) != 2 || got["a"] != "1" || got["b"] != "x" {
+		t.Errorf("Args = %v", got)
+	}
+	for in, want := range map[string]string{"es_ES.UTF-8": "es", "fr.UTF-8": "fr", "de@euro": "de", "ja": "ja"} {
+		if localeLang(in) != want {
+			t.Errorf("localeLang(%q) = %q, want %q", in, localeLang(in), want)
+		}
+	}
+}
+
+// resetI18nSettings restores the spec defaults after a test that calls Configure.
+func resetI18nSettings(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		Configure(Settings{Enabled: true, DefaultLanguage: "en", FallbackLanguage: "en"})
+	})
+}
+
+func TestConfigure_AvailableDefaultAndDisabled(t *testing.T) {
+	resetI18nSettings(t)
+	Configure(Settings{Enabled: true, DefaultLanguage: "de", FallbackLanguage: "en", AvailableLanguages: []string{"de", "fr", "xx"}})
+
+	if IsAvailable("es") || !IsAvailable("fr") || !IsAvailable("DE") {
+		t.Error("available set not honored")
+	}
+	if got := Languages(); len(got) != 2 || got[0].Code != "de" || got[1].Code != "fr" || got[0].NativeName == "" {
+		t.Errorf("Languages() = %+v", got)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/?lang=es", nil)
+	if got := LangFromRequest(req); got != "de" {
+		t.Errorf("unavailable ?lang= = %q, want default de", got)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept-Language", "ja,fr;q=0.8")
+	if got := LangFromRequest(req); got != "fr" {
+		t.Errorf("Accept-Language = %q, want fr", got)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	if got := LangFromRequest(req); got != "de" {
+		t.Errorf("no preference = %q, want default de", got)
+	}
+
+	Configure(Settings{Enabled: false, DefaultLanguage: "fr", AvailableLanguages: nil})
+	req = httptest.NewRequest(http.MethodGet, "/?lang=es", nil)
+	if got := LangFromRequest(req); got != "fr" {
+		t.Errorf("disabled i18n = %q, want default fr", got)
+	}
+}
+
+func TestConfigure_CookieSettings(t *testing.T) {
+	resetI18nSettings(t)
+	if CookieName() != "lang" || CookieMaxAge() != 365*24*60*60 {
+		t.Fatalf("defaults wrong: %q %d", CookieName(), CookieMaxAge())
+	}
+	Configure(Settings{Enabled: true, CookieName: "locale", CookieMaxAge: 60})
+	if CookieName() != "locale" || CookieMaxAge() != 60 {
+		t.Errorf("cookie settings not applied: %q %d", CookieName(), CookieMaxAge())
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "locale", Value: "ja"})
+	if got := LangFromRequest(req); got != "ja" {
+		t.Errorf("custom cookie = %q, want ja", got)
+	}
+}
+
+// TestKeyConsistency is the PART 30 build-time validation beyond key parity:
+// no empty values, matching {token} sets, and every plural category the
+// language requires is present wherever English defines plurals.
+func TestKeyConsistency(t *testing.T) {
+	token := regexp.MustCompile(`\{[a-z_0-9]+\}`)
+	tokens := func(s string) string {
+		found := token.FindAllString(s, -1)
+		sort.Strings(found)
+		return strings.Join(found, ",")
+	}
+	required := map[string][]string{
+		"en": {"one", "other"}, "es": {"one", "other"}, "de": {"one", "other"}, "fr": {"one", "other"},
+		"zh": {"other"}, "ja": {"other"}, "ar": {"zero", "one", "two", "few", "many", "other"},
+	}
+	for lang, table := range translations {
+		for key, val := range table {
+			if strings.TrimSpace(val) == "" {
+				t.Errorf("%s: key %q is empty", lang, key)
+			}
+			// Plural forms legitimately differ per language ("one" may omit {count}).
+			isPlural := false
+			for _, cat := range []string{"zero", "one", "two", "few", "many", "other"} {
+				if strings.HasSuffix(key, "."+cat) && strings.HasPrefix(key, "plurals.") {
+					isPlural = true
+				}
+			}
+			if lang != "en" && !isPlural {
+				if en, ok := translations["en"][key]; ok && tokens(en) != tokens(val) {
+					t.Errorf("%s: key %q placeholders %q differ from en %q", lang, key, tokens(val), tokens(en))
+				}
+			}
+		}
+		for key := range translations["en"] {
+			if !strings.HasSuffix(key, ".other") {
+				continue
+			}
+			base := strings.TrimSuffix(key, ".other")
+			for _, form := range required[lang] {
+				if _, ok := table[base+"."+form]; !ok {
+					t.Errorf("%s: plural %q missing category %q", lang, base, form)
+				}
+			}
+		}
 	}
 }

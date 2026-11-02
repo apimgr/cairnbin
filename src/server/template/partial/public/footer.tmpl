@@ -33,6 +33,17 @@
             <span class="footer-sep" aria-hidden="true">·</span>
             <a href="{{.AssetPrefix}}/server/preferences" class="footer-link">{{t .Lang "footer.preferences"}}</a>
         </nav>
+        {{if gt (len .AvailableLanguages) 1}}
+        <form method="get" action="" class="lang-selector">
+            <label for="lang-select" class="sr-only">{{t .Lang "common.select_language"}}</label>
+            <select name="lang" id="lang-select" class="lang-select">
+                {{range .AvailableLanguages}}
+                <option value="{{.Code}}" lang="{{.Code}}"{{if eq .Code $.Lang}} selected{{end}}>{{.NativeName}}</option>
+                {{end}}
+            </select>
+            <button type="submit" class="btn btn-secondary lang-selector-go">{{t .Lang "common.submit"}}</button>
+        </form>
+        {{end}}
         <div class="footer-made">
             <a href="https://github.com/apimgr/pastebin" target="_blank" rel="noopener noreferrer" class="footer-repo">{{t .Lang "footer.made_with"}}</a> ❤️
             <span class="footer-sep" aria-hidden="true">·</span>

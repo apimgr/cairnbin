@@ -57,7 +57,7 @@ same pass gets its own line item here.
 - [x] PART 27 CI/CD workflows
 - [x] PART 28 Testing & development
 - [x] PART 29 ReadTheDocs documentation
-- [ ] PART 30 I18N & A11Y
+- [x] PART 30 I18N & A11Y
 - [ ] PART 31 Overlay networks (Tor & I2P)
 - [ ] PART 32 Client
 - [ ] PART 33 IDEA.md reference
@@ -158,3 +158,4 @@ same pass gets its own line item here.
 - PART 26: AI.md contradicts itself on dev/test compose identity. The requirements table ("name: and network keep the -dev / -test suffix") conflicts with the Field Reference and the example YAML (same `name:` and network `{project_name}` in all three files). Followed the field reference and examples; revisit if the table is meant to win. Dev volumes omit `:z` (rule text) although the dev example shows `:z`.
 - PART 26: remaining project extras (`shadow` package, e2e browser service and E2E_* env in the test compose) are not in IDEA.md; confirm or document them.
 - PART 28: tests/e2e (42 tests) and tests/docker.sh / incus.sh were checked for presence and structure only, not re-run or mapped feature-by-feature to IDEA.md. Confirm Universal Coverage items (responsive 375x812, Swagger/GraphiQL pages, MCP tools/call with owner/linked/no token, i18n switching, static asset 200s) each have a named test; run `./tests/e2e.sh` on demand.
+- PART 30: not verified line-by-line: hardcoded user-facing strings in Go handlers (`http.Error`/JSON messages must use `errors.*` keys), Swagger/GraphQL/email translation by request language, and the CLI/TUI/GUI `--help` text per language; the reduced-motion `!important` block is tracked under PART 16. `meta.direction`-driven `dir` and logical CSS properties are tracked under PART 16 as well.

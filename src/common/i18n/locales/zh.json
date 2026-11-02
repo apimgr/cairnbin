@@ -470,6 +470,7 @@
       "other": "{count} 天"
     },
     "hours": {
+      "zero": "{count} 小时",
       "one": "小时",
       "two": "{count} 小时",
       "few": "{count} 小时",
@@ -477,6 +478,7 @@
       "other": "{count} 小时"
     },
     "minutes": {
+      "zero": "{count} 分钟",
       "one": "分钟",
       "two": "{count} 分钟",
       "few": "{count} 分钟",

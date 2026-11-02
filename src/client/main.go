@@ -109,7 +109,7 @@ func t(key string) string {
 // tf returns the translated cli.client.{key} string for the active locale with
 // {variable} placeholders replaced from alternating name/value arguments.
 func tf(key string, args ...interface{}) string {
-	return i18n.TranslateFormat(uiLang, "cli.client."+key, args...)
+	return i18n.TranslateFormat(uiLang, "cli.client."+key, i18n.Args(args...))
 }
 
 // binName is the actual (possibly renamed) binary name shown in help, version,
