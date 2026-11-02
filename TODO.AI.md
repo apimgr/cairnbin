@@ -60,7 +60,9 @@ same pass gets its own line item here.
 - [x] PART 30 I18N & A11Y
 - [x] PART 31 Overlay networks (Tor & I2P)
 - [x] PART 32 Client
-- [ ] PART 33 IDEA.md reference
+- [x] PART 33 IDEA.md reference — IDEA.md has the three required sections in order and the project variables; the compat route tables are external-service protocols so they stay
+- [ ] PART 33 checklist: it says `.claude/rules` and `.claude/memory` are committed, while PART 2 and the standing instruction keep `.claude/` gitignored and untracked; left untracked per the standing instruction
+- [ ] PART 33 checklist: `.claude/memory/` files need YAML frontmatter and no AI.md duplication; only MEMORY.md exists, not re-audited
 
 ### Follow-ups found during the alignment pass
 
