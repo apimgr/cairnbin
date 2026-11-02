@@ -37,12 +37,34 @@ type Asset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
+// devel is the canonical name of the rolling nightly channel (PART 22).
+const devel = "devel"
+
+// NormalizeBranch maps a user-supplied channel name to its canonical form
+// (stable, beta, devel). "daily", "rolling", "dev" and "development" are
+// accepted aliases for devel; an empty value means stable. The second result
+// is false for an unknown channel.
+func NormalizeBranch(branch string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(branch)) {
+	case "", "stable":
+		return "stable", true
+	case "beta":
+		return "beta", true
+	case devel, "daily", "rolling", "dev", "development":
+		return devel, true
+	}
+	return "", false
+}
+
 // CheckForUpdate queries GitHub Releases for a newer version on the given
-// branch ("stable", "beta", or "daily").  buildEpoch is the caller's embedded
-// BuildEpoch and is only consulted for the rolling "daily" tag, whose tag name
+// branch ("stable", "beta", or "devel").  buildEpoch is the caller's embedded
+// BuildEpoch and is only consulted for the rolling "devel" tag, whose tag name
 // never changes while its contents are rebuilt nightly.  Returns nil, nil when
 // already up to date or when no release is found.
 func CheckForUpdate(ctx context.Context, currentVersion, branch string, buildEpoch int64) (*Release, error) {
+	if canon, ok := NormalizeBranch(branch); ok {
+		branch = canon
+	}
 	var apiURL string
 	switch branch {
 	case "stable", "":
@@ -57,6 +79,9 @@ func CheckForUpdate(ctx context.Context, currentVersion, branch string, buildEpo
 // given apiURL (so tests can inject an httptest server) and otherwise behaves
 // identically to CheckForUpdate.
 func CheckForUpdateURL(ctx context.Context, currentVersion, branch string, buildEpoch int64, apiURL string) (*Release, error) {
+	if canon, ok := NormalizeBranch(branch); ok {
+		branch = canon
+	}
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -100,10 +125,10 @@ func CheckForUpdateURL(ctx context.Context, currentVersion, branch string, build
 		if !matchesBranch(r, branch) {
 			continue
 		}
-		// The daily channel is a single rolling tag: its name never changes
+		// The devel channel is a single rolling tag: its name never changes
 		// while the release is rebuilt nightly, so a newer nightly exists only
 		// when the release was published after this binary was built.
-		if isDailyTag(r.TagName) {
+		if isDevelTag(r.TagName) {
 			if r.PublishedAt.Unix() > buildEpoch {
 				return &r, nil
 			}
@@ -124,10 +149,10 @@ func isSameVersion(tag, currentVersion string) bool {
 	return tag == currentVersion || strings.TrimPrefix(tag, "v") == strings.TrimPrefix(currentVersion, "v")
 }
 
-// isDailyTag reports whether tag is the rolling daily tag, which daily.yml
-// deletes and recreates every night.
-func isDailyTag(tag string) bool {
-	return tag == "daily"
+// isDevelTag reports whether tag is the rolling devel tag, which the devel
+// workflow deletes and recreates every night.
+func isDevelTag(tag string) bool {
+	return tag == devel
 }
 
 // flagTakesValue reports whether the named flag consumes the following word
@@ -182,7 +207,7 @@ func restartArgs(args []string) []string {
 			if i+1 < len(args) && args[i+1] != "" && !strings.HasPrefix(args[i+1], "-") {
 				action := args[i+1]
 				i++
-				// "--update branch daily" consumes the channel as a second word.
+				// "--update branch devel" consumes the channel as a second word.
 				if action == "branch" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 					i++
 				}
@@ -270,7 +295,7 @@ func DoUpdate(ctx context.Context, release *Release) error {
 	}
 	tmpFile.Close()
 
-	// Verify SHA256 checksum against the release's checksums.txt (MANDATORY)
+	// Verify SHA256 checksum against the release's sha256.txt (MANDATORY)
 	expectedHash, err := fetchExpectedChecksum(ctx, client, release, assetName)
 	if err != nil {
 		return fmt.Errorf("failed to fetch checksum: %w", err)
@@ -289,20 +314,20 @@ func DoUpdate(ctx context.Context, release *Release) error {
 	return replaceBinary(currentPath, tmpPath)
 }
 
-// fetchExpectedChecksum downloads the release's checksums.txt asset and
+// fetchExpectedChecksum downloads the release's sha256.txt asset and
 // returns the SHA256 hash recorded for assetName. Every published release
-// MUST ship a checksums.txt — refusing an unverified binary prevents
+// MUST ship a sha256.txt — refusing an unverified binary prevents
 // installing a tampered or MITM-substituted download (fail closed).
 func fetchExpectedChecksum(ctx context.Context, client *http.Client, release *Release, assetName string) (string, error) {
 	var checksumsURL string
 	for _, a := range release.Assets {
-		if a.Name == "checksums.txt" {
+		if a.Name == "sha256.txt" {
 			checksumsURL = a.BrowserDownloadURL
 			break
 		}
 	}
 	if checksumsURL == "" {
-		return "", fmt.Errorf("release has no checksums.txt asset; refusing to install unverified update")
+		return "", fmt.Errorf("release has no sha256.txt asset; refusing to install unverified update")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumsURL, nil)
@@ -318,7 +343,7 @@ func fetchExpectedChecksum(ctx context.Context, client *http.Client, release *Re
 		return "", fmt.Errorf("checksum download failed: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
 		return "", err
 	}
@@ -329,7 +354,7 @@ func fetchExpectedChecksum(ctx context.Context, client *http.Client, release *Re
 			return fields[0], nil
 		}
 	}
-	return "", fmt.Errorf("no checksum entry for %s in checksums.txt; refusing to install unverified update", assetName)
+	return "", fmt.Errorf("no checksum entry for %s in sha256.txt; refusing to install unverified update", assetName)
 }
 
 // verifyChecksum computes the SHA256 of the file at path and compares it
@@ -371,14 +396,75 @@ func matchesBranch(r Release, branch string) bool {
 		return true
 	}
 	isBeta := strings.HasSuffix(r.TagName, "-beta")
-	// The daily channel is a single rolling release: tag "daily", rebuilt nightly.
-	isDaily := isDailyTag(r.TagName)
+	// The devel channel is a single rolling release: tag "devel", rebuilt nightly.
+	isDevel := isDevelTag(r.TagName)
 	switch branch {
 	case "beta":
 		return isBeta
-	case "daily":
-		return isBeta || isDaily
+	case devel:
+		return isBeta || isDevel
 	default:
 		return false
 	}
+}
+
+
+// CheckForUpdateDeferred is the scheduled-task variant of CheckForUpdate
+// (PART 22 "Defer Semantics"): it selects the newest release on the channel
+// that is newer than the running version AND at least deferDays old
+// (published_at, UTC). The devel channel ignores deferDays because its rolling
+// release is recreated nightly. Manual --update check/yes never use this.
+func CheckForUpdateDeferred(ctx context.Context, currentVersion, branch string, buildEpoch int64, deferDays int) (*Release, error) {
+	if deferDays <= 0 {
+		return CheckForUpdate(ctx, currentVersion, branch, buildEpoch)
+	}
+	canon, ok := NormalizeBranch(branch)
+	if !ok {
+		canon = "stable"
+	}
+	if canon == devel {
+		return CheckForUpdate(ctx, currentVersion, canon, buildEpoch)
+	}
+	return checkDeferredURL(ctx, currentVersion, canon, deferDays, configuredAPIBase(), time.Now())
+}
+
+// checkDeferredURL lists releases from apiURL (newest first) and returns the
+// newest eligible one newer than currentVersion. Scanning stops at the running
+// version, since everything after it is older.
+func checkDeferredURL(ctx context.Context, currentVersion, branch string, deferDays int, apiURL string, now time.Time) (*Release, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API: HTTP %d", resp.StatusCode)
+	}
+	var releases []Release
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&releases); err != nil {
+		return nil, fmt.Errorf("decode releases: %w", err)
+	}
+	minAge := time.Duration(deferDays) * 24 * time.Hour
+	for _, r := range releases {
+		if isSameVersion(r.TagName, currentVersion) {
+			return nil, nil
+		}
+		if !matchesBranch(r, branch) || isDevelTag(r.TagName) {
+			continue
+		}
+		if r.PublishedAt.IsZero() || now.Sub(r.PublishedAt) < minAge {
+			continue
+		}
+		return &r, nil
+	}
+	return nil, nil
 }

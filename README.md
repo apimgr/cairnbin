@@ -41,7 +41,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Full route compatibility with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (sprunge/0x0/ix.io), and termbin/fiche (raw TCP, opt-in)
 - Built-in scheduler for expiry cleanup, backups, security-database updates, and self-update checks (no external cron)
 - Backup and restore with optional AES-256-GCM encryption (Argon2id key derivation)
-- Self-update with SHA-256 checksum verification (stable/beta/daily channels)
+- Self-update with SHA-256 checksum verification (stable/beta/devel channels)
 - Prometheus metrics endpoint (`/metrics`, internal-only)
 - GeoIP country allow/deny (advisory) with auto-downloaded, scheduler-updated databases
 - Rate limiting per read/write/health class

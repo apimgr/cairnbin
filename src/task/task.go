@@ -758,13 +758,18 @@ func applyRetention(cfg BackupConfig) error {
 // eligibility: a release must be at least that many days old before the task
 // acts on it. A nil mailer or empty operatorEmail silently skips email.
 func UpdateCheck(currentVersion, branch string, buildEpoch int64, operatorEmail string, autoInstall bool, deferDays int, notifyAvailable, notifyInstalled bool, mailer Mailer) func(ctx context.Context) error {
+	// lastAnnounced remembers the version already announced to operators so the
+	// WARN log and email are emitted once per version, not on every run.
+	var lastAnnounced string
 	return func(ctx context.Context) error {
 		if branch == "" {
 			branch = "stable"
 		}
 		checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		rel, err := updater.CheckForUpdate(checkCtx, currentVersion, branch, buildEpoch)
+		// PART 22: the scheduled task selects the newest release that is both
+		// newer than the running version and at least defer_days old.
+		rel, err := updater.CheckForUpdateDeferred(checkCtx, currentVersion, branch, buildEpoch, deferDays)
 		if err != nil {
 			return fmt.Errorf("update_check: %w", err)
 		}
@@ -772,16 +777,20 @@ func UpdateCheck(currentVersion, branch string, buildEpoch int64, operatorEmail 
 			log.Printf("update_check: %s is up to date on branch %s", currentVersion, branch)
 			return nil
 		}
-		// Apply defer window: skip releases newer than deferDays.
-		if deferDays > 0 && !rel.PublishedAt.IsZero() {
-			age := time.Since(rel.PublishedAt)
-			if age < time.Duration(deferDays)*24*time.Hour {
-				log.Printf("update_check: %s available but deferred (%d/%d days)", rel.TagName, int(age.Hours()/24), deferDays)
-				return nil
+		// PART 22: "update available" fires once per newly-seen eligible
+		// version, not on every task run.
+		announced := rel.TagName == lastAnnounced
+		if rel.TagName == "devel" {
+			announced = rel.TagName+"@"+rel.PublishedAt.UTC().Format(time.RFC3339) == lastAnnounced
+		}
+		if !announced {
+			log.Printf("update_check: update available %s → %s (branch %s)", currentVersion, rel.TagName, branch)
+			updateSendAvailable(mailer, operatorEmail, notifyAvailable, currentVersion, rel.TagName, branch)
+			lastAnnounced = rel.TagName
+			if rel.TagName == "devel" {
+				lastAnnounced = rel.TagName + "@" + rel.PublishedAt.UTC().Format(time.RFC3339)
 			}
 		}
-		log.Printf("update_check: update available %s → %s (branch %s)", currentVersion, rel.TagName, branch)
-		updateSendAvailable(mailer, operatorEmail, notifyAvailable, currentVersion, rel.TagName, branch)
 		if !autoInstall {
 			return nil
 		}

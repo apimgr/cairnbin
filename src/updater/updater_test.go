@@ -104,8 +104,8 @@ func TestCheckForUpdate_BetaBranch(t *testing.T) {
 
 func TestCheckForUpdate_DailyBranch(t *testing.T) {
 	releases := []updater.Release{
-		// daily rolling tag
-		{TagName: "daily", Prerelease: false, PublishedAt: time.Unix(1, 0)},
+		// devel rolling tag
+		{TagName: "devel", Prerelease: false, PublishedAt: time.Unix(1, 0)},
 		{TagName: "v1.5.0", Prerelease: false},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,12 +113,12 @@ func TestCheckForUpdate_DailyBranch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	rel, err := updater.CheckForUpdateURL(context.Background(), "v1.0.0", "daily", 0, srv.URL+"/releases")
+	rel, err := updater.CheckForUpdateURL(context.Background(), "v1.0.0", "devel", 0, srv.URL+"/releases")
 	if err != nil {
-		t.Fatalf("CheckForUpdate daily error: %v", err)
+		t.Fatalf("CheckForUpdate devel error: %v", err)
 	}
 	if rel == nil {
-		t.Fatal("expected a daily release, got nil")
+		t.Fatal("expected a devel release, got nil")
 	}
 }
 

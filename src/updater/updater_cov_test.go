@@ -99,8 +99,8 @@ func TestCheckForUpdateURL_BadURL(t *testing.T) {
 	}
 }
 
-// TestCheckForUpdateURL_DailyNoMatch verifies that a daily-branch list with no
-// matching tag returns nil, nil (covers the loop-exhaust path on non-beta/daily).
+// TestCheckForUpdateURL_DailyNoMatch verifies that a devel-branch list with no
+// matching tag returns nil, nil (covers the loop-exhaust path on non-beta/devel).
 func TestCheckForUpdateURL_DailyNoMatch(t *testing.T) {
 	releases := []Release{
 		{TagName: "v1.0.0", Prerelease: false},
@@ -110,12 +110,12 @@ func TestCheckForUpdateURL_DailyNoMatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	rel, err := CheckForUpdateURL(context.Background(), "v1.0.0", "daily", 0, srv.URL+"/releases")
+	rel, err := CheckForUpdateURL(context.Background(), "v1.0.0", "devel", 0, srv.URL+"/releases")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if rel != nil {
-		t.Errorf("expected nil when no daily tag found, got %+v", rel)
+		t.Errorf("expected nil when no devel tag found, got %+v", rel)
 	}
 }
 
@@ -172,7 +172,7 @@ func TestFetchExpectedChecksum_HTTPError(t *testing.T) {
 	defer srv.Close()
 
 	client := &http.Client{}
-	rel := &Release{Assets: []Asset{{Name: "checksums.txt", BrowserDownloadURL: srv.URL}}}
+	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
 	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error when connection is forcibly closed, got nil")
@@ -191,7 +191,7 @@ func TestFetchExpectedChecksum_CancelledContext(t *testing.T) {
 	cancel()
 
 	client := &http.Client{}
-	rel := &Release{Assets: []Asset{{Name: "checksums.txt", BrowserDownloadURL: srv.URL}}}
+	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
 	_, err := fetchExpectedChecksum(ctx, client, rel, "pastebin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error with cancelled context, got nil")
@@ -199,10 +199,10 @@ func TestFetchExpectedChecksum_CancelledContext(t *testing.T) {
 }
 
 // TestFetchExpectedChecksum_BadURL covers the http.NewRequestWithContext error
-// branch by passing an unparseable checksums.txt URL.
+// branch by passing an unparseable sha256.txt URL.
 func TestFetchExpectedChecksum_BadURL(t *testing.T) {
 	client := &http.Client{}
-	rel := &Release{Assets: []Asset{{Name: "checksums.txt", BrowserDownloadURL: "://bad"}}}
+	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: "://bad"}}}
 	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error for malformed URL, got nil")
@@ -210,7 +210,7 @@ func TestFetchExpectedChecksum_BadURL(t *testing.T) {
 }
 
 // TestFetchExpectedChecksum_MultipleEntriesMatchFirst verifies that when a
-// checksums.txt file has multiple entries the one matching assetName is
+// sha256.txt file has multiple entries the one matching assetName is
 // returned, not the others.
 func TestFetchExpectedChecksum_MultipleEntriesMatchFirst(t *testing.T) {
 	const want = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
@@ -222,7 +222,7 @@ func TestFetchExpectedChecksum_MultipleEntriesMatchFirst(t *testing.T) {
 	defer srv.Close()
 
 	client := &http.Client{}
-	rel := &Release{Assets: []Asset{{Name: "checksums.txt", BrowserDownloadURL: srv.URL}}}
+	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
 	got, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -233,7 +233,7 @@ func TestFetchExpectedChecksum_MultipleEntriesMatchFirst(t *testing.T) {
 }
 
 // TestFetchExpectedChecksum_UnexpectedStatusCode covers the non-200 status
-// branch when fetching checksums.txt.
+// branch when fetching sha256.txt.
 func TestFetchExpectedChecksum_UnexpectedStatusCode(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -241,7 +241,7 @@ func TestFetchExpectedChecksum_UnexpectedStatusCode(t *testing.T) {
 	defer srv.Close()
 
 	client := &http.Client{}
-	rel := &Release{Assets: []Asset{{Name: "checksums.txt", BrowserDownloadURL: srv.URL}}}
+	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
 	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error for 503, got nil")

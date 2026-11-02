@@ -1,4 +1,4 @@
-name: Daily Build
+name: Devel Build
 
 on:
   schedule:
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: daily-${{ gitea.ref }}
+  group: devel-${{ gitea.ref }}
   cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
 
 permissions:
@@ -22,7 +22,7 @@ env:
 
 jobs:
   # Compute VERSION once — matrix legs must never each compute their own value.
-  # Daily identity is the commit being built, not release.txt or a timestamp.
+  # Devel identity is the commit being built, not release.txt or a timestamp.
   version:
     runs-on: ubuntu-26.04
     outputs:
@@ -153,19 +153,19 @@ jobs:
           sha256sum $FILES > sha256.txt
           sha512sum $FILES > sha512.txt
 
-      - name: Delete previous daily release
+      - name: Delete previous devel release
         run: |
-          # Use Gitea API to delete previous daily release
+          # Use Gitea API to delete previous devel release
           curl -X DELETE \
             -H "Authorization: token ${{ secrets.GITEA_TOKEN }}" \
-            "${{ gitea.server_url }}/api/v1/repos/${{ gitea.repository }}/releases/tags/daily" || true
-          git push origin :refs/tags/daily 2>/dev/null || true
+            "${{ gitea.server_url }}/api/v1/repos/${{ gitea.repository }}/releases/tags/devel" || true
+          git push origin :refs/tags/devel 2>/dev/null || true
 
       - name: Create Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
-          tag_name: daily
-          name: "Daily Build ${{ env.VERSION }}"
+          tag_name: devel
+          name: "Devel Build ${{ env.VERSION }}"
           files: binaries/*
           prerelease: true
-          body: "Daily build: ${{ env.VERSION }}"
+          body: "Devel build: ${{ env.VERSION }}"

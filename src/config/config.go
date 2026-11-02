@@ -25,6 +25,7 @@ import (
 
 	"github.com/apimgr/pastebin/src/common/secretbox"
 	"github.com/apimgr/pastebin/src/logging"
+	"github.com/apimgr/pastebin/src/updater"
 )
 
 // Config is the top-level configuration for the pastebin server.
@@ -1396,7 +1397,7 @@ type BackupRetentionConfig struct {
 
 // UpdateConfig controls self-update channel and scheduled check behaviour (PART 22).
 type UpdateConfig struct {
-	// Branch selects the release channel: "stable" (default), "beta", or "daily".
+	// Branch selects the release channel: "stable" (default), "beta", or "devel".
 	Branch string `yaml:"branch"`
 	// AutoInstall causes the daily update_check task to install eligible updates
 	// automatically. Default false — the task notifies only.
@@ -1404,6 +1405,9 @@ type UpdateConfig struct {
 	// DeferDays delays eligibility of a release: a release is only considered once
 	// it has been public for this many days (0 = adopt immediately).
 	DeferDays int `yaml:"defer_days"`
+	// CLIMinVersion is the minimum CLI version the server accepts; returned
+	// verbatim as cli_min_version by /api/autodiscover. Empty = no minimum.
+	CLIMinVersion string `yaml:"cli_min_version"`
 }
 
 // SchedulerConfig configures the built-in task scheduler (PART 12/18).
@@ -2691,6 +2695,7 @@ func Validate(cfg *Config) {
 	}
 
 	validateRestoreLimits(&cfg.Server.Restore)
+	validateUpdate(&cfg.Server.Update)
 	validateBackupRetention(&cfg.Server.Backup.Retention)
 	if cfg.Server.Compression.Level < 1 || cfg.Server.Compression.Level > 9 {
 		log.Printf("[config] WARNING: invalid server.compression.level %d, using default 5", cfg.Server.Compression.Level)
@@ -3510,5 +3515,20 @@ func validateBackupRetention(r *BackupRetentionConfig) {
 	}
 	if r.KeepYearly > 2 {
 		log.Printf("[config] WARNING: keep_yearly: %d exceeds recommended 2", r.KeepYearly)
+	}
+}
+
+// validateUpdate canonicalizes server.update.branch (devel aliases accepted)
+// and bounds defer_days to 0-365; invalid values warn and take the default.
+func validateUpdate(u *UpdateConfig) {
+	if canon, ok := updater.NormalizeBranch(u.Branch); ok {
+		u.Branch = canon
+	} else {
+		log.Printf("[config] WARNING: invalid server.update.branch %q, using default stable", u.Branch)
+		u.Branch = "stable"
+	}
+	if u.DeferDays < 0 || u.DeferDays > 365 {
+		log.Printf("[config] WARNING: invalid server.update.defer_days %d (0-365), using default 0", u.DeferDays)
+		u.DeferDays = 0
 	}
 }

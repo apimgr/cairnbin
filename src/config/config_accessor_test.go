@@ -230,15 +230,15 @@ func TestSetUpdateBranch_UpdatesExisting(t *testing.T) {
 	if err := config.SetUpdateBranch(path, "stable"); err != nil {
 		t.Fatalf("first SetUpdateBranch: %v", err)
 	}
-	if err := config.SetUpdateBranch(path, "daily"); err != nil {
+	if err := config.SetUpdateBranch(path, "devel"); err != nil {
 		t.Fatalf("second SetUpdateBranch: %v", err)
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Server.Update.Branch != "daily" {
-		t.Errorf("Update.Branch = %q, want %q", cfg.Server.Update.Branch, "daily")
+	if cfg.Server.Update.Branch != "devel" {
+		t.Errorf("Update.Branch = %q, want %q", cfg.Server.Update.Branch, "devel")
 	}
 }
 

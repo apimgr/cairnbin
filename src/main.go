@@ -627,7 +627,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 Commands:
   check              Check for updates without installing
   yes                Download and install the latest update, then restart
-  branch <name>      Switch update branch (stable|beta|daily)
+  branch <name>      Switch update branch (stable|beta|devel)
 
 Examples:
   %s --update check
@@ -679,12 +679,15 @@ Examples:
 		case strings.HasPrefix(updateCmd, "branch"):
 			parts := strings.Fields(updateCmd)
 			if len(parts) < 2 {
-				fmt.Fprintf(stderr, "Usage: %s --update branch <stable|beta|daily>\n", binaryName)
+				fmt.Fprintf(stderr, "Usage: %s --update branch <stable|beta|devel>\n", binaryName)
 				return 2
 			}
-			branch := parts[1]
-			switch branch {
-			case "stable", "beta", "daily":
+			branch, branchOK := updater.NormalizeBranch(parts[1])
+			if parts[1] == "" {
+				branchOK = false
+			}
+			switch {
+			case branchOK:
 				// Persist the branch choice to the config file (server.update.branch).
 				if writeErr := config.SetUpdateBranch(updateCfgFile, branch); writeErr != nil {
 					fmt.Fprintf(stderr, "%s: could not persist update branch: %v\n", binaryName, writeErr)
@@ -692,7 +695,7 @@ Examples:
 				}
 				fmt.Fprintf(stdout, "Update branch set to: %s\n", branch)
 			default:
-				fmt.Fprintf(stderr, "%s: unknown branch: %s (use stable|beta|daily)\n", binaryName, branch)
+				fmt.Fprintf(stderr, "%s: unknown branch: %s (use stable|beta|devel)\n", binaryName, parts[1])
 				return 2
 			}
 			return 0
@@ -1159,6 +1162,11 @@ Examples:
 		DiskThreshold: cfg.Server.Maintenance.Cleanup.DiskThreshold,
 		Audit:         auditW,
 		Compliance:    cfg.Server.Compliance.Enabled,
+	}
+	// PART 21: warn at startup while backups are unencrypted; the warning stops
+	// once server.backup.encryption.enabled is set.
+	if !cfg.Server.Backup.Encryption.Enabled {
+		log.Printf("WARN: backup encryption not configured; backups are NOT encrypted (set server.backup.encryption.enabled and supply the password when prompted)")
 	}
 	logSchedErr(sched.Register("backup_daily", "Backup Daily", "0 2 * * *", true,
 		task.BackupDaily(backupCfg)))

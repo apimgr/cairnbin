@@ -118,6 +118,19 @@ characters, and emoji are stripped before writing. Invalid `rotate`,
 never fails. Rotation is checked on every write (size) and by the
 `log_rotation` scheduler task (time + retention pruning).
 
+### Updates (`server.update`)
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `branch` | `stable` | Release channel: `stable`, `beta`, or `devel` (aliases `daily`, `rolling`, `dev`, `development`) |
+| `auto_install` | `false` | Let the `update_check` task install eligible releases; off means notify only |
+| `defer_days` | `0` | Scheduled task only: a release must be this many days old (0-365); ignored on `devel` |
+| `cli_min_version` | empty | Minimum CLI version, returned as `cli_min_version` by `/api/autodiscover` |
+
+Channels are cumulative: `beta` also sees stable releases, and `devel` also
+sees beta and stable. `--update branch {name}` writes `server.update.branch`.
+Updates are verified against the release's `sha256.txt` before install.
+
 ### Backups (`server.backup`)
 
 Retention keys under `backup.retention`:

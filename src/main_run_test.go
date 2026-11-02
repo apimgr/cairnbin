@@ -494,14 +494,14 @@ func TestRunShellInitFish(t *testing.T) {
 	}
 }
 
-// TestRunUpdateBranchDaily verifies --update branch daily exits 0.
+// TestRunUpdateBranchDaily verifies the daily alias for --update branch devel exits 0.
 func TestRunUpdateBranchDaily(t *testing.T) {
 	code, out, _ := runCapture("--update", "branch", "daily")
 	if code != 0 {
 		t.Errorf("--update branch daily: exit %d, want 0", code)
 	}
-	if !strings.Contains(out, "daily") {
-		t.Errorf("--update branch daily: output missing 'daily'; got %q", out)
+	if !strings.Contains(out, "devel") {
+		t.Errorf("--update branch daily: output missing 'devel'; got %q", out)
 	}
 }
 

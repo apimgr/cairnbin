@@ -3261,7 +3261,7 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 			// Empty map = no CLI binaries hosted by this server; clients stay on their
 			// installed version. Operators can populate via the release workflow.
 			"cli_versions":    map[string]interface{}{},
-			"cli_min_version": "0.0.0",
+			"cli_min_version": s.liveCfg().Server.Update.CLIMinVersion,
 
 			// Feature flags visible to clients
 			"features": map[string]interface{}{

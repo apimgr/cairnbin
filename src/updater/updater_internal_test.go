@@ -33,23 +33,23 @@ func TestMatchesBranch(t *testing.T) {
 		{"beta", "v1.0.0-beta", true, true},
 		{"beta", "v1.0.0", true, false},
 		{"beta", "v1.0.0-rc1", true, false},
-		// daily branch — the single rolling "daily" tag
-		{"daily", "daily", true, true},
-		// a timestamp-shaped tag is not the daily tag
-		{"daily", "20250115120000", true, false},
-		{"daily", "v1.0.20250115", true, false},
-		// beta channel must not accept the rolling daily tag
-		{"beta", "daily", true, false},
-		// stable branch must not accept the rolling daily tag
-		{"stable", "daily", true, false},
+		// devel branch — the single rolling "devel" tag
+		{"devel", "devel", true, true},
+		// a timestamp-shaped tag is not the devel tag
+		{"devel", "20250115120000", true, false},
+		{"devel", "v1.0.20250115", true, false},
+		// beta channel must not accept the rolling devel tag
+		{"beta", "devel", true, false},
+		// stable branch must not accept the rolling devel tag
+		{"stable", "devel", true, false},
 		// unknown branch behaves like stable
 		{"unknown", "v2.0.0", false, true},
 		{"unknown", "v2.0.0", true, false},
 		// channels are cumulative — a stable release matches every channel
 		{"beta", "v1.0.0", false, true},
-		{"daily", "v1.0.0", false, true},
-		// a beta prerelease also matches the (less stable) daily channel
-		{"daily", "v1.0.0-beta", true, true},
+		{"devel", "v1.0.0", false, true},
+		// a beta prerelease also matches the (less stable) devel channel
+		{"devel", "v1.0.0-beta", true, true},
 	}
 	for _, tc := range cases {
 		r := Release{TagName: tc.tag, Prerelease: tc.pre}
@@ -70,7 +70,7 @@ func TestFetchExpectedChecksum_HashAndFilenameFormat(t *testing.T) {
 	defer srv.Close()
 
 	client := &http.Client{}
-	rel := &Release{Assets: []Asset{{Name: "checksums.txt", BrowserDownloadURL: srv.URL}}}
+	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
 	hash, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
 	if err != nil {
 		t.Fatalf("fetchExpectedChecksum error: %v", err)
@@ -87,7 +87,7 @@ func TestFetchExpectedChecksum_NoMatch_Errors(t *testing.T) {
 	defer srv.Close()
 
 	client := &http.Client{}
-	rel := &Release{Assets: []Asset{{Name: "checksums.txt", BrowserDownloadURL: srv.URL}}}
+	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
 	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error when no matching entry is found, got nil")
@@ -99,7 +99,7 @@ func TestFetchExpectedChecksum_NoChecksumsAsset_Errors(t *testing.T) {
 	rel := &Release{Assets: []Asset{{Name: "pastebin-linux-amd64", BrowserDownloadURL: "http://example.com/bin"}}}
 	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
 	if err == nil {
-		t.Fatal("expected error when release has no checksums.txt asset, got nil")
+		t.Fatal("expected error when release has no sha256.txt asset, got nil")
 	}
 }
 
@@ -292,7 +292,7 @@ func TestDoUpdate_WithChecksumAsset(t *testing.T) {
 	expectedHash := hex.EncodeToString(h.Sum(nil))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "checksums.txt") {
+		if strings.HasSuffix(r.URL.Path, "sha256.txt") {
 			w.Write([]byte(expectedHash + "  " + assetName + "\n"))
 		} else {
 			w.Write(fakeContent)
@@ -304,7 +304,7 @@ func TestDoUpdate_WithChecksumAsset(t *testing.T) {
 		TagName: "v9.9.9",
 		Assets: []Asset{
 			{Name: assetName, BrowserDownloadURL: srv.URL + "/bin"},
-			{Name: "checksums.txt", BrowserDownloadURL: srv.URL + "/checksums.txt"},
+			{Name: "sha256.txt", BrowserDownloadURL: srv.URL + "/sha256.txt"},
 		},
 	}
 
@@ -326,7 +326,7 @@ func TestDoUpdate_ChecksumMismatch(t *testing.T) {
 	assetName := binaryAssetName()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "checksums.txt") {
+		if strings.HasSuffix(r.URL.Path, "sha256.txt") {
 			// Return a wrong hash for the asset.
 			w.Write([]byte("0000000000000000000000000000000000000000000000000000000000000000  " + assetName + "\n"))
 		} else {
@@ -339,7 +339,7 @@ func TestDoUpdate_ChecksumMismatch(t *testing.T) {
 		TagName: "v9.9.9",
 		Assets: []Asset{
 			{Name: assetName, BrowserDownloadURL: srv.URL + "/bin"},
-			{Name: "checksums.txt", BrowserDownloadURL: srv.URL + "/checksums.txt"},
+			{Name: "sha256.txt", BrowserDownloadURL: srv.URL + "/sha256.txt"},
 		},
 	}
 
@@ -352,7 +352,7 @@ func TestDoUpdate_ChecksumMismatch(t *testing.T) {
 }
 
 // TestDoUpdate_NoChecksumRefuses verifies the fail-closed policy: a release
-// that ships the binary but no checksums.txt asset must be refused rather
+// that ships the binary but no sha256.txt asset must be refused rather
 // than installed unverified.
 func TestDoUpdate_NoChecksumRefuses(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -377,12 +377,12 @@ func TestDoUpdate_NoChecksumRefuses(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected refusal when no checksum is published, got nil")
 	}
-	if !strings.Contains(err.Error(), "checksums.txt") {
+	if !strings.Contains(err.Error(), "sha256.txt") {
 		t.Errorf("expected unverified-update refusal, got: %v", err)
 	}
 }
 
-// ─── isSameVersion / isDailyTag ──────────────────────────────────────────────
+// ─── isSameVersion / isDevelTag ──────────────────────────────────────────────
 
 // TestIsSameVersion verifies the tag comparison ignores the "v" prefix that
 // release.yml omits from the stamped Version but includes in tag_name.
@@ -401,7 +401,7 @@ func TestIsSameVersion(t *testing.T) {
 		{"v1.0.1", "1.0.0", false},
 		{"v2.0.0", "1.0.0", false},
 		// a rolling tag never equals a version string
-		{"daily", "1.0.0", false},
+		{"devel", "1.0.0", false},
 	}
 	for _, tc := range cases {
 		if got := isSameVersion(tc.tag, tc.current); got != tc.want {
@@ -410,17 +410,17 @@ func TestIsSameVersion(t *testing.T) {
 	}
 }
 
-// TestIsDailyTag verifies the rolling daily tag is recognised exactly.
+// TestIsDailyTag verifies the rolling devel tag is recognised exactly.
 func TestIsDailyTag(t *testing.T) {
 	cases := map[string]bool{
-		"daily":          true,
+		"devel":          true,
 		"v1.0.0":         false,
 		"20250115120000": false,
 		"":               false,
 	}
 	for tag, want := range cases {
-		if got := isDailyTag(tag); got != want {
-			t.Errorf("isDailyTag(%q) = %v, want %v", tag, got, want)
+		if got := isDevelTag(tag); got != want {
+			t.Errorf("isDevelTag(%q) = %v, want %v", tag, got, want)
 		}
 	}
 }
@@ -466,11 +466,11 @@ func TestCheckForUpdateURL_StableGenuineUpgrade(t *testing.T) {
 }
 
 // TestCheckForUpdateURL_DailyRollingTagUsesBuildEpoch verifies the rolling
-// "daily" tag is resolved by publish time against the binary's build epoch,
+// "devel" tag is resolved by publish time against the binary's build epoch,
 // since the tag name itself never changes.
 func TestCheckForUpdateURL_DailyRollingTagUsesBuildEpoch(t *testing.T) {
 	newer := time.Unix(2_000_000_000, 0).UTC()
-	releases := []Release{{TagName: "daily", Prerelease: true, PublishedAt: newer}}
+	releases := []Release{{TagName: "devel", Prerelease: true, PublishedAt: newer}}
 
 	cases := []struct {
 		name       string
@@ -492,7 +492,7 @@ func TestCheckForUpdateURL_DailyRollingTagUsesBuildEpoch(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			rel, err := CheckForUpdateURL(context.Background(), "1.0.0", "daily", tc.buildEpoch, srv.URL+"/releases")
+			rel, err := CheckForUpdateURL(context.Background(), "1.0.0", "devel", tc.buildEpoch, srv.URL+"/releases")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -503,7 +503,7 @@ func TestCheckForUpdateURL_DailyRollingTagUsesBuildEpoch(t *testing.T) {
 	}
 }
 
-// TestCheckForUpdateURL_DailySkipsBetaAndStableTags verifies the daily channel
+// TestCheckForUpdateURL_DailySkipsBetaAndStableTags verifies the devel channel
 // does not stop at an unversioned older release: a real version ahead of the
 // running one is still offered.
 func TestCheckForUpdateURL_DailySkipsBetaAndStableTags(t *testing.T) {
@@ -513,7 +513,7 @@ func TestCheckForUpdateURL_DailySkipsBetaAndStableTags(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	rel, err := CheckForUpdateURL(context.Background(), "1.0.0", "daily", 0, srv.URL+"/releases")
+	rel, err := CheckForUpdateURL(context.Background(), "1.0.0", "devel", 0, srv.URL+"/releases")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -550,7 +550,7 @@ func TestRestartArgs_StripsUpdateSelector(t *testing.T) {
 		},
 		{
 			name: "update branch consumes the channel",
-			in:   []string{"pastebin", "--update", "branch", "daily"},
+			in:   []string{"pastebin", "--update", "branch", "devel"},
 			want: []string{"pastebin"},
 		},
 		{
@@ -654,5 +654,63 @@ func TestRestartArgs_StripsUpdateSelector(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// ─── NormalizeBranch / deferred checks (PART 22) ─────────────────────────────
+
+func TestNormalizeBranch(t *testing.T) {
+	cases := map[string]string{
+		"": "stable", "stable": "stable", "beta": "beta", "devel": "devel",
+		"daily": "devel", "rolling": "devel", "dev": "devel", "development": "devel", "DEVEL": "devel",
+	}
+	for in, want := range cases {
+		got, ok := NormalizeBranch(in)
+		if !ok || got != want {
+			t.Errorf("NormalizeBranch(%q) = %q, %v; want %q", in, got, ok, want)
+		}
+	}
+	if _, ok := NormalizeBranch("nightly"); ok {
+		t.Error("unknown channel must not normalize")
+	}
+}
+
+// TestCheckDeferred_PicksNewestEligible mirrors the spec example: running
+// v1.2.2, v1.2.3 is 40 days old, v1.2.4 is 5 days old, defer_days 30 → v1.2.3.
+func TestCheckDeferred_PicksNewestEligible(t *testing.T) {
+	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	releases := []Release{
+		{TagName: "v1.2.4", PublishedAt: now.Add(-5 * 24 * time.Hour)},
+		{TagName: "v1.2.3", PublishedAt: now.Add(-40 * 24 * time.Hour)},
+		{TagName: "v1.2.2", PublishedAt: now.Add(-60 * 24 * time.Hour)},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(releases)
+	}))
+	defer srv.Close()
+
+	rel, err := checkDeferredURL(context.Background(), "v1.2.2", "stable", 30, srv.URL, now)
+	if err != nil || rel == nil || rel.TagName != "v1.2.3" {
+		t.Fatalf("got %+v, %v; want v1.2.3", rel, err)
+	}
+	// Nothing eligible and newer: running v1.2.3 with only v1.2.4 (too new).
+	rel, err = checkDeferredURL(context.Background(), "v1.2.3", "stable", 30, srv.URL, now)
+	if err != nil || rel != nil {
+		t.Fatalf("got %+v, %v; want nil", rel, err)
+	}
+}
+
+func TestFetchExpectedChecksum_UsesSha256Txt(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("abc123  pastebin-linux-amd64\n"))
+	}))
+	defer srv.Close()
+	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
+	got, err := fetchExpectedChecksum(context.Background(), srv.Client(), rel, "pastebin-linux-amd64")
+	if err != nil || got != "abc123" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if _, err := fetchExpectedChecksum(context.Background(), srv.Client(), &Release{}, "x"); err == nil {
+		t.Error("release without sha256.txt must be refused")
 	}
 }
