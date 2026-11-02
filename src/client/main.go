@@ -677,6 +677,10 @@ func main() {
 	// flag.Parse accepts it and --help lists it.
 	flag.String("config", "", "config profile name or path (default: cli.yml)")
 
+	// --shell takes a sub-command (completions|init|help) that follows as the
+	// next argument; declared as a bool so flag.Parse accepts it.
+	shellFlag := flag.Bool("shell", false, "shell integration: completions, init, help")
+
 	// -h and -v are aliases for --help and --version.
 	flag.BoolVar(showHelp, "h", false, "show help and exit")
 	flag.BoolVar(showVersion, "v", false, "print version and exit")
@@ -714,7 +718,7 @@ func main() {
 	setUILang(locale)
 
 	if *showHelp {
-		printUsage()
+		writeUsage(os.Stdout)
 		return
 	}
 
@@ -733,18 +737,21 @@ func main() {
 	}
 
 	// --shell completions / --shell init — handle before server check.
-	if len(args) >= 1 && args[0] == "--shell" {
+	if *shellFlag || (len(args) >= 1 && args[0] == "--shell") {
+		if !*shellFlag {
+			args = args[1:]
+		}
 		shellArg := ""
-		if len(args) >= 2 {
-			shellArg = args[1]
+		if len(args) >= 1 {
+			shellArg = args[0]
 		}
 		switch shellArg {
 		case "--help", "help", "":
 			shell.PrintHelp(binName())
 		case "init":
 			shellShell := ""
-			if len(args) >= 3 {
-				shellShell = args[2]
+			if len(args) >= 2 {
+				shellShell = args[1]
 			}
 			if err := shell.PrintInit(binName(), shellShell); err != nil {
 				fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_shell_init", "error", err))
@@ -752,8 +759,8 @@ func main() {
 			}
 		case "completions":
 			shellShell := ""
-			if len(args) >= 3 {
-				shellShell = args[2]
+			if len(args) >= 2 {
+				shellShell = args[1]
 			}
 			if err := shell.PrintClientCompletions(binName(), shellShell); err != nil {
 				fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_shell_completions", "error", err))
@@ -764,6 +771,19 @@ func main() {
 			fmt.Fprintln(os.Stderr, tf("shell_try_help", "binary", binName()))
 			os.Exit(exitUsage)
 		}
+		return
+	}
+
+	// "<command> help" / "<command> --help" and "help <command>" never need a
+	// server or a readable cli.yml.
+	if len(args) >= 2 && (args[1] == "help" || args[1] == "--help" || args[1] == "-h") && printCommandHelp(os.Stdout, args[0]) {
+		return
+	}
+	if len(args) >= 1 && args[0] == "help" {
+		if len(args) >= 2 && printCommandHelp(os.Stdout, args[1]) {
+			return
+		}
+		writeUsage(os.Stdout)
 		return
 	}
 
@@ -2079,61 +2099,114 @@ func reorderCommandArgs(args []string, valueFlags ...string) []string {
 	return append(flags, positional...)
 }
 
-func printUsage() {
+// helpRow prints one spec-style flag row: "--flag ARG        - description".
+func helpRow(w io.Writer, flagSpec, desc string) {
+	fmt.Fprintf(w, "%-39s- %s\n", flagSpec, desc)
+}
+
+// printUsage writes the spec --help layout (PART 32 "--help Output") to
+// stderr; used by flag.Usage and by usage errors.
+func printUsage() { writeUsage(os.Stderr) }
+
+// writeUsage renders the help text: tagline, usage, the universal flag set,
+// then the project-specific commands and flags, shells and footer lines.
+func writeUsage(w io.Writer) {
 	binaryName := binName()
-	// AI.md PART 32 "Server Address Resolution" (line 45128-45136): when the
-	// binary was built with a compiled {official_site}, --help shows it as
-	// the default; otherwise the flag stays marked required.
 	serverFlagHelp := t("help_flag_server_required")
 	if OfficialSite != "" {
 		serverFlagHelp = tf("help_flag_server_default", "site", OfficialSite)
 	}
-	fmt.Fprintf(os.Stderr, "%s\n\n", tf("help_tagline", "binary", binaryName, "version", Version))
-	fmt.Fprintf(os.Stderr, "%s\n", t("help_head_usage"))
-	fmt.Fprintf(os.Stderr, "    %s\n\n", tf("help_usage_line", "binary", binaryName))
+	fmt.Fprintf(w, "%s\n\n", tf("help_tagline", "binary", binaryName, "version", Version))
+	fmt.Fprintf(w, "%s\n", t("help_head_usage"))
+	fmt.Fprintf(w, "  %s [command] [flags]\n", binaryName)
+	fmt.Fprintf(w, "  # %s\n  %s\n\n", t("help_tui_comment"), binaryName)
 
-	fmt.Fprintf(os.Stderr, "%s\n", t("help_head_commands"))
-	fmt.Fprintf(os.Stderr, "    create [file]        %s\n", t("help_cmd_create"))
-	fmt.Fprintf(os.Stderr, "    get <id>             %s\n", t("help_cmd_get"))
-	fmt.Fprintf(os.Stderr, "    delete <id> <token>  %s\n", t("help_cmd_delete"))
-	fmt.Fprintf(os.Stderr, "    list [--limit N]     %s\n", t("help_cmd_list"))
-	fmt.Fprintf(os.Stderr, "    update [check|yes]   %s\n\n", t("help_cmd_update"))
-	fmt.Fprintf(os.Stderr, "    %s\n\n", t("help_cmd_tui_note"))
+	fmt.Fprintf(w, "%s\n", t("help_head_flags"))
+	helpRow(w, "-h, --help", t("help_flag_help"))
+	helpRow(w, "-v, --version", t("help_flag_version"))
+	helpRow(w, "--shell completions [SHELL]", t("help_flag_shell_completions"))
+	helpRow(w, "--shell init [SHELL]", t("help_flag_shell_init"))
+	helpRow(w, "--shell help", t("help_flag_shell_help"))
+	fmt.Fprintln(w)
+	helpRow(w, "--server URL", serverFlagHelp)
+	helpRow(w, "--token TOKEN", t("help_flag_token"))
+	helpRow(w, "--token-file FILE", t("help_flag_token_file"))
+	helpRow(w, "--config NAME", t("help_flag_config"))
+	helpRow(w, "--debug", t("help_flag_debug"))
+	helpRow(w, "--color {auto|yes|no}", t("help_flag_color"))
+	helpRow(w, "--lang CODE", t("help_flag_lang"))
+	fmt.Fprintln(w)
 
-	fmt.Fprintf(os.Stderr, "%s\n", t("help_head_create_flags"))
-	fmt.Fprintf(os.Stderr, "    --lang <lang>        %s\n", t("help_flag_lang_create"))
-	fmt.Fprintf(os.Stderr, "    --expiry <duration>  %s\n", t("help_flag_expiry"))
-	fmt.Fprintf(os.Stderr, "    --burn <n>           %s\n", t("help_flag_burn"))
-	fmt.Fprintf(os.Stderr, "    --unlisted           %s\n", t("help_flag_unlisted"))
-	fmt.Fprintf(os.Stderr, "    --title <title>      %s\n", t("help_flag_title"))
-	fmt.Fprintf(os.Stderr, "    --link                %s\n", t("help_flag_link"))
-	fmt.Fprintf(os.Stderr, "                          %s\n\n", t("help_flag_link_cont"))
+	fmt.Fprintf(w, "%s\n", t("help_head_global_flags"))
+	helpRow(w, "--output FORMAT", t("help_flag_output"))
+	helpRow(w, "--json", t("help_flag_json"))
+	helpRow(w, "--verbose", t("help_flag_verbose"))
+	helpRow(w, "--update check|yes", t("help_flag_update"))
+	fmt.Fprintln(w)
 
-	fmt.Fprintf(os.Stderr, "%s\n", t("help_head_list_flags"))
-	fmt.Fprintf(os.Stderr, "    --limit <n>          %s\n", t("help_flag_limit"))
-	fmt.Fprintf(os.Stderr, "    --page <n>           %s\n\n", t("help_flag_page"))
+	fmt.Fprintf(w, "%s\n", t("help_head_commands"))
+	helpRow(w, "create [file]", t("help_cmd_create"))
+	helpRow(w, "get <id>", t("help_cmd_get"))
+	helpRow(w, "delete <id> <token>", t("help_cmd_delete"))
+	helpRow(w, "list", t("help_cmd_list"))
+	helpRow(w, "update [check|yes]", t("help_cmd_update"))
+	fmt.Fprintln(w)
 
-	fmt.Fprintf(os.Stderr, "%s\n", t("help_head_global_flags"))
-	fmt.Fprintf(os.Stderr, "    --server <url>       %s\n", serverFlagHelp)
-	fmt.Fprintf(os.Stderr, "    --token <token>      %s\n", t("help_flag_token"))
-	fmt.Fprintf(os.Stderr, "    --token-file <file>  %s\n", t("help_flag_token_file"))
-	fmt.Fprintf(os.Stderr, "    --json               %s\n", t("help_flag_json"))
-	fmt.Fprintf(os.Stderr, "    --output <format>    %s\n", t("help_flag_output"))
-	fmt.Fprintf(os.Stderr, "    --color <when>       %s\n", t("help_flag_color"))
-	fmt.Fprintf(os.Stderr, "    --lang <code>        %s\n", t("help_flag_lang"))
-	fmt.Fprintf(os.Stderr, "    --config <name>      %s\n", t("help_flag_config"))
-	fmt.Fprintf(os.Stderr, "    --debug              %s\n", t("help_flag_debug"))
-	fmt.Fprintf(os.Stderr, "    --verbose            %s\n", t("help_flag_verbose"))
-	fmt.Fprintf(os.Stderr, "    --update check|yes   %s\n", t("help_flag_update"))
-	fmt.Fprintf(os.Stderr, "    --version            %s\n", t("help_flag_version"))
-	fmt.Fprintf(os.Stderr, "    --shell completions [SHELL]  %s\n", t("help_flag_shell_completions"))
-	fmt.Fprintf(os.Stderr, "    --shell init [SHELL]         %s\n", t("help_flag_shell_init"))
-	fmt.Fprintf(os.Stderr, "    --shell --help               %s\n\n", t("help_flag_shell_help"))
+	fmt.Fprintf(w, "%s\n", t("help_head_create_flags"))
+	writeCreateFlags(w)
+	fmt.Fprintf(w, "\n%s\n", t("help_head_list_flags"))
+	writeListFlags(w)
 
-	fmt.Fprintf(os.Stderr, "%s\n", t("help_head_examples"))
-	fmt.Fprintf(os.Stderr, "    PASTEBIN_SERVER_PRIMARY=https://paste.example.com %s create --lang text < file.txt\n", binaryName)
-	fmt.Fprintf(os.Stderr, "    %s --server https://paste.example.com create --lang go myfile.go\n", binaryName)
-	fmt.Fprintf(os.Stderr, "    %s --server https://paste.example.com get abc12345\n", binaryName)
-	fmt.Fprintf(os.Stderr, "    %s --server https://paste.example.com delete abc12345 <delete-token>\n", binaryName)
-	fmt.Fprintf(os.Stderr, "    %s --server https://paste.example.com list --limit 10\n\n", binaryName)
+	fmt.Fprintf(w, "\n%s\n", t("help_head_examples"))
+	fmt.Fprintf(w, "  PASTEBIN_SERVER_PRIMARY=https://paste.example.com %s create --lang text < file.txt\n", binaryName)
+	fmt.Fprintf(w, "  %s --server https://paste.example.com create --lang go myfile.go\n", binaryName)
+	fmt.Fprintf(w, "  %s --server https://paste.example.com get abc12345\n", binaryName)
+	fmt.Fprintf(w, "  %s --server https://paste.example.com delete abc12345 <delete-token>\n", binaryName)
+	fmt.Fprintf(w, "  %s --server https://paste.example.com list --limit 10\n\n", binaryName)
+
+	fmt.Fprintf(w, "%s: bash, zsh, fish, sh, dash, ksh, powershell, pwsh\n\n", t("help_shells_label"))
+	fmt.Fprintf(w, "%s\n", t("help_footer_tui"))
+	fmt.Fprintf(w, "%s\n", tf("help_footer_cmd", "binary", binaryName))
+}
+
+func writeCreateFlags(w io.Writer) {
+	helpRow(w, "--lang LANG", t("help_flag_lang_create"))
+	helpRow(w, "--expiry DURATION", t("help_flag_expiry"))
+	helpRow(w, "--burn N", t("help_flag_burn"))
+	helpRow(w, "--unlisted", t("help_flag_unlisted"))
+	helpRow(w, "--title TITLE", t("help_flag_title"))
+	helpRow(w, "--link", t("help_flag_link")+" "+t("help_flag_link_cont"))
+}
+
+func writeListFlags(w io.Writer) {
+	helpRow(w, "--limit N", t("help_flag_limit"))
+	helpRow(w, "--page N", t("help_flag_page"))
+}
+
+// printCommandHelp implements "<binary> <command> help" (PART 32): detailed
+// help for one command, served before any server/config checks. Returns false
+// when the command is unknown.
+func printCommandHelp(w io.Writer, command string) bool {
+	binaryName := binName()
+	usage := map[string]struct{ line, desc string }{
+		"create": {"create [file] [flags]", "help_cmd_create"},
+		"get":    {"get <id>", "help_cmd_get"},
+		"delete": {"delete <id> <token>", "help_cmd_delete"},
+		"list":   {"list [flags]", "help_cmd_list"},
+		"update": {"update [check|yes]", "help_cmd_update"},
+	}
+	u, ok := usage[command]
+	if !ok {
+		return false
+	}
+	fmt.Fprintf(w, "%s\n  %s [global flags] %s\n\n%s\n", t("help_head_usage"), binaryName, u.line, t(u.desc))
+	switch command {
+	case "create":
+		fmt.Fprintf(w, "\n%s\n", t("help_head_create_flags"))
+		writeCreateFlags(w)
+	case "list":
+		fmt.Fprintf(w, "\n%s\n", t("help_head_list_flags"))
+		writeListFlags(w)
+	}
+	return true
 }
