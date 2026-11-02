@@ -60,6 +60,11 @@ type BackupOptions struct {
 	Password string
 	// empty = auto-generate
 	Filename string
+	// IncludeSSL adds {config_dir}/ssl/ to the archive (--include-ssl).
+	IncludeSSL bool
+	// IncludeData adds {data_dir}/ (except db/ and the backup dir) to the
+	// archive (--include-data).
+	IncludeData bool
 	// ComplianceEnabled mirrors server.compliance.enabled (AI.md 28945-28989).
 	// When true, Backup refuses to run unless Password is set.
 	ComplianceEnabled bool
@@ -141,6 +146,12 @@ func Backup(opts BackupOptions) error {
 	// private key's KDF input is installation_secret, which lives in server.db
 	// (already archived), so the backup is self-sufficient to restore.
 	addDir(filepath.Join(opts.ConfigDir, "security"), "security")
+	if opts.IncludeSSL {
+		addDir(filepath.Join(opts.ConfigDir, "ssl"), "ssl")
+	}
+	if opts.IncludeData {
+		addDataDir(addFile, opts.DataDir, opts.BackupDir)
+	}
 
 	// Compute content checksum: SHA-256 of all data file bytes in archive order,
 	// excluding the manifest. This avoids the circular-dependency that would arise
@@ -231,6 +242,17 @@ func Restore(archivePath, configDir, dataDir, password string) error {
 // RestoreWithVersion warns when the backup was produced by a different app
 // version, then restores it after all integrity checks pass.
 func RestoreWithVersion(archivePath, configDir, dataDir, password, runningVersion string) error {
+	return RestoreWithLimits(archivePath, configDir, dataDir, password, runningVersion, DefaultRestoreLimits())
+}
+
+// RestoreWithLimits is RestoreWithVersion with explicit `server.restore`
+// limits: the archive size is checked before it is read, and extraction aborts
+// the moment the file count, per-file size, expanded size, or expansion ratio
+// limit is crossed.
+func RestoreWithLimits(archivePath, configDir, dataDir, password, runningVersion string, limits RestoreLimits) error {
+	if err := limits.checkArchiveSize(archivePath); err != nil {
+		return fmt.Errorf("backup rejected: %w", err)
+	}
 	// Verify the backup before touching any live config or data (PART 21:
 	// "Only proceed with restore if ALL verification checks pass").
 	if err := VerifyBackup(archivePath, password); err != nil {
@@ -290,6 +312,7 @@ func RestoreWithVersion(archivePath, configDir, dataDir, password, runningVersio
 	defer gr.Close()
 
 	tr := tar.NewReader(gr)
+	budget := &extractBudget{limits: limits, compressed: int64(len(data))}
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -301,7 +324,10 @@ func RestoreWithVersion(archivePath, configDir, dataDir, password, runningVersio
 		if hdr.Name == "manifest.json" {
 			continue
 		}
-		if err := extractEntry(tr, hdr, configDir, dataDir); err != nil {
+		if err := budget.admit(hdr.Size); err != nil {
+			return fmt.Errorf("backup rejected: %w", err)
+		}
+		if err := extractEntryBudget(tr, hdr, configDir, dataDir, budget); err != nil {
 			return fmt.Errorf("extracting %s: %w", hdr.Name, err)
 		}
 	}
@@ -422,6 +448,7 @@ func PrintHelp(binaryName string) {
 
 Commands:
   backup [filename]   Create a backup of config and database files
+                      (--include-ssl adds ssl/, --include-data adds the data dir)
   backup test         Dry-run verify the security keypair decrypts
   restore <file>      Restore from a backup file
   update              Update the binary to the latest release (alias: --update yes)
@@ -681,6 +708,10 @@ func addToTar(tw *tar.Writer, srcPath, archiveName string) error {
 }
 
 func extractEntry(tr *tar.Reader, hdr *tar.Header, configDir, dataDir string) error {
+	return extractEntryBudget(tr, hdr, configDir, dataDir, &extractBudget{limits: DefaultRestoreLimits()})
+}
+
+func extractEntryBudget(tr *tar.Reader, hdr *tar.Header, configDir, dataDir string, budget *extractBudget) error {
 	// Map archive names to destination paths.
 	var dest string
 	switch hdr.Name {
@@ -702,6 +733,10 @@ func extractEntry(tr *tar.Reader, hdr *tar.Header, configDir, dataDir string) er
 			base, prefix = filepath.Join(configDir, "theme"), "theme/"
 		case strings.HasPrefix(hdr.Name, "security/"):
 			base, prefix = filepath.Join(configDir, "security"), "security/"
+		case strings.HasPrefix(hdr.Name, "ssl/"):
+			base, prefix = filepath.Join(configDir, "ssl"), "ssl/"
+		case strings.HasPrefix(hdr.Name, "data/"):
+			base, prefix = dataDir, "data/"
 		default:
 			// unknown entry — skip
 			return nil
@@ -742,10 +777,21 @@ func extractEntry(tr *tar.Reader, hdr *tar.Header, configDir, dataDir string) er
 		return fmt.Errorf("chmod %s: %w", dest, err)
 	}
 
-	// 256 MiB cap per entry
-	lr := io.LimitReader(tr, 256<<20)
-	_, err = io.Copy(f, lr)
-	return err
+	// Read at most one byte past the per-file limit so an entry whose header
+	// understates its size is still caught; the written total feeds the
+	// expanded-size and ratio checks.
+	var reader io.Reader = tr
+	if budget.limits.MaxFileSize > 0 {
+		reader = io.LimitReader(tr, budget.limits.MaxFileSize+1)
+	}
+	n, err := io.Copy(f, reader)
+	if err != nil {
+		return err
+	}
+	if budget.limits.MaxFileSize > 0 && n > budget.limits.MaxFileSize {
+		return fmt.Errorf("entry exceeds server.restore.max_file_size (%d)", budget.limits.MaxFileSize)
+	}
+	return budget.account(n)
 }
 
 // rejectSymlinkedPath walks every component of path from the filesystem root
@@ -836,4 +882,31 @@ func decrypt(data []byte, password string) ([]byte, error) {
 // argon2Key derives a 32-byte AES key from a password and salt using Argon2id.
 func argon2Key(password string, salt []byte) []byte {
 	return argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+}
+
+// addDataDir walks dataDir for --include-data, skipping db/ (server.db and
+// users.db are always archived on their own) and the backup directory so a
+// backup never contains earlier backups.
+func addDataDir(addFile func(src, name string), dataDir, backupDir string) {
+	skipDB := filepath.Join(dataDir, "db")
+	filepath.Walk(dataDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			if path == skipDB || (backupDir != "" && path == filepath.Clean(backupDir)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(dataDir, path)
+		if relErr != nil {
+			return nil
+		}
+		addFile(path, filepath.Join("data", rel))
+		return nil
+	})
 }

@@ -124,10 +124,10 @@ Retention keys under `backup.retention`:
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `max_backups` | `30` | Newest N dated backups kept |
-| `keep_weekly` | `4` | Sunday backups kept |
-| `keep_monthly` | `12` | First-of-month backups kept |
-| `keep_yearly` | `3` | Jan 1st backups kept |
+| `max_backups` | `1` | Daily full backups kept (at least 1) |
+| `keep_weekly` | `0` | Sunday backups kept |
+| `keep_monthly` | `0` | First-of-month backups kept |
+| `keep_yearly` | `0` | Jan 1st backups kept |
 | `max_total_size` | `10%` | Hard size cap on retained backups |
 
 `max_total_size` accepts a percent of the backup volume (`10%`) or an
@@ -139,6 +139,22 @@ Before each daily backup the server checks free disk space: the backup
 is skipped (with a `backup.skipped_disk_full` audit event) when free
 space is less than 2x the last backup size or disk usage exceeds
 `maintenance.cleanup.disk_threshold` (default 90%).
+
+`--maintenance backup` archives `server.yml`, the databases, and the
+`template/` and `theme/` directories; add `--include-ssl` for
+`{config_dir}/ssl/` and `--include-data` for `{data_dir}/` (excluding
+`db/` and the backup directory).
+
+Restore applies hard limits from `server.restore`, aborting extraction
+when any is crossed:
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `max_archive_size` | `1G` | Largest accepted archive |
+| `max_expanded_size` | `4G` | Largest total expanded size |
+| `max_files` | `10000` | Largest file count |
+| `max_file_size` | `512M` | Largest single extracted file |
+| `max_ratio` | `100` | Largest expanded-to-compressed ratio (`100:1`) |
 
 The `--maintenance setup`, `restore`, and `mode` subcommands require
 authorization: allowed on first run (empty database), as root (with

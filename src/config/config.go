@@ -124,6 +124,8 @@ type ServerConfig struct {
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 	// Compression controls response compression (PART 12).
 	Compression CompressionConfig `yaml:"compression"`
+	// Restore bounds restore/import archive extraction (PART 21).
+	Restore RestoreConfig `yaml:"restore"`
 	// Compliance toggles per-standard regulatory behavior (AI.md Compliance).
 	// All standards are disabled by default; enabled individually. When more
 	// than one is enabled, the strictest requirement wins on overlap.
@@ -1343,6 +1345,22 @@ type SEOCustomVerificationTag struct {
 	Content  string `yaml:"content"`
 }
 
+// RestoreConfig is the `server.restore` block (PART 21): hard limits applied
+// to every restore/import archive so a crafted backup cannot exhaust disk or
+// memory (zip-bomb, file-count and oversized-file protection).
+type RestoreConfig struct {
+	// MaxArchiveSize is the largest archive accepted (default "1G").
+	MaxArchiveSize string `yaml:"max_archive_size"`
+	// MaxExpandedSize is the largest total expanded size (default "4G").
+	MaxExpandedSize string `yaml:"max_expanded_size"`
+	// MaxFiles is the largest number of files in an archive (default 10000).
+	MaxFiles int `yaml:"max_files"`
+	// MaxFileSize is the largest single extracted file (default "512M").
+	MaxFileSize string `yaml:"max_file_size"`
+	// MaxRatio is the largest expanded-to-compressed ratio (default 100).
+	MaxRatio int `yaml:"max_ratio"`
+}
+
 // BackupConfig holds backup, encryption, compliance, and retention settings (PART 21).
 type BackupConfig struct {
 	Encryption BackupEncryptionConfig `yaml:"encryption"`
@@ -1526,6 +1544,13 @@ func DefaultConfig() *Config {
 				Level:   5,
 				Types:   []string{"text/html", "text/css", "text/javascript", "application/json", "application/xml", "text/plain"},
 			},
+			Restore: RestoreConfig{
+				MaxArchiveSize:  "1G",
+				MaxExpandedSize: "4G",
+				MaxFiles:        10000,
+				MaxFileSize:     "512M",
+				MaxRatio:        100,
+			},
 			Compliance: ComplianceConfig{},
 			GeoIP: GeoIPConfig{
 				Enabled: true,
@@ -1668,10 +1693,10 @@ func DefaultConfig() *Config {
 				Encryption: BackupEncryptionConfig{Enabled: false},
 				Compliance: BackupComplianceConfig{Enabled: false},
 				Retention: BackupRetentionConfig{
-					MaxBackups:   30,
-					KeepWeekly:   4,
-					KeepMonthly:  12,
-					KeepYearly:   3,
+					MaxBackups:   1,
+					KeepWeekly:   0,
+					KeepMonthly:  0,
+					KeepYearly:   0,
 					MaxTotalSize: "10%",
 				},
 			},
@@ -2665,6 +2690,8 @@ func Validate(cfg *Config) {
 		cfg.Server.Tokens.CookieMaxAge = d.Server.Tokens.CookieMaxAge
 	}
 
+	validateRestoreLimits(&cfg.Server.Restore)
+	validateBackupRetention(&cfg.Server.Backup.Retention)
 	if cfg.Server.Compression.Level < 1 || cfg.Server.Compression.Level > 9 {
 		log.Printf("[config] WARNING: invalid server.compression.level %d, using default 5", cfg.Server.Compression.Level)
 		cfg.Server.Compression.Level = 5
@@ -3429,4 +3456,59 @@ func migrateLegacyKeys(data []byte) []byte {
 		return data
 	}
 	return out
+}
+
+// validateRestoreLimits warns and substitutes the PART 21 default for any
+// server.restore value that is unparsable or below its minimum; startup never
+// fails on a bad limit.
+func validateRestoreLimits(r *RestoreConfig) {
+	def := RestoreConfig{MaxArchiveSize: "1G", MaxExpandedSize: "4G", MaxFiles: 10000, MaxFileSize: "512M", MaxRatio: 100}
+	fix := func(name string, v *string, d string) {
+		if n, err := ParseSize(*v, -1); err != nil || n <= 0 {
+			log.Printf("[config] WARNING: invalid server.restore.%s %q, using default %s", name, *v, d)
+			*v = d
+		}
+	}
+	fix("max_archive_size", &r.MaxArchiveSize, def.MaxArchiveSize)
+	fix("max_expanded_size", &r.MaxExpandedSize, def.MaxExpandedSize)
+	fix("max_file_size", &r.MaxFileSize, def.MaxFileSize)
+	if r.MaxFiles < 1 {
+		log.Printf("[config] WARNING: invalid server.restore.max_files %d, using default %d", r.MaxFiles, def.MaxFiles)
+		r.MaxFiles = def.MaxFiles
+	}
+	if r.MaxRatio < 1 {
+		log.Printf("[config] WARNING: invalid server.restore.max_ratio %d, using default %d", r.MaxRatio, def.MaxRatio)
+		r.MaxRatio = def.MaxRatio
+	}
+}
+
+// validateBackupRetention applies the PART 21 retention rules: an invalid
+// value warns and falls back to the default (max_backups 1, others 0); values
+// above the recommended thresholds are accepted with a warning.
+func validateBackupRetention(r *BackupRetentionConfig) {
+	if r.MaxBackups < 1 {
+		log.Printf("[config] WARNING: max_backups: %d invalid, using default 1", r.MaxBackups)
+		r.MaxBackups = 1
+	}
+	for _, f := range []struct {
+		name string
+		v    *int
+	}{{"keep_weekly", &r.KeepWeekly}, {"keep_monthly", &r.KeepMonthly}, {"keep_yearly", &r.KeepYearly}} {
+		if *f.v < 0 {
+			log.Printf("[config] WARNING: %s: %d invalid, using default 0", f.name, *f.v)
+			*f.v = 0
+		}
+	}
+	if r.MaxBackups > 7 {
+		log.Printf("[config] WARNING: max_backups: %d exceeds recommended 7 (%d days of daily backups)", r.MaxBackups, r.MaxBackups)
+	}
+	if r.KeepWeekly > 8 {
+		log.Printf("[config] WARNING: keep_weekly: %d exceeds recommended 8", r.KeepWeekly)
+	}
+	if r.KeepMonthly > 12 {
+		log.Printf("[config] WARNING: keep_monthly: %d exceeds recommended 12", r.KeepMonthly)
+	}
+	if r.KeepYearly > 2 {
+		log.Printf("[config] WARNING: keep_yearly: %d exceeds recommended 2", r.KeepYearly)
+	}
 }

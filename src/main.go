@@ -129,6 +129,9 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		// "--maintenance data <export|delete> <prefix>"
 		maintenancePGP []string
 		updateCmd      string
+		// backup content flags (PART 21)
+		includeSSL  bool
+		includeData bool
 	)
 
 	fs := flag.NewFlagSet(binaryName, flag.ContinueOnError)
@@ -158,6 +161,8 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&serviceCmd, "service", "", "Service management")
 	fs.StringVar(&maintenanceCmd, "maintenance", "", "Maintenance operations")
 	fs.StringVar(&updateCmd, "update", "", "Check/perform updates")
+	fs.BoolVar(&includeSSL, "include-ssl", false, "Include {config_dir}/ssl/ in --maintenance backup")
+	fs.BoolVar(&includeData, "include-data", false, "Include {data_dir}/ in --maintenance backup")
 
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(stderr, "%s: %v\n", binaryName, err)
@@ -381,7 +386,9 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				AppVersion: Version,
 				Password:   backupPass,
 				// optional custom filename
-				Filename: maintenanceArg,
+				Filename:    maintenanceArg,
+				IncludeSSL:  includeSSL,
+				IncludeData: includeData,
 				// M11: compliance mode blocks unencrypted backups (AI.md 28945-28989).
 				ComplianceEnabled: btCfgErr == nil && btCfg.Server.Compliance.Enabled,
 			}
@@ -413,7 +420,11 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				}
 				restorePass = string(pw)
 			}
-			if err := maintenance.RestoreWithVersion(maintenanceArg, mcConfigDir, mcDataDir, restorePass, Version); err != nil {
+			restoreLimits := maintenance.DefaultRestoreLimits()
+			if rtCfg, rtErr := config.Load(filepath.Join(mcConfigDir, "server.yml")); rtErr == nil {
+				restoreLimits = maintenance.RestoreLimitsFromConfig(rtCfg.Server.Restore)
+			}
+			if err := maintenance.RestoreWithLimits(maintenanceArg, mcConfigDir, mcDataDir, restorePass, Version, restoreLimits); err != nil {
 				fmt.Fprintf(stderr, "%s: maintenance restore: %v\n", binaryName, err)
 				return 1
 			}

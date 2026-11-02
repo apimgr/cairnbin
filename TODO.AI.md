@@ -48,7 +48,7 @@ same pass gets its own line item here.
 - [x] PART 18 Scheduler
 - [x] PART 19 GeoIP
 - [x] PART 20 Metrics
-- [ ] PART 21 Backup & restore
+- [x] PART 21 Backup & restore
 - [ ] PART 22 Update command
 - [ ] PART 23 Privilege escalation & service
 - [ ] PART 24 Service support
@@ -155,3 +155,4 @@ same pass gets its own line item here.
   is now enforced by src/server/template_policy_test.go.
 - PART 17: AI.md references `{project_name} email test` (lines 28164, 48828) but the server flag set (PART 7) has no `email` command; resolve by routing it through `--maintenance` or confirming the CLI client owns it. Save-time template validation (unknown variable, empty subject/body) has no caller because there is no admin UI; add a validator for custom files in `{config_dir}/template/email/` at load.
 - PART 18: spec lists CLI `scheduler list|show|run|enable|disable|history` (client); no `scheduler` command exists in src/client or the server. Add to the client against the server scheduler API.
+- PART 21: not yet verified against spec: retention sweep (yearly>monthly>weekly>daily marking, max_total_size), WebUI/API restore password flow (400 VALIDATION_FAILED for encrypted backups without password), backup.* audit events (retention_cleanup, daily_updated, verification_failed), startup warning when encryption is not configured.
