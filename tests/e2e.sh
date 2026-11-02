@@ -30,7 +30,7 @@ E2E_PROJECT_ORG="apimgr"
 E2E_PROJECT_NAME="pastebin"
 E2E_IMAGE_NAME="${E2E_PROJECT_NAME}:e2e-$$"
 E2E_COMPOSE_PROJECT="${E2E_PROJECT_NAME}-e2e-$$"
-E2E_CONTAINER_NAME="${E2E_PROJECT_NAME}-test"
+E2E_CONTAINER_NAME="${E2E_PROJECT_NAME}-app"
 E2E_PORT="80"
 E2E_BASE_URL="http://pastebin:${E2E_PORT}"
 E2E_BROWSER_URL="http://pastebin-e2e-browser:9222"
@@ -135,7 +135,7 @@ cp -- "${E2E_PROJECT_DIR}/docker/docker-compose.test.yml" "${E2E_TEMP_DIR}/docke
 sed -i.bak \
     -e "s|image: .*${E2E_PROJECT_NAME}.*|image: ${E2E_IMAGE_NAME}|" \
     -e 's|pull_policy: always|pull_policy: missing|' \
-    -e '/^  pastebin-test:$/,/^    external: false$/ { /^    external: false$/a\
+    -e '/^  pastebin:$/,/^    external: false$/ { /^    external: false$/a\
     internal: true
     }' \
     "${E2E_TEMP_DIR}/docker-compose.yml" 2>/dev/null || true
@@ -162,8 +162,8 @@ if [[ "${E2E_READY}" != true ]]; then
     exit 1
 fi
 
-E2E_SERVER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "pastebin-test").IPAddress}}' "${E2E_CONTAINER_NAME}")"
-E2E_BROWSER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "pastebin-test").IPAddress}}' pastebin-e2e-browser)"
+E2E_SERVER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "pastebin").IPAddress}}' "${E2E_CONTAINER_NAME}")"
+E2E_BROWSER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "pastebin").IPAddress}}' pastebin-e2e-browser)"
 if [[ -z "${E2E_SERVER_IP}" || -z "${E2E_BROWSER_IP}" ]]; then
     __fail "could not resolve test service addresses"
     exit 1
@@ -180,7 +180,7 @@ if (
     TEST_PKGS="./tests/e2e/..." \
     TEST_RUN="-count=1" \
     TEST_COVERAGE=0 \
-    EXTRA_ENV="--network pastebin-test --network-alias=pastebin-e2e-runner -e PASTEBIN_E2E_UPDATE_API_URL=http://pastebin-e2e-runner:64980/update -e E2E_BASE_URL=${E2E_BASE_URL} -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
+    EXTRA_ENV="--network pastebin --network-alias=pastebin-e2e-runner -e PASTEBIN_E2E_UPDATE_API_URL=http://pastebin-e2e-runner:64980/update -e E2E_BASE_URL=${E2E_BASE_URL} -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
 ); then
     __pass "E2E tiers 1–3"
 else

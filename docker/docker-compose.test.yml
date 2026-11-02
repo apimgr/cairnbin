@@ -10,7 +10,7 @@
 #   cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
 #   rm -rf "$TEMP_DIR"
 
-name: pastebin-test
+name: pastebin
 
 x-logging: &default-logging
   options:
@@ -22,7 +22,7 @@ services:
   pastebin:
     image: ghcr.io/apimgr/pastebin:devel
     pull_policy: always
-    container_name: pastebin-test
+    container_name: pastebin-app
     hostname: pastebin
     restart: "no"
     logging: *default-logging
@@ -32,7 +32,7 @@ services:
       MODE: development
       TZ: ${TZ:-America/New_York}
       TERMBIN_ENABLED: true
-      CACHE_URL: valkey://pastebin-cache-test:6379
+      CACHE_URL: valkey://pastebin-cache:6379
       PASTEBIN_E2E_UPDATE_API_URL: http://pastebin-e2e-runner:64980/update
       PASTEBIN_E2E_GEOIP_BASE_URL: http://pastebin-e2e-runner:64980/geoip
       PASTEBIN_E2E_GEOIP_SKIP_INITIAL_DOWNLOAD: "true"
@@ -50,10 +50,10 @@ services:
       retries: 3
       start_period: 90s
     depends_on:
-      pastebin-cache-test:
+      pastebin-cache:
         condition: service_healthy
     networks:
-      - pastebin-test
+      - pastebin
 
   pastebin-e2e-browser:
     image: chromedp/headless-shell:latest
@@ -62,12 +62,12 @@ services:
     restart: "no"
     logging: *default-logging
     networks:
-      - pastebin-test
+      - pastebin
 
-  pastebin-cache-test:
+  pastebin-cache:
     image: valkey/valkey:alpine
     pull_policy: always
-    container_name: pastebin-cache-test
+    container_name: pastebin-cache
     restart: "no"
     logging: *default-logging
     tmpfs:
@@ -79,9 +79,9 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - pastebin-test
+      - pastebin
 
 networks:
-  pastebin-test:
-    name: pastebin-test
+  pastebin:
+    name: pastebin
     external: false

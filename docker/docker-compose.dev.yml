@@ -3,7 +3,7 @@
 # FOR HUMAN USE ONLY - AI must never use this file directly.
 # Use temp dir workflow: cp docker/docker-compose.dev.yml $TEMP_DIR/docker-compose.yml
 
-name: pastebin-dev
+name: pastebin
 
 x-logging: &default-logging
   options:
@@ -41,9 +41,9 @@ services:
       retries: 3
       start_period: 90s
     networks:
-      - pastebin-dev
+      - pastebin
 
 networks:
-  pastebin-dev:
-    name: pastebin-dev
+  pastebin:
+    name: pastebin
     external: false

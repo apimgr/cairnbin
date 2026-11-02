@@ -53,7 +53,7 @@ same pass gets its own line item here.
 - [x] PART 23 Privilege escalation & service
 - [x] PART 24 Service support
 - [x] PART 25 Makefile
-- [ ] PART 26 Docker
+- [x] PART 26 Docker
 - [ ] PART 27 CI/CD workflows
 - [ ] PART 28 Testing & development
 - [ ] PART 29 ReadTheDocs documentation
@@ -155,3 +155,5 @@ same pass gets its own line item here.
 - PART 21: no restore API or WebUI exists (spec forbids an admin UI); the 400 VALIDATION_FAILED encrypted-restore API response is therefore not applicable until a restore endpoint is specified.
 - PART 24: the spec systemd unit sets `ProtectSystem=strict` with `ReadWritePaths` limited to the four app dirs, but PART 23 has the binary create the service user (useradd/groupadd write `/etc/passwd`, `/etc/group`) at normal startup. Under the spec unit `/etc` is read-only, so first-start account creation can fail when launched by systemd. The unit now matches the spec exactly (previous extras `ReadWritePaths=/etc`, `NoNewPrivileges`, `RuntimeDirectory` removed); confirm the startup path degrades safely (or pre-creates the user during `--service --install`) once PART 8 startup order is done.
 - PART 24: Windows service (VSA, `svc.Run`) and launchd/runit/rc.d/OpenRC/SysV templates now generated from `src/service/templates.go` and matched to spec; Windows path not exercised in Docker (needs a Windows runner).
+- PART 26: AI.md contradicts itself on dev/test compose identity. The requirements table ("name: and network keep the -dev / -test suffix") conflicts with the Field Reference and the example YAML (same `name:` and network `{project_name}` in all three files). Followed the field reference and examples; revisit if the table is meant to win. Dev volumes omit `:z` (rule text) although the dev example shows `:z`.
+- PART 26: project-specific extras kept in compose/Dockerfile (TERMBIN_ENABLED, port 9999, `shadow` package, e2e browser service and E2E_* env in the test file) - confirm they are covered by SPEC.md/IDEA.md.

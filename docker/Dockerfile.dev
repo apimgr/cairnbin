@@ -48,6 +48,7 @@ RUN apk upgrade --no-cache && \
     git \
     curl \
     bash \
+    shadow \
     tini \
     tor
 
