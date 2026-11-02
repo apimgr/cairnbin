@@ -218,7 +218,7 @@ textarea:user-invalid ~ .field-error {
 .form-input[type="file"]::file-selector-button {
     min-height: 44px;
     padding: var(--space-2) var(--space-5);
-    margin-right: var(--space-4);
+    margin-inline-end: var(--space-4);
     font-family: var(--font-sans);
     font-size: var(--font-size-sm);
     font-weight: 600;
@@ -237,8 +237,8 @@ textarea:user-invalid ~ .field-error {
 
 /* RTL: the picker button sits to the right of the filename */
 [dir="rtl"] .form-input[type="file"]::file-selector-button {
-    margin-right: 0;
-    margin-left: var(--space-4);
+    margin-inline-end: 0;
+    margin-inline-start: var(--space-4);
 }
 
 .form-actions {
@@ -265,7 +265,7 @@ textarea:user-invalid ~ .field-error {
     border: 3px solid var(--color-border);
     border-top-color: var(--color-accent-primary);
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: spin calc(1s * var(--motion-scale)) linear infinite;
 }
 
 @keyframes spin {
@@ -404,7 +404,7 @@ textarea:user-invalid ~ .field-error {
 #toast-container {
     position: fixed;
     top: var(--space-4);
-    right: var(--space-4);
+    inset-inline-end: var(--space-4);
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -426,7 +426,7 @@ textarea:user-invalid ~ .field-error {
     color: var(--color-text-primary);
     box-shadow: var(--shadow-lg);
     pointer-events: auto;
-    animation: toastIn 0.2s ease forwards;
+    animation: toastIn calc(0.2s * var(--motion-scale)) ease forwards;
     position: relative;
     min-width: 200px;
     max-width: 400px;
@@ -455,7 +455,7 @@ textarea:user-invalid ~ .field-error {
 .toast-progress {
     position: absolute;
     bottom: 0;
-    left: 0;
+    inset-inline-start: 0;
     height: 3px;
     background: rgba(255, 255, 255, 0.5);
     animation: toastCountdown linear forwards;
@@ -467,10 +467,10 @@ textarea:user-invalid ~ .field-error {
     animation-play-state: paused;
 }
 
-.toast-info { border-left: 4px solid var(--color-info); }
-.toast-success { border-left: 4px solid var(--color-success); }
-.toast-warning { border-left: 4px solid var(--color-warning); }
-.toast-error { border-left: 4px solid var(--color-error); }
+.toast-info { border-inline-start: 4px solid var(--color-info); }
+.toast-success { border-inline-start: 4px solid var(--color-success); }
+.toast-warning { border-inline-start: 4px solid var(--color-warning); }
+.toast-error { border-inline-start: 4px solid var(--color-error); }
 
 @keyframes toastIn {
     from { opacity: 0; transform: translateY(-8px); }
@@ -488,7 +488,7 @@ textarea:user-invalid ~ .field-error {
 }
 
 .toast-dismissing {
-    animation: toastOut 0.2s ease forwards;
+    animation: toastOut calc(0.2s * var(--motion-scale)) ease forwards;
 }
 
 
@@ -621,8 +621,8 @@ textarea:user-invalid ~ .field-error {
 
 .cookie-banner {
     position: fixed;
-    left: 0;
-    right: 0;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
     width: 100%;
     background: var(--color-accent-primary);
     color: var(--color-on-accent);
@@ -821,7 +821,7 @@ textarea:user-invalid ~ .field-error {
     }
 
     .cookie-message {
-        text-align: left;
+        text-align: start;
     }
 }
 
@@ -864,7 +864,7 @@ textarea:user-invalid ~ .field-error {
 .swagger-page header .version {
     font-size: 0.8rem;
     color: var(--color-text-muted);
-    margin-left: var(--space-3);
+    margin-inline-start: var(--space-3);
 }
 
 .swagger-page .info-block {
@@ -872,7 +872,7 @@ textarea:user-invalid ~ .field-error {
     padding: var(--space-4) var(--space-5);
     background: var(--color-bg-secondary);
     border-radius: var(--radius-md);
-    border-left: 4px solid var(--color-accent-primary);
+    border-inline-start: 4px solid var(--color-accent-primary);
 }
 
 .swagger-page .info-block p {
@@ -961,7 +961,7 @@ textarea:user-invalid ~ .field-error {
 .swagger-page .opblock-summary-desc {
     font-size: 0.85rem;
     color: var(--color-text-muted);
-    margin-left: auto;
+    margin-inline-start: auto;
 }
 
 .swagger-page .opblock-body {
@@ -991,7 +991,7 @@ textarea:user-invalid ~ .field-error {
 }
 
 .swagger-page .param-table th {
-    text-align: left;
+    text-align: start;
     padding: 0.35rem var(--space-2);
     background: var(--color-bg-elevated);
     color: var(--color-text-muted);
@@ -1126,11 +1126,11 @@ textarea:user-invalid ~ .field-error {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-right: 1px solid var(--color-border);
+    border-inline-end: 1px solid var(--color-border);
 }
 
 .graphql-page .pane:last-child {
-    border-right: none;
+    border-inline-end: none;
 }
 
 .graphql-page .pane-header {
@@ -1221,7 +1221,7 @@ textarea:user-invalid ~ .field-error {
         display: block;
         width: 260px;
         flex-shrink: 0;
-        border-left: 1px solid var(--color-border);
+        border-inline-start: 1px solid var(--color-border);
         overflow-y: auto;
         padding: var(--space-3);
         font-size: 0.8rem;

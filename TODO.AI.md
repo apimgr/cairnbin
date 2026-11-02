@@ -143,15 +143,11 @@ same pass gets its own line item here.
   database-anomaly (injection pattern) blocking, config-tampering rollback.
   Allowlist/blocked_ips are plain string lists; AI.md uses `{cidr, description}`
   objects. Temporary blocks are in-memory only (lost on restart).
-- PART 16 frontend (sampled via a rule scan, not a line-by-line read): the
-  prefers-reduced-motion block in static/css/common.css.tmpl uses
-  `!important`, which AI.md allows only in print styles (needs durations driven
-  by CSS custom properties instead); physical `margin-left/right` and
-  `padding-left/right` remain in ~10 rules (spec: CSS logical properties for
-  RTL); the `/server/*` standard pages, empty states, PWA, themes, branding/SEO,
-  cookie banner and footer sections were not individually re-verified.
-  Template policy (no inline handlers/styles/scripts, no alert/confirm/prompt)
-  is now enforced by src/server/template_policy_test.go.
+- PART 16 frontend: reduced-motion `!important` and physical left/right CSS
+  properties are fixed and enforced by src/server/css_policy_test.go. The
+  `/server/*` standard pages, empty states, PWA, themes, branding/SEO, cookie
+  banner and footer sections were not individually re-verified. Template policy
+  is enforced by src/server/template_policy_test.go.
 - PART 17: AI.md references `{project_name} email test` (lines 28164, 48828) but the server flag set (PART 7) has no `email` command; resolve by routing it through `--maintenance` or confirming the CLI client owns it. Save-time template validation (unknown variable, empty subject/body) has no caller because there is no admin UI; add a validator for custom files in `{config_dir}/template/email/` at load.
 - PART 18: spec lists CLI `scheduler list|show|run|enable|disable|history` (client); no `scheduler` command exists in src/client or the server. Add to the client against the server scheduler API.
 - PART 21: no restore API or WebUI exists (spec forbids an admin UI); the 400 VALIDATION_FAILED encrypted-restore API response is therefore not applicable until a restore endpoint is specified.
