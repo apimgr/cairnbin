@@ -331,6 +331,7 @@
     "features": "機能",
     "version": "バージョン",
     "links": "リンク",
+    "license_note": "オープンソース、MITライセンス。",
     "attribution": "サードパーティ表示",
     "attribution_geoip": "DB-IP による IP ジオロケーション",
     "attribution_nro": "国および ASN データは Number Resource Organization (NRO) により CC BY 4.0 でライセンスされています。"

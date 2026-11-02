@@ -331,6 +331,7 @@
     "features": "Características",
     "version": "Versión",
     "links": "Enlaces",
+    "license_note": "Código abierto, licencia MIT.",
     "attribution": "Atribución de terceros",
     "attribution_geoip": "Geolocalización IP por DB-IP",
     "attribution_nro": "Datos de país y ASN bajo licencia CC BY 4.0 de la Number Resource Organization (NRO)."

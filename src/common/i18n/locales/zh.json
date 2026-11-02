@@ -331,6 +331,7 @@
     "features": "功能",
     "version": "版本",
     "links": "链接",
+    "license_note": "开源，采用 MIT 许可证。",
     "attribution": "第三方致谢",
     "attribution_geoip": "IP 地理定位由 DB-IP 提供",
     "attribution_nro": "国家和 ASN 数据由 Number Resource Organization (NRO) 依据 CC BY 4.0 许可提供。"

@@ -30,7 +30,7 @@
                         {{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Label}}</a>
                         {{end}}
                     </p>
-                    <p>Open source, MIT licensed.</p>
+                    <p>{{t .Lang "about.license_note"}}</p>
 
                     {{if .GeoIPEnabled}}
                     <h2 class="section-mt">{{t .Lang "about.attribution"}}</h2>

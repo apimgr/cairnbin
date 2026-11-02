@@ -331,6 +331,7 @@
     "features": "Fonctionnalités",
     "version": "Version",
     "links": "Liens",
+    "license_note": "Open source, sous licence MIT.",
     "attribution": "Attribution tierce",
     "attribution_geoip": "Géolocalisation IP par DB-IP",
     "attribution_nro": "Données de pays et d'ASN sous licence CC BY 4.0 par la Number Resource Organization (NRO)."

@@ -46,7 +46,7 @@ same pass gets its own line item here.
 - [x] PART 16 Web frontend (sampled; gaps logged below)
 - [x] PART 17 Email & notifications (gaps logged below)
 - [x] PART 18 Scheduler
-- [ ] PART 19 GeoIP
+- [x] PART 19 GeoIP
 - [ ] PART 20 Metrics
 - [ ] PART 21 Backup & restore
 - [ ] PART 22 Update command

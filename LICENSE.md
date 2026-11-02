@@ -547,3 +547,15 @@ http://github.com/golang/protobuf/
 Copyright 2010 The Go Authors
 See source code for license details.
 ```
+
+### GeoIP Data Attribution
+
+GeoIP databases are downloaded at runtime from sapics/ip-location-db and are licensed CC BY 4.0.
+
+```html
+<a href="https://db-ip.com/">IP Geolocation by DB-IP</a>
+```
+
+```text
+Country and ASN data licensed CC BY 4.0 by the Number Resource Organization (NRO).
+```
