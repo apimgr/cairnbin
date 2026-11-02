@@ -25,6 +25,7 @@ jobs:
     if: gitea.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
+      options: "--user 0:0"
     env:
       CGO_ENABLED: "0"
     steps:
@@ -37,6 +38,7 @@ jobs:
     if: gitea.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
+      options: "--user 0:0"
     env:
       CGO_ENABLED: "0"
     steps:
@@ -63,6 +65,7 @@ jobs:
     if: gitea.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
+      options: "--user 0:0"
     env:
       CGO_ENABLED: "0"
     steps:
@@ -73,6 +76,7 @@ jobs:
     runs-on: ubuntu-26.04
     container:
       image: casjaysdev/go:latest
+      options: "--user 0:0"
     env:
       GOFLAGS: -buildvcs=false
     steps:
@@ -84,6 +88,7 @@ jobs:
     if: gitea.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
+      options: "--user 0:0"
     env:
       GOFLAGS: -buildvcs=false
     steps:
@@ -139,6 +144,7 @@ jobs:
     if: gitea.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
+      options: "--user 0:0"
     env:
       CGO_ENABLED: "0"
     steps:
@@ -184,6 +190,7 @@ jobs:
     if: gitea.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
+      options: "--user 0:0"
     env:
       CGO_ENABLED: "0"
     steps:

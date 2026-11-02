@@ -54,7 +54,7 @@ same pass gets its own line item here.
 - [x] PART 24 Service support
 - [x] PART 25 Makefile
 - [x] PART 26 Docker
-- [ ] PART 27 CI/CD workflows
+- [x] PART 27 CI/CD workflows
 - [ ] PART 28 Testing & development
 - [ ] PART 29 ReadTheDocs documentation
 - [ ] PART 30 I18N & A11Y

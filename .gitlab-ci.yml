@@ -327,7 +327,7 @@ build:beta:
     - if: $CI_COMMIT_BRANCH == "beta"
 
 # =============================================================================
-# DAILY BUILDS (Scheduled + main/master push) - All 8 platforms
+# DEVEL BUILDS (Scheduled + main/master push) - All 8 platforms
 # =============================================================================
 
 build:devel:
@@ -335,7 +335,7 @@ build:devel:
   stage: build
   before_script:
     # All tooling is pre-installed in casjaysdev/go:latest — never `apk add` in a CI job
-    # Daily identity is the commit being built, not a timestamp
+    # Devel identity is the commit being built, not a timestamp
     - export VERSION="${CI_COMMIT_SHA:0:7}"
     - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
@@ -416,7 +416,7 @@ sbom:devel:
   needs:
     - test
   before_script:
-    # Daily identity is the commit, not a timestamp - matches build:devel
+    # Devel identity is the commit, not a timestamp - matches build:devel
     - export VERSION="${CI_COMMIT_SHA:0:7}"
   script:
     - cyclonedx-gomod mod -json -output "${PROJECT_NAME}-${VERSION}-sbom.cdx.json"
@@ -431,7 +431,7 @@ sbom:devel:
       allow_failure: true
 
 # =============================================================================
-# RELEASE PUBLISH (Beta + Daily) - real GitLab Release objects, mirroring the
+# RELEASE PUBLISH (Beta + Devel) - real GitLab Release objects, mirroring the
 # stable release job above (source archive + SBOM + checksums, in that order)
 # =============================================================================
 
@@ -504,7 +504,7 @@ release:devel:
     - sbom:devel
     - test
   before_script:
-    # Delete previous rolling daily release + tag via GitLab Releases API
+    # Delete previous rolling devel release + tag via GitLab Releases API
     - >
       curl --request DELETE --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}"
       "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases/devel" || true
@@ -512,7 +512,7 @@ release:devel:
       curl --request DELETE --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}"
       "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/tags/devel" || true
   script:
-    # Daily identity is the commit, not a timestamp - matches build:devel
+    # Devel identity is the commit, not a timestamp - matches build:devel
     - echo "${CI_COMMIT_SHA:0:7}" > version.txt
     # Source archive - already-staged release assets (binaries, sbom,
     # checksums) are excluded to avoid archiving our own output
@@ -642,7 +642,7 @@ docker:build:
 # DEVEL IMAGE BUILD (own job — push to any branch + daily schedule)
 # =============================================================================
 # :devel is never built by docker:build above — Dockerfile.dev is built here,
-# on every push (excluding tags) and once daily via a scheduled pipeline, so a
+# on every push (excluding tags) and once devel via a scheduled pipeline, so a
 # broken Dockerfile.dev can never block the release docker:build job. MODE=devel
 # is baked into Dockerfile.dev via ENV — no extra build-arg needed here.
 

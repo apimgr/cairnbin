@@ -2,8 +2,8 @@ pipeline {
     agent none
 
     triggers {
-        // Daily build at 3am UTC (matches GitHub Actions devel.yml) and
-        // daily devel image rebuild at 4am UTC (matches docker.yml build-devel job)
+        // Devel build at 3am UTC (matches GitHub Actions devel.yml) and
+        // devel devel image rebuild at 4am UTC (matches docker.yml build-devel job)
         cron('0 3 * * *\n0 4 * * *')
     }
 
@@ -60,7 +60,7 @@ pipeline {
                         env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-beta'
                     } else if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
                         // Devel build - matches devel.yml
-                        // Daily identity is the commit being built, not a timestamp
+                        // Devel identity is the commit being built, not a timestamp
                         env.BUILD_TYPE = 'devel'
                         env.VERSION = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
                     } else {
@@ -599,7 +599,7 @@ pipeline {
             steps {
                 script {
                     // Runs on every push (this pipeline's global cron trigger above
-                    // also fires it daily) and always builds Dockerfile.dev with a
+                    // also fires it devel) and always builds Dockerfile.dev with a
                     // single static :devel tag - MODE=devel is baked into
                     // Dockerfile.dev via ENV, no extra build-arg needed here.
                     sh """
