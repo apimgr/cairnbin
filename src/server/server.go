@@ -265,6 +265,12 @@ type Server struct {
 	// installSecret is the root installation_secret (PART 11 Cryptographic Keys),
 	// loaded from the DB at startup; base for the rotating security_id token.
 	installSecret []byte
+	// prevInstallSecret is the installation_secret in force before the last
+	// manual rotation, loaded only inside its 7-day grace window.
+	prevInstallSecret []byte
+	// prevEncKey is the at-rest encryption key in force before the last manual
+	// rotation, loaded only inside its 30-day grace window.
+	prevEncKey []byte
 	// privDrop holds privilege-drop parameters set by main before Run (PART 23 step 8g).
 	privDrop *privDropConfig
 	// notifier delivers outbound role-scoped webhook notifications (PART 17).
@@ -691,6 +697,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	if instSec, err := db.EnsureAppSecret("installation_secret"); err == nil {
 		s.installSecret = instSec
 	}
+	s.loadPreviousSecrets(db)
 
 	// Generate the project PGP keypair on first start when publishing is enabled
 	// (PART 11 → GPG Keypair Management). Never fails startup; falls back to

@@ -1,8 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"testing"
 	"time"
+
+	"github.com/apimgr/pastebin/src/common/secretbox"
 )
 
 func newSecurityIDTestServer() *Server {
@@ -76,5 +79,35 @@ func TestItoa64(t *testing.T) {
 		if got := itoa64(in); got != want {
 			t.Errorf("itoa64(%d) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestValidSecurityID_PreviousSecretGrace(t *testing.T) {
+	s := &Server{installSecret: []byte("new-secret-new-secret-new-secret!"), prevInstallSecret: []byte("old-secret-old-secret-old-secret!")}
+	window := time.Now().Unix() / securityIDWindow
+	oldID := securityIDFor(s.prevInstallSecret, window)
+	if !s.validSecurityID(oldID) {
+		t.Fatal("id minted under the previous secret must validate during grace")
+	}
+	s.prevInstallSecret = nil
+	if s.validSecurityID(oldID) {
+		t.Fatal("previous-secret id must be rejected after grace")
+	}
+}
+
+func TestOpenAtRest_PreviousKeyFallback(t *testing.T) {
+	oldKey := bytes.Repeat([]byte{1}, 32)
+	newKey := bytes.Repeat([]byte{2}, 32)
+	sealed, err := secretbox.Seal(oldKey, []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{}
+	if _, err := s.openAtRest(newKey, sealed); err == nil {
+		t.Fatal("expected failure without previous key")
+	}
+	s.prevEncKey = oldKey
+	if plain, err := s.openAtRest(newKey, sealed); err != nil || string(plain) != "x" {
+		t.Fatalf("fallback failed: %q %v", plain, err)
 	}
 }

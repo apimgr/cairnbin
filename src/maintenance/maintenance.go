@@ -468,6 +468,7 @@ setup                                 - Reset server configuration (first-run or
 pgp <action>                          - Manage the project security keypair (see below)
 token <action>                        - Manage API tokens (see below)
 data <action> <prefix>                - Data-subject export/delete (see below)
+secret rotate <name>                  - Rotate installation_secret or encryption_key
 compliance report                     - Print the compliance status summary
 
 `, projectName)
@@ -488,6 +489,11 @@ Data actions (--maintenance data <action> <prefix>) — requires root or the
 operator token; prefix identifies the owner token (see token list):
   export <prefix>     Print the token and paste record as JSON (GDPR/CCPA export)
   delete <prefix>     Delete the paste and revoke the token (right to erasure)
+
+Secret actions (--maintenance secret rotate <name>) — requires root or the
+operator token plus a typed confirmation; restart the server afterwards:
+  installation_secret Re-wrap the PGP private key; previous secret valid 7 days
+  encryption_key      Re-encrypt tokens, reports and DNS credentials; previous key valid 30 days
 
 Examples:
   %s --maintenance backup

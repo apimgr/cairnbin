@@ -128,12 +128,9 @@ same pass gets its own line item here.
   `security.ip_allowlisted`/`ip_allowlist_removed` (allowlist is config-only;
   would need a diff on hot reload), `config.*_updated`/`ssl_expired` (config hot-reload
   does not diff and emit), `server.updated`, and the rotation events below.
-- PART 11 `--maintenance secret rotate installation_secret|encryption_key` is
-  not implemented (listed in the spec's maintenance subcommands): operator
-  re-prompt + audit `security.*_rotated`; installation_secret rotation must
-  re-wrap the PGP private key and keep the previous secret 7 days for
-  in-flight `{security_id}` URLs; encryption_key rotation must re-encrypt
-  `api_tokens.token_enc` and report bodies and keep the previous key 30 days.
+- PART 11 `--maintenance secret rotate` is implemented (src/maintenance/secret.go). Not done: the running server
+  keeps the old secret in memory until restart (the command says to restart); the typed-confirmation flow is
+  not re-prompting the operator token for root callers, matching the other sensitive operations.
 - PART 11 reports config (`server.security.reports.rate_limit_per_minute`,
   `rate_limit_per_ip_burst`) is fixed in code (60/min per IP); expose it in
   config. `nel` and other report groups are accepted and discarded, not

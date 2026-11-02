@@ -139,7 +139,7 @@ func (s *Server) revealOwnerPrimary(w http.ResponseWriter, r *http.Request) (str
 		http.Error(w, "Token unavailable", http.StatusInternalServerError)
 		return "", false
 	}
-	plain, err := secretbox.Open(key, sealed)
+	plain, err := s.openAtRest(key, sealed)
 	if err != nil {
 		http.Error(w, "Token unavailable", http.StatusInternalServerError)
 		return "", false
@@ -606,7 +606,7 @@ func (s *Server) decryptOwnerToken(encoded string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	plain, err := secretbox.Open(key, sealed)
+	plain, err := s.openAtRest(key, sealed)
 	return string(plain), err
 }
 

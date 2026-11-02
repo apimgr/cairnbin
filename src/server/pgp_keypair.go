@@ -202,7 +202,7 @@ func (s *Server) decryptSecurityReport(rec *database.SecurityReport, aesKey []by
 		}
 		return nil, fmt.Errorf("pgp: no private key could decrypt report %s", rec.TrackingID)
 	}
-	return secretbox.Open(aesKey, rec.EncryptedBody)
+	return s.openAtRest(aesKey, rec.EncryptedBody)
 }
 
 // publishToKeyservers submits the armored public key to every configured

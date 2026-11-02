@@ -186,7 +186,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		// "pgp"/"token"/"data" take further positionals (e.g. "export
 		// private <path>", "revoke <prefix>", "delete <prefix>").
 		switch maintenanceCmd {
-		case "pgp", "token", "data":
+		case "pgp", "token", "data", "secret":
 			maintenancePGP = positional[1:]
 		}
 	}
@@ -572,6 +572,29 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 			if err := maintenance.RunData(maintenanceArg, dataPrefix, dataOpts); err != nil {
 				fmt.Fprintf(stderr, "%s: maintenance data: %v\n", binaryName, err)
+				return 1
+			}
+			return 0
+		case "secret":
+			if maintenanceArg == "" {
+				fmt.Fprintf(stderr, "%s: --maintenance secret requires an action\n", binaryName)
+				fmt.Fprintf(stderr, "Usage: %s --maintenance secret rotate {installation_secret|encryption_key}\n", binaryName)
+				return 2
+			}
+			var secretName string
+			if len(maintenancePGP) > 0 {
+				secretName = maintenancePGP[0]
+			}
+			if err := maintenance.AuthorizeSecretOp(mcAuthOpts); err != nil {
+				fmt.Fprintf(stderr, "%s: maintenance secret: %v\n", binaryName, err)
+				return 1
+			}
+			if err := maintenance.RunSecret(maintenanceArg, secretName, maintenance.SecretOptions{
+				ConfigDir: mcConfigDir,
+				DBPath:    path.GetDBPath(appName),
+				LogDir:    path.GetLogsDir(appName),
+			}); err != nil {
+				fmt.Fprintf(stderr, "%s: maintenance secret: %v\n", binaryName, err)
 				return 1
 			}
 			return 0

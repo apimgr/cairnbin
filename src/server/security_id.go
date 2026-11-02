@@ -6,6 +6,9 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"time"
+
+	"github.com/apimgr/pastebin/src/common/secretbox"
+	"github.com/apimgr/pastebin/src/database"
 )
 
 // securityIDWindow is the rotation period for the security_id token: 48 hours
@@ -17,7 +20,12 @@ const securityIDWindow = 172800
 // securityIDForWindow computes the security_id for a specific 48h window index:
 // HMAC-SHA256(installation_secret, window) hex-encoded, first 16 chars.
 func (s *Server) securityIDForWindow(window int64) string {
-	mac := hmac.New(sha256.New, s.installSecret)
+	return securityIDFor(s.installSecret, window)
+}
+
+// securityIDFor computes the security_id for one window under secret.
+func securityIDFor(secret []byte, window int64) string {
+	mac := hmac.New(sha256.New, secret)
 	// The window index is written as its decimal ASCII form to keep the
 	// derivation stable and human-auditable.
 	mac.Write([]byte(itoa64(window)))
@@ -48,8 +56,49 @@ func (s *Server) validSecurityID(id string) bool {
 		if subtle.ConstantTimeCompare([]byte(want), []byte(id)) == 1 {
 			return true
 		}
+		// During the 7-day grace window after `secret rotate
+		// installation_secret`, ids minted under the previous secret still work.
+		if len(s.prevInstallSecret) > 0 {
+			prev := securityIDFor(s.prevInstallSecret, w)
+			if subtle.ConstantTimeCompare([]byte(prev), []byte(id)) == 1 {
+				return true
+			}
+		}
 	}
 	return false
+}
+
+// loadPreviousSecrets loads the parked pre-rotation secrets that are still
+// inside their grace windows (PART 11 → Secret Rotation): installation_secret
+// for 7 days, the at-rest encryption key for 30 days.
+func (s *Server) loadPreviousSecrets(db database.DB) {
+	fresh, ok := db.(interface {
+		FreshAppSecret(key string, maxAge time.Duration) ([]byte, bool)
+	})
+	if !ok {
+		return
+	}
+	if raw, ok := fresh.FreshAppSecret("installation_secret_previous", 7*24*time.Hour); ok {
+		s.prevInstallSecret = raw
+	}
+	if raw, ok := fresh.FreshAppSecret("encryption_key_previous", 30*24*time.Hour); ok {
+		if key, err := hex.DecodeString(string(raw)); err == nil && len(key) == 32 {
+			s.prevEncKey = key
+		}
+	}
+}
+
+// openAtRest opens a value sealed under the at-rest encryption key, falling
+// back to the pre-rotation key during its 30-day grace window.
+func (s *Server) openAtRest(key, sealed []byte) ([]byte, error) {
+	plain, err := secretbox.Open(key, sealed)
+	if err == nil || len(s.prevEncKey) == 0 {
+		return plain, err
+	}
+	if prev, perr := secretbox.Open(s.prevEncKey, sealed); perr == nil {
+		return prev, nil
+	}
+	return nil, err
 }
 
 // itoa64 formats a signed 64-bit integer as decimal ASCII without importing

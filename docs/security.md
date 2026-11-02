@@ -83,6 +83,22 @@ treated as Tor hidden-service traffic:
 - Contact, abuse, and security emails shown on Tor pages come from
   `tor.contact_email` only; when unset, no email is disclosed
 
+## Secret Rotation
+
+Two secrets can be rotated manually from the command line. There is no web UI or API route for this.
+
+```bash
+pastebin --maintenance secret rotate installation_secret
+pastebin --maintenance secret rotate encryption_key
+```
+
+Both require root, or the operator token (`server.token`) when run as the service user, plus typing `rotate` to confirm. Restart the server afterwards.
+
+- `installation_secret`: generates a new secret and re-wraps the PGP private key under it. The previous secret keeps validating in-flight `security_id` URLs for 7 days. Logged as `security.installation_secret_rotated`.
+- `encryption_key`: generates a new AES-256-GCM key, then re-encrypts the stored copies of owner and linked tokens, AES-sealed security report bodies and the DNS-01 credentials. The previous key stays available for 30 days to decrypt anything not yet re-encrypted. Logged as `security.encryption_key_rotated`.
+
+`cookie_signing_key` and `csrf_token_secret` rotate automatically and are rejected by this command.
+
 ## Reporting Vulnerabilities
 
 See [SECURITY.md](https://github.com/apimgr/pastebin/blob/main/.github/SECURITY.md) for the responsible disclosure process.

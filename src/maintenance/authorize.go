@@ -143,6 +143,19 @@ func (a *authorizer) authorizeMode() error {
 	return errors.New("mode change requires administrator authorization: run as root or provide the operator token")
 }
 
+// AuthorizeSecretOp enforces the secret-rotation gate: root, or the service
+// user with the operator token (AI.md PART 11 → Secret Rotation).
+func AuthorizeSecretOp(opts AuthOptions) error {
+	a := newAuthorizer(opts)
+	if a.isRootFn() {
+		return nil
+	}
+	if a.isServiceUser() {
+		return a.requireOperatorToken("Rotating a server secret requires operator authorization.")
+	}
+	return errors.New("secret rotation requires administrator authorization: run as root or provide the operator token")
+}
+
 func (a *authorizer) authorizeDataOp() error {
 	if a.isRootFn() {
 		return nil
