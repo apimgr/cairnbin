@@ -67,9 +67,12 @@ func PrintHelp(binName string) {
 
 Usage:
   # Add to shell profile for persistent completions
-  %s --shell init >> ~/.bashrc      # bash
-  %s --shell init >> ~/.zshrc       # zsh
-  %s --shell init >> ~/.config/fish/config.fish  # fish
+  # bash
+  %s --shell init >> ~/.bashrc
+  # zsh
+  %s --shell init >> ~/.zshrc
+  # fish
+  %s --shell init >> ~/.config/fish/config.fish
 
   # Or eval directly for current session
   eval "$(%s --shell init)"

@@ -444,23 +444,34 @@ func Setup(configDir string) error {
 
 // PrintHelp prints the --maintenance subcommand help.
 func PrintHelp(binaryName string) {
-	fmt.Printf(`Maintenance operations: %s --maintenance <command>
+	fmt.Printf(`Maintenance commands:
 
-Commands:
-  backup [filename]   Create a backup of config and database files
-                      (--include-ssl adds ssl/, --include-data adds the data dir)
-  backup test         Dry-run verify the security keypair decrypts
-  restore <file>      Restore from a backup file
-  update              Update the binary to the latest release (alias: --update yes)
-  mode <mode>         Set the server mode (production|development)
-  setup               Reset admin credentials / initial setup
-  pgp <action>        Manage the project security keypair (see below)
-  token <action>      Manage API tokens (see below)
-  data <action> <prefix>  Data-subject export/delete (see below)
-  compliance report   Print the compliance status summary
-  --help              Show this help
+backup [file]                         - Create backup of all data
+                                        Default: {backup_dir}/%s_backup_YYYY-MM-DD_HHMMSS.tar.gz
+                                        --include-ssl adds ssl/, --include-data adds the data dir
+backup test                           - Dry-run verify the security keypair decrypts
 
-PGP keypair actions (--maintenance pgp <action>):
+restore <file>                        - Restore from backup file
+                                        Stops server, restores data, restarts server
+
+update [cmd]                          - Manage updates
+  check                               - Check for available updates
+  yes                                 - Download and install update
+  branch <name>                       - Switch update branch (stable|beta|devel)
+
+mode <mode>                           - Set application mode
+  production                          - Normal operation (default)
+  development                         - Verbose logging (debug endpoints require the debug flag)
+
+setup                                 - Reset server configuration (first-run or root only)
+
+pgp <action>                          - Manage the project security keypair (see below)
+token <action>                        - Manage API tokens (see below)
+data <action> <prefix>                - Data-subject export/delete (see below)
+compliance report                     - Print the compliance status summary
+
+`, projectName)
+	fmt.Printf(`PGP keypair actions (--maintenance pgp <action>):
   generate            Create the keypair and publish to keyservers
   rotate              Roll to a new keypair, cross-signed by the old key
   publish             Re-publish the public key to configured keyservers
@@ -492,7 +503,7 @@ Examples:
   %s --maintenance data export tok_abc123
   %s --maintenance data delete tok_abc123
   %s --maintenance compliance report
-`, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName)
+`, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName)
 }
 
 // VerifyBackup performs the post-creation checks required by PART 21:

@@ -622,18 +622,34 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 		switch {
 		case updateCmd == "--help" || updateCmd == "help":
-			fmt.Fprintf(stdout, `Update: %s --update [command]
+			// "Current" block (PART 23): version, configured branch, and the
+			// latest release only when it differs from the running version.
+			latest := ""
+			helpCtx, helpCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if rel, relErr := updater.CheckForUpdate(helpCtx, Version, configuredBranch, buildEpoch()); relErr == nil && rel != nil {
+				latest = rel.TagName
+			}
+			helpCancel()
+			fmt.Fprint(stdout, `Update management:
 
-Commands:
-  check              Check for updates without installing
-  yes                Download and install the latest update, then restart
-  branch <name>      Switch update branch (stable|beta|devel)
+check                                 - Check for available updates
+                                        Compares current version with latest release
+
+yes                                   - Download and install update
+                                        Downloads latest release, replaces binary, restarts
+
+branch <name>                         - Switch update branch
+  stable                              - Stable releases (default)
+  beta                                - Beta/preview releases
+  devel                               - Devel builds (development)
 
 Examples:
-  %s --update check
-  %s --update yes
-  %s --update branch beta
-`, binaryName, binaryName, binaryName, binaryName)
+`)
+			fmt.Fprintf(stdout, "  %s --update check\n  %s --update yes\n  %s --update branch beta\n\n", binaryName, binaryName, binaryName)
+			fmt.Fprintf(stdout, "Current:\n  Version:  %s\n  Branch:   %s\n", Version, configuredBranch)
+			if latest != "" {
+				fmt.Fprintf(stdout, "  Latest:   %s\n", latest)
+			}
 			return 0
 
 		case updateCmd == "check":

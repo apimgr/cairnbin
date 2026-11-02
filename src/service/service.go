@@ -1315,8 +1315,8 @@ func GetStatus() Status {
 }
 
 // PrintHelp prints service subcommand help to stdout.
-func PrintHelp(binaryName string) {
-	fmt.Printf(`Service management commands:
+func PrintHelp(_ string) {
+	fmt.Print(`Service management commands:
 
 start                                 - Start the service
 stop                                  - Stop the service
@@ -1326,14 +1326,7 @@ reload                                - Reload configuration without restart
 --install                              - Install, enable, and start service
 --disable                              - Stop and disable service (keeps data)
 --uninstall                            - Stop, disable, and remove everything (keeps binary)
---help                                 - Show this help
-
-Examples:
-  sudo %s --service --install
-  sudo %s --service start
-  sudo %s --service stop
-  sudo %s --service --uninstall
-`, binaryName, binaryName, binaryName, binaryName)
+`)
 
 	st := GetStatus()
 

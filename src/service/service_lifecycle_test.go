@@ -390,35 +390,12 @@ func TestPrintHelp_IncludesAllCommands(t *testing.T) {
 		"--install",
 		"--disable",
 		"--uninstall",
-		"--help",
 	}
 
 	for _, cmd := range commands {
 		if !strings.Contains(out, cmd) {
 			t.Errorf("PrintHelp output missing command %q", cmd)
 		}
-	}
-}
-
-func TestPrintHelp_IncludesExamples(t *testing.T) {
-	origStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	PrintHelp("pastebin")
-
-	w.Close()
-	os.Stdout = origStdout
-
-	buf := make([]byte, 8192)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
-
-	if !strings.Contains(out, "sudo") {
-		t.Error("PrintHelp output missing sudo in examples")
-	}
-	if !strings.Contains(out, "--service") {
-		t.Error("PrintHelp output missing --service flag")
 	}
 }
 

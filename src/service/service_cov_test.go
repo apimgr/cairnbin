@@ -149,27 +149,6 @@ func TestCopyBinary_IdempotentOverwrite(t *testing.T) {
 
 // ─── PrintHelp content checks ─────────────────────────────────────────────────
 
-// TestPrintHelp_ContainsBinaryName verifies the help output includes the
-// binary name passed as argument.
-func TestPrintHelp_ContainsBinaryName(t *testing.T) {
-	origStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	PrintHelp("testbin")
-
-	w.Close()
-	os.Stdout = origStdout
-
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	out := string(buf[:n])
-
-	if !strings.Contains(out, "testbin") {
-		t.Errorf("PrintHelp output does not contain binary name 'testbin':\n%s", out)
-	}
-}
-
 // TestPrintHelp_ContainsServiceCommands verifies the help output documents
 // the expected service management subcommands.
 func TestPrintHelp_ContainsServiceCommands(t *testing.T) {

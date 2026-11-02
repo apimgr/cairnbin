@@ -50,7 +50,7 @@ same pass gets its own line item here.
 - [x] PART 20 Metrics
 - [x] PART 21 Backup & restore
 - [x] PART 22 Update command
-- [ ] PART 23 Privilege escalation & service
+- [x] PART 23 Privilege escalation & service
 - [ ] PART 24 Service support
 - [ ] PART 25 Makefile
 - [ ] PART 26 Docker

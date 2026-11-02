@@ -397,7 +397,7 @@ func TestPrintHelp_Structure(t *testing.T) {
 	// Verify help structure
 	sections := []string{
 		"Service management commands:",
-		"Examples:",
+		"Current status:",
 	}
 
 	for _, section := range sections {
@@ -415,7 +415,6 @@ func TestPrintHelp_Structure(t *testing.T) {
 		"--install",
 		"--disable",
 		"--uninstall",
-		"--help",
 	}
 
 	for _, cmd := range commands {
