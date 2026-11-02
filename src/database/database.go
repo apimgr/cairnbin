@@ -38,27 +38,27 @@ type APITokenRecord struct {
 
 // TaskState holds the persistent state for a single scheduler task.
 type TaskState struct {
-	TaskID   string
-	TaskName string
-	Schedule string
-	LastRun  time.Time
+	TaskID   string    `json:"task_id"`
+	TaskName string    `json:"task_name"`
+	Schedule string    `json:"schedule"`
+	LastRun  time.Time `json:"last_run"`
 	// "pending" | "success" | "failed" | "skipped"
-	LastStatus string
-	LastError  string
-	NextRun    time.Time
-	RunCount   int64
-	FailCount  int64
-	Enabled    bool
+	LastStatus string    `json:"last_status"`
+	LastError  string    `json:"last_error"`
+	NextRun    time.Time `json:"next_run"`
+	RunCount   int64     `json:"run_count"`
+	FailCount  int64     `json:"fail_count"`
+	Enabled    bool      `json:"enabled"`
 }
 
 // TaskHistory records a single execution event.
 type TaskHistory struct {
-	TaskID     string
-	StartedAt  time.Time
-	FinishedAt time.Time
-	Status     string
-	ErrorMsg   string
-	DurationMS int64
+	TaskID     string    `json:"task_id"`
+	StartedAt  time.Time `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at"`
+	Status     string    `json:"status"`
+	ErrorMsg   string    `json:"error_msg"`
+	DurationMS int64     `json:"duration_ms"`
 }
 
 // DB is the database interface for paste and scheduler operations.

@@ -43,12 +43,12 @@ _%s() {
     cword=$COMP_CWORD
 
     local global_opts="--server --json --color --debug --version --help --shell -h -v"
-    local commands="create get delete del rm list ls version"
+    local commands="create get delete del rm list ls scheduler update version"
 
     local cmd=""
     for w in "${words[@]:1}"; do
         case "$w" in
-            create|get|delete|del|rm|list|ls|version) cmd="$w"; break ;;
+            create|get|delete|del|rm|list|ls|scheduler|update|version) cmd="$w"; break ;;
         esac
     done
 
@@ -178,7 +178,7 @@ func printClientPOSIX(bin string) {
 	fmt.Printf(`# POSIX sh/dash/ksh completion for %s — source this file
 # Usage: . <(%s --shell completions sh)
 if [ -n "$BASH_VERSION" ]; then
-    complete -W "--server --json --color --debug --version --help --shell create get delete list version" %s
+    complete -W "--server --json --color --debug --version --help --shell create get delete list scheduler update version" %s
 fi
 `, bin, bin, bin)
 }
@@ -187,7 +187,7 @@ func printClientPowerShell(bin string) {
 	fmt.Printf(`# PowerShell completion for %s
 Register-ArgumentCompleter -Native -CommandName '%s' -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
-    $cmds = @('create','get','delete','del','rm','list','ls','version')
+    $cmds = @('create','get','delete','del','rm','list','ls','scheduler','update','version')
     $flags = @('--server','--json','--color','--debug','--version','--help','--shell','-h','-v')
     $all = $cmds + $flags
     $all | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {

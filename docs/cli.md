@@ -118,6 +118,21 @@ pastebin-cli list [--limit N] [--output FORMAT]
 pastebin-cli list --limit 20
 ```
 
+### scheduler
+
+Inspect and control the server's built-in scheduled tasks.
+
+```bash
+pastebin-cli scheduler list
+pastebin-cli scheduler show <id>
+pastebin-cli scheduler history <id>
+pastebin-cli scheduler run <id>
+pastebin-cli scheduler enable <id>
+pastebin-cli scheduler disable <id>
+```
+
+`list`, `show` and `history` are read-only. `run`, `enable` and `disable` need the operator token (`--token` or `auth.token` in `cli.yml`). Status symbols: `✓` success, `●` running, `✗` failed, `○` pending, `◐` skipped. Supports `--output json|yaml|csv|table`.
+
 ## Shell Pipeline Examples
 
 ```bash

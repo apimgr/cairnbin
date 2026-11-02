@@ -959,6 +959,8 @@ func main() {
 		c.cmdDelete(args[1:])
 	case "list", "ls":
 		c.cmdList(args[1:])
+	case "scheduler":
+		c.cmdScheduler(args[1:])
 	case "update":
 		// Positional form: pastebin-cli update [check|yes]
 		// Equivalent to --update flag; defaults to "check" when no sub-arg given.
@@ -2185,6 +2187,7 @@ func writeUsage(w io.Writer) {
 	helpRow(w, "get <id>", t("help_cmd_get"))
 	helpRow(w, "delete <id> <token>", t("help_cmd_delete"))
 	helpRow(w, "list", t("help_cmd_list"))
+	helpRow(w, "scheduler <action> [id]", t("help_cmd_scheduler"))
 	helpRow(w, "update [check|yes]", t("help_cmd_update"))
 	fmt.Fprintln(w)
 
@@ -2231,6 +2234,7 @@ func printCommandHelp(w io.Writer, command string) bool {
 		"get":    {"get <id>", "help_cmd_get"},
 		"delete": {"delete <id> <token>", "help_cmd_delete"},
 		"list":   {"list [flags]", "help_cmd_list"},
+		"scheduler": {"scheduler {list|show|run|enable|disable|history} [id]", "help_cmd_scheduler"},
 		"update": {"update [check|yes]", "help_cmd_update"},
 	}
 	u, ok := usage[command]
