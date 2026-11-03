@@ -92,11 +92,7 @@ same pass gets its own line item here.
 - PART 8 test helper `TestSelfPIDHelper` (src/pid/pid_internal_test.go) uses
   os.Exit(3)/os.Exit(4), outside the standard exit-code ranges; switch to
   in-range codes and update the parent test's expectations.
-- PART 9 gaps: no shared `withRetry`/`isRetryable` exponential-backoff helper
-  (0s,1s,2s,4s,8s, cap 30s; retry only network/timeout/503) — outbound
-  fetches (GeoIP, blocklist, CVE, update check) each use ad-hoc retry; and no
-  cache warming (`config:server`, `security:blocklist`, `geoip:info`) at
-  startup. Decide the callers before adding either, so neither ships unused.
+- PART 9: `src/common/retry` implements `withRetry`/`isRetryable` and is used by the blocklist/CVE/Trivy-source downloads and the GeoIP download. Still open: the update check and CLI client keep their own retry; cache warming (`config:server`, `security:blocklist`, `geoip:info`) has no consumer yet, so it is not added.
 - PART 12 config layout: `encryption_key`, `allowlist`, `blocked_ips`, `abuse_detection`, `blocklists`, `cve`, `trivy` now live under `server.security.*` (legacy `web.security.*` values migrate on load). `allowlist` entries are `{cidr, description}` maps (bare strings still accepted).
 - PART 8/CSRF: `POST /pastes` (browser form route) still requires a CSRF token,
   so a plain `curl -d content=... {base}/pastes` is rejected; API/compat routes

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	maxminddb "github.com/oschwald/maxminddb-golang"
+	"github.com/apimgr/pastebin/src/common/retry"
 )
 
 // Database URLs from sapics/ip-location-db. ASN/Country are served via
@@ -497,6 +498,11 @@ func ensureFile(dst, src string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
+	return retry.Do(ctx, func() error { return downloadOnce(ctx, dst, src) })
+}
+
+// downloadOnce is a single download attempt for ensureFile.
+func downloadOnce(ctx context.Context, dst, src string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
@@ -510,7 +516,7 @@ func ensureFile(dst, src string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status %d from %s", resp.StatusCode, src)
+		return &retry.StatusError{Code: resp.StatusCode, URL: src}
 	}
 
 	tmp := dst + ".tmp"

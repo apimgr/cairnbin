@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/apimgr/pastebin/src/audit"
+	"github.com/apimgr/pastebin/src/common/retry"
 	"github.com/apimgr/pastebin/src/maintenance"
 	"github.com/apimgr/pastebin/src/updater"
 )
@@ -299,6 +300,11 @@ func securityFetchTask(name, dir string, sources []Source) func(ctx context.Cont
 // as an error and dst is left untouched. ctx bounds the request so a scheduler
 // shutdown aborts an in-flight download instead of holding the task's slot.
 func downloadFile(ctx context.Context, url, dst string) error {
+	return retry.Do(ctx, func() error { return downloadFileOnce(ctx, url, dst) })
+}
+
+// downloadFileOnce is a single download attempt for downloadFile.
+func downloadFileOnce(ctx context.Context, url, dst string) error {
 	client := &http.Client{Timeout: 60 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -311,7 +317,7 @@ func downloadFile(ctx context.Context, url, dst string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("get %s: status %d", url, resp.StatusCode)
+		return &retry.StatusError{Code: resp.StatusCode, URL: url}
 	}
 
 	tmp, err := os.CreateTemp(filepath.Dir(dst), ".dl-*")
