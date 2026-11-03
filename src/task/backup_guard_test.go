@@ -307,3 +307,27 @@ func TestResolveSizeCap_Absolute(t *testing.T) {
 		t.Errorf("resolveSizeCap(banana) = %d, want 0 (fail-open)", got)
 	}
 }
+
+// TestAuditBackupRetentionCleanupEmitsDeleted verifies each removed backup is
+// recorded as backup.deleted alongside the summary backup.retention_cleanup.
+func TestAuditBackupRetentionCleanupEmitsDeleted(t *testing.T) {
+	auditDir := t.TempDir()
+	w := audit.New(audit.Config{
+		Enabled: true,
+		Dir:     auditDir,
+		Events:  audit.EventCategories{Backup: true},
+	})
+	cfg := BackupConfig{BackupDir: t.TempDir(), ProjectName: "pastebin", Audit: w}
+	auditBackupRetentionCleanup(cfg, []string{"a.tar.gz", "b.tar.gz"}, "retention policy", 1)
+
+	data, err := os.ReadFile(filepath.Join(auditDir, "audit.log"))
+	if err != nil {
+		t.Fatalf("audit log not written: %v", err)
+	}
+	if n := strings.Count(string(data), `"event":"backup.deleted"`); n != 2 {
+		t.Fatalf("want 2 backup.deleted entries, got %d: %s", n, data)
+	}
+	if !strings.Contains(string(data), "backup.retention_cleanup") {
+		t.Fatalf("missing backup.retention_cleanup: %s", data)
+	}
+}

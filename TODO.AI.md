@@ -105,10 +105,12 @@ same pass gets its own line item here.
   review: Output Sanitization Pipeline chokepoint (stages 1-4), logging
   sections, audit log events, compliance modes, abuse detection, IP blocks.
 - PART 11 audit events still not emitted (spec "Audit Log Events"):
-  `backup.deleted` (retention removals in src/task/backup_guard.go),
   `security.ip_allowlisted`/`ip_allowlist_removed` (allowlist is config-only;
-  would need a diff on hot reload), `config.*_updated`/`ssl_expired` (config hot-reload
-  does not diff and emit), `server.updated`, and the rotation events below.
+  would need a diff on hot reload), `config.smtp_updated`/`ssl_updated`/
+  `ssl_expired`/`branding_updated` (config hot-reload does not diff and emit),
+  and `server.updated` (emitted by the update flow in a different process
+  from the restarted server). `backup.deleted` and
+  `config.tor_address_regenerated` are now emitted.
 - PART 11 `--maintenance secret rotate` is implemented (src/maintenance/secret.go). Not done: the running server
   keeps the old secret in memory until restart (the command says to restart); the typed-confirmation flow is
   not re-prompting the operator token for root callers, matching the other sensitive operations.

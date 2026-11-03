@@ -229,6 +229,16 @@ func auditBackupRetentionCleanup(cfg BackupConfig, deleted []string, reason stri
 	if cfg.Audit == nil || len(deleted) == 0 {
 		return
 	}
+	for _, name := range deleted {
+		cfg.Audit.Log(audit.Entry{
+			Event:    "backup.deleted",
+			Severity: audit.SeverityInfo,
+			Result:   audit.ResultSuccess,
+			Target:   &audit.Target{Type: "backup_file", ID: name},
+			Reason:   reason,
+			Details:  map[string]any{"filename": name},
+		})
+	}
 	cfg.Audit.Log(audit.Entry{
 		Event:    "backup.retention_cleanup",
 		Severity: audit.SeverityInfo,

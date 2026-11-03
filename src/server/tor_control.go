@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/apimgr/pastebin/src/audit"
 	"github.com/apimgr/pastebin/src/path"
 	"github.com/apimgr/pastebin/src/tor"
 )
@@ -192,6 +193,12 @@ func (s *Server) handleTorControlRegenerate(w http.ResponseWriter, r *http.Reque
 		})
 		return
 	}
+	s.auditLog(r, audit.Entry{
+		Event:    "config.tor_address_regenerated",
+		Severity: audit.SeverityInfo,
+		Result:   audit.ResultSuccess,
+		Target:   &audit.Target{Type: "tor", ID: "onion_address"},
+	})
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":   true,
 		"data": map[string]interface{}{"hostname": addr},
