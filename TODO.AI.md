@@ -78,11 +78,6 @@ same pass gets its own line item here.
   and user, but the macOS user data dir has no `data/` segment. Callers join
   `{data_dir}/security` directly; add a `security` path helper and migrate
   GeoIP/blocklist/CVE/Trivy callers when auditing PART 19.
-- PART 5 config-file booleans: yaml.v3 decodes only YAML 1.1 `yes/no/on/off`
-  into `bool` fields; spec requires the full truthy/falsy set (`enable`,
-  `oui`, ...) for config values via `config.ParseBool`. Needs a flexible bool
-  type or a pre-decode normalization pass across all `bool` fields in
-  `src/config/config.go`.
 - PART 5 `SafePath` (src/path) validates lowercase `[a-z0-9_-]` segments and
   strips the leading slash, so it cannot validate absolute operator paths
   (`--data`, `--config`) or dotted filenames as the AI.md examples imply.

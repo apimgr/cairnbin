@@ -3326,6 +3326,7 @@ func persistPortOnly(path string, port string) error {
 }
 
 func decodeConfig(data []byte, cfg *Config) error {
+	data = normalizeBoolDocument(data, cfg)
 	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
 	decoder.KnownFields(true)
 	return decoder.Decode(cfg)
