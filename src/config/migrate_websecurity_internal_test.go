@@ -33,3 +33,15 @@ func TestMigrateLegacyKeysWebSecurityMoves(t *testing.T) {
 		t.Error("security.txt field must stay under web.security")
 	}
 }
+
+func TestAllowlistEntryAcceptsScalarAndMapping(t *testing.T) {
+	var c ServerSecurityConfig
+	in := "allowlist:\n  - 10.0.0.1\n  - cidr: 192.168.0.0/16\n    description: LAN\n"
+	if err := yaml.Unmarshal([]byte(in), &c); err != nil {
+		t.Fatal(err)
+	}
+	got := c.AllowlistCIDRs()
+	if len(got) != 2 || got[0] != "10.0.0.1" || got[1] != "192.168.0.0/16" || c.Allowlist[1].Description != "LAN" {
+		t.Fatalf("unexpected allowlist: %+v", c.Allowlist)
+	}
+}

@@ -107,7 +107,7 @@ same pass gets its own line item here.
   fetches (GeoIP, blocklist, CVE, update check) each use ad-hoc retry; and no
   cache warming (`config:server`, `security:blocklist`, `geoip:info`) at
   startup. Decide the callers before adding either, so neither ships unused.
-- PART 12 config layout: `encryption_key`, `allowlist`, `blocked_ips`, `abuse_detection`, `blocklists`, `cve`, `trivy` now live under `server.security.*` (legacy `web.security.*` values migrate on load). Still open: AI.md writes `allowlist` entries as `{cidr, description}` maps; the code still reads plain strings.
+- PART 12 config layout: `encryption_key`, `allowlist`, `blocked_ips`, `abuse_detection`, `blocklists`, `cve`, `trivy` now live under `server.security.*` (legacy `web.security.*` values migrate on load). `allowlist` entries are `{cidr, description}` maps (bare strings still accepted).
 - PART 8/CSRF: `POST /pastes` (browser form route) still requires a CSRF token,
   so a plain `curl -d content=... {base}/pastes` is rejected; API/compat routes
   are exempt via `config.CSRFBuiltinExemptPaths`. Confirm this split with the

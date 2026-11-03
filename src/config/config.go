@@ -1135,7 +1135,7 @@ type ServerSecurityConfig struct {
 	// Allowlist is a list of IP addresses or CIDR ranges that bypass blocklist,
 	// rate limiting, and geoip checks. Auth checks are never bypassed.
 	// Single IPs are automatically expanded to /32 (IPv4) or /128 (IPv6).
-	Allowlist []string `yaml:"allowlist"`
+	Allowlist []AllowlistEntry `yaml:"allowlist"`
 	// BlockedIPs are permanent blocks (IP or CIDR): config-file entries only,
 	// released manually by removing the entry (PART 11 "IP Block Management").
 	BlockedIPs []string `yaml:"blocked_ips"`
@@ -1150,6 +1150,42 @@ type ServerSecurityConfig struct {
 	// Trivy configures the Aqua Trivy vulnerability database downloaded daily by
 	// the scheduler into {data_dir}/security/trivy/ (PART 18/19).
 	Trivy TrivyConfig `yaml:"trivy"`
+}
+
+// AllowlistEntry is one server.security.allowlist item (AI.md PART 11): an IP
+// or CIDR plus a human-readable label. A bare scalar in server.yml is accepted
+// as an entry with no description.
+type AllowlistEntry struct {
+	CIDR        string `yaml:"cidr" json:"cidr"`
+	Description string `yaml:"description" json:"description"`
+}
+
+// UnmarshalYAML accepts either the `{cidr, description}` mapping or a bare
+// string (older configs).
+func (e *AllowlistEntry) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		e.CIDR = strings.TrimSpace(n.Value)
+		return nil
+	}
+	type plain AllowlistEntry
+	var p plain
+	if err := n.Decode(&p); err != nil {
+		return err
+	}
+	p.CIDR = strings.TrimSpace(p.CIDR)
+	*e = AllowlistEntry(p)
+	return nil
+}
+
+// AllowlistCIDRs returns the non-empty allowlist IP/CIDR strings.
+func (c ServerSecurityConfig) AllowlistCIDRs() []string {
+	out := make([]string, 0, len(c.Allowlist))
+	for _, e := range c.Allowlist {
+		if e.CIDR != "" {
+			out = append(out, e.CIDR)
+		}
+	}
+	return out
 }
 
 // BlocklistSource is a single downloadable blocklist: File is the destination
