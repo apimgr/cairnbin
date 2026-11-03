@@ -33,7 +33,7 @@ func tempCovPath(t *testing.T) string {
 func TestLoad_ExistingFile_MissingEncryptionKey_GeneratesOne(t *testing.T) {
 	path := tempCovPath(t)
 	cfg := config.DefaultConfig()
-	cfg.Web.Security.EncryptionKey = ""
+	cfg.Server.Security.EncryptionKey = ""
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -41,14 +41,14 @@ func TestLoad_ExistingFile_MissingEncryptionKey_GeneratesOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if loaded.Web.Security.EncryptionKey == "" {
+	if loaded.Server.Security.EncryptionKey == "" {
 		t.Error("Load should generate EncryptionKey for existing config with blank key")
 	}
 	reloaded, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load reload: %v", err)
 	}
-	if reloaded.Web.Security.EncryptionKey != loaded.Web.Security.EncryptionKey {
+	if reloaded.Server.Security.EncryptionKey != loaded.Server.Security.EncryptionKey {
 		t.Error("generated EncryptionKey should be persisted to disk")
 	}
 }
@@ -57,7 +57,7 @@ func TestLoad_ExistingFile_MissingToken_GeneratesOne(t *testing.T) {
 	path := tempCovPath(t)
 	cfg := config.DefaultConfig()
 	cfg.Server.Token = ""
-	cfg.Web.Security.EncryptionKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	cfg.Server.Security.EncryptionKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatalf("Save: %v", err)
 	}

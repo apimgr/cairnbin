@@ -38,7 +38,7 @@ func newSecurityReportTestServer(t *testing.T) *Server {
 	}
 
 	cfg := &config.Config{Web: config.WebConfig{SiteTitle: "Pastebin", Theme: "dark"}}
-	cfg.Web.Security.EncryptionKey = securityReportTestKey
+	cfg.Server.Security.EncryptionKey = securityReportTestKey
 	cfg.Server.Pages.Contact.Enabled = true
 
 	s := &Server{
@@ -265,7 +265,7 @@ func TestSecurityReportValidationRejects(t *testing.T) {
 // is mandatory), returning 503 rather than storing the report.
 func TestSecurityReportRequiresEncryptionKey(t *testing.T) {
 	s := newSecurityReportTestServer(t)
-	s.cfg.Web.Security.EncryptionKey = ""
+	s.cfg.Server.Security.EncryptionKey = ""
 
 	rec := postSecurityReport(s, securityReportForm())
 	if rec.Code != http.StatusServiceUnavailable {

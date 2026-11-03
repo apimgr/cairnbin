@@ -793,7 +793,7 @@ func TestConfigManager_Get_ConcurrentReads(t *testing.T) {
 func TestEncryptionKey(t *testing.T) {
 	t.Run("absent_returns_error", func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		cfg.Web.Security.EncryptionKey = ""
+		cfg.Server.Security.EncryptionKey = ""
 		if _, err := cfg.EncryptionKey(); err == nil {
 			t.Error("expected error for empty EncryptionKey, got nil")
 		}
@@ -801,7 +801,7 @@ func TestEncryptionKey(t *testing.T) {
 
 	t.Run("non_hex_returns_error", func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		cfg.Web.Security.EncryptionKey = "not-hex!!"
+		cfg.Server.Security.EncryptionKey = "not-hex!!"
 		if _, err := cfg.EncryptionKey(); err == nil {
 			t.Error("expected error for non-hex EncryptionKey, got nil")
 		}
@@ -810,7 +810,7 @@ func TestEncryptionKey(t *testing.T) {
 	t.Run("wrong_length_returns_error", func(t *testing.T) {
 		cfg := config.DefaultConfig()
 		// 16 bytes hex = 32 hex chars — too short for AES-256
-		cfg.Web.Security.EncryptionKey = "00112233445566778899aabbccddeeff"
+		cfg.Server.Security.EncryptionKey = "00112233445566778899aabbccddeeff"
 		if _, err := cfg.EncryptionKey(); err == nil {
 			t.Error("expected error for 16-byte key, got nil")
 		}
@@ -819,7 +819,7 @@ func TestEncryptionKey(t *testing.T) {
 	t.Run("valid_32_byte_key", func(t *testing.T) {
 		cfg := config.DefaultConfig()
 		// 32 bytes = 64 hex chars
-		cfg.Web.Security.EncryptionKey = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+		cfg.Server.Security.EncryptionKey = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
 		key, err := cfg.EncryptionKey()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -836,7 +836,7 @@ func TestEncryptionKey(t *testing.T) {
 // "unset returns empty map, not error" startup-validation path.
 func TestDNSCredentials_EncryptDecrypt_RoundTrip(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Web.Security.EncryptionKey = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+	cfg.Server.Security.EncryptionKey = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
 
 	t.Run("round_trip", func(t *testing.T) {
 		creds := map[string]string{"auth_token": "secret-value", "region": "us-east-1"}
@@ -887,7 +887,7 @@ func TestDNSCredentials_EncryptDecrypt_RoundTrip(t *testing.T) {
 
 	t.Run("missing_encryption_key_returns_error", func(t *testing.T) {
 		badCfg := config.DefaultConfig()
-		badCfg.Web.Security.EncryptionKey = ""
+		badCfg.Server.Security.EncryptionKey = ""
 		if _, err := badCfg.EncryptDNSCredentials(map[string]string{"a": "b"}); err == nil {
 			t.Error("expected error when EncryptionKey is unset")
 		}
@@ -1306,7 +1306,7 @@ func TestLoad_UnknownKeyStillGeneratesSecrets(t *testing.T) {
 	if cfg.Server.Port != "12345" {
 		t.Errorf("valid port not kept: %q", cfg.Server.Port)
 	}
-	if cfg.Web.Security.EncryptionKey == "" {
+	if cfg.Server.Security.EncryptionKey == "" {
 		t.Error("encryption key not generated for config with invalid entry")
 	}
 	if cfg.Server.Token == "" {

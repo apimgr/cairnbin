@@ -1173,7 +1173,7 @@ Examples:
 	logSchedErr(sched.Register("blocklist_update", "Blocklist Update", "0 4 * * *", true,
 		task.BlocklistUpdate(dataDir, blocklistSources(cfg)...)))
 	cveTask := task.CVEUpdate(dataDir, cveSources(cfg)...)
-	trivyCfg := cfg.Web.Security.Trivy
+	trivyCfg := cfg.Server.Security.Trivy
 	// PART 18: trivy has no scheduled task of its own — cve_update owns both the
 	// NVD CVE feed and the Trivy vulnerability database.
 	logSchedErr(sched.Register("cve_update", "CVE Update", "0 5 * * *", true, func(ctx context.Context) error {
@@ -2221,7 +2221,7 @@ func startupBaseURL(cfg *config.Config) string {
 // Returns nil when blocklists are disabled so the task only ensures the
 // directory exists (graceful degradation, PART 19).
 func blocklistSources(cfg *config.Config) []task.Source {
-	bl := cfg.Web.Security.Blocklists
+	bl := cfg.Server.Security.Blocklists
 	if !bl.Enabled {
 		return nil
 	}
@@ -2238,7 +2238,7 @@ func blocklistSources(cfg *config.Config) []task.Source {
 // cveSources maps the configured CVE source to task.Source values. Returns nil
 // when CVE updates are disabled or unconfigured.
 func cveSources(cfg *config.Config) []task.Source {
-	c := cfg.Web.Security.CVE
+	c := cfg.Server.Security.CVE
 	if !c.Enabled || c.File == "" || c.Source == "" {
 		return nil
 	}

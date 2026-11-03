@@ -1993,7 +1993,7 @@ func TestAllowlistMiddleware(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := &config.Config{}
-			cfg.Web.Security.Allowlist = tc.allowlist
+			cfg.Server.Security.Allowlist = tc.allowlist
 			s := newMinimalServer(cfg)
 
 			var gotFlag bool

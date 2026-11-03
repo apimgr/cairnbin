@@ -14,8 +14,8 @@ func newAbuseServer(readLimit, multiplier int) *Server {
 	cfg := config.DefaultConfig()
 	cfg.Server.RateLimit.Enabled = true
 	cfg.Server.RateLimit.Read.Requests = readLimit
-	cfg.Web.Security.AbuseDetection.RequestFlood.Multiplier = multiplier
-	cfg.Web.Security.AbuseDetection.RequestFlood.BlockDuration = "1h"
+	cfg.Server.Security.AbuseDetection.RequestFlood.Multiplier = multiplier
+	cfg.Server.Security.AbuseDetection.RequestFlood.BlockDuration = "1h"
 	return &Server{cfg: cfg, ipBlocks: newIPBlocks()}
 }
 
@@ -62,7 +62,7 @@ func TestAbuse_AllowlistedIPIsNeverBlocked(t *testing.T) {
 
 func TestAbuse_AutoBlockOffRecordsNothing(t *testing.T) {
 	s := newAbuseServer(1, 1)
-	s.cfg.Web.Security.AbuseDetection.AutoBlockIP = false
+	s.cfg.Server.Security.AbuseDetection.AutoBlockIP = false
 	for i := 0; i < 5; i++ {
 		if code := serveAbuse(s, "203.0.113.7:1", false); code != http.StatusOK {
 			t.Fatalf("request %d status=%d, want 200 with auto_block_ip off", i+1, code)
@@ -72,7 +72,7 @@ func TestAbuse_AutoBlockOffRecordsNothing(t *testing.T) {
 
 func TestAbuse_PermanentBlockedIPsFromConfig(t *testing.T) {
 	s := newAbuseServer(100, 10)
-	s.cfg.Web.Security.BlockedIPs = []string{"192.0.2.0/24", "2001:db8::1"}
+	s.cfg.Server.Security.BlockedIPs = []string{"192.0.2.0/24", "2001:db8::1"}
 	if code := serveAbuse(s, "192.0.2.77:5", false); code != http.StatusForbidden {
 		t.Errorf("CIDR-blocked IP status=%d, want 403", code)
 	}
@@ -115,10 +115,10 @@ func TestAbuse_TemporaryBlockExpiresAndSweeps(t *testing.T) {
 
 func TestAbuse_ValidateDefaults(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Web.Security.AbuseDetection.RequestFlood.Multiplier = 0
-	cfg.Web.Security.AbuseDetection.RequestFlood.BlockDuration = "bogus"
+	cfg.Server.Security.AbuseDetection.RequestFlood.Multiplier = 0
+	cfg.Server.Security.AbuseDetection.RequestFlood.BlockDuration = "bogus"
 	config.Validate(cfg)
-	rf := cfg.Web.Security.AbuseDetection.RequestFlood
+	rf := cfg.Server.Security.AbuseDetection.RequestFlood
 	if rf.Multiplier != 10 || rf.BlockDuration != "1h" {
 		t.Errorf("invalid abuse settings not replaced by defaults: %+v", rf)
 	}

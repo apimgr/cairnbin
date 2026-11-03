@@ -10,7 +10,7 @@ import (
 // values, with incomplete entries dropped.
 func TestBlocklistSources_Enabled(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Web.Security.Blocklists = config.BlocklistsConfig{
+	cfg.Server.Security.Blocklists = config.BlocklistsConfig{
 		Enabled: true,
 		Sources: []config.BlocklistSource{
 			{File: "a.txt", URL: "https://example.test/a"},
@@ -30,7 +30,7 @@ func TestBlocklistSources_Enabled(t *testing.T) {
 // TestBlocklistSources_Disabled verifies disabled blocklists yield no sources.
 func TestBlocklistSources_Disabled(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Web.Security.Blocklists.Enabled = false
+	cfg.Server.Security.Blocklists.Enabled = false
 	if got := blocklistSources(cfg); got != nil {
 		t.Errorf("expected nil sources when disabled, got %+v", got)
 	}
@@ -40,7 +40,7 @@ func TestBlocklistSources_Disabled(t *testing.T) {
 // to a single task.Source.
 func TestCVESources_Enabled(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Web.Security.CVE = config.CVEConfig{
+	cfg.Server.Security.CVE = config.CVEConfig{
 		Enabled: true,
 		File:    "nvd.json",
 		Source:  "https://example.test/cve",
@@ -59,7 +59,7 @@ func TestCVESources_DisabledOrIncomplete(t *testing.T) {
 	if got := cveSources(cfg); got != nil {
 		t.Errorf("expected nil for default (disabled) CVE config, got %+v", got)
 	}
-	cfg.Web.Security.CVE = config.CVEConfig{Enabled: true, File: "", Source: "https://x"}
+	cfg.Server.Security.CVE = config.CVEConfig{Enabled: true, File: "", Source: "https://x"}
 	if got := cveSources(cfg); got != nil {
 		t.Errorf("expected nil when File empty, got %+v", got)
 	}

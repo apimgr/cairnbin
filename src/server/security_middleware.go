@@ -124,7 +124,7 @@ func (s *allowlistSet) contains(ip net.IP) bool {
 func (s *Server) allowlistMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg := s.liveCfg()
-		al := newAllowlistSet(cfg.Web.Security.Allowlist)
+		al := newAllowlistSet(cfg.Server.Security.Allowlist)
 
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {

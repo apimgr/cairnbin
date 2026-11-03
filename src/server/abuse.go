@@ -167,7 +167,7 @@ func (s *Server) abuseMiddleware(next http.Handler) http.Handler {
 		ipStr := requestIP(r)
 		ip := net.ParseIP(ipStr)
 
-		if ip != nil && len(cfg.Web.Security.BlockedIPs) > 0 && newAllowlistSet(cfg.Web.Security.BlockedIPs).contains(ip) {
+		if ip != nil && len(cfg.Server.Security.BlockedIPs) > 0 && newAllowlistSet(cfg.Server.Security.BlockedIPs).contains(ip) {
 			writeJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "error": "FORBIDDEN", "message": "forbidden"})
 			return
 		}
@@ -178,7 +178,7 @@ func (s *Server) abuseMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ad := cfg.Web.Security.AbuseDetection
+		ad := cfg.Server.Security.AbuseDetection
 		limit := cfg.Server.RateLimit.Read.Requests
 		if limit < 1 {
 			limit = 1

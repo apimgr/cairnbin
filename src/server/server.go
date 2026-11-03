@@ -552,7 +552,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 			AllowCountries: cfg.Server.GeoIP.AllowCountries,
 			// Wire server-wide security allowlist into geoip so GeoIP also
 			// bypasses country-blocking for explicitly allowlisted IPs.
-			Allowlist: cfg.Web.Security.Allowlist,
+			Allowlist: cfg.Server.Security.Allowlist,
 		}
 		if gdb, err := geoip.Open(gcfg); err != nil {
 			log.Printf("warning: geoip init: %v", err)

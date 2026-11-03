@@ -129,6 +129,9 @@ type ServerConfig struct {
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 	// Compression controls response compression (PART 12).
 	Compression CompressionConfig `yaml:"compression"`
+	// Security holds secrets, IP lists, abuse detection and security data sources
+	// (PART 11 server.security.*).
+	Security ServerSecurityConfig `yaml:"security"`
 	// Restore bounds restore/import archive extraction (PART 21).
 	Restore RestoreConfig `yaml:"restore"`
 	// Compliance toggles per-standard regulatory behavior (AI.md Compliance).
@@ -1109,10 +1112,6 @@ type SecurityConfig struct {
 	// PreferredLanguages is the security.txt Preferred-Languages field: a
 	// comma-separated list of RFC 5646 language tags. Empty → "en".
 	PreferredLanguages string `yaml:"preferred_languages"`
-	// EncryptionKey is the 32-byte AES-256-GCM key (hex-encoded) used for at-rest
-	// encryption of sensitive server data (DNS credentials, security reports, etc.).
-	// Auto-generated on first run; stored in server.yml; included in every backup.
-	EncryptionKey string `yaml:"encryption_key"`
 	// ContactEmail is the operator recipient for coordinated-disclosure security
 	// reports (PART 11 → Coordinated Disclosure Pipeline). Empty → falls back to
 	// the canonical server.contact.security.email.
@@ -1123,6 +1122,16 @@ type SecurityConfig struct {
 	// PublishPGPKey enables serving /.well-known/pgp-key.asc, the Encryption line
 	// in security.txt, and keyserver publishing. Parsed via config.ParseBool.
 	PublishPGPKey string `yaml:"publish_pgp_key"`
+}
+
+// ServerSecurityConfig is the server.security block (AI.md PART 11): at-rest
+// encryption key, IP allow/block lists, abuse detection and the downloaded
+// security data sources. The security.txt fields stay in web.security.
+type ServerSecurityConfig struct {
+	// EncryptionKey is the 32-byte AES-256-GCM key (hex-encoded) used for at-rest
+	// encryption of sensitive server data (DNS credentials, security reports, etc.).
+	// Auto-generated on first run; stored in server.yml; included in every backup.
+	EncryptionKey string `yaml:"encryption_key"`
 	// Allowlist is a list of IP addresses or CIDR ranges that bypass blocklist,
 	// rate limiting, and geoip checks. Auth checks are never bypassed.
 	// Single IPs are automatically expanded to /32 (IPv4) or /128 (IPv6).
@@ -1194,7 +1203,7 @@ type TLSConfig struct {
 	// DNSProvider selects the dns-01 provider name (e.g. cloudflare, rfc2136).
 	DNSProvider string `yaml:"dns_provider"`
 	// DNSCredentialsEncrypted stores AES-256-GCM encrypted JSON of provider credentials.
-	// Encrypted using web.security.encryption_key. Never store plaintext credentials here.
+	// Encrypted using server.security.encryption_key. Never store plaintext credentials here.
 	DNSCredentialsEncrypted string `yaml:"dns_credentials_encrypted"`
 }
 
@@ -1476,6 +1485,38 @@ type CSPConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
+			Security: ServerSecurityConfig{
+				// auto-generated on first run
+				EncryptionKey: "",
+				AbuseDetection: AbuseDetectionConfig{
+					RequestFlood: RequestFloodConfig{Multiplier: 10, BlockDuration: "1h"},
+					AutoBlockIP:  true,
+					AutoAlert:    true,
+				},
+				Blocklists: BlocklistsConfig{
+					Enabled: true,
+					Sources: []BlocklistSource{
+						{
+							File: "firehol_level1.txt",
+							URL:  "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
+						},
+						{
+							File: "spamhaus_drop.txt",
+							URL:  "https://www.spamhaus.org/drop/drop.txt",
+						},
+					},
+				},
+				CVE: CVEConfig{
+					Enabled:     false,
+					File:        "nvd.json",
+					Source:      "https://services.nvd.nist.gov/rest/json/cves/2.0",
+					FilterByCPE: false,
+				},
+				Trivy: TrivyConfig{
+					Enabled: false,
+					Source:  "ghcr.io/aquasecurity/trivy-db:2",
+				},
+			},
 			Port:       "",
 			Address:    "0.0.0.0",
 			FQDN:       "",
@@ -1883,38 +1924,6 @@ func DefaultConfig() *Config {
 				Allow: []string{"/"},
 				Deny:  []string{},
 			},
-			Security: SecurityConfig{
-				// auto-generated on first run
-				EncryptionKey: "",
-				AbuseDetection: AbuseDetectionConfig{
-					RequestFlood: RequestFloodConfig{Multiplier: 10, BlockDuration: "1h"},
-					AutoBlockIP:  true,
-					AutoAlert:    true,
-				},
-				Blocklists: BlocklistsConfig{
-					Enabled: true,
-					Sources: []BlocklistSource{
-						{
-							File: "firehol_level1.txt",
-							URL:  "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
-						},
-						{
-							File: "spamhaus_drop.txt",
-							URL:  "https://www.spamhaus.org/drop/drop.txt",
-						},
-					},
-				},
-				CVE: CVEConfig{
-					Enabled:     false,
-					File:        "nvd.json",
-					Source:      "https://services.nvd.nist.gov/rest/json/cves/2.0",
-					FilterByCPE: false,
-				},
-				Trivy: TrivyConfig{
-					Enabled: false,
-					Source:  "ghcr.io/aquasecurity/trivy-db:2",
-				},
-			},
 			HSTS: HSTSConfig{
 				Enabled: true,
 				// 2 years (preload-list eligible)
@@ -1969,7 +1978,7 @@ func Load(path string) (*Config, error) {
 			// Copy only the generated secrets so they survive the next startup.
 			saveCfg := DefaultConfig()
 			saveCfg.Server.FQDN = cfg.ResolveFQDN()
-			saveCfg.Web.Security.EncryptionKey = cfg.Web.Security.EncryptionKey
+			saveCfg.Server.Security.EncryptionKey = cfg.Server.Security.EncryptionKey
 			saveCfg.Server.Token = cfg.Server.Token
 			if saveErr := Save(path, saveCfg); saveErr != nil {
 				log.Printf("config: warning: could not persist generated secrets to %s: %v", path, saveErr)
@@ -2008,7 +2017,7 @@ func Load(path string) (*Config, error) {
 
 	// Generate and persist encryption key if missing (upgrade path for older configs).
 	needSave := false
-	if cfg.Web.Security.EncryptionKey == "" {
+	if cfg.Server.Security.EncryptionKey == "" {
 		if genErr := cfg.ensureEncryptionKey(); genErr != nil {
 			log.Printf("config: warning: could not generate encryption key: %v", genErr)
 		} else {
@@ -2046,16 +2055,16 @@ func Load(path string) (*Config, error) {
 }
 
 // ensureEncryptionKey generates a 32-byte AES-256-GCM key and stores it
-// hex-encoded in Web.Security.EncryptionKey. Idempotent — no-ops if already set.
+// hex-encoded in Server.Security.EncryptionKey. Idempotent — no-ops if already set.
 func (c *Config) ensureEncryptionKey() error {
-	if c.Web.Security.EncryptionKey != "" {
+	if c.Server.Security.EncryptionKey != "" {
 		return nil
 	}
 	var key [32]byte
 	if _, err := crand.Read(key[:]); err != nil {
 		return err
 	}
-	c.Web.Security.EncryptionKey = fmt.Sprintf("%x", key)
+	c.Server.Security.EncryptionKey = fmt.Sprintf("%x", key)
 	return nil
 }
 
@@ -2083,7 +2092,7 @@ func (c *Config) ensureServerToken() error {
 // EncryptionKey returns the decoded 32-byte AES-256-GCM key, or an error if
 // the key is absent or malformed.
 func (c *Config) EncryptionKey() ([]byte, error) {
-	s := c.Web.Security.EncryptionKey
+	s := c.Server.Security.EncryptionKey
 	if s == "" {
 		return nil, fmt.Errorf("encryption_key not configured")
 	}
@@ -2718,7 +2727,7 @@ func Validate(cfg *Config) {
 		cfg.Server.Compression.Types = d.Server.Compression.Types
 	}
 
-	ad := &cfg.Web.Security.AbuseDetection.RequestFlood
+	ad := &cfg.Server.Security.AbuseDetection.RequestFlood
 	if ad.Multiplier < 1 {
 		log.Printf("[config] WARNING: invalid abuse_detection.request_flood.multiplier %d, using default 10", ad.Multiplier)
 		ad.Multiplier = 10
@@ -3449,7 +3458,7 @@ func migrateLegacyKeys(data []byte) []byte {
 	if err := yaml.Unmarshal(data, &doc); err != nil || doc == nil {
 		return data
 	}
-	changed := false
+	changed := migrateWebSecurityKeys(doc)
 	for _, key := range legacyKeyMoves {
 		val, ok := doc[key]
 		if !ok {
@@ -3474,6 +3483,46 @@ func migrateLegacyKeys(data []byte) []byte {
 		return data
 	}
 	return out
+}
+
+// legacyWebSecurityMoves lists the web.security keys that AI.md PART 11 places
+// under server.security.
+var legacyWebSecurityMoves = []string{
+	"encryption_key", "allowlist", "blocked_ips", "abuse_detection", "blocklists", "cve", "trivy",
+}
+
+// migrateWebSecurityKeys moves legacy web.security.<key> values to
+// server.security.<key> in doc without overwriting a value already present at
+// the new location. It reports whether doc changed.
+func migrateWebSecurityKeys(doc map[string]any) bool {
+	web, _ := doc["web"].(map[string]any)
+	old, _ := web["security"].(map[string]any)
+	if old == nil {
+		return false
+	}
+	changed := false
+	for _, key := range legacyWebSecurityMoves {
+		val, ok := old[key]
+		if !ok {
+			continue
+		}
+		server, _ := doc["server"].(map[string]any)
+		if server == nil {
+			server = map[string]any{}
+		}
+		sec, _ := server["security"].(map[string]any)
+		if sec == nil {
+			sec = map[string]any{}
+		}
+		if _, exists := sec[key]; !exists {
+			sec[key] = val
+		}
+		server["security"] = sec
+		doc["server"] = server
+		delete(old, key)
+		changed = true
+	}
+	return changed
 }
 
 // validateRestoreLimits warns and substitutes the PART 21 default for any
