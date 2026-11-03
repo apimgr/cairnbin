@@ -632,6 +632,30 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		return runTorCommand(binaryName, positional[1:], stdout, stderr)
 	}
 
+	// ── Email (AI.md PART 17) ───────────────────────────────────────────────────
+	// Bare positional subcommand: "{project_name} email test [recipient]".
+
+	if len(positional) > 0 && positional[0] == "email" {
+		if len(positional) < 2 {
+			fmt.Fprintf(stderr, "%s: email requires an action\nUsage: %s email test [recipient]\n", binaryName, binaryName)
+			return 2
+		}
+		emailOpts := maintenance.EmailOptions{
+			ConfigDir: path.GetConfigDir(appName),
+			DBPath:    path.GetDBPath(appName),
+			LogDir:    path.GetLogsDir(appName),
+			Stdout:    stdout,
+		}
+		if len(positional) > 2 {
+			emailOpts.To = positional[2]
+		}
+		if err := maintenance.RunEmail(positional[1], emailOpts); err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", binaryName, err)
+			return 1
+		}
+		return 0
+	}
+
 	// ── Update ────────────────────────────────────────────────────────────────
 
 	if updateCmd != "" {

@@ -238,6 +238,8 @@ they are read individually (no `.env` file is ever loaded).
 | `SMTP_FROM_NAME` | From display name (default: app name) |
 | `SMTP_FROM_EMAIL` | From address (default: `no-reply@{fqdn}`) |
 
+Verify the SMTP setup with `pastebin email test [recipient]`. It checks the SMTP handshake, sends the `test` template (subject prefixed `[TEST]`) to the admin contact or the given recipient, and records the result in the audit log. Without SMTP configured it exits 1 with "email features require SMTP configuration".
+
 ### Directory overrides
 
 | Variable | Description |
