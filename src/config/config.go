@@ -132,6 +132,9 @@ type ServerConfig struct {
 	// Security holds secrets, IP lists, abuse detection and security data sources
 	// (PART 11 server.security.*).
 	Security ServerSecurityConfig `yaml:"security"`
+	// Debug holds the debug-only diagnostics settings (PART 6 "Debug
+	// Configuration"). They apply only while the debug flag is on.
+	Debug DebugConfig `yaml:"debug"`
 	// Restore bounds restore/import archive extraction (PART 21).
 	Restore RestoreConfig `yaml:"restore"`
 	// Compliance toggles per-standard regulatory behavior (AI.md Compliance).
@@ -1124,6 +1127,36 @@ type SecurityConfig struct {
 	PublishPGPKey string `yaml:"publish_pgp_key"`
 }
 
+// DebugConfig is the server.debug block (AI.md PART 6). Every setting is gated
+// by the debug flag (--debug, DEBUG env, MODE=debug), never by mode alone.
+type DebugConfig struct {
+	// Pprof mounts /debug/pprof and /debug/vars.
+	Pprof bool `yaml:"pprof"`
+	// LogQueries is reserved for SQL statement logging to debug.log.
+	LogQueries bool `yaml:"log_queries"`
+	// LogCache logs cache get/set/delete operations to debug.log.
+	LogCache bool `yaml:"log_cache"`
+	// LogBodies logs request and response bodies, truncated to MaxBodyLogSize.
+	LogBodies bool `yaml:"log_bodies"`
+	// MaxBodyLogSize caps each logged body (e.g. "10KB").
+	MaxBodyLogSize string `yaml:"max_body_log_size"`
+	// BlockProfileRate is the runtime block profiling rate (0 = disabled).
+	BlockProfileRate int `yaml:"block_profile_rate"`
+	// MutexProfileFraction is the runtime mutex profiling fraction (0 = disabled).
+	MutexProfileFraction int `yaml:"mutex_profile_fraction"`
+	// RuntimeEndpoints mounts /debug/{config,routes,cache,db,scheduler,memory,goroutines}.
+	RuntimeEndpoints bool `yaml:"runtime_endpoints"`
+}
+
+// MaxBodyLogBytes returns MaxBodyLogSize in bytes, defaulting to 10KB.
+func (d DebugConfig) MaxBodyLogBytes() int {
+	n, err := ParseSize(d.MaxBodyLogSize, 10*1024)
+	if err != nil || n <= 0 {
+		return 10 * 1024
+	}
+	return int(n)
+}
+
 // ServerSecurityConfig is the server.security block (AI.md PART 11): at-rest
 // encryption key, IP allow/block lists, abuse detection and the downloaded
 // security data sources. The security.txt fields stay in web.security.
@@ -1521,6 +1554,15 @@ type CSPConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
+			Debug: DebugConfig{
+				Pprof:                true,
+				LogQueries:           true,
+				LogCache:             true,
+				MaxBodyLogSize:       "10KB",
+				BlockProfileRate:     1,
+				MutexProfileFraction: 1,
+				RuntimeEndpoints:     true,
+			},
 			Security: ServerSecurityConfig{
 				// auto-generated on first run
 				EncryptionKey: "",
@@ -2752,6 +2794,7 @@ func Validate(cfg *Config) {
 	}
 
 	validateRestoreLimits(&cfg.Server.Restore)
+	validateDebugConfig(&cfg.Server.Debug)
 	validateUpdate(&cfg.Server.Update)
 	validateI18n(&cfg.Server.I18n)
 	validateBackupRetention(&cfg.Server.Backup.Retention)
@@ -3559,6 +3602,25 @@ func migrateWebSecurityKeys(doc map[string]any) bool {
 		changed = true
 	}
 	return changed
+}
+
+// validateDebugConfig warns and substitutes the PART 6 default for an invalid
+// server.debug value; startup never fails on a bad debug setting.
+func validateDebugConfig(d *DebugConfig) {
+	if d.BlockProfileRate < 0 {
+		log.Printf("[config] WARNING: invalid server.debug.block_profile_rate %d, using default 1", d.BlockProfileRate)
+		d.BlockProfileRate = 1
+	}
+	if d.MutexProfileFraction < 0 {
+		log.Printf("[config] WARNING: invalid server.debug.mutex_profile_fraction %d, using default 1", d.MutexProfileFraction)
+		d.MutexProfileFraction = 1
+	}
+	if n, err := ParseSize(d.MaxBodyLogSize, -1); err != nil || n <= 0 {
+		if d.MaxBodyLogSize != "" {
+			log.Printf("[config] WARNING: invalid server.debug.max_body_log_size %q, using default 10KB", d.MaxBodyLogSize)
+		}
+		d.MaxBodyLogSize = "10KB"
+	}
 }
 
 // validateRestoreLimits warns and substitutes the PART 21 default for any

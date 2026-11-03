@@ -969,6 +969,9 @@ Examples:
 		cfg.Server.Mode = mode.Get().String()
 	}
 
+	// server.debug profiling rates take effect while the debug flag is on (PART 6).
+	mode.SetProfileRates(cfg.Server.Debug.BlockProfileRate, cfg.Server.Debug.MutexProfileFraction)
+
 	// Re-resolve the output language now that server.yml is loaded, so the
 	// config-file lang: key takes its documented priority-2 position between the
 	// --lang flag and the system locale (PART 30).

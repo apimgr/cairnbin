@@ -45,3 +45,14 @@ func TestAllowlistEntryAcceptsScalarAndMapping(t *testing.T) {
 		t.Fatalf("unexpected allowlist: %+v", c.Allowlist)
 	}
 }
+
+func TestValidateDebugConfig(t *testing.T) {
+	d := DebugConfig{BlockProfileRate: -1, MutexProfileFraction: -3, MaxBodyLogSize: "junk"}
+	validateDebugConfig(&d)
+	if d.BlockProfileRate != 1 || d.MutexProfileFraction != 1 || d.MaxBodyLogBytes() != 10*1024 {
+		t.Fatalf("defaults not applied: %+v", d)
+	}
+	if def := DefaultConfig().Server.Debug; !def.Pprof || !def.RuntimeEndpoints || def.LogBodies {
+		t.Fatalf("unexpected defaults: %+v", def)
+	}
+}

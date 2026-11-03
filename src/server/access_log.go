@@ -64,8 +64,10 @@ func (s *Server) accessLogMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		bodies := s.newBodyCapture(ww, r)
 		next.ServeHTTP(ww, r)
 		latency := time.Since(start)
+		bodies.log(s, r, ww.Status())
 
 		if ww.Status() >= 200 && ww.Status() < 300 && !mode.IsDebugEnabled() &&
 			!s.liveCfg().Server.Logging.Access.LogHealthChecks && isHealthzPath(r.URL.Path) {

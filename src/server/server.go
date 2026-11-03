@@ -627,6 +627,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	} else {
 		s.cacheStore = cs
 	}
+	s.cacheStore = &debugCache{Cache: s.cacheStore, s: s}
 	// Wire the cache driver into the paste read path (PART 9) now that it's ready.
 	s.pasteHandler.SetCache(s.cacheStore)
 	// Wire the configured max paste size (server.yml paste.max_size) into
@@ -1403,10 +1404,16 @@ func (s *Server) setupRoutes() {
 
 	// ── Debug endpoints (only when --debug flag is active) (PART 6) ──────────
 	if mode.ShouldShowDebugEndpoints() {
-		r.Mount("/debug/pprof", http.DefaultServeMux)
-		r.Get("/debug/vars", expvar.Handler().ServeHTTP)
-		s.registerDebugRoutes(r)
-		log.Printf("debug: /debug/pprof, /debug/vars, /debug/{config,routes,cache,db,scheduler,memory,goroutines} endpoints enabled")
+		dbg := s.liveCfg().Server.Debug
+		if dbg.Pprof {
+			r.Mount("/debug/pprof", http.DefaultServeMux)
+			r.Get("/debug/vars", expvar.Handler().ServeHTTP)
+			log.Printf("debug: /debug/pprof and /debug/vars endpoints enabled")
+		}
+		if dbg.RuntimeEndpoints {
+			s.registerDebugRoutes(r)
+			log.Printf("debug: /debug/{config,routes,cache,db,scheduler,memory,goroutines} endpoints enabled")
+		}
 	}
 
 	// ── Auth stubs (no user accounts — redirect to home) ─────────────────────

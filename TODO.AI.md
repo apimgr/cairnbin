@@ -87,12 +87,7 @@ same pass gets its own line item here.
   strips the leading slash, so it cannot validate absolute operator paths
   (`--data`, `--config`) or dotted filenames as the AI.md examples imply.
   `SafeFilePath` is added; backup filenames use a base-name/`..` guard instead.
-- PART 6 `server.debug.*` config block (pprof, log_queries, log_cache,
-  log_bodies, max_body_log_size, block_profile_rate, mutex_profile_fraction,
-  runtime_endpoints) is not implemented; only the fixed on/off profiling rates
-  tied to the debug flag exist. Also missing: DB-query and cache-operation
-  debug logging (`debugLogDB`, `debugLogCache`) and the expvar counters
-  (`requests_total`, `errors_total`, `uptime_seconds`, ...) from the spec.
+- PART 6 `server.debug.*`: block implemented (pprof, log_cache, log_bodies, max_body_log_size, profile rates, runtime_endpoints). Still missing: `log_queries` is parsed but no SQL statement logging exists (needs a driver-level hook), and the expvar counters (`requests_total`, `errors_total`, `uptime_seconds`, ...).
 - PART 8 startup order: AI.md steps 8a-8i require creating dirs, binding
   privileged ports, spawning Tor with service-user setuid credentials, then
   dropping privileges BEFORE logging, PID file, config load and DB init. The

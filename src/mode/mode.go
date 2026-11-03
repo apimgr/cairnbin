@@ -25,6 +25,8 @@ const (
 )
 
 var (
+	blockProfileRate     = 1
+	mutexProfileFraction = 1
 	// currentMode stores the active application mode
 	currentMode Mode = Production
 	// debugEnabled tracks whether --debug / DEBUG=true was set (PART 6).
@@ -185,12 +187,23 @@ func SetDebug(enabled bool) {
 // data only while debugging (PART 6).
 func updateProfilingSettings(enabled bool) {
 	if enabled {
-		runtime.SetBlockProfileRate(1)
-		runtime.SetMutexProfileFraction(1)
+		runtime.SetBlockProfileRate(blockProfileRate)
+		runtime.SetMutexProfileFraction(mutexProfileFraction)
 		return
 	}
 	runtime.SetBlockProfileRate(0)
 	runtime.SetMutexProfileFraction(0)
+}
+
+// SetProfileRates sets the block profiling rate and mutex profiling fraction
+// used while debug is on (server.debug.block_profile_rate and
+// server.debug.mutex_profile_fraction); 0 disables that profile.
+func SetProfileRates(block, mutex int) {
+	mu.Lock()
+	defer mu.Unlock()
+	blockProfileRate = block
+	mutexProfileFraction = mutex
+	updateProfilingSettings(debugEnabled)
 }
 
 // SetDebugEnabled is the spec-required alias for SetDebug (PART 6, AI.md line 9020).
