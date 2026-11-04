@@ -96,7 +96,7 @@ Each log file accepts `filename`, `format`, `custom` (only when
 
 | Key | Default | Formats |
 |-----|---------|---------|
-| `logs.level` | `info` | `debug`/`info`/`warn`/`error` (server.log, app.log gate) |
+| `logs.level` | `warn` | `debug`/`info`/`warn`/`error` (server.log, app.log gate) |
 | `logs.access` | `access.log`, `apache`, rotate `monthly`, keep `none` | `apache`, `nginx`, `json`, `custom` |
 | `logs.server` | `server.log`, `text`, rotate `weekly,50MB`, keep `none` | `text`, `json` |
 | `logs.error` | `error.log`, `text`, rotate `weekly,50MB`, keep `none` | `text`, `json` |

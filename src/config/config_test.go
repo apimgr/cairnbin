@@ -456,7 +456,7 @@ func TestValidate(t *testing.T) {
 		if cfg.Web.Theme != "dark" {
 			t.Errorf("Theme changed: got %q", cfg.Web.Theme)
 		}
-		if cfg.Server.Logging.Level != "info" {
+		if cfg.Server.Logging.Level != "warn" {
 			t.Errorf("Logging.Level changed: got %q", cfg.Server.Logging.Level)
 		}
 	})
@@ -524,8 +524,8 @@ func TestValidate(t *testing.T) {
 		cfg := fresh()
 		cfg.Server.Logging.Level = "verbose"
 		config.Validate(cfg)
-		if cfg.Server.Logging.Level != "info" {
-			t.Errorf("expected log level reset to \"info\", got %q", cfg.Server.Logging.Level)
+		if cfg.Server.Logging.Level != "warn" {
+			t.Errorf("expected log level reset to \"warn\", got %q", cfg.Server.Logging.Level)
 		}
 	})
 

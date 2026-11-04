@@ -1742,7 +1742,7 @@ func DefaultConfig() *Config {
 				BootstrapTimeout: "5m",
 			},
 			Logging: LoggingConfig{
-				Level: "info",
+				Level: "warn",
 				Access: AccessLogConfig{
 					Filename:        "access.log",
 					Format:          "apache",
@@ -3019,9 +3019,9 @@ func Validate(cfg *Config) {
 	switch cfg.Server.Logging.Level {
 	case "debug", "info", "warn", "error":
 	default:
-		log.Printf("[config] WARNING: invalid logging.level %q, using default \"info\"",
+		log.Printf("[config] WARNING: invalid logging.level %q, using default \"warn\"",
 			cfg.Server.Logging.Level)
-		cfg.Server.Logging.Level = "info"
+		cfg.Server.Logging.Level = "warn"
 	}
 
 	// Per-file log settings: blank filename/format/rotate/keep fall back to
