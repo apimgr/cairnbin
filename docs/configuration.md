@@ -240,6 +240,8 @@ they are read individually (no `.env` file is ever loaded).
 
 Verify the SMTP setup with `pastebin email test [recipient]`. It checks the SMTP handshake, sends the `test` template (subject prefixed `[TEST]`) to the admin contact or the given recipient, and records the result in the audit log. Without SMTP configured it exits 1 with "email features require SMTP configuration".
 
+Custom email templates in `{config_dir}/template/email/{name}.txt` are validated when loaded. A file with an unknown `{variable}` (the log suggests the closest match), an empty subject or body, or a missing `Subject:` line or `---` separator is logged and ignored, and the built-in default is used instead. Subjects over 78 characters only log a warning.
+
 ### Directory overrides
 
 | Variable | Description |

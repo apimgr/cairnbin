@@ -284,7 +284,14 @@ func (m *Mailer) loadTemplate(name string) (string, error) {
 	if m.cfg.TemplateDir != "" {
 		path := m.cfg.TemplateDir + "/" + name + ".txt"
 		if data, err := os.ReadFile(path); err == nil {
-			return string(data), nil
+			errs, warns := ValidateTemplate(string(data))
+			for _, w := range warns {
+				log.Printf("email: template %s: warning: %s", path, w)
+			}
+			if len(errs) == 0 {
+				return string(data), nil
+			}
+			log.Printf("email: template %s ignored, using the default: %s", path, strings.Join(errs, "; "))
 		}
 	}
 

@@ -116,17 +116,16 @@ same pass gets its own line item here.
   not re-prompting the operator token for root callers, matching the other sensitive operations.
 - PART 11 reports: `web.reports.*` limits are now configurable. `nel` and other report groups
   are still accepted and discarded, not logged.
-- PART 11 abuse detection: only the request-flood detector + temporary/permanent
-  IP blocks exist (src/server/abuse.go). Not implemented: API-abuse throttling,
-  database-anomaly (injection pattern) blocking, config-tampering rollback.
-  Allowlist/blocked_ips are plain string lists; AI.md uses `{cidr, description}`
-  objects. Temporary blocks are in-memory only (lost on restart).
+- PART 11 abuse detection: request-flood detection, temporary blocks (auto-release by scheduler) and permanent
+  blocks exist; allowlist uses `{cidr, description}`. The spec table also lists API Abuse (throttle), Database
+  Anomaly (block) and Config Tampering (rollback) but defines no thresholds, config keys or detection rules for
+  them, so they are not implemented. Temporary blocks are in-memory only (lost on restart).
 - PART 16 frontend: reduced-motion `!important` and physical left/right CSS
   properties are fixed and enforced by src/server/css_policy_test.go. The
   `/server/*` standard pages, empty states, PWA, themes, branding/SEO, cookie
   banner and footer sections were not individually re-verified. Template policy
   is enforced by src/server/template_policy_test.go.
-- PART 17: `email test` is implemented as a bare positional command (like `tor`). Still open: save-time template validation (unknown variable, empty subject/body) has no caller; add a validator for custom files in `{config_dir}/template/email/` at load.
+- PART 17: `email test` is implemented as a bare positional command (like `tor`). Template validation is implemented (src/common/email/validate.go): invalid custom files are logged and ignored in favor of the default. Not done: the deprecated-variable and missing-recommended-section warnings (spec defines no deprecated variables or section lists).
 - PART 18: `scheduler list|show|run|enable|disable|history` is now a client command (src/client/scheduler.go) against /api/v1/server/schedulers. The spec writes `{project_name} scheduler ...` but the server flag set (PART 7) is fixed, so it lives on the client; the bordered box layout and `[Run All Now]` are not reproduced, and the show view omits the backup list/retention panel.
 - PART 21: no restore API or WebUI exists (spec forbids an admin UI); the 400 VALIDATION_FAILED encrypted-restore API response is therefore not applicable until a restore endpoint is specified.
 - PART 24: the spec systemd unit sets `ProtectSystem=strict` with `ReadWritePaths` limited to the four app dirs, but PART 23 has the binary create the service user (useradd/groupadd write `/etc/passwd`, `/etc/group`) at normal startup. Under the spec unit `/etc` is read-only, so first-start account creation can fail when launched by systemd. The unit now matches the spec exactly (previous extras `ReadWritePaths=/etc`, `NoNewPrivileges`, `RuntimeDirectory` removed); confirm the startup path degrades safely (or pre-creates the user during `--service --install`) once PART 8 startup order is done.
