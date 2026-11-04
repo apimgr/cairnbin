@@ -5198,11 +5198,39 @@ func (s *Server) pageData() map[string]interface{} {
 // it as template.HTML is safe; it is never user-submitted content. An empty
 // result (default or disabled branding) drops the branding row entirely.
 func (s *Server) injectFooterData(data map[string]interface{}) {
-	if html := s.liveCfg().FooterCustomHTML(); html != "" {
-		data["FooterCustomHTML"] = template.HTML(html)
-	} else {
-		data["FooterCustomHTML"] = template.HTML("")
+	html := s.liveCfg().FooterCustomHTML()
+	data["FooterCustomHTML"] = template.HTML(s.expandFooterVars(html))
+}
+
+// Project identity used by the footer variables; fixed regardless of binary rename.
+const (
+	footerProjectName = "pastebin"
+	footerProjectOrg  = "apimgr"
+)
+
+// expandFooterVars substitutes the AI.md "Available Footer Variables" in
+// already-sanitized footer HTML. Values are HTML-escaped; the onion and I2P
+// addresses are empty unless the service is enabled, running and published.
+func (s *Server) expandFooterVars(html string) string {
+	if html == "" || !strings.Contains(html, "{") {
+		return html
 	}
+	onion, i2p := "", ""
+	if s.torManager != nil && s.TorRunning() {
+		onion = s.TorOnionAddress()
+	}
+	if s.i2pManager != nil && s.I2PRunning() {
+		i2p = s.I2PAddress()
+	}
+	return strings.NewReplacer(
+		"{current_year}", strconv.Itoa(time.Now().Year()),
+		"{project_name}", footerProjectName,
+		"{project_org}", footerProjectOrg,
+		"{project_version}", template.HTMLEscapeString(s.version),
+		"{build_datetime}", template.HTMLEscapeString(s.buildDate),
+		"{onion_address}", template.HTMLEscapeString(onion),
+		"{i2p_address}", template.HTMLEscapeString(i2p),
+	).Replace(html)
 }
 
 // injectTorData adds the Tor hidden-service status fields used by page footers

@@ -81,3 +81,21 @@ func TestServerPagesAPI(t *testing.T) {
 		t.Errorf("disabled status=%d, want 404", w.Code)
 	}
 }
+
+func TestExpandFooterVars(t *testing.T) {
+	s := pagesServer(t)
+	s.version = "1.2.3"
+	s.buildDate = "July 18, 2026 at 10:00:00 UTC"
+	got := s.expandFooterVars("<p>{project_org}/{project_name} {project_version} {build_datetime} [{onion_address}][{i2p_address}] {current_year}</p>")
+	for _, want := range []string{"apimgr/pastebin", "1.2.3", "July 18, 2026 at 10:00:00 UTC", "[][]"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expanded footer %q missing %q", got, want)
+		}
+	}
+	if strings.Contains(got, "{current_year}") {
+		t.Error("{current_year} not expanded")
+	}
+	if s.expandFooterVars("") != "" {
+		t.Error("empty footer must stay empty")
+	}
+}

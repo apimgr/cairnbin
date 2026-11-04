@@ -4,7 +4,7 @@
         {{if .FooterCustomHTML}}
         <div class="footer-brand">{{.FooterCustomHTML}}</div>
         {{end}}
-        {{if and .TorEnabled .TorRunning}}
+        {{if and .TorEnabled .TorRunning .OnionAddress}}
         <div class="footer-onion">
             <a href="{{.AssetPrefix}}/server/help#tor-access" class="footer-onion-icon" aria-label="{{t .Lang "footer.tor_support"}}">🧅</a>
             <code class="footer-onion-address onion-address">{{.OnionAddress}}</code>

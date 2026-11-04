@@ -68,6 +68,9 @@ web:
     # default "*" (any site may iframe embeds); restrict with origins,
     # e.g. "'self' https://example.com"
     embed_frame_ancestors: "*"
+  footer:
+    # branding HTML above the footer; "" = default, " " = none; sanitized (no scripts or style)
+    custom_html: ""
   reports:
     # max browser reports per minute per client IP, across all report types
     rate_limit_per_minute: 60
@@ -78,6 +81,8 @@ web:
 `web.reports.*` tunes the browser-report intake at
 `/api/v1/server/reports/{name}`. Non-positive or invalid values warn at load
 and fall back to the defaults above.
+
+`web.footer.custom_html` may use `{current_year}`, `{project_name}`, `{project_org}`, `{project_version}`, `{build_datetime}`, `{onion_address}` and `{i2p_address}`; the last two are empty unless Tor or I2P is running with a published address.
 
 `server.pages.{about,help,privacy,terms}.content` takes Markdown. For `about` and `help` it is appended to the page; for `privacy` and `terms` a non-empty value replaces the default body. `server.pages.contact` has `enabled`, `captcha` and `success_message`.
 
