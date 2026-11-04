@@ -994,6 +994,25 @@ type ComplianceConfig struct {
 	PDPA     bool `yaml:"pdpa"`
 }
 
+// AuditRetentionYears returns the minimum audit-log retention, in years, that
+// the enabled standards require (PART 11 Compliance Requirements Matrix, the
+// strictest wins). It is 0 when no standard with a stated minimum is enabled.
+func (c ComplianceConfig) AuditRetentionYears() int {
+	years := 0
+	set := func(on bool, y int) {
+		if on && y > years {
+			years = y
+		}
+	}
+	set(c.GDPR, 1)
+	set(c.CCPA, 1)
+	set(c.HIPAA, 6)
+	set(c.SOC2, 1)
+	set(c.PCIDSS, 1)
+	set(c.ISO27001, 3)
+	return years
+}
+
 // CORSConfig controls cross-origin resource sharing (PART 16 → CORS).
 // Lives at server.cors (moved from the legacy web.cors / web.security.cors
 // single-string field).

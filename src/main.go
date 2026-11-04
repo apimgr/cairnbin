@@ -1120,6 +1120,12 @@ Examples:
 	// Logging manager (AI.md server.logs): owns access/server/error/app/auth/
 	// debug log files plus scheduled rotation for audit.log and security.log.
 	logCfg := cfg.Server.Logging
+	// Compliance standards set a minimum audit retention that overrides a
+	// shorter configured keep policy (PART 11 Compliance Requirements Matrix).
+	auditKeep := logging.EnforceMinimumAge(ac.Keep, cfg.Server.Compliance.AuditRetentionYears()*365)
+	if auditKeep != ac.Keep {
+		log.Printf("compliance: audit log keep %q raised to %q to meet the enabled standards' minimum retention", ac.Keep, auditKeep)
+	}
 	logMgr := logging.New(logging.Options{
 		Dir:       logsDir,
 		Level:     logCfg.Level,
@@ -1155,7 +1161,7 @@ Examples:
 			Enabled:  ac.Enabled,
 			Filename: ac.Filename,
 			Rotate:   ac.Rotate,
-			Keep:     ac.Keep,
+			Keep:     auditKeep,
 			Compress: ac.Compress,
 		},
 		Security: logFileOpts(logCfg.Security),

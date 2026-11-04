@@ -428,3 +428,27 @@ func gzipAndRemove(src string, perm os.FileMode) error {
 	}
 	return os.Remove(src)
 }
+
+// EnforceMinimumAge returns the keep policy to apply given a compliance
+// minimum retention of days (PART 11: audit log retention under a compliance
+// standard). Policies that already retain at least that long ("forever", or an
+// age >= days) are returned unchanged; anything shorter, including "none" and
+// plain counts whose age cannot be known, becomes "<days>d". days <= 0 leaves
+// keep unchanged.
+func EnforceMinimumAge(keep string, days int) string {
+	if days <= 0 {
+		return keep
+	}
+	p, err := ParseKeep(keep)
+	if err == nil {
+		switch p.Mode {
+		case "forever":
+			return keep
+		case "age":
+			if p.Age >= time.Duration(days)*24*time.Hour {
+				return keep
+			}
+		}
+	}
+	return fmt.Sprintf("%dd", days)
+}

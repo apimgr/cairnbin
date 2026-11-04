@@ -104,7 +104,9 @@ same pass gets its own line item here.
   has no `--maintenance`/docs surface beyond config. Output Sanitization Pipeline: stages 2-5 now run on error envelopes in
   httputil.WriteJSON; success bodies are not rewritten (they carry paste content, and stage 1 is the typed
   handler structs); stage 6 constant-time padding exists only for failed auth. Still to review: logging
-  sections, compliance modes.
+  sections. Compliance: audit retention minimum is now enforced; the per-standard behaviors tables (session
+  timeout, breach alerts, DPO, per-record PHI keys, change approval, etc.) are not implemented — most describe
+  features this app lacks (no user sessions, no PHI/cardholder data).
 - PART 11 audit events still not emitted (spec "Audit Log Events"):
   `security.ip_allowlisted`/`ip_allowlist_removed` (allowlist is config-only;
   would need a diff on hot reload), `config.smtp_updated`/`ssl_updated`/

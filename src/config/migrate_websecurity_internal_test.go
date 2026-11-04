@@ -69,3 +69,15 @@ func TestValidateReportsConfig(t *testing.T) {
 		t.Errorf("valid values changed: %+v", ok)
 	}
 }
+
+func TestAuditRetentionYears(t *testing.T) {
+	if got := (ComplianceConfig{}).AuditRetentionYears(); got != 0 {
+		t.Errorf("none enabled: got %d, want 0", got)
+	}
+	if got := (ComplianceConfig{GDPR: true, ISO27001: true}).AuditRetentionYears(); got != 3 {
+		t.Errorf("gdpr+iso: got %d, want 3", got)
+	}
+	if got := (ComplianceConfig{GDPR: true, HIPAA: true}).AuditRetentionYears(); got != 6 {
+		t.Errorf("gdpr+hipaa: got %d, want 6", got)
+	}
+}

@@ -367,3 +367,24 @@ func TestFileWriter_RotateCheck_NoFile(t *testing.T) {
 		t.Errorf("rotateCheck on missing file should be a no-op, got %v", err)
 	}
 }
+
+func TestEnforceMinimumAge(t *testing.T) {
+	cases := []struct {
+		keep string
+		days int
+		want string
+	}{
+		{"none", 0, "none"},
+		{"none", 365, "365d"},
+		{"30d", 365, "365d"},
+		{"400d", 365, "400d"},
+		{"forever", 2190, "forever"},
+		{"5", 365, "365d"},
+		{"bogus", 365, "365d"},
+	}
+	for _, c := range cases {
+		if got := EnforceMinimumAge(c.keep, c.days); got != c.want {
+			t.Errorf("EnforceMinimumAge(%q,%d)=%q want %q", c.keep, c.days, got, c.want)
+		}
+	}
+}
