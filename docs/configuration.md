@@ -68,7 +68,16 @@ web:
     # default "*" (any site may iframe embeds); restrict with origins,
     # e.g. "'self' https://example.com"
     embed_frame_ancestors: "*"
+  reports:
+    # max browser reports per minute per client IP, across all report types
+    rate_limit_per_minute: 60
+    # short-burst allowance per client IP (reports in one second)
+    rate_limit_per_ip_burst: 10
 ```
+
+`web.reports.*` tunes the browser-report intake at
+`/api/v1/server/reports/{name}`. Non-positive or invalid values warn at load
+and fall back to the defaults above.
 
 ### Tor (`server.tor`)
 
