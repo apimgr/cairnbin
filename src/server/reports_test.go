@@ -110,3 +110,22 @@ func TestRateLimitAuditOncePerIPPerMinute(t *testing.T) {
 		t.Errorf("onRateLimited called %d times for one IP within a minute, want 1", calls)
 	}
 }
+
+func TestConfigureReportLimits(t *testing.T) {
+	oldMin, oldBurst := reportLimiter, reportBurstLimiter
+	t.Cleanup(func() { reportLimiter, reportBurstLimiter = oldMin, oldBurst })
+
+	configureReportLimits(100, 2)
+	if !reportBurstLimiter.allow("a") || !reportBurstLimiter.allow("a") {
+		t.Fatal("first two reports within the burst must pass")
+	}
+	if reportBurstLimiter.allow("a") {
+		t.Error("third report in the same second must exceed burst=2")
+	}
+
+	keepMin, keepBurst := reportLimiter, reportBurstLimiter
+	configureReportLimits(0, 0)
+	if reportLimiter != keepMin || reportBurstLimiter != keepBurst {
+		t.Error("non-positive limits must leave the limiters unchanged")
+	}
+}

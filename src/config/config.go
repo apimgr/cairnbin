@@ -881,6 +881,8 @@ type WebConfig struct {
 	Security SecurityConfig `yaml:"security"`
 	HSTS     HSTSConfig     `yaml:"hsts"`
 	CSP      CSPConfig      `yaml:"csp"`
+	// Reports throttles the public reporting endpoints (PART 11).
+	Reports ReportsConfig `yaml:"reports"`
 	// Headers controls which advanced security headers are emitted.
 	Headers HeadersConfig `yaml:"headers"`
 	// CSRF controls double-submit cookie CSRF protection (PART 16).
@@ -2002,6 +2004,7 @@ func DefaultConfig() *Config {
 				Allow: []string{"/"},
 				Deny:  []string{},
 			},
+			Reports: ReportsConfig{RateLimitPerMinute: 60, RateLimitPerIPBurst: 10},
 			HSTS: HSTSConfig{
 				Enabled: true,
 				// 2 years (preload-list eligible)
@@ -2795,6 +2798,7 @@ func Validate(cfg *Config) {
 
 	validateRestoreLimits(&cfg.Server.Restore)
 	validateDebugConfig(&cfg.Server.Debug)
+	validateReportsConfig(&cfg.Web.Reports)
 	validateUpdate(&cfg.Server.Update)
 	validateI18n(&cfg.Server.I18n)
 	validateBackupRetention(&cfg.Server.Backup.Retention)
@@ -3603,6 +3607,28 @@ func migrateWebSecurityKeys(doc map[string]any) bool {
 		changed = true
 	}
 	return changed
+}
+
+// ReportsConfig is web.reports.* (PART 11 → Reporting API): per-IP limits for
+// the public /api/{api_version}/server/reports/{name} endpoints.
+type ReportsConfig struct {
+	// RateLimitPerMinute is the max reports per minute per IP across all types.
+	RateLimitPerMinute int `yaml:"rate_limit_per_minute"`
+	// RateLimitPerIPBurst is the short-burst allowance (max reports per second per IP).
+	RateLimitPerIPBurst int `yaml:"rate_limit_per_ip_burst"`
+}
+
+// validateReportsConfig warns and substitutes the PART 11 defaults for
+// non-positive values; startup never fails on a bad reports setting.
+func validateReportsConfig(r *ReportsConfig) {
+	if r.RateLimitPerMinute <= 0 {
+		log.Printf("[config] WARNING: invalid web.reports.rate_limit_per_minute %d, using default 60", r.RateLimitPerMinute)
+		r.RateLimitPerMinute = 60
+	}
+	if r.RateLimitPerIPBurst <= 0 {
+		log.Printf("[config] WARNING: invalid web.reports.rate_limit_per_ip_burst %d, using default 10", r.RateLimitPerIPBurst)
+		r.RateLimitPerIPBurst = 10
+	}
 }
 
 // validateDebugConfig warns and substitutes the PART 6 default for an invalid

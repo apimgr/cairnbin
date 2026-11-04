@@ -56,3 +56,16 @@ func TestValidateDebugConfig(t *testing.T) {
 		t.Fatalf("unexpected defaults: %+v", def)
 	}
 }
+
+func TestValidateReportsConfig(t *testing.T) {
+	r := ReportsConfig{RateLimitPerMinute: -1, RateLimitPerIPBurst: 0}
+	validateReportsConfig(&r)
+	if r.RateLimitPerMinute != 60 || r.RateLimitPerIPBurst != 10 {
+		t.Errorf("got %+v, want defaults 60/10", r)
+	}
+	ok := ReportsConfig{RateLimitPerMinute: 5, RateLimitPerIPBurst: 2}
+	validateReportsConfig(&ok)
+	if ok.RateLimitPerMinute != 5 || ok.RateLimitPerIPBurst != 2 {
+		t.Errorf("valid values changed: %+v", ok)
+	}
+}

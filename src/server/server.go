@@ -628,6 +628,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		s.cacheStore = cs
 	}
 	s.cacheStore = &debugCache{Cache: s.cacheStore, s: s}
+	configureReportLimits(cfg.Web.Reports.RateLimitPerMinute, cfg.Web.Reports.RateLimitPerIPBurst)
 	// Wire the cache driver into the paste read path (PART 9) now that it's ready.
 	s.pasteHandler.SetCache(s.cacheStore)
 	// Wire the configured max paste size (server.yml paste.max_size) into

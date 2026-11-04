@@ -114,10 +114,8 @@ same pass gets its own line item here.
 - PART 11 `--maintenance secret rotate` is implemented (src/maintenance/secret.go). Not done: the running server
   keeps the old secret in memory until restart (the command says to restart); the typed-confirmation flow is
   not re-prompting the operator token for root callers, matching the other sensitive operations.
-- PART 11 reports config (`server.security.reports.rate_limit_per_minute`,
-  `rate_limit_per_ip_burst`) is fixed in code (60/min per IP); expose it in
-  config. `nel` and other report groups are accepted and discarded, not
-  logged.
+- PART 11 reports: `web.reports.*` limits are now configurable. `nel` and other report groups
+  are still accepted and discarded, not logged.
 - PART 11 abuse detection: only the request-flood detector + temporary/permanent
   IP blocks exist (src/server/abuse.go). Not implemented: API-abuse throttling,
   database-anomaly (injection pattern) blocking, config-tampering rollback.

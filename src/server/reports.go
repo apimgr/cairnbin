@@ -17,8 +17,8 @@ import (
 const (
 	// reportsMaxBody bounds one browser report; real reports are well under 8 KiB.
 	reportsMaxBody = 64 << 10
-	// reportsPerMinute is the per-IP ceiling across all report types
-	// (`server.security.reports.rate_limit_per_minute`, PART 11).
+	// reportsPerMinute is the default per-IP ceiling across all report types
+	// (`web.reports.rate_limit_per_minute`, PART 11).
 	reportsPerMinute = 60
 	// reportField caps every logged report field (PART 11 sanitization stage 4).
 	reportField = 200
@@ -26,6 +26,19 @@ const (
 
 // reportLimiter throttles the public reports endpoints per client IP.
 var reportLimiter = newRateLimiter(reportsPerMinute, time.Minute)
+
+// reportBurstLimiter caps reports per second per IP (`web.reports.rate_limit_per_ip_burst`);
+// nil until configureReportLimits runs.
+var reportBurstLimiter *rateLimiter
+
+// configureReportLimits applies web.reports.* to the shared report limiters.
+func configureReportLimits(perMinute, burst int) {
+	if perMinute <= 0 || burst <= 0 {
+		return
+	}
+	reportLimiter = newRateLimiter(perMinute, time.Minute)
+	reportBurstLimiter = newRateLimiter(burst, time.Second)
+}
 
 // reportName restricts the {name} path segment to the documented report
 // groups; anything else is a 404 so the endpoint never becomes a free-form sink.
@@ -124,7 +137,7 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
-	if !reportLimiter.allow(ip) {
+	if !reportLimiter.allow(ip) || (reportBurstLimiter != nil && !reportBurstLimiter.allow(ip)) {
 		w.Header().Set("Retry-After", "60")
 		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{
 			"ok": false, "error": "RATE_LIMITED", "message": "Too many requests",
