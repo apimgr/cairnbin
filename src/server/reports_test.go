@@ -116,8 +116,10 @@ func TestConfigureReportLimits(t *testing.T) {
 	t.Cleanup(func() { reportLimiter, reportBurstLimiter = oldMin, oldBurst })
 
 	configureReportLimits(100, 2)
-	if !reportBurstLimiter.allow("a") || !reportBurstLimiter.allow("a") {
-		t.Fatal("first two reports within the burst must pass")
+	for i := 0; i < 2; i++ {
+		if !reportBurstLimiter.allow("a") {
+			t.Fatalf("report %d within the burst must pass", i+1)
+		}
 	}
 	if reportBurstLimiter.allow("a") {
 		t.Error("third report in the same second must exceed burst=2")
