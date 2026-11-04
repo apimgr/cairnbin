@@ -37,6 +37,7 @@
                     <p><a href="https://db-ip.com/" target="_blank" rel="noopener">{{t .Lang "about.attribution_geoip"}}</a></p>
                     <p>{{t .Lang "about.attribution_nro"}}</p>
                     {{end}}
+                    {{if .PageContent}}<div class="markdown-content">{{.PageContent}}</div>{{end}}
                 </div>
             </div>
         </section>

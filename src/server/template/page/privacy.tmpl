@@ -11,6 +11,7 @@
                 </div>
 
                 <div class="paste-view page-view">
+                    {{if .PageContent}}<div class="markdown-content">{{.PageContent}}</div>{{else}}
                     <section id="summary" class="privacy-summary">
                     <p class="privacy-summary">
                         {{if .Privacy.Data.Sold}}
@@ -142,6 +143,7 @@
                         {{t .Lang "privacy.contact_intro"}} <a href="{{.AssetPrefix}}/server/contact">{{t .Lang "privacy.contact_page_link"}}</a>.
                     </p>
                     </section>
+                    {{end}}
                 </div>
             </div>
         </section>

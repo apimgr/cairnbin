@@ -316,6 +316,7 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
                     <p>You have hit the rate limit. Wait and retry; the <code>Retry-After</code> header tells you how long.</p>
                     <h3>403 Forbidden on delete</h3>
                     <p>The delete token is missing or incorrect. Only the correct token can delete a paste.</p>
+                    {{if .PageContent}}<div class="markdown-content">{{.PageContent}}</div>{{end}}
                 </div>
             </div>
         </section>

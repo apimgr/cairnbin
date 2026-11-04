@@ -145,6 +145,18 @@ GET https://pste.us/api/healthz
 
 `/server/healthz` is content negotiated: HTML for browsers, JSON for API clients, plain text for CLI. The two API routes always return JSON; `/api/healthz` is a direct alias (no redirect). An optional `/healthz` alias exists when `server.healthz.root.enabled: true`.
 
+### Server pages
+
+```
+GET  https://pste.us/api/v1/server/about
+GET  https://pste.us/api/v1/server/privacy
+GET  https://pste.us/api/v1/server/help
+GET  https://pste.us/api/v1/server/terms
+POST https://pste.us/api/v1/server/contact
+```
+
+The GET routes return `{"ok": true, "data": {...}}` with the same facts the matching `/server/*` page shows. `POST /server/contact` takes a JSON body (`name`, `email`, `subject`, `message`, plus `captcha_token` and `captcha` when the built-in captcha is on) and follows the same rules as the web form.
+
 ## Guest Preferences
 
 Guest UI preferences (theme, language, list preferences) are cookie-based. The JSON mirror of the preferences form:

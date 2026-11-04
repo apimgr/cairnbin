@@ -79,6 +79,8 @@ web:
 `/api/v1/server/reports/{name}`. Non-positive or invalid values warn at load
 and fall back to the defaults above.
 
+`server.pages.{about,help,privacy,terms}.content` takes Markdown. For `about` and `help` it is appended to the page; for `privacy` and `terms` a non-empty value replaces the default body. `server.pages.contact` has `enabled`, `captcha` and `success_message`.
+
 ### Tor (`server.tor`)
 
 Tor hidden-service support is auto-enabled when a Tor binary is found —

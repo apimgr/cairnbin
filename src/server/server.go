@@ -1501,6 +1501,11 @@ func (s *Server) setupRoutes() {
 		// Server info
 		r.Get("/server/healthz", s.maybeHealthRateLimit(s.handleHealthzJSON))
 		r.Get("/server/version", s.handleVersion)
+		r.Get("/server/about", s.handleAboutAPI)
+		r.Get("/server/privacy", s.handlePrivacyAPI)
+		r.Get("/server/help", s.handleHelpAPI)
+		r.Get("/server/terms", s.handleTermsAPI)
+		r.Post("/server/contact", s.maybeStrictRateLimit(s.handleContactAPI))
 		// Cross-device preference sync API mirror (AI.md 23509-23512) — same
 		// handlers as the web routes above; each content-negotiates JSON here.
 		r.Get("/server/preferences", s.handlePreferences)
@@ -3977,6 +3982,7 @@ func (s *Server) aboutPageData() map[string]interface{} {
 	data["Features"] = b.EffectiveFeatures()
 	data["Links"] = b.EffectiveLinks()
 	data["GeoIPEnabled"] = s.liveCfg().Server.GeoIP.Enabled
+	data["PageContent"] = pageContentHTML(s.liveCfg().Server.Pages.About.Content)
 	return data
 }
 
@@ -3986,6 +3992,7 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 		"Theme":     s.liveCfg().Web.Theme,
 		"BaseURL":   s.baseURL(r),
 	}
+	data["PageContent"] = pageContentHTML(s.liveCfg().Server.Pages.Help.Content)
 	s.injectTermbinData(r, data)
 	if detectClientType(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -4132,6 +4139,27 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if status, msg := s.deliverContact(r, cfg, name, fromEmail, subject, message); status != http.StatusOK {
+		data["ContactError"] = msg
+		w.WriteHeader(status)
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
+
+	data["ContactSuccess"] = pc.SuccessMessage
+	// Clear the preserved fields on success so the form resets.
+	delete(data, "FormName")
+	delete(data, "FormEmail")
+	delete(data, "FormSubject")
+	delete(data, "FormMessage")
+	s.renderTemplate(w, r, "contact.html", data)
+}
+
+// deliverContact sends a validated contact-form message through every
+// configured channel (general webhook, then SMTP to the general recipient). It
+// returns http.StatusOK on success, otherwise the failure status and a
+// user-facing message. Shared by the web form and the JSON API.
+func (s *Server) deliverContact(r *http.Request, cfg *config.Config, name, fromEmail, subject, message string) (int, string) {
 	to := strings.TrimSpace(cfg.GeneralEmail())
 	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, s.baseURL(r), cfg.Server.FQDN)
 	emailReady := to != "" && m.Enabled()
@@ -4140,10 +4168,7 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 	// The form is available if any delivery channel is configured (PART 17): an
 	// SMTP recipient or at least one general-role webhook.
 	if !emailReady && len(webhookTargets) == 0 {
-		data["ContactError"] = "The contact form is currently unavailable. Please try again later."
-		w.WriteHeader(http.StatusServiceUnavailable)
-		s.renderTemplate(w, r, "contact.html", data)
-		return
+		return http.StatusServiceUnavailable, "The contact form is currently unavailable. Please try again later."
 	}
 
 	// General webhook — spam-filtered sender details and message (PART 17).
@@ -4160,20 +4185,11 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 			"message": message,
 		}); err != nil {
 			log.Printf("contact: send failed: %v", err)
-			data["ContactError"] = "Failed to send your message. Please try again later."
-			w.WriteHeader(http.StatusBadGateway)
-			s.renderTemplate(w, r, "contact.html", data)
-			return
+			return http.StatusBadGateway, "Failed to send your message. Please try again later."
 		}
 	}
 
-	data["ContactSuccess"] = pc.SuccessMessage
-	// Clear the preserved fields on success so the form resets.
-	delete(data, "FormName")
-	delete(data, "FormEmail")
-	delete(data, "FormSubject")
-	delete(data, "FormMessage")
-	s.renderTemplate(w, r, "contact.html", data)
+	return http.StatusOK, ""
 }
 
 func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
@@ -4207,6 +4223,7 @@ func (s *Server) privacyPageData(r *http.Request) map[string]interface{} {
 	data["Tracking"] = &tracking
 	data["CCPAOptedOut"] = ccpaOptedOut
 	data["ThirdPartyServices"] = cfg.EffectiveThirdParty()
+	data["PageContent"] = pageContentHTML(cfg.Server.Pages.Privacy.Content)
 	return data
 }
 
@@ -4589,9 +4606,11 @@ func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
+	data := s.pageData()
+	data["PageContent"] = pageContentHTML(s.liveCfg().Server.Pages.Terms.Content)
 	if detectClientType(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		html, err := s.renderTemplateToString(r, "terms.html", s.pageData())
+		html, err := s.renderTemplateToString(r, "terms.html", data)
 		if err != nil {
 			fmt.Fprintf(w, "Terms of Service — %s/server/terms\n", s.baseURL(r))
 			return
@@ -4599,7 +4618,7 @@ func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
-	s.renderTemplate(w, r, "terms.html", s.pageData())
+	s.renderTemplate(w, r, "terms.html", data)
 }
 
 // ─── Misc handlers ────────────────────────────────────────────────────────────
