@@ -10,7 +10,8 @@ import (
 // to w with the given HTTP status code. Shared by the server and handler
 // packages so the response-encoding behavior (indentation, escaping, and the
 // canonical SERVER_ERROR fallback on encode failure) never drifts between
-// them (AI.md PART 14 "Response Formatting").
+// them (AI.md PART 14 "Response Formatting"). Error envelopes also pass through
+// the Output Sanitization Pipeline (AI.md PART 11).
 func WriteJSON(w http.ResponseWriter, status int, v interface{}) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -24,5 +25,5 @@ func WriteJSON(w http.ResponseWriter, status int, v interface{}) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Write(buf.Bytes())
+	w.Write(sanitizeErrorBody(buf.Bytes()))
 }

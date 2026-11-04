@@ -101,9 +101,10 @@ same pass gets its own line item here.
 - PART 11 MCP follow-ups: operator-only tool mechanism exists but no operator
   API route is annotated yet; audit `source: mcp` is set via request context
   (verify it reaches paste create/delete audit events); `server.mcp.enabled`
-  has no `--maintenance`/docs surface beyond config. Also PART 11 still to
-  review: Output Sanitization Pipeline chokepoint (stages 1-4), logging
-  sections, audit log events, compliance modes, abuse detection, IP blocks.
+  has no `--maintenance`/docs surface beyond config. Output Sanitization Pipeline: stages 2-5 now run on error envelopes in
+  httputil.WriteJSON; success bodies are not rewritten (they carry paste content, and stage 1 is the typed
+  handler structs); stage 6 constant-time padding exists only for failed auth. Still to review: logging
+  sections, compliance modes.
 - PART 11 audit events still not emitted (spec "Audit Log Events"):
   `security.ip_allowlisted`/`ip_allowlist_removed` (allowlist is config-only;
   would need a diff on hot reload), `config.smtp_updated`/`ssl_updated`/
