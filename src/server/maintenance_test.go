@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/health"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/health"
 )
 
 // okHandler is a sentinel next-handler that records whether it ran.
@@ -116,7 +116,7 @@ func TestMaintenanceCleanupTrimsBackupsAndLogs(t *testing.T) {
 
 	base := time.Now()
 	for i := 0; i < 4; i++ {
-		p := filepath.Join(backupDir, "pastebin_backup_"+time.Duration(i).String()+".tar.gz")
+		p := filepath.Join(backupDir, "cairnbin_backup_"+time.Duration(i).String()+".tar.gz")
 		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +193,7 @@ func TestTrimBackupsFewFilesNoDelete(t *testing.T) {
 	}
 	// Only 2 backup files; keep=5 → nothing should be deleted.
 	for i := 0; i < 2; i++ {
-		name := filepath.Join(backupDir, "pastebin_backup_2026-07-0"+strconv.Itoa(i)+"_120000.tar.gz")
+		name := filepath.Join(backupDir, "cairnbin_backup_2026-07-0"+strconv.Itoa(i)+"_120000.tar.gz")
 		if err := os.WriteFile(name, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -305,7 +305,7 @@ func TestMaintenanceCleanupDefaultLimits(t *testing.T) {
 	// Create 7 backup files — more than the default keep count of 5.
 	base := time.Now()
 	for i := 0; i < 7; i++ {
-		name := filepath.Join(backupDir, "pastebin_backup_2026-07-0"+strconv.Itoa(i)+"_000000.tar.gz")
+		name := filepath.Join(backupDir, "cairnbin_backup_2026-07-0"+strconv.Itoa(i)+"_000000.tar.gz")
 		if err := os.WriteFile(name, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}

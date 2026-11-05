@@ -1,9 +1,9 @@
-site_name: Pastebin
-site_description: A fast, public pastebin service — drop-in replacement for pastebin.com, microbin, and lenpaste
-site_url: https://apimgr-pastebin.readthedocs.io
+site_name: Cairnbin
+site_description: A fast, public paste service — drop-in replacement for pastebin.com, microbin, and lenpaste
+site_url: https://apimgr-cairnbin.readthedocs.io
 site_author: apimgr
-repo_name: apimgr/pastebin
-repo_url: https://github.com/apimgr/pastebin
+repo_name: apimgr/cairnbin
+repo_url: https://github.com/apimgr/cairnbin
 edit_uri: edit/main/docs/
 
 theme:
@@ -82,7 +82,7 @@ markdown_extensions:
   - pymdownx.magiclink:
       repo_url_shorthand: true
       user: apimgr
-      repo: pastebin
+      repo: cairnbin
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.superfences:
@@ -113,5 +113,5 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/apimgr/pastebin
+      link: https://github.com/apimgr/cairnbin
   generator: false

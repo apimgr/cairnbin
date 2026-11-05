@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/apimgr/pastebin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/common/i18n"
 )
 
 // Daemonize is a no-op on Windows. It prints a warning directing the user

@@ -281,8 +281,8 @@ func TestCmdUpdate_SendsUserAgent(t *testing.T) {
 	c := &client{server: srv.URL}
 	c.cmdUpdate("check")
 
-	if !strings.HasPrefix(gotUA, "pastebin-cli/") {
-		t.Errorf("User-Agent = %q; want pastebin-cli/...", gotUA)
+	if !strings.HasPrefix(gotUA, "cairnbin-cli/") {
+		t.Errorf("User-Agent = %q; want cairnbin-cli/...", gotUA)
 	}
 }
 
@@ -515,8 +515,8 @@ func TestCmdGet_IDWithSpecialChars(t *testing.T) {
 // ─── envOrDefault — all branches ─────────────────────────────────────────────
 
 func TestEnvOrDefault_NonEmptyValue(t *testing.T) {
-	t.Setenv("TEST_PASTEBIN_CLI_NON_EMPTY", "value")
-	got := envOrDefault("TEST_PASTEBIN_CLI_NON_EMPTY", "default")
+	t.Setenv("TEST_CAIRNBIN_CLI_NON_EMPTY", "value")
+	got := envOrDefault("TEST_CAIRNBIN_CLI_NON_EMPTY", "default")
 	if got != "value" {
 		t.Errorf("got %q; want value", got)
 	}
@@ -596,7 +596,7 @@ func TestExitCodes_Values(t *testing.T) {
 // ─── projectName constant ────────────────────────────────────────────────────
 
 func TestProjectName_Value(t *testing.T) {
-	if projectName != "pastebin" {
-		t.Errorf("projectName = %q; want pastebin", projectName)
+	if projectName != "cairnbin" {
+		t.Errorf("projectName = %q; want cairnbin", projectName)
 	}
 }

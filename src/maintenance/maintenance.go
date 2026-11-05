@@ -21,9 +21,9 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/common/secretbox"
-	"github.com/apimgr/pastebin/src/pgp"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/pgp"
 )
 
 // ErrComplianceBackupBlocked is returned by Backup when compliance mode
@@ -35,7 +35,7 @@ var ErrComplianceBackupBlocked = errors.New("compliance mode requires an encrypt
 
 const (
 	orgName     = "apimgr"
-	projectName = "pastebin"
+	projectName = "cairnbin"
 )
 
 // Manifest is embedded in every backup archive as manifest.json.
@@ -437,7 +437,7 @@ func replaceYAMLField(lines []string, key, value string) []string {
 // Setup prints guidance for resetting admin credentials.
 func Setup(configDir string) error {
 	fmt.Println("To reset admin credentials, edit the database directly or restart")
-	fmt.Println("the server with the PASTEBIN_RESET_ADMIN=1 environment variable.")
+	fmt.Println("the server with the CAIRNBIN_RESET_ADMIN=1 environment variable.")
 	fmt.Printf("Config directory: %s\n", configDir)
 	return nil
 }
@@ -499,7 +499,7 @@ Examples:
   %s --maintenance backup
   %s --maintenance backup mybackup.tar.gz
   %s --maintenance backup test
-  %s --maintenance restore pastebin_backup_2025-01-01_120000.tar.gz
+  %s --maintenance restore cairnbin_backup_2025-01-01_120000.tar.gz
   %s --maintenance mode development
   %s --maintenance update
   %s --maintenance pgp generate

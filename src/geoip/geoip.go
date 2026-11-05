@@ -19,7 +19,7 @@ import (
 	"time"
 
 	maxminddb "github.com/oschwald/maxminddb-golang"
-	"github.com/apimgr/pastebin/src/common/retry"
+	"github.com/apimgr/cairnbin/src/common/retry"
 )
 
 // Database URLs from sapics/ip-location-db. ASN/Country are served via
@@ -507,7 +507,7 @@ func downloadOnce(ctx context.Context, dst, src string) error {
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
-	req.Header.Set("User-Agent", "pastebin-geoip/1.0")
+	req.Header.Set("User-Agent", "cairnbin-geoip/1.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

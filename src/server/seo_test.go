@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // TestValidateSEOVerification_NamedProviders covers each of the six provider
@@ -97,13 +97,13 @@ func newSEOTestServer(t *testing.T) (*Server, *config.Config) {
 // that render unconditionally, and that dynamic values are HTML-escaped.
 func TestSeoMetaTags_AlwaysPresent(t *testing.T) {
 	s, cfg := newSEOTestServer(t)
-	cfg.Server.Branding.Title = `Pastebin <script>alert(1)</script>`
+	cfg.Server.Branding.Title = `Cairnbin <script>alert(1)</script>`
 	cfg.Server.Branding.Description = "A test & example description"
 
 	r := httptest.NewRequest("GET", "http://example.com/paste/abc", nil)
 	out := string(s.seoMetaTags(r))
 
-	if !strings.Contains(out, `<meta property="og:title" content="Pastebin &lt;script&gt;alert(1)&lt;/script&gt;">`) {
+	if !strings.Contains(out, `<meta property="og:title" content="Cairnbin &lt;script&gt;alert(1)&lt;/script&gt;">`) {
 		t.Errorf("expected escaped og:title, got: %s", out)
 	}
 	if !strings.Contains(out, `<meta property="og:description" content="A test &amp; example description">`) {
@@ -145,7 +145,7 @@ func TestSeoMetaTags_Conditional(t *testing.T) {
 	cfg.Server.SEO.Keywords = []string{"paste", "code"}
 	cfg.Server.SEO.Author = "Jane Doe"
 	cfg.Server.SEO.OGImage = "https://example.com/og.png"
-	cfg.Server.SEO.TwitterHandle = "@pastebin"
+	cfg.Server.SEO.TwitterHandle = "@cairnbin"
 
 	out = string(s.seoMetaTags(r))
 	if !strings.Contains(out, `<meta name="keywords" content="paste, code">`) {
@@ -163,7 +163,7 @@ func TestSeoMetaTags_Conditional(t *testing.T) {
 	if !strings.Contains(out, wantTwitterImage) {
 		t.Errorf("expected twitter:image tag to remain the cached branding endpoint, got: %s", out)
 	}
-	if !strings.Contains(out, `<meta name="twitter:site" content="@pastebin">`) {
+	if !strings.Contains(out, `<meta name="twitter:site" content="@cairnbin">`) {
 		t.Errorf("expected twitter:site tag, got: %s", out)
 	}
 }

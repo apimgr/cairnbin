@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/maintenance"
+	"github.com/apimgr/cairnbin/src/maintenance"
 )
 
 // TestSetYAMLFieldCreatesFile verifies that SetYAMLField creates the config

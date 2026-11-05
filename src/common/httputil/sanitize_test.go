@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/mode"
+	"github.com/apimgr/cairnbin/src/mode"
 )
 
 func TestSanitizeString(t *testing.T) {
@@ -14,7 +14,7 @@ func TestSanitizeString(t *testing.T) {
 		"dial 10.1.2.3:5432 failed":                "dial [redacted]:5432 failed",
 		"dial 172.20.0.9 failed":                   "dial [redacted] failed",
 		"dial 8.8.8.8 failed":                      "dial 8.8.8.8 failed",
-		"open /var/lib/pastebin/server.db: denied": "open [redacted] denied",
+		"open /var/lib/cairnbin/server.db: denied": "open [redacted] denied",
 		"GET /api/v1/pastes failed":                "GET /api/v1/pastes failed",
 	}
 	for in, want := range cases {
@@ -32,11 +32,11 @@ func TestWriteJSONSanitizesErrorEnvelope(t *testing.T) {
 	WriteJSON(rec, 500, map[string]any{
 		"ok": false, "error": "SERVER_ERROR",
 		"message": "connect 192.168.1.5 failed",
-		"details": map[string]any{"path": "/etc/pastebin/server.yml"},
+		"details": map[string]any{"path": "/etc/cairnbin/server.yml"},
 		"_debug":  map[string]any{"stack": "x"},
 	})
 	body := rec.Body.String()
-	for _, bad := range []string{"192.168.1.5", "/etc/pastebin", "_debug"} {
+	for _, bad := range []string{"192.168.1.5", "/etc/cairnbin", "_debug"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("body leaks %q: %s", bad, body)
 		}

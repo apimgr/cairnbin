@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/apimgr/pastebin/src/client/gui"
-	"github.com/apimgr/pastebin/src/client/paths"
+	"github.com/apimgr/cairnbin/src/client/gui"
+	"github.com/apimgr/cairnbin/src/client/paths"
 )
 
 // runGUI launches the native GUI window. When no server is configured, the

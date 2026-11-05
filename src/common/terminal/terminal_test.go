@@ -3,7 +3,7 @@ package terminal_test
 import (
 	"testing"
 
-	"github.com/apimgr/pastebin/src/common/terminal"
+	"github.com/apimgr/cairnbin/src/common/terminal"
 )
 
 // TestCalculateMode_Cases exercises every branch of calculateMode by calling

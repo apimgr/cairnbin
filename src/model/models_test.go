@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // ─── Visibility constants ─────────────────────────────────────────────────────

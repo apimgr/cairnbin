@@ -52,34 +52,34 @@ func TestEscalationTools_IncludesSuAndOsascriptFallbacks(t *testing.T) {
 // ─── buildElevationCmd ────────────────────────────────────────────────────────
 
 func TestBuildElevationCmd_Sudo_PassesArgsDirectly(t *testing.T) {
-	cmd := buildElevationCmd("/usr/bin/sudo", "sudo", "/usr/local/bin/pastebin", []string{"--service", "start"})
+	cmd := buildElevationCmd("/usr/bin/sudo", "sudo", "/usr/local/bin/cairnbin", []string{"--service", "start"})
 
-	want := []string{"/usr/bin/sudo", "/usr/local/bin/pastebin", "--service", "start"}
+	want := []string{"/usr/bin/sudo", "/usr/local/bin/cairnbin", "--service", "start"}
 	if !reflect.DeepEqual(cmd.Args, want) {
 		t.Errorf("sudo cmd.Args = %v; want %v", cmd.Args, want)
 	}
 }
 
 func TestBuildElevationCmd_Pkexec_PassesArgsDirectly(t *testing.T) {
-	cmd := buildElevationCmd("/usr/bin/pkexec", "pkexec", "/usr/local/bin/pastebin", []string{"--service", "stop"})
+	cmd := buildElevationCmd("/usr/bin/pkexec", "pkexec", "/usr/local/bin/cairnbin", []string{"--service", "stop"})
 
-	want := []string{"/usr/bin/pkexec", "/usr/local/bin/pastebin", "--service", "stop"}
+	want := []string{"/usr/bin/pkexec", "/usr/local/bin/cairnbin", "--service", "stop"}
 	if !reflect.DeepEqual(cmd.Args, want) {
 		t.Errorf("pkexec cmd.Args = %v; want %v", cmd.Args, want)
 	}
 }
 
 func TestBuildElevationCmd_Doas_PassesArgsDirectly(t *testing.T) {
-	cmd := buildElevationCmd("/usr/bin/doas", "doas", "/usr/local/bin/pastebin", []string{"--service", "restart"})
+	cmd := buildElevationCmd("/usr/bin/doas", "doas", "/usr/local/bin/cairnbin", []string{"--service", "restart"})
 
-	want := []string{"/usr/bin/doas", "/usr/local/bin/pastebin", "--service", "restart"}
+	want := []string{"/usr/bin/doas", "/usr/local/bin/cairnbin", "--service", "restart"}
 	if !reflect.DeepEqual(cmd.Args, want) {
 		t.Errorf("doas cmd.Args = %v; want %v", cmd.Args, want)
 	}
 }
 
 func TestBuildElevationCmd_Su_WrapsCommandInShellString(t *testing.T) {
-	cmd := buildElevationCmd("/bin/su", "su", "/usr/local/bin/pastebin", []string{"--service", "start"})
+	cmd := buildElevationCmd("/bin/su", "su", "/usr/local/bin/cairnbin", []string{"--service", "start"})
 
 	if len(cmd.Args) != 3 {
 		t.Fatalf("su cmd.Args = %v; want 3 elements (path, -c, command)", cmd.Args)
@@ -88,13 +88,13 @@ func TestBuildElevationCmd_Su_WrapsCommandInShellString(t *testing.T) {
 		t.Errorf("su cmd.Args = %v; want [/bin/su -c ...]", cmd.Args)
 	}
 	joined := cmd.Args[2]
-	if !strings.Contains(joined, "/usr/local/bin/pastebin") || !strings.Contains(joined, "--service") || !strings.Contains(joined, "start") {
+	if !strings.Contains(joined, "/usr/local/bin/cairnbin") || !strings.Contains(joined, "--service") || !strings.Contains(joined, "start") {
 		t.Errorf("su command string %q missing expected components", joined)
 	}
 }
 
 func TestBuildElevationCmd_Osascript_UsesAdministratorPrivileges(t *testing.T) {
-	cmd := buildElevationCmd("/usr/bin/osascript", "osascript", "/usr/local/bin/pastebin", []string{"--service", "start"})
+	cmd := buildElevationCmd("/usr/bin/osascript", "osascript", "/usr/local/bin/cairnbin", []string{"--service", "start"})
 
 	if len(cmd.Args) != 3 {
 		t.Fatalf("osascript cmd.Args = %v; want 3 elements (path, -e, script)", cmd.Args)
@@ -109,7 +109,7 @@ func TestBuildElevationCmd_Osascript_UsesAdministratorPrivileges(t *testing.T) {
 	if !strings.Contains(script, "with administrator privileges") {
 		t.Errorf("osascript script %q missing 'with administrator privileges'", script)
 	}
-	if !strings.Contains(script, "/usr/local/bin/pastebin") {
+	if !strings.Contains(script, "/usr/local/bin/cairnbin") {
 		t.Errorf("osascript script %q missing target binary path", script)
 	}
 }
@@ -125,8 +125,8 @@ func TestShellQuote_EscapesEmbeddedSingleQuotes(t *testing.T) {
 }
 
 func TestShellJoin_QuotesEachArgument(t *testing.T) {
-	got := shellJoin([]string{"/usr/local/bin/pastebin", "--service", "start"})
-	want := "'/usr/local/bin/pastebin' '--service' 'start'"
+	got := shellJoin([]string{"/usr/local/bin/cairnbin", "--service", "start"})
+	want := "'/usr/local/bin/cairnbin' '--service' 'start'"
 	if got != want {
 		t.Errorf("shellJoin() = %q; want %q", got, want)
 	}

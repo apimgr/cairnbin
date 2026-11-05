@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/handler"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/handler"
 	"github.com/go-chi/chi/v5"
 )
 

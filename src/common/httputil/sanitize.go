@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"regexp"
 
-	"github.com/apimgr/pastebin/src/mode"
+	"github.com/apimgr/cairnbin/src/mode"
 )
 
 // Output Sanitization Pipeline limits (AI.md PART 11, stage 4).

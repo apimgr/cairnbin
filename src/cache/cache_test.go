@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/cache"
+	"github.com/apimgr/cairnbin/src/cache"
 )
 
 // ── DefaultConfig ─────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ func TestDefaultConfig(t *testing.T) {
 		{"Type", cfg.Type, "memory"},
 		{"Host", cfg.Host, "localhost"},
 		{"Port", cfg.Port, 6379},
-		{"Prefix", cfg.Prefix, "pastebin:"},
+		{"Prefix", cfg.Prefix, "cairnbin:"},
 		{"TTL", cfg.TTL, time.Hour},
 	}
 

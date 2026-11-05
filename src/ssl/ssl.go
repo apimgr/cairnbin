@@ -27,7 +27,7 @@ import (
 	legodns "github.com/go-acme/lego/v4/providers/dns"
 	"github.com/go-acme/lego/v4/registration"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // LetsEncryptStagingURL is the ACME directory URL for the Let's Encrypt staging CA.

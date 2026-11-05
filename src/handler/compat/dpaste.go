@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // ─── dpaste compatibility ────────────────────────────────────────────────────

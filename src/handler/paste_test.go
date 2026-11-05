@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/cache"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/handler"
+	"github.com/apimgr/cairnbin/src/cache"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/handler"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -34,7 +34,7 @@ func newTestDB(t *testing.T) database.DB {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(base, "pastebin-")
+	dir, err := os.MkdirTemp(base, "cairnbin-")
 	if err != nil {
 		t.Fatal(err)
 	}

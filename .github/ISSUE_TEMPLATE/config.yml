@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://github.com/apimgr/pastebin/tree/main/docs
+    url: https://github.com/apimgr/cairnbin/tree/main/docs
     about: Read the documentation before filing an issue
   - name: Security Vulnerability
-    url: https://github.com/apimgr/pastebin/security/advisories/new
+    url: https://github.com/apimgr/cairnbin/security/advisories/new
     about: Report security vulnerabilities privately via GitHub Security Advisories — do NOT use public issues

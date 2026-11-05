@@ -18,7 +18,7 @@ import (
 
 // cliBinaryName matches the only file names the CLI download route serves:
 // {project_name}-cli-{os}-{arch}[.exe] (PART 32 CLI Auto-Update).
-var cliBinaryName = regexp.MustCompile(`^pastebin-cli-(linux|darwin|windows|freebsd)-(amd64|arm64)(\.exe)?$`)
+var cliBinaryName = regexp.MustCompile(`^cairnbin-cli-(linux|darwin|windows|freebsd)-(amd64|arm64)(\.exe)?$`)
 
 // cliBinary describes one distributable CLI build.
 type cliBinary struct {
@@ -57,7 +57,7 @@ func hashCLIBinary(path string, info os.FileInfo) (string, error) {
 }
 
 // cliBinaryIndex lists the CLI builds this server can hand out, keyed by
-// "{os}-{arch}". Sources: files named pastebin-cli-{os}-{arch}[.exe] in
+// "{os}-{arch}". Sources: files named cairnbin-cli-{os}-{arch}[.exe] in
 // {data_dir}/cli/binaries/, plus the CLI binary installed beside the running
 // server (the container image ships it) for the server's own platform.
 func (s *Server) cliBinaryIndex() map[string]cliBinary {
@@ -87,7 +87,7 @@ func (s *Server) cliBinaryIndex() map[string]cliBinary {
 	if exe, err := os.Executable(); err == nil {
 		key := runtime.GOOS + "-" + runtime.GOARCH
 		if _, have := out[key]; !have {
-			name := "pastebin-cli"
+			name := "cairnbin-cli"
 			if runtime.GOOS == "windows" {
 				name += ".exe"
 			}
@@ -121,7 +121,7 @@ func (s *Server) handleCLIBinary(w http.ResponseWriter, r *http.Request) {
 		}
 		sum := sha256.Sum256([]byte(incoming))
 		if incoming == "" || subtle.ConstantTimeCompare(sum[:], s.operatorTokenHash[:]) != 1 {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="pastebin"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="cairnbin"`)
 			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
 				"ok": false, "error": "UNAUTHORIZED", "message": "authentication required",
 			})

@@ -252,7 +252,7 @@ func FormatJSONLine(t time.Time, level, msg string, fields ...string) string {
 }
 
 // FormatSyslog renders an RFC 3164 auth.log line:
-// May 13 10:58:00 hostname pastebin[123]: auth: token_id=xxx ip=1.2.3.4 result=fail reason=invalid_token
+// May 13 10:58:00 hostname cairnbin[123]: auth: token_id=xxx ip=1.2.3.4 result=fail reason=invalid_token
 func FormatSyslog(t time.Time, hostname, tag string, pid int, msg string) string {
 	// RFC 3164 day-of-month is space-padded.
 	stamp := t.Format("Jan _2 15:04:05")

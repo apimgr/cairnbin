@@ -3,7 +3,7 @@ package data_test
 import (
 	"testing"
 
-	"github.com/apimgr/pastebin/src/data"
+	"github.com/apimgr/cairnbin/src/data"
 )
 
 // TestLanguages_ReturnsList verifies Languages() returns a non-empty slice.

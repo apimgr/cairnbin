@@ -173,7 +173,7 @@ func TestFetchExpectedChecksum_HTTPError(t *testing.T) {
 
 	client := &http.Client{}
 	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
-	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
+	_, err := fetchExpectedChecksum(context.Background(), client, rel, "cairnbin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error when connection is forcibly closed, got nil")
 	}
@@ -192,7 +192,7 @@ func TestFetchExpectedChecksum_CancelledContext(t *testing.T) {
 
 	client := &http.Client{}
 	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
-	_, err := fetchExpectedChecksum(ctx, client, rel, "pastebin-linux-amd64")
+	_, err := fetchExpectedChecksum(ctx, client, rel, "cairnbin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error with cancelled context, got nil")
 	}
@@ -203,7 +203,7 @@ func TestFetchExpectedChecksum_CancelledContext(t *testing.T) {
 func TestFetchExpectedChecksum_BadURL(t *testing.T) {
 	client := &http.Client{}
 	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: "://bad"}}}
-	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
+	_, err := fetchExpectedChecksum(context.Background(), client, rel, "cairnbin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error for malformed URL, got nil")
 	}
@@ -215,7 +215,7 @@ func TestFetchExpectedChecksum_BadURL(t *testing.T) {
 func TestFetchExpectedChecksum_MultipleEntriesMatchFirst(t *testing.T) {
 	const want = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 	body := "other000000000000000000000000000000000000000000000000000  other-bin\n" +
-		want + "  pastebin-linux-amd64\n"
+		want + "  cairnbin-linux-amd64\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(body))
 	}))
@@ -223,7 +223,7 @@ func TestFetchExpectedChecksum_MultipleEntriesMatchFirst(t *testing.T) {
 
 	client := &http.Client{}
 	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
-	got, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
+	got, err := fetchExpectedChecksum(context.Background(), client, rel, "cairnbin-linux-amd64")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestFetchExpectedChecksum_UnexpectedStatusCode(t *testing.T) {
 
 	client := &http.Client{}
 	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
-	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
+	_, err := fetchExpectedChecksum(context.Background(), client, rel, "cairnbin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error for 503, got nil")
 	}
@@ -302,7 +302,7 @@ func TestDoUpdate_AssetWithWrongName(t *testing.T) {
 	rel := &Release{
 		TagName: "v9.9.9",
 		Assets: []Asset{
-			{Name: "pastebin-plan9-arm", BrowserDownloadURL: "http://127.0.0.1:1/bin"},
+			{Name: "cairnbin-plan9-arm", BrowserDownloadURL: "http://127.0.0.1:1/bin"},
 		},
 	}
 	err := DoUpdate(context.Background(), rel)

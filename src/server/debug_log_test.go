@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/mode"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/mode"
 )
 
 func TestSanitizeBodyForLog(t *testing.T) {

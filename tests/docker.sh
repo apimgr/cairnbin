@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # @@License : WTFPL
-# tests/docker.sh — Docker integration tests for pastebin
+# tests/docker.sh — Docker integration tests for cairnbin
 # Builds the local image, brings it up via the mandated
 # docker/docker-compose.test.yml (copied to a temp dir, never run from the
 # project tree), and exercises the API with content negotiation and endpoint
@@ -15,7 +15,7 @@ set -euo pipefail
 DOCKER_SCRIPT_NAME="$(basename -- "$0")"
 DOCKER_PROJECT_DIR="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 DOCKER_PROJECT_ORG="apimgr"
-DOCKER_PROJECT_NAME="pastebin"
+DOCKER_PROJECT_NAME="cairnbin"
 # Local build tag — the temp compose file is rewritten to use this image with
 # pull_policy:never so we exercise the current source, not a published image.
 DOCKER_IMAGE_NAME="${DOCKER_PROJECT_NAME}:test-$$"
@@ -100,13 +100,13 @@ docker build \
 mkdir -p "${TMPDIR:-/tmp}/${DOCKER_PROJECT_ORG}"
 DOCKER_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${DOCKER_PROJECT_ORG}/${DOCKER_PROJECT_NAME}-XXXXXX")"
 mkdir -p "${DOCKER_TEMP_DIR}/volumes/config" "${DOCKER_TEMP_DIR}/volumes/data"
-mkdir -p "${DOCKER_TEMP_DIR}/volumes/config/pastebin"
-cat >"${DOCKER_TEMP_DIR}/volumes/config/pastebin/server.yml" <<'EOF'
+mkdir -p "${DOCKER_TEMP_DIR}/volumes/config/cairnbin"
+cat >"${DOCKER_TEMP_DIR}/volumes/config/cairnbin/server.yml" <<'EOF'
 server:
   geoip:
     enabled: false
   tor:
-    binary: /__pastebin_e2e__/tor
+    binary: /__cairnbin_e2e__/tor
   notifications:
     email:
       enabled: false
@@ -119,9 +119,9 @@ rate_limit:
     window: 60
   global_burst: 2000
 EOF
-chmod 600 "${DOCKER_TEMP_DIR}/volumes/config/pastebin/server.yml"
-mkdir -p "${DOCKER_TEMP_DIR}/tormig-config/pastebin"
-cat >"${DOCKER_TEMP_DIR}/tormig-config/pastebin/server.yml" <<'EOF'
+chmod 600 "${DOCKER_TEMP_DIR}/volumes/config/cairnbin/server.yml"
+mkdir -p "${DOCKER_TEMP_DIR}/tormig-config/cairnbin"
+cat >"${DOCKER_TEMP_DIR}/tormig-config/cairnbin/server.yml" <<'EOF'
 server:
   geoip:
     enabled: false
@@ -131,11 +131,11 @@ server:
       smtp:
         host: localhost
 EOF
-chmod 600 "${DOCKER_TEMP_DIR}/tormig-config/pastebin/server.yml"
+chmod 600 "${DOCKER_TEMP_DIR}/tormig-config/cairnbin/server.yml"
 cp "${DOCKER_PROJECT_DIR}/docker/docker-compose.test.yml" "${DOCKER_TEMP_DIR}/docker-compose.yml"
 # Point the stack at the locally built image and never pull a published one.
 sed -i \
-    -e "s|image: ghcr.io/apimgr/pastebin:.*|image: ${DOCKER_IMAGE_NAME}|" \
+    -e "s|image: ghcr.io/apimgr/cairnbin:.*|image: ${DOCKER_IMAGE_NAME}|" \
     -e "s|pull_policy: always|pull_policy: never|" \
     "${DOCKER_TEMP_DIR}/docker-compose.yml"
 
@@ -449,7 +449,7 @@ printf '%s' "${DOCKER_HEADERS}" | grep -q -- "x-frame-options\|content-security-
 __pass "Framing protection header present"
 
 # ── --status flag ─────────────────────────────────────────────────────────────
-docker exec "${DOCKER_CONTAINER_NAME}" /usr/local/bin/pastebin --status >/dev/null || \
+docker exec "${DOCKER_CONTAINER_NAME}" /usr/local/bin/cairnbin --status >/dev/null || \
     __fail "--status exited non-zero"
 __pass "--status flag: ok"
 
@@ -466,7 +466,7 @@ __info "--- Tor key-format migration verification ---"
 __tormig_wait_hostname() {
     local timeout="$1" waited=0
     while ! docker exec "${DOCKER_TORMIG_NAME}" test -s \
-        /data/pastebin/tor/site/hostname 2>/dev/null; do
+        /data/cairnbin/tor/site/hostname 2>/dev/null; do
         sleep 2
         waited=$((waited + 2))
         [[ "${waited}" -lt "${timeout}" ]] || return 1
@@ -482,9 +482,9 @@ docker run -d --name "${DOCKER_TORMIG_NAME}" \
     "${DOCKER_IMAGE_NAME}" >/dev/null
 
 if __tormig_wait_hostname 200; then
-    DOCKER_TORMIG_ONION_1=$(docker exec "${DOCKER_TORMIG_NAME}" cat /data/pastebin/tor/site/hostname)
+    DOCKER_TORMIG_ONION_1=$(docker exec "${DOCKER_TORMIG_NAME}" cat /data/cairnbin/tor/site/hostname)
     DOCKER_TORMIG_KEYSIZE_1=$(docker exec "${DOCKER_TORMIG_NAME}" \
-        stat -c%s /data/pastebin/tor/site/hs_ed25519_secret_key)
+        stat -c%s /data/cairnbin/tor/site/hs_ed25519_secret_key)
     if [[ "${DOCKER_TORMIG_KEYSIZE_1}" -eq 96 ]]; then
         __pass "Fresh install: native 96-byte key, .onion=${DOCKER_TORMIG_ONION_1}"
     else
@@ -496,9 +496,9 @@ if __tormig_wait_hostname 200; then
     # leaving the same 64-byte expanded key the old saveKey() wrote raw.
     # Remove the derived hostname/public-key so only the legacy secret
     # key remains for the app to discover and migrate on next startup.
-    docker exec --user pastebin "${DOCKER_TORMIG_NAME}" sh -c '
+    docker exec --user cairnbin "${DOCKER_TORMIG_NAME}" sh -c '
         set -e
-        cd /data/pastebin/tor/site
+        cd /data/cairnbin/tor/site
         tail -c 64 hs_ed25519_secret_key > hs_ed25519_secret_key.legacy
         mv hs_ed25519_secret_key.legacy hs_ed25519_secret_key
         chmod 600 hs_ed25519_secret_key
@@ -513,9 +513,9 @@ if __tormig_wait_hostname 200; then
         "${DOCKER_IMAGE_NAME}" >/dev/null
 
     if __tormig_wait_hostname 200; then
-        DOCKER_TORMIG_ONION_2=$(docker exec "${DOCKER_TORMIG_NAME}" cat /data/pastebin/tor/site/hostname)
+        DOCKER_TORMIG_ONION_2=$(docker exec "${DOCKER_TORMIG_NAME}" cat /data/cairnbin/tor/site/hostname)
         DOCKER_TORMIG_KEYSIZE_2=$(docker exec "${DOCKER_TORMIG_NAME}" \
-            stat -c%s /data/pastebin/tor/site/hs_ed25519_secret_key)
+            stat -c%s /data/cairnbin/tor/site/hs_ed25519_secret_key)
         [[ "${DOCKER_TORMIG_KEYSIZE_2}" -eq 96 ]] || \
             __fail "Legacy key was not migrated to native 96-byte format (size=${DOCKER_TORMIG_KEYSIZE_2})"
         if [[ "${DOCKER_TORMIG_ONION_1}" == "${DOCKER_TORMIG_ONION_2}" ]]; then

@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/apimgr/pastebin/src/common/terminal"
+	"github.com/apimgr/cairnbin/src/common/terminal"
 )
 
 // Tests for size.go: GetLayoutConfig, sizeMode, helpLineForMode

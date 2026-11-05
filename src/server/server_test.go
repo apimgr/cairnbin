@@ -19,14 +19,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/common/buildinfo"
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/handler"
-	"github.com/apimgr/pastebin/src/handler/compat"
-	"github.com/apimgr/pastebin/src/mode"
-	"github.com/apimgr/pastebin/src/model"
-	"github.com/apimgr/pastebin/src/tor"
+	"github.com/apimgr/cairnbin/src/common/buildinfo"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/handler"
+	"github.com/apimgr/cairnbin/src/handler/compat"
+	"github.com/apimgr/cairnbin/src/mode"
+	"github.com/apimgr/cairnbin/src/model"
+	"github.com/apimgr/cairnbin/src/tor"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -445,7 +445,7 @@ func TestCSRFFailureBrowserGetsHTML(t *testing.T) {
 	}{
 		{name: "browser gets themed HTML", accept: "text/html,application/xhtml+xml", ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36", wantHTML: true, wantSubstr: "CSRF token validation failed"},
 		{name: "curl gets JSON envelope", accept: "*/*", ua: "curl/8.0", wantHTML: false, wantSubstr: "CSRF_FAILED"},
-		{name: "API client gets JSON envelope", accept: "application/json", ua: "pastebin-cli/1.0", wantHTML: false, wantSubstr: "CSRF_FAILED"},
+		{name: "API client gets JSON envelope", accept: "application/json", ua: "cairnbin-cli/1.0", wantHTML: false, wantSubstr: "CSRF_FAILED"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
@@ -543,7 +543,7 @@ func TestDetectClientType(t *testing.T) {
 		{"mozilla browser ua", "", "Mozilla/5.0 (X11; Linux x86_64)", "html"},
 		{"chrome browser ua", "", "Chrome/113.0", "html"},
 		{"empty ua and accept", "", "", "text"},
-		{"pastebin-cli ua", "", "pastebin-cli/1.0.0", "json"},
+		{"cairnbin-cli ua", "", "cairnbin-cli/1.0.0", "json"},
 		{"go http client ua", "", "Go-http-client/1.1", "text"},
 		{"accept star-star", "*/*", "", "text"},
 		{"accept json beats ua", "application/json", "Mozilla/5.0", "json"},
@@ -1020,7 +1020,7 @@ func makeTempDir(t *testing.T) string {
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		t.Fatalf("create temp parent dir: %v", err)
 	}
-	dir, err := os.MkdirTemp(parent, "pastebin-")
+	dir, err := os.MkdirTemp(parent, "cairnbin-")
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
@@ -1241,7 +1241,7 @@ func TestHandleSecurity(t *testing.T) {
 		t.Errorf("security.txt should contain Expires field, got: %q", body)
 	}
 	// RFC 9116 preference order: report_url first, mailto last (PART 11).
-	reportURL := "https://github.com/apimgr/pastebin/security/advisories/new"
+	reportURL := "https://github.com/apimgr/cairnbin/security/advisories/new"
 	if !strings.Contains(body, "Contact: "+reportURL) {
 		t.Errorf("security.txt should contain report_url Contact line, got: %q", body)
 	}
@@ -2196,7 +2196,7 @@ func TestBuildTorInfo(t *testing.T) {
 	})
 	t.Run("missing binary reports disabled", func(t *testing.T) {
 		s := newMinimalServer(&config.Config{})
-		s.torManager = tor.NewManager(context.Background(), 0, tor.Config{Binary: "/__pastebin_test__/missing-tor"}, nil)
+		s.torManager = tor.NewManager(context.Background(), 0, tor.Config{Binary: "/__cairnbin_test__/missing-tor"}, nil)
 		info := s.buildTorInfo()
 		if info.Enabled || info.Running || info.Status != "disabled" {
 			t.Errorf("missing Tor binary status = %+v, want disabled", info)
@@ -3016,7 +3016,7 @@ func newRecentTestServer(t *testing.T) *Server {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return newServerWithDB(&config.Config{Web: config.WebConfig{SiteTitle: "Pastebin", Theme: "dark"}}, db)
+	return newServerWithDB(&config.Config{Web: config.WebConfig{SiteTitle: "Cairnbin", Theme: "dark"}}, db)
 }
 
 // seedRecentPaste creates a public, non-expired paste for handleRecent tests.
@@ -3105,7 +3105,7 @@ func TestHandleRecentSearchAndSort(t *testing.T) {
 }
 
 // TestHandleRecentPreferenceCookies verifies handleRecent's read/write of the
-// pastebin_pref_{sort,order,per_page} guest preference cookies (AI.md 23485):
+// cairnbin_pref_{sort,order,per_page} guest preference cookies (AI.md 23485):
 // an explicit query param is persisted back to its cookie, and an absent
 // query param falls back to the visitor's previously saved preference.
 func TestHandleRecentPreferenceCookies(t *testing.T) {

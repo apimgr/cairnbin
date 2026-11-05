@@ -1,16 +1,16 @@
-# pastebin - test compose
+# cairnbin - test compose
 # FOR AI AND AUTOMATED TESTING - the ONLY docker-compose file AI may use.
 # MUST be copied to a temp directory before running — NEVER run from project directory.
 #
 # Workflow:
 #   mkdir -p "${TMPDIR:-/tmp}/apimgr"
-#   TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/pastebin-XXXXXX")
+#   TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/cairnbin-XXXXXX")
 #   mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 #   cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 #   cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
 #   rm -rf "$TEMP_DIR"
 
-name: pastebin
+name: cairnbin
 
 x-logging: &default-logging
   options:
@@ -19,11 +19,11 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  pastebin:
-    image: ghcr.io/apimgr/pastebin:devel
+  cairnbin:
+    image: ghcr.io/apimgr/cairnbin:devel
     pull_policy: always
-    container_name: pastebin-app
-    hostname: pastebin
+    container_name: cairnbin-app
+    hostname: cairnbin
     restart: "no"
     logging: *default-logging
     environment:
@@ -32,10 +32,10 @@ services:
       MODE: development
       TZ: ${TZ:-America/New_York}
       TERMBIN_ENABLED: true
-      CACHE_URL: valkey://pastebin-cache:6379
-      PASTEBIN_E2E_UPDATE_API_URL: http://pastebin-e2e-runner:64980/update
-      PASTEBIN_E2E_GEOIP_BASE_URL: http://pastebin-e2e-runner:64980/geoip
-      PASTEBIN_E2E_GEOIP_SKIP_INITIAL_DOWNLOAD: "true"
+      CACHE_URL: valkey://cairnbin-cache:6379
+      CAIRNBIN_E2E_UPDATE_API_URL: http://cairnbin-e2e-runner:64980/update
+      CAIRNBIN_E2E_GEOIP_BASE_URL: http://cairnbin-e2e-runner:64980/geoip
+      CAIRNBIN_E2E_GEOIP_SKIP_INITIAL_DOWNLOAD: "true"
     volumes:
       # CRITICAL: ./volumes/ must resolve to $TEMP_DIR/volumes/, NOT project directory
       # This file MUST be copied to a temp directory before running
@@ -44,30 +44,30 @@ services:
     ports:
       - "172.17.0.1:64581:80"
     healthcheck:
-      test: ['CMD', '/usr/local/bin/pastebin', '--status']
+      test: ['CMD', '/usr/local/bin/cairnbin', '--status']
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 90s
     depends_on:
-      pastebin-cache:
+      cairnbin-cache:
         condition: service_healthy
     networks:
-      - pastebin
+      - cairnbin
 
-  pastebin-e2e-browser:
+  cairnbin-e2e-browser:
     image: chromedp/headless-shell:latest
     pull_policy: always
-    container_name: pastebin-e2e-browser
+    container_name: cairnbin-e2e-browser
     restart: "no"
     logging: *default-logging
     networks:
-      - pastebin
+      - cairnbin
 
-  pastebin-cache:
+  cairnbin-cache:
     image: valkey/valkey:alpine
     pull_policy: always
-    container_name: pastebin-cache
+    container_name: cairnbin-cache
     restart: "no"
     logging: *default-logging
     tmpfs:
@@ -79,9 +79,9 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - pastebin
+      - cairnbin
 
 networks:
-  pastebin:
-    name: pastebin
+  cairnbin:
+    name: cairnbin
     external: false

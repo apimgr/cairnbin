@@ -472,7 +472,7 @@ func isContainer() bool {
 
 // projectBinaryName is the hardcoded project name used to recognise a parent
 // process that is our own entrypoint wrapper.
-const projectBinaryName = "pastebin"
+const projectBinaryName = "cairnbin"
 
 // parentProcessName returns the command name of the parent process, read from
 // /proc on Linux and via ps elsewhere. It returns "" when it cannot be found.

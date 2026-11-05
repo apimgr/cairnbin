@@ -4,7 +4,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/apimgr/pastebin/src/path"
+	"github.com/apimgr/cairnbin/src/path"
 )
 
 // ManagedByServiceManager reports whether the process was started by a

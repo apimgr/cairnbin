@@ -37,8 +37,8 @@ func TestNormalizeArgs(t *testing.T) {
 		},
 		{
 			name: "positional argument is untouched",
-			in:   []string{"pastebin-id", "list"},
-			want: []string{"pastebin-id", "list"},
+			in:   []string{"cairnbin-id", "list"},
+			want: []string{"cairnbin-id", "list"},
 		},
 		{
 			name: "empty input",
@@ -119,11 +119,11 @@ func TestApplyColor(t *testing.T) {
 // flag sections documented in the spec.
 func TestPrintHelp(t *testing.T) {
 	var buf strings.Builder
-	printHelp(&buf, "pastebin")
+	printHelp(&buf, "cairnbin")
 	got := buf.String()
 
 	wantSubstrings := []string{
-		"pastebin",
+		"cairnbin",
 		"Usage:",
 		"--help",
 		"--version",

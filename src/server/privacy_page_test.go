@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // TestRenderMarkdown verifies operator Markdown is converted and raw HTML is not

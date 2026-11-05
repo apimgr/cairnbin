@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // ─── 0x0.st (curl -F 'file=@-') ───────────────────────────────────────────────

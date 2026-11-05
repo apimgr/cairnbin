@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/common/email"
-	"github.com/apimgr/pastebin/src/health"
+	"github.com/apimgr/cairnbin/src/common/email"
+	"github.com/apimgr/cairnbin/src/health"
 )
 
 // criticalCheck probes the two critical subsystems defined in PART 20: the

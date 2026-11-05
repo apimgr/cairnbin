@@ -1,5 +1,5 @@
-// Package metrics registers and exposes Prometheus metrics for the pastebin service.
-// All metrics are prefixed with "pastebin_" per the project naming convention.
+// Package metrics registers and exposes Prometheus metrics for the cairnbin service.
+// All metrics are prefixed with "cairnbin_" per the project naming convention.
 package metric
 
 import (
@@ -18,10 +18,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/apimgr/pastebin/src/common/httputil"
+	"github.com/apimgr/cairnbin/src/common/httputil"
 )
 
-const ns = "pastebin"
+const ns = "cairnbin"
 
 // Metrics service names (AI.md PART 20). Each has its own bearer token so
 // rotating one service's token never breaks the others.

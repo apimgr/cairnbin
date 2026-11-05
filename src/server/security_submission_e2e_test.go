@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/database"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/database"
 )
 
 // securityReportTestKey is a valid 32-byte (64 hex char) AES-256-GCM key used to
@@ -37,7 +37,7 @@ func newSecurityReportTestServer(t *testing.T) *Server {
 		t.Fatalf("mkdir logs: %v", err)
 	}
 
-	cfg := &config.Config{Web: config.WebConfig{SiteTitle: "Pastebin", Theme: "dark"}}
+	cfg := &config.Config{Web: config.WebConfig{SiteTitle: "Cairnbin", Theme: "dark"}}
 	cfg.Server.Security.EncryptionKey = securityReportTestKey
 	cfg.Server.Pages.Contact.Enabled = true
 

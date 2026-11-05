@@ -3,8 +3,8 @@ package server
 import (
 	"time"
 
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/notify"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/notify"
 )
 
 // notifyRole resolves every configured webhook destination for a role and

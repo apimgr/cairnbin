@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/path"
+	"github.com/apimgr/cairnbin/src/path"
 )
 
 // ─── reservedIDs: nobody/nogroup ─────────────────────────────────────────────

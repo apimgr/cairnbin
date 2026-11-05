@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/data"
-	"github.com/apimgr/pastebin/src/handler"
-	"github.com/apimgr/pastebin/src/metric"
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/data"
+	"github.com/apimgr/cairnbin/src/handler"
+	"github.com/apimgr/cairnbin/src/metric"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // ─── lenpaste compatibility ───────────────────────────────────────────────────

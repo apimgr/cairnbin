@@ -26,12 +26,12 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 
-	"github.com/apimgr/pastebin/src/cache"
-	"github.com/apimgr/pastebin/src/common/httputil"
-	"github.com/apimgr/pastebin/src/common/secretbox"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/metric"
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/cache"
+	"github.com/apimgr/cairnbin/src/common/httputil"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/metric"
+	"github.com/apimgr/cairnbin/src/model"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -139,7 +139,7 @@ func (h *PasteHandler) SetMaxSize(n int64) {
 }
 
 // pasteCacheKey returns the cache key for a paste ID, following AI.md PART 9's
-// "{type}:{id}" hierarchical key pattern. The "pastebin:" prefix is applied
+// "{type}:{id}" hierarchical key pattern. The "cairnbin:" prefix is applied
 // automatically by the cache driver — callers pass un-prefixed keys.
 func pasteCacheKey(id string) string {
 	return "paste:" + id
@@ -267,7 +267,7 @@ func extractToken(r *http.Request) string {
 	// Browser cookie fallback is restricted to web forms; API routes never
 	// receive ambient authority from cookies.
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
-		if cookie, err := r.Cookie("pastebin_owner_token_rU3uW5Ze"); err == nil && cookie.Value != "" {
+		if cookie, err := r.Cookie("cairnbin_owner_token_rU3uW5Ze"); err == nil && cookie.Value != "" {
 			return cookie.Value
 		}
 	}

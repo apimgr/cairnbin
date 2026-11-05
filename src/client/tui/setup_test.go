@@ -146,7 +146,7 @@ func TestSetupModelViewRendersComponents(t *testing.T) {
 	styles := StylesFromTerminalPalette(DarkTheme())
 
 	view := m.view(styles)
-	if !strings.Contains(view, "pastebin-cli setup") {
+	if !strings.Contains(view, "cairnbin-cli setup") {
 		t.Error("view should contain title")
 	}
 	if !strings.Contains(view, "Server URL") {

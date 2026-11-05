@@ -445,7 +445,7 @@ func TestRunFlagBackup(t *testing.T) {
 
 // TestRunFlagPID exercises the --pid flag case.
 func TestRunFlagPID(t *testing.T) {
-	code, _, _ := runCapture("--pid", "/tmp/pastebin-test.pid", "--help")
+	code, _, _ := runCapture("--pid", "/tmp/cairnbin-test.pid", "--help")
 	if code != 0 {
 		t.Errorf("--pid --help: exit %d, want 0", code)
 	}

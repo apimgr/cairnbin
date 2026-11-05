@@ -53,10 +53,10 @@ func TestApplyCLIConfigEnvOverrides(t *testing.T) {
 	cfg.Output.Pager = "auto"
 	cfg.Defaults.Public = "unlisted"
 	cfg.Cache.TTL = "5m"
-	t.Setenv("PASTEBIN_FORMAT", "yaml")
-	t.Setenv("PASTEBIN_OUTPUT_PAGER", "never")
-	t.Setenv("PASTEBIN_PUBLIC", "public")
-	t.Setenv("PASTEBIN_CACHE_TTL", "30s")
+	t.Setenv("CAIRNBIN_FORMAT", "yaml")
+	t.Setenv("CAIRNBIN_OUTPUT_PAGER", "never")
+	t.Setenv("CAIRNBIN_PUBLIC", "public")
+	t.Setenv("CAIRNBIN_CACHE_TTL", "30s")
 
 	got := applyCLIConfigEnv(cfg)
 	if got.Output.Format != "yaml" || got.Output.Pager != "never" || got.Defaults.Public != "public" || got.Cache.TTL != "30s" {

@@ -3,7 +3,7 @@ package terminal_test
 import (
 	"testing"
 
-	"github.com/apimgr/pastebin/src/common/terminal"
+	"github.com/apimgr/cairnbin/src/common/terminal"
 )
 
 // TestNewSymbolSet_Dumb verifies ASCII fallback when dumb=true.

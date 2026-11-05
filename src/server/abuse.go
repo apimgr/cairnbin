@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/common/email"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/email"
 )
 
 // floodWindow is the fixed counting window for request-flood detection.

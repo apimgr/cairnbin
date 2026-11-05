@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/common/theme"
+	"github.com/apimgr/cairnbin/src/common/theme"
 )
 
 func TestGetThemePalette(t *testing.T) {

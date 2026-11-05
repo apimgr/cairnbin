@@ -37,7 +37,7 @@ type ResponseSpec struct {
 	Schema      map[string]interface{}
 }
 
-// Routes returns the canonical API route annotations for the pastebin service.
+// Routes returns the canonical API route annotations for the cairnbin service.
 // These are the authoritative source from which the OpenAPI JSON spec is generated.
 // Compatibility routes are documented with the "compatibility" tag; they accept the
 // same wire formats as their respective upstream services so existing scripts work

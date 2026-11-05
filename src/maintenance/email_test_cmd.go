@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/common/email"
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/common/email"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // EmailOptions carries the resolved paths an email command needs.

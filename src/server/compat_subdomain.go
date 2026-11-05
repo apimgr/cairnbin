@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/handler/compat"
+	"github.com/apimgr/cairnbin/src/handler/compat"
 )
 
 // compatSubdomainAliases maps a recognized Host label (short and long form,
@@ -12,8 +12,8 @@ import (
 // involved — recognition is automatic and hardcoded, per the operator's
 // requested "no config, subdomain-only" behavior.
 var compatSubdomainAliases = map[string]string{
-	"pb":       "pastebin",
-	"pastebin": "pastebin",
+	"pb":       "cairnbin",
+	"cairnbin": "cairnbin",
 	"lp":       "lenpaste",
 	"lenpaste": "lenpaste",
 	"sk":       "stikked",
@@ -56,7 +56,7 @@ type compatRouteRule struct {
 func (s *Server) compatOwnership() map[string][]compatRouteRule {
 	av := "/api/" + s.apiVersion()
 	return map[string][]compatRouteRule{
-		"pastebin": {
+		"cairnbin": {
 			{http.MethodPost, "/api/api_post.php", false},
 			{http.MethodGet, "/api/api_raw.php", false},
 			{http.MethodPost, "/api/api_login.php", false},

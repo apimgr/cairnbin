@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 const testOnion = "abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrstuvwx.onion"

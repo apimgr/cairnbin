@@ -15,10 +15,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/common/secretbox"
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/pgp"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/pgp"
 )
 
 // Grace-period app_secrets keys written by a rotation (PART 11).

@@ -115,7 +115,7 @@ func TestPrintHelp_DoesNotPanic(t *testing.T) {
 			t.Errorf("PrintHelp panicked: %v", r)
 		}
 	}()
-	PrintHelp("pastebin")
+	PrintHelp("cairnbin")
 }
 
 // ─── ServiceType constants ────────────────────────────────────────────────────
@@ -228,7 +228,7 @@ func TestIsWindowsService_NonWindows(t *testing.T) {
 
 func TestRunAsWindowsService_NonWindows(t *testing.T) {
 	called := false
-	err := RunAsWindowsService("pastebin", func() { called = true })
+	err := RunAsWindowsService("cairnbin", func() { called = true })
 	if err != nil {
 		t.Errorf("RunAsWindowsService on non-Windows: expected nil error, got %v", err)
 	}
@@ -241,7 +241,7 @@ func TestRunAsWindowsService_NonWindows(t *testing.T) {
 // code paths without needing a real service manager to be present.
 
 func TestUninstallSystemd_NoServiceFile(t *testing.T) {
-	// uninstallSystemd tries to remove /etc/systemd/system/pastebin.service.
+	// uninstallSystemd tries to remove /etc/systemd/system/cairnbin.service.
 	// When the file does not exist, os.IsNotExist(err) is true and nil is returned.
 	// systemctl commands are run but their errors are ignored.
 	err := uninstallSystemd()
@@ -251,7 +251,7 @@ func TestUninstallSystemd_NoServiceFile(t *testing.T) {
 }
 
 func TestUninstallLaunchd_NoPlist(t *testing.T) {
-	// uninstallLaunchd removes /Library/LaunchDaemons/io.github.apimgr.pastebin.plist.
+	// uninstallLaunchd removes /Library/LaunchDaemons/io.github.apimgr.cairnbin.plist.
 	// When the plist does not exist, os.IsNotExist(err) skips the error and nil is returned.
 	err := uninstallLaunchd()
 	if err != nil {
@@ -260,7 +260,7 @@ func TestUninstallLaunchd_NoPlist(t *testing.T) {
 }
 
 func TestUninstallBSDRC_NoScript(t *testing.T) {
-	// uninstallBSDRC removes /usr/local/etc/rc.d/pastebin.
+	// uninstallBSDRC removes /usr/local/etc/rc.d/cairnbin.
 	// When the file does not exist, os.IsNotExist(err) skips the error and nil is returned.
 	err := uninstallBSDRC()
 	if err != nil {

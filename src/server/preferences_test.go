@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
-// TestParseAppPref verifies the pastebin_pref_{key} name/value allowlist
+// TestParseAppPref verifies the cairnbin_pref_{key} name/value allowlist
 // (AI.md 23485/23501) accepts well-formed pairs and rejects everything else.
 func TestParseAppPref(t *testing.T) {
 	cases := []struct {
@@ -21,27 +21,27 @@ func TestParseAppPref(t *testing.T) {
 		wantKey string
 		wantOK  bool
 	}{
-		{"valid", "pastebin_pref_view_mode", "compact", "view_mode", true},
+		{"valid", "cairnbin_pref_view_mode", "compact", "view_mode", true},
 		{"wrong prefix", "theme", "dark", "", false},
-		{"unrelated cookie", "pastebin_build", "1.0.0-abc123", "", false},
-		{"empty key", "pastebin_pref_", "x", "", false},
-		{"uppercase key rejected", "pastebin_pref_ViewMode", "x", "", false},
-		{"key starting with digit rejected", "pastebin_pref_1abc", "x", "", false},
-		{"empty value rejected", "pastebin_pref_view_mode", "", "", false},
-		{"value with space rejected", "pastebin_pref_view_mode", "a b", "", false},
-		{"value with semicolon rejected", "pastebin_pref_view_mode", "a;b", "", false},
-		{"value too long rejected", "pastebin_pref_view_mode", string(make([]byte, 65)), "", false},
+		{"unrelated cookie", "cairnbin_build", "1.0.0-abc123", "", false},
+		{"empty key", "cairnbin_pref_", "x", "", false},
+		{"uppercase key rejected", "cairnbin_pref_ViewMode", "x", "", false},
+		{"key starting with digit rejected", "cairnbin_pref_1abc", "x", "", false},
+		{"empty value rejected", "cairnbin_pref_view_mode", "", "", false},
+		{"value with space rejected", "cairnbin_pref_view_mode", "a b", "", false},
+		{"value with semicolon rejected", "cairnbin_pref_view_mode", "a;b", "", false},
+		{"value too long rejected", "cairnbin_pref_view_mode", string(make([]byte, 65)), "", false},
 		// Concrete keys carry a per-key enum, so a well-formed but
 		// unsupported value is rejected here rather than reaching a handler
 		// as a cookie the UI has no <option> to render back.
-		{"sort enum accepts a real column", "pastebin_pref_sort", "views", "sort", true},
-		{"sort enum rejects unknown column", "pastebin_pref_sort", "bogus", "", false},
-		{"sort enum rejects SQL fragment", "pastebin_pref_sort", "date;drop", "", false},
-		{"order enum accepts desc", "pastebin_pref_order", "desc", "order", true},
-		{"order enum rejects sideways", "pastebin_pref_order", "sideways", "", false},
-		{"per_page enum accepts a listed size", "pastebin_pref_per_page", "50", "per_page", true},
-		{"per_page enum rejects unlisted size", "pastebin_pref_per_page", "37", "", false},
-		{"per_page enum rejects non-numeric", "pastebin_pref_per_page", "lots", "", false},
+		{"sort enum accepts a real column", "cairnbin_pref_sort", "views", "sort", true},
+		{"sort enum rejects unknown column", "cairnbin_pref_sort", "bogus", "", false},
+		{"sort enum rejects SQL fragment", "cairnbin_pref_sort", "date;drop", "", false},
+		{"order enum accepts desc", "cairnbin_pref_order", "desc", "order", true},
+		{"order enum rejects sideways", "cairnbin_pref_order", "sideways", "", false},
+		{"per_page enum accepts a listed size", "cairnbin_pref_per_page", "50", "per_page", true},
+		{"per_page enum rejects unlisted size", "cairnbin_pref_per_page", "37", "", false},
+		{"per_page enum rejects non-numeric", "cairnbin_pref_per_page", "lots", "", false},
 	}
 
 	for _, tc := range cases {
@@ -57,17 +57,17 @@ func TestParseAppPref(t *testing.T) {
 	}
 }
 
-// TestAppPreferencesFromRequest verifies only pastebin_pref_* cookies are
-// surfaced, non-preference cookies (theme, cookie_consent, pastebin_build)
+// TestAppPreferencesFromRequest verifies only cairnbin_pref_* cookies are
+// surfaced, non-preference cookies (theme, cookie_consent, cairnbin_build)
 // are excluded, and malformed values are dropped rather than applied.
 func TestAppPreferencesFromRequest(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
 	req.AddCookie(&http.Cookie{Name: "theme", Value: "dark"})
 	req.AddCookie(&http.Cookie{Name: "cookie_consent", Value: `{"essential":true}`})
 	req.AddCookie(&http.Cookie{Name: "ccpa_opt_out", Value: "true"})
-	req.AddCookie(&http.Cookie{Name: "pastebin_build", Value: "1.0.0-abc123"})
-	req.AddCookie(&http.Cookie{Name: "pastebin_pref_view_mode", Value: "compact"})
-	req.AddCookie(&http.Cookie{Name: "pastebin_pref_bad value", Value: "x"})
+	req.AddCookie(&http.Cookie{Name: "cairnbin_build", Value: "1.0.0-abc123"})
+	req.AddCookie(&http.Cookie{Name: "cairnbin_pref_view_mode", Value: "compact"})
+	req.AddCookie(&http.Cookie{Name: "cairnbin_pref_bad value", Value: "x"})
 
 	got := appPreferencesFromRequest(req)
 	if len(got) != 1 {
@@ -85,8 +85,8 @@ func TestExtractAppPrefs(t *testing.T) {
 		"theme":                   {"dark"},
 		"lang":                    {"fr"},
 		"code":                    {"abc"},
-		"pastebin_pref_view_mode": {"compact"},
-		"pastebin_pref_invalid!":  {"x"},
+		"cairnbin_pref_view_mode": {"compact"},
+		"cairnbin_pref_invalid!":  {"x"},
 	}
 
 	got := extractAppPrefs(values)
@@ -99,7 +99,7 @@ func TestExtractAppPrefs(t *testing.T) {
 }
 
 // TestPreferencesExportQuery verifies theme/lang always round-trip and every
-// app-specific pastebin_pref_* entry is appended in stable (sorted) order
+// app-specific cairnbin_pref_* entry is appended in stable (sorted) order
 // (AI.md 23507/23503).
 func TestPreferencesExportQuery(t *testing.T) {
 	got := preferencesExportQuery("dark", "fr", nil)
@@ -112,7 +112,7 @@ func TestPreferencesExportQuery(t *testing.T) {
 		"view_mode": "compact",
 		"per_page":  "50",
 	})
-	want = "theme=dark&lang=fr&pastebin_pref_per_page=50&pastebin_pref_view_mode=compact"
+	want = "theme=dark&lang=fr&cairnbin_pref_per_page=50&cairnbin_pref_view_mode=compact"
 	if got != want {
 		t.Fatalf("preferencesExportQuery(extra) = %q, want %q", got, want)
 	}
@@ -228,13 +228,13 @@ func TestPreferencesPageRenders(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
 
-	// AI.md 23485: a control for every app-specific pastebin_pref_* setting.
+	// AI.md 23485: a control for every app-specific cairnbin_pref_* setting.
 	// Each must post to the endpoint and render its current value as selected.
 	body := w.Body.String()
 	for _, want := range []string{
-		`name="pastebin_pref_sort"`,
-		`name="pastebin_pref_order"`,
-		`name="pastebin_pref_per_page"`,
+		`name="cairnbin_pref_sort"`,
+		`name="cairnbin_pref_order"`,
+		`name="cairnbin_pref_per_page"`,
 		// No cookie was sent, so each control must render the hard default as
 		// its selected option rather than leaving the first <option> selected
 		// by accident.

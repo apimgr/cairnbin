@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/audit"
+	"github.com/apimgr/cairnbin/src/audit"
 )
 
 // defaultDiskThreshold is the disk-usage percentage above which backups are

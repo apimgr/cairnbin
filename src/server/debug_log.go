@@ -14,8 +14,8 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/apimgr/pastebin/src/cache"
-	"github.com/apimgr/pastebin/src/mode"
+	"github.com/apimgr/cairnbin/src/cache"
+	"github.com/apimgr/cairnbin/src/mode"
 )
 
 // debugLog writes one diagnostic line for a completed request. Gating on

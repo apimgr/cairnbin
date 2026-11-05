@@ -1,10 +1,10 @@
 package tui
 
-import "github.com/apimgr/pastebin/src/common/i18n"
+import "github.com/apimgr/cairnbin/src/common/i18n"
 
 // uiLang is the resolved TUI display language, cached once at startup.
 // PART 30 requires locale files be embedded and used in ALL binaries,
-// including the TUI screens of pastebin-cli.
+// including the TUI screens of cairnbin-cli.
 var uiLang = "en"
 
 // setUILang resolves and caches the TUI display language from the client's

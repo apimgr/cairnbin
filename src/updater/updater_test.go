@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/updater"
+	"github.com/apimgr/cairnbin/src/updater"
 )
 
 // ─── CheckForUpdate ───────────────────────────────────────────────────────────
@@ -16,7 +16,7 @@ import (
 func TestCheckForUpdate_StableNewerVersion(t *testing.T) {
 	release := updater.Release{
 		TagName: "v2.0.0",
-		Assets:  []updater.Asset{{Name: "pastebin-linux-amd64", BrowserDownloadURL: "http://example.com/bin"}},
+		Assets:  []updater.Asset{{Name: "cairnbin-linux-amd64", BrowserDownloadURL: "http://example.com/bin"}},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(release)

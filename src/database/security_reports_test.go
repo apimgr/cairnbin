@@ -3,7 +3,7 @@ package database_test
 import (
 	"testing"
 
-	"github.com/apimgr/pastebin/src/database"
+	"github.com/apimgr/cairnbin/src/database"
 )
 
 func sampleReport(id string) *database.SecurityReport {

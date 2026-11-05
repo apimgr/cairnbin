@@ -3,7 +3,7 @@ package service
 import "fmt"
 
 // appTitle is the human-readable application name ({app_name} in PART 24).
-const appTitle = "Pastebin API Server"
+const appTitle = "Cairnbin API Server"
 
 // buildSystemdUnit returns the system-wide systemd unit (PART 24). The binary
 // starts elevated only when it needs to, binds its ports, then drops to the

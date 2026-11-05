@@ -14,8 +14,8 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/apimgr/pastebin/src/logging"
-	"github.com/apimgr/pastebin/src/mode"
+	"github.com/apimgr/cairnbin/src/logging"
+	"github.com/apimgr/cairnbin/src/mode"
 )
 
 // SetLogManager registers the logging manager that owns access/server/error/

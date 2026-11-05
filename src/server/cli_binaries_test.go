@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -31,7 +31,7 @@ func cliTestServer(t *testing.T, requireAuth bool) (*Server, http.Handler, strin
 func TestCLIBinary_IndexAndDownload(t *testing.T) {
 	s, router, binDir := cliTestServer(t, false)
 	body := []byte("cli-binary-bytes")
-	if err := os.WriteFile(filepath.Join(binDir, "pastebin-cli-linux-arm64"), body, 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(binDir, "cairnbin-cli-linux-arm64"), body, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(binDir, "notes.txt"), []byte("x"), 0o644); err != nil {
@@ -48,7 +48,7 @@ func TestCLIBinary_IndexAndDownload(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/cli/binaries/pastebin-cli-linux-arm64", nil))
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/cli/binaries/cairnbin-cli-linux-arm64", nil))
 	if rec.Code != http.StatusOK || rec.Body.String() != string(body) {
 		t.Fatalf("download = %d %q", rec.Code, rec.Body.String())
 	}
@@ -59,8 +59,8 @@ func TestCLIBinary_IndexAndDownload(t *testing.T) {
 
 func TestCLIBinary_RejectsUnknownAndTraversal(t *testing.T) {
 	_, router, binDir := cliTestServer(t, false)
-	_ = os.WriteFile(filepath.Join(binDir, "pastebin-cli-linux-amd64"), []byte("x"), 0o755)
-	for _, name := range []string{"pastebin-cli-linux-riscv", "..%2Fserver.yml", "pastebin-cli-linux-amd64.sh", "pastebin-cli-darwin-arm64"} {
+	_ = os.WriteFile(filepath.Join(binDir, "cairnbin-cli-linux-amd64"), []byte("x"), 0o755)
+	for _, name := range []string{"cairnbin-cli-linux-riscv", "..%2Fserver.yml", "cairnbin-cli-linux-amd64.sh", "cairnbin-cli-darwin-arm64"} {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/cli/binaries/"+name, nil))
 		if rec.Code != http.StatusNotFound {
@@ -71,14 +71,14 @@ func TestCLIBinary_RejectsUnknownAndTraversal(t *testing.T) {
 
 func TestCLIBinary_RequireAuth(t *testing.T) {
 	_, router, binDir := cliTestServer(t, true)
-	_ = os.WriteFile(filepath.Join(binDir, "pastebin-cli-linux-amd64"), []byte("x"), 0o755)
+	_ = os.WriteFile(filepath.Join(binDir, "cairnbin-cli-linux-amd64"), []byte("x"), 0o755)
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/cli/binaries/pastebin-cli-linux-amd64", nil))
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/cli/binaries/cairnbin-cli-linux-amd64", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("anonymous = %d, want 401", rec.Code)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/cli/binaries/pastebin-cli-linux-amd64", nil)
+	req := httptest.NewRequest(http.MethodGet, "/cli/binaries/cairnbin-cli-linux-amd64", nil)
 	req.Header.Set("Authorization", "Bearer tok_operator")
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

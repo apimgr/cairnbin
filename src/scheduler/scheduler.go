@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/metric"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/metric"
 )
 
 const (

@@ -1,6 +1,6 @@
 # Compatibility
 
-Pastebin is a drop-in replacement for pastebin.com, microbin, lenpaste,
+Cairnbin is a drop-in replacement for pastebin.com, microbin, lenpaste,
 stikked, hastebin/haste-server, dpaste, the curl-upload family
 (sprunge/0x0/ix.io), and termbin/fiche. Existing scripts, CLIs, and
 integrations targeting any of those services work against this server without

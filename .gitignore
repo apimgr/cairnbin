@@ -108,8 +108,8 @@ releases/
 
 # Stray host-built binaries (must live in binaries/, never repo root)
 /client
-/pastebin
-/pastebin-cli
+/cairnbin
+/cairnbin-cli
 
 # Runtime volume data (NEVER commit)
 volumes/

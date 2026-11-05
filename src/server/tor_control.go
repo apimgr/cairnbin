@@ -19,9 +19,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/path"
-	"github.com/apimgr/pastebin/src/tor"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/tor"
 )
 
 // torControlLoopbackMiddleware restricts the /server/tor/* control channel to
@@ -73,7 +73,7 @@ func (s *Server) torControlConfig() tor.Config {
 		VirtualPort:               cfg.Server.Tor.VirtualPort,
 		ConfigDir:                 s.configDir,
 		DataDir:                   s.dataDir,
-		LogDir:                    path.GetLogsDir("pastebin"),
+		LogDir:                    path.GetLogsDir("cairnbin"),
 	}
 }
 

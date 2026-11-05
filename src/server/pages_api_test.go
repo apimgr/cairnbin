@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 func pagesServer(t *testing.T) *Server {
@@ -87,7 +87,7 @@ func TestExpandFooterVars(t *testing.T) {
 	s.version = "1.2.3"
 	s.buildDate = "July 18, 2026 at 10:00:00 UTC"
 	got := s.expandFooterVars("<p>{project_org}/{project_name} {project_version} {build_datetime} [{onion_address}][{i2p_address}] {current_year}</p>")
-	for _, want := range []string{"apimgr/pastebin", "1.2.3", "July 18, 2026 at 10:00:00 UTC", "[][]"} {
+	for _, want := range []string{"apimgr/cairnbin", "1.2.3", "July 18, 2026 at 10:00:00 UTC", "[][]"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expanded footer %q missing %q", got, want)
 		}

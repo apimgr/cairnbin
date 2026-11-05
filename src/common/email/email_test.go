@@ -5,15 +5,15 @@ import (
 	"os"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/common/email"
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/common/email"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // ─── New + Enabled ────────────────────────────────────────────────────────────
 
 func TestNew_ReturnsMailer(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: true, SMTP: config.SMTPConfig{Host: "smtp.example.com", Port: 587}}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 	if m == nil {
 		t.Fatal("New returned nil")
 	}
@@ -21,7 +21,7 @@ func TestNew_ReturnsMailer(t *testing.T) {
 
 func TestEnabled_True(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: true, SMTP: config.SMTPConfig{Host: "smtp.example.com", Port: 587}}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 	if !m.Enabled() {
 		t.Error("expected Enabled()=true when SMTP host is set and enabled=true")
 	}
@@ -29,7 +29,7 @@ func TestEnabled_True(t *testing.T) {
 
 func TestEnabled_FalseWhenDisabled(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false, SMTP: config.SMTPConfig{Host: "smtp.example.com"}}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 	if m.Enabled() {
 		t.Error("expected Enabled()=false when Enabled=false")
 	}
@@ -37,7 +37,7 @@ func TestEnabled_FalseWhenDisabled(t *testing.T) {
 
 func TestEnabled_FalseWhenNoHost(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: true, SMTP: config.SMTPConfig{Host: ""}}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 	if m.Enabled() {
 		t.Error("expected Enabled()=false when SMTP host is empty")
 	}
@@ -47,7 +47,7 @@ func TestEnabled_FalseWhenNoHost(t *testing.T) {
 
 func TestSend_Disabled_ReturnsNil(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 
 	if err := m.Send("user@example.com", "paste_created", map[string]string{
 		"paste_id": "abc123",
@@ -58,7 +58,7 @@ func TestSend_Disabled_ReturnsNil(t *testing.T) {
 
 func TestSend_NoHost_ReturnsNil(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: true, SMTP: config.SMTPConfig{Host: ""}}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 
 	if err := m.Send("user@example.com", "paste_created", nil); err != nil {
 		t.Errorf("Send with no SMTP host: expected nil, got %v", err)
@@ -69,7 +69,7 @@ func TestSend_NoHost_ReturnsNil(t *testing.T) {
 
 func TestTestSMTP_NoHost_ReturnsError(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false, SMTP: config.SMTPConfig{Host: ""}}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 
 	if err := m.TestSMTP(); err == nil {
 		t.Error("TestSMTP with no host: expected error, got nil")
@@ -120,7 +120,7 @@ func TestTestSMTP_WithListeningServer(t *testing.T) {
 		Enabled: true,
 		SMTP:    config.SMTPConfig{Host: "127.0.0.1", Port: port},
 	}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 	// TestSMTP connects and completes an EHLO handshake against the fake server above.
 	if err := m.TestSMTP(); err != nil {
 		t.Errorf("TestSMTP with listening server: %v", err)
@@ -132,7 +132,7 @@ func TestTestSMTP_UnreachableHost_ReturnsError(t *testing.T) {
 		Enabled: true,
 		SMTP:    config.SMTPConfig{Host: "127.0.0.1", Port: 1},
 	}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 	if err := m.TestSMTP(); err == nil {
 		t.Error("expected error for unreachable SMTP host, got nil")
 	}
@@ -145,7 +145,7 @@ func TestSend_TemplateNotFound_ReturnsError(t *testing.T) {
 		Enabled: true,
 		SMTP:    config.SMTPConfig{Host: "smtp.example.com", Port: 587},
 	}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 	err := m.Send("user@example.com", "nonexistent_xyz_template", nil)
 	if err == nil {
 		t.Error("expected error for nonexistent template, got nil")
@@ -163,7 +163,7 @@ func TestSend_TemplateMissingSubject_ReturnsError(t *testing.T) {
 		SMTP:        config.SMTPConfig{Host: "smtp.example.com", Port: 587},
 		TemplateDir: dir,
 	}
-	m := email.New(cfg, "pastebin", "https://example.com", "example.com")
+	m := email.New(cfg, "cairnbin", "https://example.com", "example.com")
 	err := m.Send("user@example.com", "no_subject", nil)
 	if err == nil {
 		t.Error("expected error for template missing Subject:, got nil")

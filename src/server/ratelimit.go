@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/pastebin/src/metric"
+	"github.com/apimgr/cairnbin/src/metric"
 )
 
 // ipBucket tracks request counts for a single IP within a sliding window.

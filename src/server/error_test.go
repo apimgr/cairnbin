@@ -1,18 +1,21 @@
 package server
 
 import (
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 func newErrorTestServer(t *testing.T) *Server {
 	t.Helper()
 	s := &Server{
-		cfg:       &config.Config{Web: config.WebConfig{SiteTitle: "Pastebin", Theme: "dark"}},
+		cfg:       &config.Config{Web: config.WebConfig{SiteTitle: "Cairnbin", Theme: "dark"}},
 		version:   "test",
 		buildDate: "2026-01-01",
 	}
@@ -80,7 +83,7 @@ func TestRenderErrorPageHTML(t *testing.T) {
 		t.Errorf("content-type: got %q", ct)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"404", "Not Found", "no such paste", `class="theme-dark"`, "Pastebin"} {
+	for _, want := range []string{"404", "Not Found", "no such paste", `class="theme-dark"`, "Cairnbin"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("html body missing %q", want)
 		}
@@ -118,6 +121,8 @@ func TestRenderErrorPageNoTemplatesFallback(t *testing.T) {
 
 func TestRecovererRendersThemed500(t *testing.T) {
 	s := newErrorTestServer(t)
+	log.SetOutput(io.Discard)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	h := s.recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	}))

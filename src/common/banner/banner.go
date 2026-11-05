@@ -8,8 +8,8 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
-	"github.com/apimgr/pastebin/src/common/i18n"
-	"github.com/apimgr/pastebin/src/common/terminal"
+	"github.com/apimgr/cairnbin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/common/terminal"
 )
 
 // BannerConfig holds configuration for the startup banner

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // Mode represents the application execution mode

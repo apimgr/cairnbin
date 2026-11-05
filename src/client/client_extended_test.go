@@ -175,7 +175,7 @@ func TestCmdDelete_404ReturnsNotFoundExit(t *testing.T) {
 
 	// Build the request manually to verify behavior
 	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/v1/pastes/notfound?token=tok", nil)
-	req.Header.Set("User-Agent", "pastebin-cli/test")
+	req.Header.Set("User-Agent", "cairnbin-cli/test")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("delete request: %v", err)

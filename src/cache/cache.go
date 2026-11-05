@@ -7,13 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/pastebin/src/metric"
+	"github.com/apimgr/cairnbin/src/metric"
 	"github.com/redis/go-redis/v9"
 )
 
 // Cache is the unified interface for all cache drivers.
 // All keys are prefixed with Config.Prefix automatically — callers pass
-// un-prefixed keys (e.g., "paste:abc123", not "pastebin:paste:abc123").
+// un-prefixed keys (e.g., "paste:abc123", not "cairnbin:paste:abc123").
 type Cache interface {
 	// Get retrieves a value. Returns ErrCacheMiss if the key is absent.
 	Get(ctx context.Context, key string) (string, error)
@@ -64,7 +64,7 @@ func DefaultConfig() Config {
 		PoolSize: 10,
 		MinIdle:  2,
 		Timeout:  5 * time.Second,
-		Prefix:   "pastebin:",
+		Prefix:   "cairnbin:",
 		TTL:      time.Hour,
 	}
 }

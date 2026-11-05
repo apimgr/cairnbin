@@ -1,9 +1,9 @@
-// Package shell — client completion generators for pastebin-cli.
+// Package shell — client completion generators for cairnbin-cli.
 package shell
 
 import "fmt"
 
-// PrintClientCompletions writes completion scripts for pastebin-cli to stdout.
+// PrintClientCompletions writes completion scripts for cairnbin-cli to stdout.
 // It follows the same shell-detection logic as PrintCompletions.
 func PrintClientCompletions(binName, shellName string) error {
 	sh := shellName

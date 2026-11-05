@@ -48,7 +48,7 @@
                         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                         <div class="form-group">
                             <label class="form-label" for="pref-sort">{{t .Lang "recent.sort_label"}}</label>
-                            <select id="pref-sort" name="pastebin_pref_sort" class="form-select">
+                            <select id="pref-sort" name="cairnbin_pref_sort" class="form-select">
                                 {{$sort := .PrefSort}}
                                 {{range $col := (list "date" "name" "views")}}
                                 <option value="{{$col}}" {{if eq $sort $col}}selected{{end}}>{{t $.Lang (print "recent.sort_" $col)}}</option>
@@ -57,7 +57,7 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="pref-order">{{t .Lang "recent.order_label"}}</label>
-                            <select id="pref-order" name="pastebin_pref_order" class="form-select">
+                            <select id="pref-order" name="cairnbin_pref_order" class="form-select">
                                 {{$order := .PrefOrder}}
                                 <option value="desc" {{if eq $order "desc"}}selected{{end}}>{{t .Lang "recent.order_desc"}}</option>
                                 <option value="asc" {{if eq $order "asc"}}selected{{end}}>{{t .Lang "recent.order_asc"}}</option>
@@ -65,7 +65,7 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="pref-per-page">{{t .Lang "recent.limit_label"}}</label>
-                            <select id="pref-per-page" name="pastebin_pref_per_page" class="form-select">
+                            <select id="pref-per-page" name="cairnbin_pref_per_page" class="form-select">
                                 {{$perPage := .PrefPerPage}}
                                 {{range $n := (list "20" "50" "100" "250")}}
                                 <option value="{{$n}}" {{if eq $perPage $n}}selected{{end}}>{{$n}}</option>

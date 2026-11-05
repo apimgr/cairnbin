@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // RestoreLimits bounds a restore/import archive (PART 21, `server.restore`).

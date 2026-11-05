@@ -5,7 +5,7 @@ package server
 import (
 	"net/http"
 
-	"github.com/apimgr/pastebin/src/mode"
+	"github.com/apimgr/cairnbin/src/mode"
 	"github.com/go-chi/chi/v5"
 )
 

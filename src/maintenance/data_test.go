@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 func newDataTestDB(t *testing.T) database.DB {

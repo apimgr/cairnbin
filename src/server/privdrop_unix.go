@@ -11,7 +11,7 @@ import (
 
 // defaultServiceUser is the unprivileged account the server drops to when no
 // explicit user is configured (PART 23).
-const defaultServiceUser = "pastebin"
+const defaultServiceUser = "cairnbin"
 
 // currentlyRoot reports whether the effective UID is 0.
 func currentlyRoot() bool {

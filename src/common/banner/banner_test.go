@@ -81,7 +81,7 @@ func TestAsciiArt_TooLong(t *testing.T) {
 
 func TestPrintStartupBanner_DoesNotPanic(t *testing.T) {
 	cfg := BannerConfig{
-		AppName: "pastebin",
+		AppName: "cairnbin",
 		Version: "1.0.0",
 		AppMode: "production",
 		Debug:   false,

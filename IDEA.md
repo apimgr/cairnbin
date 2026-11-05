@@ -1,25 +1,25 @@
 ## Project description
 
-Pastebin is a full-stack Go web application for creating and sharing text snippets anonymously. It is a drop-in replacement for pastebin.com, microbin, lenpaste (fork: forksmgr/lcomrade-lenpaste), stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP, enabled by default) — existing scripts, CLIs, and integrations targeting any of those services work against this server without modification. Users submit text or upload a file and receive a short shareable URL. No user accounts. Fully public. Deployed as a single self-contained static binary. The companion CLI (`pastebin-cli`) provides full API access from the terminal.
+Cairnbin is a full-stack Go web application for creating and sharing text snippets anonymously. It is a drop-in replacement for pastebin.com, microbin, lenpaste (fork: forksmgr/lcomrade-lenpaste), stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP, enabled by default) — existing scripts, CLIs, and integrations targeting any of those services work against this server without modification. Users submit text or upload a file and receive a short shareable URL. No user accounts. Fully public. Deployed as a single self-contained static binary. The companion CLI (`pastebin-cli`) provides full API access from the terminal.
 
 ## Project variables
 
-project_name: pastebin
+project_name: cairnbin
 project_org: apimgr
 # STABLE — set at creation, defaults to project_org; not changed by a rename
 internal_org: apimgr
 # STABLE — equals project_name on first install; reset only on an explicit org/repo rename or a fork's first setup
-internal_name: pastebin
-app_name: Pastebin
+internal_name: cairnbin
+app_name: Cairnbin
 official_site: https://pste.us
 maintainer_name: apimgr
 maintainer_email: git-admin@casjaysdev.pro
-repo: https://github.com/apimgr/pastebin
+repo: https://github.com/apimgr/cairnbin
 license: MIT
-binary: pastebin
-client_binary: pastebin-cli
+binary: cairnbin
+client_binary: cairnbin-cli
 api_version: v1
-owner_token: pastebin_owner_token_rU3uW5Ze
+owner_token: cairnbin_owner_token_rU3uW5Ze
 tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and more
 
 ## Business logic
@@ -27,7 +27,7 @@ tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and m
 ### Target users
 
 - Developers and sysadmins sharing logs, diffs, config snippets, and stack traces
-- Terminal and script users who pipe output straight from a shell (`curl`, `nc`, `pastebin-cli`)
+- Terminal and script users who pipe output straight from a shell (`curl`, `nc`, `cairnbin-cli`)
 - Operators of existing pastebin.com / hastebin / dpaste / microbin / lenpaste / stikked / termbin scripts, CLIs, and bots who need a self-hosted drop-in without editing those integrations
 - Self-hosters wanting a single-binary, account-free paste service they can run on their own hardware, optionally reachable over Tor or I2P
 - Privacy-conscious users who want anonymous, expiring, or burn-after-read snippets with no registration
@@ -42,12 +42,12 @@ tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and m
 - Burn after N reads: paste is permanently deleted once its view count reaches a user-set threshold (1–9999); `0` = disabled
 - Visibility: public (listed in recent pastes) or unlisted (URL-only, not listed)
 - Owner token: a `tok_`-prefixed cryptographically random token returned in every API create response; reusable across pastes created by the same caller; stored as a SHA-256 hash; required to delete the paste before natural expiry
-- Token reuse: callers may supply an existing owner token on paste creation to link the new paste to that token; the web UI saves the token to the `pastebin_owner_token_rU3uW5Ze` cookie (HttpOnly, primary) and, as a JS convenience copy, to `localStorage` under the same key; the create form is pre-filled by JS only, never load-bearing
+- Token reuse: callers may supply an existing owner token on paste creation to link the new paste to that token; the web UI saves the token to the `cairnbin_owner_token_rU3uW5Ze` cookie (HttpOnly, primary) and, as a JS convenience copy, to `localStorage` under the same key; the create form is pre-filled by JS only, never load-bearing
 - Raw paste view, file download, iframe-embeddable view with copy-ready HTML and Markdown embed snippets offered on the paste view page, and a QR code available as both a page and a PNG image
 - View count tracking; automatic background cleanup of expired and burned pastes
 - Full web frontend (server-side Go templates, dark/light/auto theme, PWA, mobile-first)
 - Static info pages: about, help, health check, privacy, terms
-- CLI client (`pastebin-cli`) — full API access from the terminal
+- CLI client (`cairnbin-cli`) — full API access from the terminal
 - OpenAPI/Swagger docs
 - GraphQL read-only query interface (create and delete are REST-only)
 - MCP (Model Context Protocol) endpoint so AI clients can use the paste API as tools: Streamable HTTP JSON-RPC at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`), on by default (`server.mcp.enabled`), same Bearer tokens as the API (no MCP-specific token), tools generated from the API routes (create/get/list/delete paste, health, version); an anonymous create tool call returns the `owner_token` exactly like the REST API; token management is never exposed as a tool
@@ -57,7 +57,7 @@ tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and m
 - Tor hidden service: auto-enabled when the `tor` binary is present; the site is reachable at a persistent v3 `.onion` address; non-fatal when Tor is absent — see PART 31.1 for HOW
 - I2P eepsite: optional, disabled by default (`server.i2p.enabled` / `I2P_ENABLED` / `--i2p`); when enabled the site is reachable at a persistent `.b32.i2p` address; non-fatal when no provider is available — see PART 31.2 for HOW
 - GeoIP: country-based access control (allowlist or denylist) applied per request, with a fail-open when the country database is unavailable — see PART 19 for HOW
-- Prometheus metrics (`pastebin_` namespace); internal-only, never exposed publicly — see PART 20 for HOW
+- Prometheus metrics (`cairnbin_` namespace); internal-only, never exposed publicly — see PART 20 for HOW
 - Built-in task scheduler (no external cron): the PART 18 mandated task set plus a project-specific `expire-pastes` task that removes expired and burned pastes
 - Backup and restore: encrypted when a backup password is set, integrity-verified before any restore, scheduled hourly and daily, CLI-triggerable — see PART 21 for HOW
 - Self-update: checks GitHub Releases for new versions and installs a checksum-verified binary — see PART 22 for HOW
@@ -67,7 +67,7 @@ tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and m
 - Email notifications: SMTP; 7 template types (`security_alert`, `backup_complete`, `backup_failed`, `ssl_expiring`, `ssl_renewed`, `scheduler_error`, `test`); silently disabled when unconfigured
 - Security report system: `/server/security` report submission flow with optional PGP-encrypted reports, `security.txt` (RFC 9116) at `/.well-known/security.txt`, and operator PGP key at `/.well-known/pgp-key.asc`
 - Cookie consent and CCPA opt-out: consent banner (works without JavaScript) plus a do-not-sell opt-out submission; preferences stored client-side, no server-side tracking
-- App-specific guest preferences (AI.md "Client-Side Preferences"): the `/pastes` recents list's sort column, sort direction, and page size are remembered across visits via `pastebin_pref_sort` (`date`\|`name`\|`views`, default `date`), `pastebin_pref_order` (`asc`\|`desc`, default `desc`), and `pastebin_pref_per_page` (`20`\|`50`\|`100`\|`250`, default `20`) cookies — set whenever the visitor changes a filter-bar control, read as the default on the next visit when no explicit query param is given, editable on `/server/preferences`, and included in preference export/import like every other `pastebin_pref_*` key
+- App-specific guest preferences (AI.md "Client-Side Preferences"): the `/pastes` recents list's sort column, sort direction, and page size are remembered across visits via `cairnbin_pref_sort` (`date`\|`name`\|`views`, default `date`), `cairnbin_pref_order` (`asc`\|`desc`, default `desc`), and `cairnbin_pref_per_page` (`20`\|`50`\|`100`\|`250`, default `20`) cookies — set whenever the visitor changes a filter-bar control, read as the default on the next visit when no explicit query param is given, editable on `/server/preferences`, and included in preference export/import like every other `cairnbin_pref_*` key
 - URL shortening: `is_link` is auto-detected from content, never a client-settable flag — a paste becomes a link when its entire (trimmed) content is exactly one absolute `http://`/`https://` URL and nothing else (no extra whitespace, no additional lines, no surrounding text); no checkbox, form field, JSON field, or header controls it; auto-generated short ID only (no vanity or custom slugs); visiting the short link, from the web or the API, redirects to the target — the target is never fetched or validated server-side beyond scheme and format, so there is no SSRF exposure; if no title is supplied, a link paste's title defaults to the target URL itself rather than the generic "Untitled" fallback; the raw, download, and paste-detail views never redirect regardless of `is_link` — they always render or return the literal stored content, so the target URL stays retrievable as text and viewable as a normal paste; link pastes share the paste record, expiry, burn-after, visibility, owner-token deletion, and view-count tracking unchanged; language and syntax highlighting do not apply to links
 
 **Non-goals:**
@@ -90,7 +90,7 @@ tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and m
 - **Raw view, file download, and embeds** — raw content view, download-as-file, an iframe-embeddable view with copy-ready HTML/Markdown snippets, and a QR code page plus PNG image for every paste
 - **View count tracking** with automatic background cleanup of expired and burned pastes
 - **Full web frontend** — server-rendered Go templates, dark/light/auto theme, PWA, mobile-first, fully usable without JavaScript
-- **CLI client** (`pastebin-cli`) — full API access from the terminal
+- **CLI client** (`cairnbin-cli`) — full API access from the terminal
 - **OpenAPI/Swagger docs** and a **read-only GraphQL query interface** (create/delete remain REST-only)
 - **Drop-in compatibility layer** for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP, enabled by default) — see Compat targets below
 - **i18n** — 7 locales (en, es, fr, de, zh, ar, ja), automatic selection via `Accept-Language`, RTL layout for Arabic, fallback to English
@@ -162,7 +162,7 @@ Every subdomain-forced compat create path continues to honor the operator-config
 - A paste with no supplied title falls back to `Untitled`, except a link paste, which falls back to its target URL
 - Recent-paste listings are paginated with a maximum page size of 250 items; requested page sizes above 250 are silently capped, never rejected
 - Recent-paste listings support `search` (matches paste ID, title, and content, case-insensitive substring), `sort` (`date` (default), `name`, `views`, or `id`), and `order` (`desc` (default) or `asc`) query parameters, on both the frontend `/recent` page and the JSON API; unrecognized `sort` values fall back to `date` rather than erroring; unlisted pastes are never returned regardless of search/sort
-- Guests may save their recents-list settings as client-side cookies: `pastebin_pref_sort` (`date` \| `name` \| `views`), `pastebin_pref_order` (`desc` \| `asc`), and `pastebin_pref_per_page` (`20` \| `50` \| `100` \| `250`), each editable from `/server/preferences` and never persisted server-side
+- Guests may save their recents-list settings as client-side cookies: `cairnbin_pref_sort` (`date` \| `name` \| `views`), `cairnbin_pref_order` (`desc` \| `asc`), and `cairnbin_pref_per_page` (`20` \| `50` \| `100` \| `250`), each editable from `/server/preferences` and never persisted server-side
 - Saved preferences are a deliberate subset of what a `/pastes` query accepts: that query also permits `title` (an alias of `name`) and `id` as sort columns and any page size up to 250, but none of those are offered as a control on the preferences page, so none may be saved — a cookie must never hold a value the page has no control to render back, or the page would display one ordering while the list used another
 - An explicit `?sort=`/`?order=`/`?limit=` on a recents request is persisted to its cookie only when the value passes the same allowlist the read path applies; a wider value applies to that one request and is not remembered. Ordering is a one-way door: preferences may narrow what a query accepts, never widen it
 - Deletion before natural expiry requires the paste's owner token; the operator token deletes any paste unconditionally; compat-created pastes use their protocol's own delete token and the two systems are never mixed
@@ -189,7 +189,7 @@ Compat endpoints are the one place where concrete paths, field names, status cod
 ### FAQ
 
 **Do I need an account to create a paste?**
-No. Pastebin is fully anonymous — no registration, no login.
+No. Cairnbin is fully anonymous — no registration, no login.
 
 **How long are pastes stored?**
 Until the expiry you choose at creation (`1h` up to `2y`), or forever if you pick `never` (the default).
@@ -207,7 +207,7 @@ An optional setting that permanently deletes the paste once its view count reach
 Yes — every paste has an iframe-embeddable view, and the paste view page provides copy-ready HTML and Markdown embed snippets.
 
 **Can I use this from the command line?**
-Yes — pipe content to the create endpoint with `curl`, or use the `pastebin-cli` client for full API access.
+Yes — pipe content to the create endpoint with `curl`, or use the `cairnbin-cli` client for full API access.
 
 **Does it work with my existing pastebin.com/hastebin/dpaste scripts?**
 Yes — the compat layer is wire-compatible with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family, and termbin/fiche; existing scripts work unmodified.

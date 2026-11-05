@@ -1,4 +1,4 @@
-module github.com/apimgr/pastebin
+module github.com/apimgr/cairnbin
 
 go 1.26.0
 

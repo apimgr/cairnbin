@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/path"
+	"github.com/apimgr/cairnbin/src/path"
 )
 
 // ─── Env-override path helpers ────────────────────────────────────────────────
@@ -19,7 +19,7 @@ import (
 // TestGetConfigDir_EnvOverride verifies that CONFIG_DIR overrides the computed path.
 func TestGetConfigDir_EnvOverride(t *testing.T) {
 	t.Setenv("CONFIG_DIR", "/tmp/test-config")
-	got := path.GetConfigDir("pastebin")
+	got := path.GetConfigDir("cairnbin")
 	if got != "/tmp/test-config" {
 		t.Errorf("GetConfigDir: got %q, want %q", got, "/tmp/test-config")
 	}
@@ -28,7 +28,7 @@ func TestGetConfigDir_EnvOverride(t *testing.T) {
 // TestGetDataDir_EnvOverride verifies that DATA_DIR overrides the computed path.
 func TestGetDataDir_EnvOverride(t *testing.T) {
 	t.Setenv("DATA_DIR", "/tmp/test-data")
-	got := path.GetDataDir("pastebin")
+	got := path.GetDataDir("cairnbin")
 	if got != "/tmp/test-data" {
 		t.Errorf("GetDataDir: got %q, want %q", got, "/tmp/test-data")
 	}
@@ -37,7 +37,7 @@ func TestGetDataDir_EnvOverride(t *testing.T) {
 // TestGetLogsDir_EnvOverride verifies that LOGS_DIR overrides the computed path.
 func TestGetLogsDir_EnvOverride(t *testing.T) {
 	t.Setenv("LOGS_DIR", "/tmp/test-logs")
-	got := path.GetLogsDir("pastebin")
+	got := path.GetLogsDir("cairnbin")
 	if got != "/tmp/test-logs" {
 		t.Errorf("GetLogsDir: got %q, want %q", got, "/tmp/test-logs")
 	}
@@ -47,7 +47,7 @@ func TestGetLogsDir_EnvOverride(t *testing.T) {
 func TestGetLogsDir_LOG_DIR(t *testing.T) {
 	os.Unsetenv("LOGS_DIR")
 	t.Setenv("LOG_DIR", "/tmp/canonical-logs")
-	got := path.GetLogsDir("pastebin")
+	got := path.GetLogsDir("cairnbin")
 	if got != "/tmp/canonical-logs" {
 		t.Errorf("GetLogsDir: got %q, want %q", got, "/tmp/canonical-logs")
 	}
@@ -57,7 +57,7 @@ func TestGetLogsDir_LOG_DIR(t *testing.T) {
 func TestGetDBPath_DATABASE_DIR(t *testing.T) {
 	os.Unsetenv("DB_PATH")
 	t.Setenv("DATABASE_DIR", "/tmp/dbdir")
-	got := path.GetDBPath("pastebin")
+	got := path.GetDBPath("cairnbin")
 	if got != filepath.Join("/tmp/dbdir", "server.db") {
 		t.Errorf("GetDBPath: got %q, want %q", got, filepath.Join("/tmp/dbdir", "server.db"))
 	}
@@ -66,7 +66,7 @@ func TestGetDBPath_DATABASE_DIR(t *testing.T) {
 // TestGetBackupDir_EnvOverride verifies that BACKUP_DIR overrides the computed path.
 func TestGetBackupDir_EnvOverride(t *testing.T) {
 	t.Setenv("BACKUP_DIR", "/tmp/test-backup")
-	got := path.GetBackupDir("pastebin")
+	got := path.GetBackupDir("cairnbin")
 	if got != "/tmp/test-backup" {
 		t.Errorf("GetBackupDir: got %q, want %q", got, "/tmp/test-backup")
 	}
@@ -74,17 +74,17 @@ func TestGetBackupDir_EnvOverride(t *testing.T) {
 
 // TestGetPIDFile_EnvOverride verifies that PID_FILE overrides the computed path.
 func TestGetPIDFile_EnvOverride(t *testing.T) {
-	t.Setenv("PID_FILE", "/tmp/test-pastebin.pid")
-	got := path.GetPIDFile("pastebin")
-	if got != "/tmp/test-pastebin.pid" {
-		t.Errorf("GetPIDFile: got %q, want %q", got, "/tmp/test-pastebin.pid")
+	t.Setenv("PID_FILE", "/tmp/test-cairnbin.pid")
+	got := path.GetPIDFile("cairnbin")
+	if got != "/tmp/test-cairnbin.pid" {
+		t.Errorf("GetPIDFile: got %q, want %q", got, "/tmp/test-cairnbin.pid")
 	}
 }
 
 // TestGetCacheDir_EnvOverride verifies that CACHE_DIR overrides the computed path.
 func TestGetCacheDir_EnvOverride(t *testing.T) {
 	t.Setenv("CACHE_DIR", "/tmp/test-cache")
-	got := path.GetCacheDir("pastebin")
+	got := path.GetCacheDir("cairnbin")
 	if got != "/tmp/test-cache" {
 		t.Errorf("GetCacheDir: got %q, want %q", got, "/tmp/test-cache")
 	}
@@ -93,7 +93,7 @@ func TestGetCacheDir_EnvOverride(t *testing.T) {
 // TestGetDBPath_EnvOverride verifies that DB_PATH overrides the computed path.
 func TestGetDBPath_EnvOverride(t *testing.T) {
 	t.Setenv("DB_PATH", "/tmp/test.db")
-	got := path.GetDBPath("pastebin")
+	got := path.GetDBPath("cairnbin")
 	if got != "/tmp/test.db" {
 		t.Errorf("GetDBPath: got %q, want %q", got, "/tmp/test.db")
 	}
@@ -106,8 +106,8 @@ func TestGetDBPath_NativeHost(t *testing.T) {
 		t.Skip("running inside Docker — container path applies")
 	}
 	os.Unsetenv("DB_PATH")
-	got := path.GetDBPath("pastebin")
-	want := filepath.Join(path.GetDataDir("pastebin"), "db", "server.db")
+	got := path.GetDBPath("cairnbin")
+	want := filepath.Join(path.GetDataDir("cairnbin"), "db", "server.db")
 	if got != want {
 		t.Errorf("GetDBPath: got %q, want %q", got, want)
 	}
@@ -139,7 +139,7 @@ func TestEnsureDir(t *testing.T) {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(base, "pastebin-")
+	dir, err := os.MkdirTemp(base, "cairnbin-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,14 +197,14 @@ func TestGetConfigDir_IgnoresXDG(t *testing.T) {
 	os.Unsetenv("CONFIG_DIR")
 
 	home, _ := os.UserHomeDir()
-	got := path.GetConfigDir("pastebin")
-	want := filepath.Join(home, ".config", "apimgr", "pastebin")
+	got := path.GetConfigDir("cairnbin")
+	want := filepath.Join(home, ".config", "apimgr", "cairnbin")
 	if got != want {
 		t.Errorf("GetConfigDir with XDG set: got %q, want %q", got, want)
 	}
 }
 
-// TestGetConfigDir_HomeDefault verifies the ~/.config/apimgr/pastebin fallback
+// TestGetConfigDir_HomeDefault verifies the ~/.config/apimgr/cairnbin fallback
 // on Linux when neither CONFIG_DIR nor XDG_CONFIG_HOME is set.
 func TestGetConfigDir_HomeDefault(t *testing.T) {
 	skipIfContainer(t)
@@ -218,8 +218,8 @@ func TestGetConfigDir_HomeDefault(t *testing.T) {
 		t.Skipf("UserHomeDir unavailable: %v", err)
 	}
 
-	got := path.GetConfigDir("pastebin")
-	want := filepath.Join(home, ".config", "apimgr", "pastebin")
+	got := path.GetConfigDir("cairnbin")
+	want := filepath.Join(home, ".config", "apimgr", "cairnbin")
 	if got != want {
 		t.Errorf("GetConfigDir home default: got %q, want %q", got, want)
 	}
@@ -235,14 +235,14 @@ func TestGetDataDir_IgnoresXDG(t *testing.T) {
 	os.Unsetenv("DATA_DIR")
 
 	home, _ := os.UserHomeDir()
-	got := path.GetDataDir("pastebin")
-	want := filepath.Join(home, ".local", "share", "apimgr", "pastebin")
+	got := path.GetDataDir("cairnbin")
+	want := filepath.Join(home, ".local", "share", "apimgr", "cairnbin")
 	if got != want {
 		t.Errorf("GetDataDir with XDG set: got %q, want %q", got, want)
 	}
 }
 
-// TestGetDataDir_HomeDefault verifies the ~/.local/share/apimgr/pastebin
+// TestGetDataDir_HomeDefault verifies the ~/.local/share/apimgr/cairnbin
 // fallback on Linux when neither DATA_DIR nor XDG_DATA_HOME is set.
 func TestGetDataDir_HomeDefault(t *testing.T) {
 	skipIfContainer(t)
@@ -256,14 +256,14 @@ func TestGetDataDir_HomeDefault(t *testing.T) {
 		t.Skipf("UserHomeDir unavailable: %v", err)
 	}
 
-	got := path.GetDataDir("pastebin")
-	want := filepath.Join(home, ".local", "share", "apimgr", "pastebin")
+	got := path.GetDataDir("cairnbin")
+	want := filepath.Join(home, ".local", "share", "apimgr", "cairnbin")
 	if got != want {
 		t.Errorf("GetDataDir home default: got %q, want %q", got, want)
 	}
 }
 
-// TestGetLogsDir_HomeDefault verifies the ~/.local/log/apimgr/pastebin path on
+// TestGetLogsDir_HomeDefault verifies the ~/.local/log/apimgr/cairnbin path on
 // Linux for a non-root, non-container user when LOGS_DIR is not set.
 func TestGetLogsDir_HomeDefault(t *testing.T) {
 	skipIfContainer(t)
@@ -276,8 +276,8 @@ func TestGetLogsDir_HomeDefault(t *testing.T) {
 		t.Skipf("UserHomeDir unavailable: %v", err)
 	}
 
-	got := path.GetLogsDir("pastebin")
-	want := filepath.Join(home, ".local", "log", "apimgr", "pastebin")
+	got := path.GetLogsDir("cairnbin")
+	want := filepath.Join(home, ".local", "log", "apimgr", "cairnbin")
 	if got != want {
 		t.Errorf("GetLogsDir home default: got %q, want %q", got, want)
 	}
@@ -296,7 +296,7 @@ func TestGetBackupDir_DataBased(t *testing.T) {
 		t.Skipf("UserHomeDir unavailable: %v", err)
 	}
 
-	got := path.GetBackupDir("pastebin")
+	got := path.GetBackupDir("cairnbin")
 	// The backup dir must start with the user home, confirming we are in the
 	// non-root / non-container branch.
 	if !filepath.IsAbs(got) {
@@ -308,20 +308,20 @@ func TestGetBackupDir_DataBased(t *testing.T) {
 }
 
 // TestGetPIDFile_UserPath verifies that for a non-root user the PID file path
-// ends in "pastebin.pid" and is located under the data directory.
+// ends in "cairnbin.pid" and is located under the data directory.
 func TestGetPIDFile_UserPath(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
 	os.Unsetenv("PID_FILE")
 
-	got := path.GetPIDFile("pastebin")
-	if filepath.Base(got) != "pastebin.pid" {
-		t.Errorf("GetPIDFile: base name should be %q, got %q", "pastebin.pid", filepath.Base(got))
+	got := path.GetPIDFile("cairnbin")
+	if filepath.Base(got) != "cairnbin.pid" {
+		t.Errorf("GetPIDFile: base name should be %q, got %q", "cairnbin.pid", filepath.Base(got))
 	}
 
 	// Must be under the data directory for user installs.
-	dataDir := path.GetDataDir("pastebin")
+	dataDir := path.GetDataDir("cairnbin")
 	if len(got) <= len(dataDir) || got[:len(dataDir)] != dataDir {
 		t.Errorf("GetPIDFile: expected path under %q, got %q", dataDir, got)
 	}
@@ -340,14 +340,14 @@ func TestGetCacheDir_IgnoresXDG(t *testing.T) {
 	if err != nil {
 		t.Skipf("UserHomeDir unavailable: %v", err)
 	}
-	got := path.GetCacheDir("pastebin")
-	want := filepath.Join(home, ".cache", "apimgr", "pastebin")
+	got := path.GetCacheDir("cairnbin")
+	want := filepath.Join(home, ".cache", "apimgr", "cairnbin")
 	if got != want {
 		t.Errorf("GetCacheDir with XDG set: got %q, want %q", got, want)
 	}
 }
 
-// TestGetCacheDir_HomeDefault verifies the ~/.cache/apimgr/pastebin fallback on
+// TestGetCacheDir_HomeDefault verifies the ~/.cache/apimgr/cairnbin fallback on
 // Linux when neither CACHE_DIR nor XDG_CACHE_HOME is set.
 func TestGetCacheDir_HomeDefault(t *testing.T) {
 	skipIfContainer(t)
@@ -361,8 +361,8 @@ func TestGetCacheDir_HomeDefault(t *testing.T) {
 		t.Skipf("UserHomeDir unavailable: %v", err)
 	}
 
-	got := path.GetCacheDir("pastebin")
-	want := filepath.Join(home, ".cache", "apimgr", "pastebin")
+	got := path.GetCacheDir("cairnbin")
+	want := filepath.Join(home, ".cache", "apimgr", "cairnbin")
 	if got != want {
 		t.Errorf("GetCacheDir home default: got %q, want %q", got, want)
 	}
@@ -385,8 +385,8 @@ func TestGetDBPath_NativeUser(t *testing.T) {
 
 	os.Unsetenv("DB_PATH")
 
-	got := path.GetDBPath("pastebin")
-	dataDir := path.GetDataDir("pastebin")
+	got := path.GetDBPath("cairnbin")
+	dataDir := path.GetDataDir("cairnbin")
 	want := filepath.Join(dataDir, "db", "server.db")
 	if got != want {
 		t.Errorf("GetDBPath user: got %q, want %q", got, want)
@@ -412,13 +412,13 @@ func TestAllPathFunctions_ReturnAbsolutePaths(t *testing.T) {
 		name string
 		fn   func() string
 	}{
-		{"GetConfigDir", func() string { return path.GetConfigDir("pastebin") }},
-		{"GetDataDir", func() string { return path.GetDataDir("pastebin") }},
-		{"GetLogsDir", func() string { return path.GetLogsDir("pastebin") }},
-		{"GetBackupDir", func() string { return path.GetBackupDir("pastebin") }},
-		{"GetPIDFile", func() string { return path.GetPIDFile("pastebin") }},
-		{"GetCacheDir", func() string { return path.GetCacheDir("pastebin") }},
-		{"GetDBPath", func() string { return path.GetDBPath("pastebin") }},
+		{"GetConfigDir", func() string { return path.GetConfigDir("cairnbin") }},
+		{"GetDataDir", func() string { return path.GetDataDir("cairnbin") }},
+		{"GetLogsDir", func() string { return path.GetLogsDir("cairnbin") }},
+		{"GetBackupDir", func() string { return path.GetBackupDir("cairnbin") }},
+		{"GetPIDFile", func() string { return path.GetPIDFile("cairnbin") }},
+		{"GetCacheDir", func() string { return path.GetCacheDir("cairnbin") }},
+		{"GetDBPath", func() string { return path.GetDBPath("cairnbin") }},
 	}
 
 	for _, tc := range cases {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # @@License : WTFPL
-# tests/e2e.sh — Browser E2E test runner for pastebin (PART 28).
+# tests/e2e.sh — Browser E2E test runner for cairnbin (PART 28).
 # Builds the local image, brings it up via docker/docker-compose.test.yml
 # (copied to a temp dir, never run from the project tree), then runs the
 # `e2e`-tagged Go test package (tests/e2e/) against it inside a Docker
@@ -27,13 +27,13 @@ set -euo pipefail
 E2E_SCRIPT_NAME="$(basename -- "$0")"
 E2E_PROJECT_DIR="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 E2E_PROJECT_ORG="apimgr"
-E2E_PROJECT_NAME="pastebin"
+E2E_PROJECT_NAME="cairnbin"
 E2E_IMAGE_NAME="${E2E_PROJECT_NAME}:e2e-$$"
 E2E_COMPOSE_PROJECT="${E2E_PROJECT_NAME}-e2e-$$"
 E2E_CONTAINER_NAME="${E2E_PROJECT_NAME}-app"
 E2E_PORT="80"
-E2E_BASE_URL="http://pastebin:${E2E_PORT}"
-E2E_BROWSER_URL="http://pastebin-e2e-browser:9222"
+E2E_BASE_URL="http://cairnbin:${E2E_PORT}"
+E2E_BROWSER_URL="http://cairnbin-e2e-browser:9222"
 E2E_SERVER_IP=""
 E2E_BROWSER_IP=""
 E2E_TEMP_DIR=""
@@ -79,10 +79,10 @@ command -v docker >/dev/null 2>&1 || { __fail "docker not found — required for
 mkdir -p "${TMPDIR:-/tmp}/${E2E_PROJECT_ORG}"
 E2E_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${E2E_PROJECT_ORG}/${E2E_PROJECT_NAME}-XXXXXX")"
 mkdir -p "${E2E_TEMP_DIR}/volumes/config" "${E2E_TEMP_DIR}/volumes/data"
-mkdir -p "${E2E_TEMP_DIR}/volumes/config/pastebin"
+mkdir -p "${E2E_TEMP_DIR}/volumes/config/cairnbin"
 E2E_ARTIFACT_DIR="${E2E_TEMP_DIR}/artifacts"
 mkdir -p "${E2E_ARTIFACT_DIR}"
-cat >"${E2E_TEMP_DIR}/volumes/config/pastebin/server.yml" <<'EOF'
+cat >"${E2E_TEMP_DIR}/volumes/config/cairnbin/server.yml" <<'EOF'
 server:
   rate_limit:
     enabled: true
@@ -98,7 +98,7 @@ server:
       country: true
       city: true
   tor:
-    binary: /__pastebin_e2e__/tor
+    binary: /__cairnbin_e2e__/tor
   contact:
     admin:
       email: e2e-admin@example.test
@@ -106,7 +106,7 @@ server:
     email:
       enabled: true
       smtp:
-        host: pastebin-e2e-runner
+        host: cairnbin-e2e-runner
         port: 64981
         tls: none
       events:
@@ -117,13 +117,13 @@ web:
       enabled: true
       sources:
         - file: e2e-blocklist.txt
-          url: http://pastebin-e2e-runner:64980/blocklist
+          url: http://cairnbin-e2e-runner:64980/blocklist
     cve:
       enabled: true
       file: e2e-cves.json
-      source: http://pastebin-e2e-runner:64980/cve
+      source: http://cairnbin-e2e-runner:64980/cve
 EOF
-chmod 600 "${E2E_TEMP_DIR}/volumes/config/pastebin/server.yml"
+chmod 600 "${E2E_TEMP_DIR}/volumes/config/cairnbin/server.yml"
 __info "Temp dir: ${E2E_TEMP_DIR}"
 
 # ── Build local image ───────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ cp -- "${E2E_PROJECT_DIR}/docker/docker-compose.test.yml" "${E2E_TEMP_DIR}/docke
 sed -i.bak \
     -e "s|image: .*${E2E_PROJECT_NAME}.*|image: ${E2E_IMAGE_NAME}|" \
     -e 's|pull_policy: always|pull_policy: missing|' \
-    -e '/^  pastebin:$/,/^    external: false$/ { /^    external: false$/a\
+    -e '/^  cairnbin:$/,/^    external: false$/ { /^    external: false$/a\
     internal: true
     }' \
     "${E2E_TEMP_DIR}/docker-compose.yml" 2>/dev/null || true
@@ -158,12 +158,12 @@ done
 if [[ "${E2E_READY}" != true ]]; then
     __fail "server did not become healthy"
     docker logs "${E2E_CONTAINER_NAME}" >"${E2E_ARTIFACT_DIR}/server.log" 2>&1 || true
-    docker logs pastebin-e2e-browser >"${E2E_ARTIFACT_DIR}/browser.log" 2>&1 || true
+    docker logs cairnbin-e2e-browser >"${E2E_ARTIFACT_DIR}/browser.log" 2>&1 || true
     exit 1
 fi
 
-E2E_SERVER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "pastebin").IPAddress}}' "${E2E_CONTAINER_NAME}")"
-E2E_BROWSER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "pastebin").IPAddress}}' pastebin-e2e-browser)"
+E2E_SERVER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "cairnbin").IPAddress}}' "${E2E_CONTAINER_NAME}")"
+E2E_BROWSER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "cairnbin").IPAddress}}' cairnbin-e2e-browser)"
 if [[ -z "${E2E_SERVER_IP}" || -z "${E2E_BROWSER_IP}" ]]; then
     __fail "could not resolve test service addresses"
     exit 1
@@ -180,13 +180,13 @@ if (
     TEST_PKGS="./tests/e2e/..." \
     TEST_RUN="-count=1" \
     TEST_COVERAGE=0 \
-    EXTRA_ENV="--network pastebin --network-alias=pastebin-e2e-runner -e PASTEBIN_E2E_UPDATE_API_URL=http://pastebin-e2e-runner:64980/update -e E2E_BASE_URL=${E2E_BASE_URL} -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
+    EXTRA_ENV="--network cairnbin --network-alias=cairnbin-e2e-runner -e CAIRNBIN_E2E_UPDATE_API_URL=http://cairnbin-e2e-runner:64980/update -e E2E_BASE_URL=${E2E_BASE_URL} -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
 ); then
     __pass "E2E tiers 1–3"
 else
     __fail "E2E tiers 1–3"
     docker logs "${E2E_CONTAINER_NAME}" >"${E2E_ARTIFACT_DIR}/server.log" 2>&1 || true
-    docker logs pastebin-e2e-browser >"${E2E_ARTIFACT_DIR}/browser.log" 2>&1 || true
+    docker logs cairnbin-e2e-browser >"${E2E_ARTIFACT_DIR}/browser.log" 2>&1 || true
 fi
 
 if [[ "${E2E_ERRORS}" -gt 0 ]]; then

@@ -7,8 +7,8 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/apimgr/pastebin/src/common/secretbox"
-	"github.com/apimgr/pastebin/src/database"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/database"
 )
 
 // securityIDWindow is the rotation period for the security_id token: 48 hours

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/client/paths"
+	"github.com/apimgr/cairnbin/src/client/paths"
 )
 
 type responseCacheConfig struct {

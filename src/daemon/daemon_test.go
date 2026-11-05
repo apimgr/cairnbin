@@ -5,7 +5,7 @@ package daemon_test
 import (
 	"testing"
 
-	"github.com/apimgr/pastebin/src/daemon"
+	"github.com/apimgr/cairnbin/src/daemon"
 )
 
 // ─── Daemonize ────────────────────────────────────────────────────────────────

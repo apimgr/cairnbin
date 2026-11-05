@@ -19,7 +19,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // Provider verification-code format rules (AI.md 24501-24508).

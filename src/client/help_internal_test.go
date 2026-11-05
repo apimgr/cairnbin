@@ -14,7 +14,7 @@ func TestWriteUsage_SpecLayout(t *testing.T) {
 	writeUsage(&buf)
 	out := buf.String()
 	for _, want := range []string{
-		" - CLI for pastebin", "Usage:", "# TUI mode (no args)", "Flags:",
+		" - CLI for cairnbin", "Usage:", "# TUI mode (no args)", "Flags:",
 		"-h, --help", "-v, --version", "--shell completions [SHELL]", "--shell init [SHELL]", "--shell help",
 		"--server URL", "--token TOKEN", "--token-file FILE", "--config NAME", "--debug",
 		"--color {auto|yes|no}", "--lang CODE",

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/database"
+	"github.com/apimgr/cairnbin/src/database"
 )
 
 func TestIsPublicIP(t *testing.T) {

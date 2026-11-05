@@ -6,9 +6,9 @@ The server reads `server.yml` from the config directory on startup. First run cr
 
 | Platform | Path |
 |----------|------|
-| Linux    | `/etc/apimgr/pastebin/server.yml` |
-| macOS    | `/Library/Application Support/apimgr/pastebin/server.yml` |
-| Docker   | `/config/pastebin/server.yml` |
+| Linux    | `/etc/apimgr/cairnbin/server.yml` |
+| macOS    | `/Library/Application Support/apimgr/cairnbin/server.yml` |
+| Docker   | `/config/cairnbin/server.yml` |
 
 Override the directory with: `--config /path/to/config-dir` (the file inside is always `server.yml`)
 
@@ -92,7 +92,7 @@ and fall back to the defaults above.
 server:
   branding:
     # display name; empty falls back to the project name
-    title: "pastebin"
+    title: "cairnbin"
     tagline: ""
     description: ""
   seo:
@@ -193,10 +193,10 @@ Updates are verified against the release's `sha256.txt` before install.
 
 ### CLI distribution (`server.cli`)
 
-The server hands out `pastebin-cli` builds for CLI self-update. `/api/autodiscover`
+The server hands out `cairnbin-cli` builds for CLI self-update. `/api/autodiscover`
 lists each available build under `cli_versions` (`{os}-{arch}` → `version` and
-`sha256`), and `GET /cli/binaries/pastebin-cli-{os}-{arch}[.exe]` streams it.
-Builds come from `{data_dir}/cli/binaries/` plus the `pastebin-cli` installed
+`sha256`), and `GET /cli/binaries/cairnbin-cli-{os}-{arch}[.exe]` streams it.
+Builds come from `{data_dir}/cli/binaries/` plus the `cairnbin-cli` installed
 next to the server binary (the container image ships it).
 
 | Key | Default | Meaning |
@@ -255,7 +255,7 @@ they are read individually (no `.env` file is ever loaded).
 | Variable | Description |
 |----------|-------------|
 | `PORT`   | Override listen port (dual format `"8090,8443"` supported) |
-| `PASTEBIN_PORT` | Alias for `PORT` |
+| `CAIRNBIN_PORT` | Alias for `PORT` |
 | `ADDRESS` | Listen address (e.g. `0.0.0.0`) |
 | `LISTEN` | Full listen spec (`address:port`) |
 | `BASE_URL` | Public base URL / path prefix |
@@ -298,7 +298,7 @@ they are read individually (no `.env` file is ever loaded).
 | `SMTP_FROM_NAME` | From display name (default: app name) |
 | `SMTP_FROM_EMAIL` | From address (default: `no-reply@{fqdn}`) |
 
-Verify the SMTP setup with `pastebin email test [recipient]`. It checks the SMTP handshake, sends the `test` template (subject prefixed `[TEST]`) to the admin contact or the given recipient, and records the result in the audit log. Without SMTP configured it exits 1 with "email features require SMTP configuration".
+Verify the SMTP setup with `cairnbin email test [recipient]`. It checks the SMTP handshake, sends the `test` template (subject prefixed `[TEST]`) to the admin contact or the given recipient, and records the result in the audit log. Without SMTP configured it exits 1 with "email features require SMTP configuration".
 
 Custom email templates in `{config_dir}/template/email/{name}.txt` are validated when loaded. A file with an unknown `{variable}` (the log suggests the closest match), an empty subject or body, or a missing `Subject:` line or `---` separator is logged and ignored, and the built-in default is used instead. Subjects over 78 characters only log a warning.
 

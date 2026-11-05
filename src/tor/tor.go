@@ -1,4 +1,4 @@
-// Package tor manages a dedicated Tor hidden service for the pastebin server.
+// Package tor manages a dedicated Tor hidden service for the cairnbin server.
 // The server binary fully owns the Tor process lifecycle — it starts, monitors,
 // and stops the process. The hidden service is auto-enabled whenever a Tor
 // binary is found in PATH or common install locations; there is no enable flag.
@@ -722,7 +722,7 @@ func getTorConfig(cfg *Config, backendPort int) string {
 	if cfg.MaxMonthlyBandwidth != "" && cfg.MaxMonthlyBandwidth != "unlimited" {
 		accounting = fmt.Sprintf("\n# Monthly bandwidth limit\nAccountingStart month 1 00:00\nAccountingMax %s", cfg.MaxMonthlyBandwidth)
 	}
-	return fmt.Sprintf(`# Tor configuration — managed by pastebin server binary
+	return fmt.Sprintf(`# Tor configuration — managed by cairnbin server binary
 # Regenerated on every startup; this file is fully-derived state.
 # NEVER uses default ports 9050/9051 — runtime auto-ports only
 

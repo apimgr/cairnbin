@@ -11,7 +11,7 @@ import (
 
 const (
 	internalOrg  = "apimgr"
-	internalName = "pastebin"
+	internalName = "cairnbin"
 )
 
 // ActiveConfigPath, when non-empty, overrides the default cli.yml path.

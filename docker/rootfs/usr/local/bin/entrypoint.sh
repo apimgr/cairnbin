@@ -7,7 +7,7 @@ set -eo pipefail
 # Binary handles: directories, permissions, user/group, Tor, etc.
 # =============================================================================
 
-APP_NAME="pastebin"
+APP_NAME="cairnbin"
 APP_BIN="/usr/local/bin/${APP_NAME}"
 
 # Export environment defaults (binary reads these)

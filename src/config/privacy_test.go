@@ -7,7 +7,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // TestPrivacyDefaults verifies the documented PART 31 defaults land in the

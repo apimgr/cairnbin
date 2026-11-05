@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/common/secretbox"
-	"github.com/apimgr/pastebin/src/maintenance"
-	"github.com/apimgr/pastebin/src/pgp"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/maintenance"
+	"github.com/apimgr/cairnbin/src/pgp"
 )
 
 // writeSecurityKeypair generates a real project keypair and writes the public
@@ -16,7 +16,7 @@ import (
 // {configDir}/security, mirroring the server's on-disk layout.
 func writeSecurityKeypair(t *testing.T, configDir string, installSecret []byte) {
 	t.Helper()
-	kp, err := pgp.Generate("Pastebin", "security@example.com", time.Now(), 24*time.Hour)
+	kp, err := pgp.Generate("Cairnbin", "security@example.com", time.Now(), 24*time.Hour)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}

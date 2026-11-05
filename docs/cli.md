@@ -1,13 +1,13 @@
 # CLI Reference
 
-The `pastebin-cli` binary is a fully spec-compliant command-line client.
+The `cairnbin-cli` binary is a fully spec-compliant command-line client.
 
 ## Global Flags
 
 | Flag | Description |
 |------|-------------|
-| `--server URL` | Target server URL (default: `https://pste.us`, the embedded official site; or set `$PASTEBIN_SERVER_PRIMARY`) |
-| `--token TOKEN` | Operator/owner API token (or set `$PASTEBIN_TOKEN`) |
+| `--server URL` | Target server URL (default: `https://pste.us`, the embedded official site; or set `$CAIRNBIN_SERVER_PRIMARY`) |
+| `--token TOKEN` | Operator/owner API token (or set `$CAIRNBIN_TOKEN`) |
 | `--token-file PATH` | Read the API token from a file |
 | `--config NAME` | Config profile name or path (default: `cli.yml`; `.yml` checked before `.yaml`) |
 | `--json` | Output in JSON format |
@@ -21,7 +21,7 @@ The `pastebin-cli` binary is a fully spec-compliant command-line client.
 | `-h, --help` | Show help |
 | `-v, --version` | Show version |
 
-Environment variables: `PASTEBIN_SERVER_PRIMARY`, `PASTEBIN_TOKEN`, `PASTEBIN_OUTPUT_FORMAT`, `PASTEBIN_OUTPUT_PAGER`, `PASTEBIN_OUTPUT_VERBOSE`, `PASTEBIN_OUTPUT_QUIET`, `PASTEBIN_PUBLIC`, `PASTEBIN_EXPIRE`, `PASTEBIN_SYNTAX`, `PASTEBIN_LIMIT`, `CLI_CONFIG`, and `NO_COLOR`. Response caching and rotating logs use the configured `cache.*` and `logging.*` settings in `cli.yml`.
+Environment variables: `CAIRNBIN_SERVER_PRIMARY`, `CAIRNBIN_TOKEN`, `CAIRNBIN_OUTPUT_FORMAT`, `CAIRNBIN_OUTPUT_PAGER`, `CAIRNBIN_OUTPUT_VERBOSE`, `CAIRNBIN_OUTPUT_QUIET`, `CAIRNBIN_PUBLIC`, `CAIRNBIN_EXPIRE`, `CAIRNBIN_SYNTAX`, `CAIRNBIN_LIMIT`, `CLI_CONFIG`, and `NO_COLOR`. Response caching and rotating logs use the configured `cache.*` and `logging.*` settings in `cli.yml`.
 
 ## Commands
 
@@ -30,7 +30,7 @@ Environment variables: `PASTEBIN_SERVER_PRIMARY`, `PASTEBIN_TOKEN`, `PASTEBIN_OU
 Create a new paste from stdin or a file.
 
 ```bash
-pastebin-cli create [file] [flags]
+cairnbin-cli create [file] [flags]
 ```
 
 **Flags:**
@@ -49,23 +49,23 @@ pastebin-cli create [file] [flags]
 
 ```bash
 # Paste from stdin
-echo "Hello, World!" | pastebin-cli create
+echo "Hello, World!" | cairnbin-cli create
 
 # Paste from stdin without an explicit command
-echo "Hello, World!" | pastebin-cli
+echo "Hello, World!" | cairnbin-cli
 
 # Paste a file
-pastebin-cli create myfile.go --lang go
-pastebin-cli myfile.go --syntax go
+cairnbin-cli create myfile.go --lang go
+cairnbin-cli myfile.go --syntax go
 
 # Burn-after-read with expiry
-pastebin-cli create --burn 1 --expiry 1h secret.txt
+cairnbin-cli create --burn 1 --expiry 1h secret.txt
 
 # Unlisted paste with title
-pastebin-cli create notes.txt --title "Meeting Notes" --unlisted
+cairnbin-cli create notes.txt --title "Meeting Notes" --unlisted
 
 # Target a custom server (default: https://pste.us)
-pastebin-cli --server https://your-server.example.com create myfile.txt
+cairnbin-cli --server https://your-server.example.com create myfile.txt
 ```
 
 **Output:**
@@ -80,14 +80,14 @@ Delete Token: 64-char-hex-token (save this — shown once only)
 Fetch and print the raw content of a paste.
 
 ```bash
-pastebin-cli get <id> [--output FORMAT]
+cairnbin-cli get <id> [--output FORMAT]
 ```
 
 **Example:**
 
 ```bash
-pastebin-cli get abc12345
-pastebin-cli get abc12345 --output json
+cairnbin-cli get abc12345
+cairnbin-cli get abc12345 --output json
 ```
 
 ### delete
@@ -95,13 +95,13 @@ pastebin-cli get abc12345 --output json
 Delete a paste using its delete token.
 
 ```bash
-pastebin-cli delete <id> <delete-token>
+cairnbin-cli delete <id> <delete-token>
 ```
 
 **Example:**
 
 ```bash
-pastebin-cli delete abc12345 64-char-hex-token
+cairnbin-cli delete abc12345 64-char-hex-token
 ```
 
 ### list
@@ -109,13 +109,13 @@ pastebin-cli delete abc12345 64-char-hex-token
 List recent public pastes.
 
 ```bash
-pastebin-cli list [--limit N] [--output FORMAT]
+cairnbin-cli list [--limit N] [--output FORMAT]
 ```
 
 **Example:**
 
 ```bash
-pastebin-cli list --limit 20
+cairnbin-cli list --limit 20
 ```
 
 ### scheduler
@@ -123,12 +123,12 @@ pastebin-cli list --limit 20
 Inspect and control the server's built-in scheduled tasks.
 
 ```bash
-pastebin-cli scheduler list
-pastebin-cli scheduler show <id>
-pastebin-cli scheduler history <id>
-pastebin-cli scheduler run <id>
-pastebin-cli scheduler enable <id>
-pastebin-cli scheduler disable <id>
+cairnbin-cli scheduler list
+cairnbin-cli scheduler show <id>
+cairnbin-cli scheduler history <id>
+cairnbin-cli scheduler run <id>
+cairnbin-cli scheduler enable <id>
+cairnbin-cli scheduler disable <id>
 ```
 
 `list`, `show` and `history` are read-only. `run`, `enable` and `disable` need the operator token (`--token` or `auth.token` in `cli.yml`). Status symbols: `✓` success, `●` running, `✗` failed, `○` pending, `◐` skipped. Supports `--output json|yaml|csv|table`.
@@ -137,11 +137,11 @@ pastebin-cli scheduler disable <id>
 
 ```bash
 # Paste from pipe
-cat file.go | pastebin-cli create --lang go
+cat file.go | cairnbin-cli create --lang go
 
 # Paste output of a command
-kubectl logs my-pod | pastebin-cli create --lang text --title "Pod Logs"
+kubectl logs my-pod | cairnbin-cli create --lang text --title "Pod Logs"
 
 # Fetch paste content
-pastebin-cli get abc12345 > downloaded.txt
+cairnbin-cli get abc12345 > downloaded.txt
 ```

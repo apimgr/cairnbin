@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/common/retry"
+	"github.com/apimgr/cairnbin/src/common/retry"
 )
 
 // TestMain shortens the PART 9 backoff so tests that hit an unreachable

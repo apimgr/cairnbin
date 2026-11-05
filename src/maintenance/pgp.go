@@ -13,11 +13,11 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/common/secretbox"
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/pgp"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/pgp"
 )
 
 // pgpKeypairValidity is the default project-key lifetime (AI.md 14181).

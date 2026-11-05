@@ -143,5 +143,5 @@ same pass gets its own line item here.
 - PART 16 footer: rows use <div> where AI.md markup uses consecutive <p> rows, and page links should sit in a <nav>; CSS targets the classes today. Align markup.
 - PART 16 Themes: spec dark Muted #6272a4 on Background #282a36 is ~3.3:1 (<4.5:1 AA) where used for body-size text; spec palette applied verbatim, review which elements use --color-text-muted and bump weight/size or confirm with spec owner.
 - PART 16 Themes: spec file layout (src/server/theme.go, src/client/tui/styles.go, src/client/cli/output.go) differs from current layout; verify TUI/CLI consume TerminalPalette and NO_COLOR via ColorEnabled.
-- PART 16 Sitemap: sitemap index (/sitemap-N.xml) for >50000 URLs not implemented (pastebin lists ~12 URLs).
+- PART 16 Sitemap: sitemap index (/sitemap-N.xml) for >50000 URLs not implemented (cairnbin lists ~12 URLs).
 - PART 16 PWA: manifest has no `shortcuts`/`screenshots`, and no iOS `apple-touch-startup-image` splash links (AI.md optional items); icons are generated, so splash/screenshot assets need a generator.

@@ -15,14 +15,14 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/common/i18n"
-	"github.com/apimgr/pastebin/src/common/secretbox"
-	"github.com/apimgr/pastebin/src/database"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/database"
 	"github.com/go-chi/chi/v5"
 )
 
-const ownerCookieName = "pastebin_owner_token_rU3uW5Ze"
+const ownerCookieName = "cairnbin_owner_token_rU3uW5Ze"
 
 func (s *Server) ownerDB() (database.OwnerDB, bool) {
 	db, ok := s.db.(database.OwnerDB)

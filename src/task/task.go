@@ -21,10 +21,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/common/retry"
-	"github.com/apimgr/pastebin/src/maintenance"
-	"github.com/apimgr/pastebin/src/updater"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/retry"
+	"github.com/apimgr/cairnbin/src/maintenance"
+	"github.com/apimgr/cairnbin/src/updater"
 )
 
 // BackupRetention controls how many old backups to keep for each period.

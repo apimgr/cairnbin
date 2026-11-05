@@ -31,7 +31,7 @@ func newTestHandler(enabled bool) *Handler {
 	})
 	return New(Config{
 		APIVersion:    "v1",
-		ServerName:    "pastebin",
+		ServerName:    "cairnbin",
 		ServerVersion: "1.2.3",
 		Dispatch:      echo,
 		Enabled:       func() bool { return enabled },
@@ -84,7 +84,7 @@ func TestInitializeNegotiatesVersion(t *testing.T) {
 	if res["protocolVersion"] != "2025-03-26" {
 		t.Errorf("protocolVersion = %v, want echoed 2025-03-26", res["protocolVersion"])
 	}
-	if info := res["serverInfo"].(map[string]any); info["name"] != "pastebin" || info["version"] != "1.2.3" {
+	if info := res["serverInfo"].(map[string]any); info["name"] != "cairnbin" || info["version"] != "1.2.3" {
 		t.Errorf("serverInfo = %v", info)
 	}
 	got = decode(t, rpc(t, h, `{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"1999-01-01"}}`, nil))

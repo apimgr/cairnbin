@@ -22,25 +22,25 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/common/banner"
-	"github.com/apimgr/pastebin/src/common/email"
-	"github.com/apimgr/pastebin/src/common/i18n"
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/daemon"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/logging"
-	"github.com/apimgr/pastebin/src/maintenance"
-	"github.com/apimgr/pastebin/src/mode"
-	"github.com/apimgr/pastebin/src/path"
-	"github.com/apimgr/pastebin/src/pid"
-	"github.com/apimgr/pastebin/src/scheduler"
-	"github.com/apimgr/pastebin/src/server"
-	"github.com/apimgr/pastebin/src/service"
-	"github.com/apimgr/pastebin/src/shell"
-	"github.com/apimgr/pastebin/src/task"
-	"github.com/apimgr/pastebin/src/tor"
-	"github.com/apimgr/pastebin/src/updater"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/banner"
+	"github.com/apimgr/cairnbin/src/common/email"
+	"github.com/apimgr/cairnbin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/daemon"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/logging"
+	"github.com/apimgr/cairnbin/src/maintenance"
+	"github.com/apimgr/cairnbin/src/mode"
+	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/pid"
+	"github.com/apimgr/cairnbin/src/scheduler"
+	"github.com/apimgr/cairnbin/src/server"
+	"github.com/apimgr/cairnbin/src/service"
+	"github.com/apimgr/cairnbin/src/shell"
+	"github.com/apimgr/cairnbin/src/task"
+	"github.com/apimgr/cairnbin/src/tor"
+	"github.com/apimgr/cairnbin/src/updater"
 )
 
 // Version, CommitID, BuildEpoch, and OfficialSite are injected at build time via
@@ -56,7 +56,7 @@ var (
 	OfficialSite = ""
 )
 
-const appName = "pastebin"
+const appName = "cairnbin"
 
 // buildEpoch parses the embedded BuildEpoch ldflag; 0 when unset or invalid.
 func buildEpoch() int64 {
@@ -2088,7 +2088,7 @@ func applyColor(v string) {
 
 // printHelp writes usage information to w.
 func printHelp(w io.Writer, name string) {
-	fmt.Fprintf(w, `%s %s - a fast, public pastebin service
+	fmt.Fprintf(w, `%s %s - a fast, public cairnbin service
 
 Usage:
   %s [flags]

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/logging"
-	"github.com/apimgr/pastebin/src/metric"
+	"github.com/apimgr/cairnbin/src/logging"
+	"github.com/apimgr/cairnbin/src/metric"
 )
 
 // lokiTailBytes is how much of the tail of each log file is read per scrape.

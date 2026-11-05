@@ -5,7 +5,7 @@ import (
 	"html/template"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // renderTrackingScript returns the analytics platform embed snippet for the

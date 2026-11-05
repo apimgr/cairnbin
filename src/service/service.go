@@ -11,14 +11,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/path"
-	"github.com/apimgr/pastebin/src/pid"
+	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/pid"
 )
 
 const (
-	appName     = "pastebin"
+	appName     = "cairnbin"
 	orgName     = "apimgr"
-	serviceUser = "pastebin"
+	serviceUser = "cairnbin"
 	// launchdLabel is the reverse-DNS identifier for the macOS launchd plist.
 	// PART 3 derives {plist_name} as io.github.{project_org}.{internal_name}.
 	launchdLabel = "io.github." + orgName + "." + appName

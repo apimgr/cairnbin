@@ -7,8 +7,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/apimgr/pastebin/src/common/buildinfo"
-	"github.com/apimgr/pastebin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/common/buildinfo"
+	"github.com/apimgr/cairnbin/src/common/i18n"
 )
 
 // Handler handles both the GraphQL POST API and the GraphiQL browser UI.
@@ -228,7 +228,7 @@ func (h *Handler) renderUI(r *http.Request) string {
           <a href="` + prefix + `/server/help" class="footer-link">` + t("footer.help") + `</a>
         </nav>
         <div class="footer-made">
-          <a href="https://github.com/apimgr/pastebin" target="_blank" rel="noopener noreferrer" class="footer-repo">` + t("footer.made_with") + ` Go</a> ❤️
+          <a href="https://github.com/apimgr/cairnbin" target="_blank" rel="noopener noreferrer" class="footer-repo">` + t("footer.made_with") + ` Go</a> ❤️
         </div>
       </div>
     </footer>

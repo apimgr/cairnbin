@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/maintenance"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/maintenance"
 )
 
 // makeTestDirs creates temp config and data directories with dummy files.
@@ -332,7 +332,7 @@ func TestSetup(t *testing.T) {
 
 func TestPrintHelp(t *testing.T) {
 	// Should not panic.
-	maintenance.PrintHelp("pastebin")
+	maintenance.PrintHelp("cairnbin")
 }
 
 // ─── VerifyBackup — SQLite magic ─────────────────────────────────────────────

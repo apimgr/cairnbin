@@ -20,14 +20,14 @@ func TestApplyRetention_KeepsMaxBackups(t *testing.T) {
 		"2025-01-01",
 	}
 	for _, d := range dates {
-		name := "pastebin_backup_" + d + ".tar.gz"
+		name := "cairnbin_backup_" + d + ".tar.gz"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Keep only 2 most recent.
-	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "pastebin", Retention: BackupRetention{MaxBackups: 2}}); err != nil {
+	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{MaxBackups: 2}}); err != nil {
 		t.Fatalf("applyRetention error: %v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestApplyRetention_KeepsWeekly(t *testing.T) {
 	// 2025-01-05 is a Sunday; 2025-01-06 is a Monday.
 	dates := []string{"2025-01-06", "2025-01-05"}
 	for _, d := range dates {
-		name := "pastebin_backup_" + d + ".tar.gz"
+		name := "cairnbin_backup_" + d + ".tar.gz"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -54,7 +54,7 @@ func TestApplyRetention_KeepsWeekly(t *testing.T) {
 
 	// MaxBackups=1 would keep only the newest daily (Mon 01-06).
 	// KeepWeekly=1 also retains the Sunday (01-05).
-	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "pastebin", Retention: BackupRetention{
+	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{
 		MaxBackups: 1,
 		KeepWeekly: 1,
 	}}); err != nil {
@@ -78,14 +78,14 @@ func TestApplyRetention_YearlyKept(t *testing.T) {
 	jan1 := "2025-01-01"
 	jan2 := "2025-01-02"
 	for _, d := range []string{jan1, jan2} {
-		name := "pastebin_backup_" + d + ".tar.gz"
+		name := "cairnbin_backup_" + d + ".tar.gz"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// MaxBackups=1 keeps newest daily (jan2). KeepYearly=1 keeps jan1 as yearly.
-	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "pastebin", Retention: BackupRetention{
+	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{
 		MaxBackups: 1,
 		KeepYearly: 1,
 	}}); err != nil {
@@ -103,13 +103,13 @@ func TestApplyRetention_YearlyKept(t *testing.T) {
 
 func TestApplyRetention_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
-	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "pastebin", Retention: BackupRetention{MaxBackups: 3}}); err != nil {
+	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{MaxBackups: 3}}); err != nil {
 		t.Fatalf("unexpected error on empty dir: %v", err)
 	}
 }
 
 func TestApplyRetention_InvalidDir(t *testing.T) {
-	err := applyRetention(BackupConfig{BackupDir: "/nonexistent/path/xxx", ProjectName: "pastebin", Retention: BackupRetention{MaxBackups: 3}})
+	err := applyRetention(BackupConfig{BackupDir: "/nonexistent/path/xxx", ProjectName: "cairnbin", Retention: BackupRetention{MaxBackups: 3}})
 	if err == nil {
 		t.Error("expected error for nonexistent dir, got nil")
 	}
@@ -123,14 +123,14 @@ func TestApplyRetention_KeepsMonthly(t *testing.T) {
 	// 2025-02-01 is 1st of the month; 2025-02-02 is not.
 	dates := []string{"2025-02-02", "2025-02-01"}
 	for _, d := range dates {
-		name := "pastebin_backup_" + d + ".tar.gz"
+		name := "cairnbin_backup_" + d + ".tar.gz"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// MaxBackups=1 keeps newest daily (Feb 2). KeepMonthly=1 also retains Feb 1st.
-	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "pastebin", Retention: BackupRetention{
+	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{
 		MaxBackups:  1,
 		KeepMonthly: 1,
 	}}); err != nil {
@@ -162,13 +162,13 @@ func TestApplyRetention_ExceedsAllTiers(t *testing.T) {
 		"2025-01-08",
 	}
 	for _, d := range dates {
-		name := "pastebin_backup_" + d + ".tar.gz"
+		name := "cairnbin_backup_" + d + ".tar.gz"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "pastebin", Retention: BackupRetention{
+	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{
 		MaxBackups:  1,
 		KeepWeekly:  1,
 		KeepMonthly: 1,
@@ -188,11 +188,11 @@ func TestBackupFileRE(t *testing.T) {
 		name  string
 		match bool
 	}{
-		{"pastebin_backup_2025-01-15.tar.gz", true},
-		{"pastebin_backup_2025-01-15.tar.gz.enc", true},
-		{"pastebin_backup_20250115.tar.gz", false},
-		{"pastebin-daily.tar.gz", false},
-		{"pastebin-hourly.tar.gz.enc", false},
+		{"cairnbin_backup_2025-01-15.tar.gz", true},
+		{"cairnbin_backup_2025-01-15.tar.gz.enc", true},
+		{"cairnbin_backup_20250115.tar.gz", false},
+		{"cairnbin-daily.tar.gz", false},
+		{"cairnbin-hourly.tar.gz.enc", false},
 		{"other_backup_2025-01-15.tar.gz", true},
 	}
 	for _, tc := range cases {

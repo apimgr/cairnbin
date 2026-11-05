@@ -235,7 +235,7 @@ func TestPrintTorInfo(t *testing.T) {
 func TestRunTorVanity_NoServer(t *testing.T) {
 	for _, action := range []string{"start", "stop", "apply"} {
 		var out, errOut strings.Builder
-		code := runTorVanity("pastebin", action, []string{"abcdef"}, "", false, &out, &errOut)
+		code := runTorVanity("cairnbin", action, []string{"abcdef"}, "", false, &out, &errOut)
 		if code != 1 {
 			t.Errorf("runTorVanity(%q, serverUp=false) = %d, want 1", action, code)
 		}
@@ -248,7 +248,7 @@ func TestRunTorVanity_NoServer(t *testing.T) {
 // TestRunTorVanity_StartNoPrefix covers the missing-prefix usage error.
 func TestRunTorVanity_StartNoPrefix(t *testing.T) {
 	var out, errOut strings.Builder
-	code := runTorVanity("pastebin", "start", nil, "http://127.0.0.1:9", true, &out, &errOut)
+	code := runTorVanity("cairnbin", "start", nil, "http://127.0.0.1:9", true, &out, &errOut)
 	if code != 2 {
 		t.Errorf("runTorVanity(start, no prefix) = %d, want 2", code)
 	}
@@ -260,7 +260,7 @@ func TestRunTorVanity_StartNoPrefix(t *testing.T) {
 // TestRunTorVanity_UnknownAction covers the default case.
 func TestRunTorVanity_UnknownAction(t *testing.T) {
 	var out, errOut strings.Builder
-	code := runTorVanity("pastebin", "bogus", nil, "http://127.0.0.1:9", true, &out, &errOut)
+	code := runTorVanity("cairnbin", "bogus", nil, "http://127.0.0.1:9", true, &out, &errOut)
 	if code != 2 {
 		t.Errorf("runTorVanity(bogus) = %d, want 2", code)
 	}
@@ -290,7 +290,7 @@ func TestRunTorVanity_StartSuccess(t *testing.T) {
 	defer srv.Close()
 
 	var out, errOut strings.Builder
-	code := runTorVanity("pastebin", "start", []string{"abcdef", "--workers", "2"}, srv.URL, true, &out, &errOut)
+	code := runTorVanity("cairnbin", "start", []string{"abcdef", "--workers", "2"}, srv.URL, true, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("runTorVanity(start) = %d, want 0; stderr=%q", code, errOut.String())
 	}
@@ -302,7 +302,7 @@ func TestRunTorVanity_StartSuccess(t *testing.T) {
 // TestRunTorVanity_StartBadWorkers covers the flag-parsing usage error path.
 func TestRunTorVanity_StartBadWorkers(t *testing.T) {
 	var out, errOut strings.Builder
-	code := runTorVanity("pastebin", "start", []string{"abcdef", "--workers=notanumber"}, "http://127.0.0.1:9", true, &out, &errOut)
+	code := runTorVanity("cairnbin", "start", []string{"abcdef", "--workers=notanumber"}, "http://127.0.0.1:9", true, &out, &errOut)
 	if code != 2 {
 		t.Errorf("runTorVanity(start, bad --workers) = %d, want 2", code)
 	}
@@ -368,7 +368,7 @@ func TestRunTorVanity_StopSuccess(t *testing.T) {
 			defer srv.Close()
 
 			var out, errOut strings.Builder
-			code := runTorVanity("pastebin", "stop", nil, srv.URL, true, &out, &errOut)
+			code := runTorVanity("cairnbin", "stop", nil, srv.URL, true, &out, &errOut)
 			if code != 0 {
 				t.Fatalf("runTorVanity(stop) = %d, want 0; stderr=%q", code, errOut.String())
 			}
@@ -396,7 +396,7 @@ func TestRunTorVanity_ApplySuccess(t *testing.T) {
 	defer func() { confirmInput = restore }()
 
 	var out, errOut strings.Builder
-	code := runTorVanity("pastebin", "apply", nil, srv.URL, true, &out, &errOut)
+	code := runTorVanity("cairnbin", "apply", nil, srv.URL, true, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("runTorVanity(apply) = %d, want 0; stderr=%q", code, errOut.String())
 	}
@@ -418,7 +418,7 @@ func TestRunTorVanity_ApplyDeclined(t *testing.T) {
 	defer func() { confirmInput = restore }()
 
 	var out, errOut strings.Builder
-	code := runTorVanity("pastebin", "apply", nil, srv.URL, true, &out, &errOut)
+	code := runTorVanity("cairnbin", "apply", nil, srv.URL, true, &out, &errOut)
 	if code != 1 {
 		t.Errorf("runTorVanity(apply, declined) = %d, want 1", code)
 	}
@@ -437,7 +437,7 @@ func TestRunTorVanity_StartServerError(t *testing.T) {
 	defer srv.Close()
 
 	var out, errOut strings.Builder
-	code := runTorVanity("pastebin", "start", []string{"abcdef"}, srv.URL, true, &out, &errOut)
+	code := runTorVanity("cairnbin", "start", []string{"abcdef"}, srv.URL, true, &out, &errOut)
 	if code != 1 {
 		t.Errorf("runTorVanity(start, server error) = %d, want 1", code)
 	}
@@ -499,7 +499,7 @@ func TestRunTorCommand_RestartNoServer(t *testing.T) {
 	writeTorTestServerYML(t, dir, "1")
 
 	var out, errOut strings.Builder
-	code := runTorCommand("pastebin", []string{"restart"}, &out, &errOut)
+	code := runTorCommand("cairnbin", []string{"restart"}, &out, &errOut)
 	if code != 1 {
 		t.Errorf("runTorCommand(restart, no server) = %d, want 1; stderr=%q", code, errOut.String())
 	}
@@ -512,7 +512,7 @@ func TestRunTorCommand_RestartNoServer(t *testing.T) {
 // invoked with no subcommand.
 func TestRunTorCommand_NoSubcommand(t *testing.T) {
 	var out, errOut strings.Builder
-	code := runTorCommand("pastebin", nil, &out, &errOut)
+	code := runTorCommand("cairnbin", nil, &out, &errOut)
 	if code != 2 {
 		t.Errorf("runTorCommand(no args) = %d, want 2", code)
 	}

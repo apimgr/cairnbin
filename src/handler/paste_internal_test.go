@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ func newInternalTestDB(t *testing.T) database.DB {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(base, "pastebin-int-")
+	dir, err := os.MkdirTemp(base, "cairnbin-int-")
 	if err != nil {
 		t.Fatal(err)
 	}

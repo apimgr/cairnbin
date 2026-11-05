@@ -1,4 +1,4 @@
-// Package i2p manages an optional I2P eepsite for the pastebin server.
+// Package i2p manages an optional I2P eepsite for the cairnbin server.
 // Unlike Tor, I2P is opt-in: no port is allocated and no session is
 // established unless Config.Enabled is explicitly true (PART 31.2).
 //
@@ -482,7 +482,7 @@ func writeSecureI2PFile(path string, content []byte) error {
 // getTunnelsConfig generates i2pd tunnels.conf content for a single server
 // eepsite tunnel forwarding to the given backend port.
 func getTunnelsConfig(cfg *Config, siteDir string, backendPort int) string {
-	return fmt.Sprintf(`# i2pd tunnels configuration — managed by pastebin server binary
+	return fmt.Sprintf(`# i2pd tunnels configuration — managed by cairnbin server binary
 # Regenerated on every startup; this file is fully-derived state.
 
 [site]

@@ -1,4 +1,4 @@
-// Package tui provides the bubbletea-based interactive TUI for pastebin-cli.
+// Package tui provides the bubbletea-based interactive TUI for cairnbin-cli.
 //
 // Entry point: Run(cfg) launches the program. The main Model dispatches to
 // sub-models (setup, list, detail) based on the current state.
@@ -7,8 +7,8 @@ package tui
 import (
 	"strings"
 
-	"github.com/apimgr/pastebin/src/common/terminal"
-	"github.com/apimgr/pastebin/src/common/theme"
+	"github.com/apimgr/cairnbin/src/common/terminal"
+	"github.com/apimgr/cairnbin/src/common/theme"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -28,7 +28,7 @@ const (
 
 // ClientConfig is passed from main.go to tui.Run.
 type ClientConfig struct {
-	// Server is the base URL of the pastebin server (may be empty on first run).
+	// Server is the base URL of the cairnbin server (may be empty on first run).
 	Server string
 	// Lang is the resolved Accept-Language locale string.
 	Lang string
@@ -279,7 +279,7 @@ func (m Model) viewSetup() string {
 
 // viewListing renders the header + list view + help line.
 func (m Model) viewListing() string {
-	header := m.styles.Title.Render("pastebin  ") +
+	header := m.styles.Title.Render("cairnbin  ") +
 		m.styles.Muted.Render(m.cfg.Server)
 	listContent := m.list.view(m.styles, m.width, m.height-3, m.mode)
 	helpLine := m.styles.Help.Render(helpLineForMode(m.mode))

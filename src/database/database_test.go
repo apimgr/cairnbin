@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // newTestDB creates an isolated SQLite database in a temp directory and
@@ -29,7 +29,7 @@ func newTestDB(t *testing.T) database.DB {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(base, "pastebin-")
+	dir, err := os.MkdirTemp(base, "cairnbin-")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,7 @@ import (
 )
 
 func testMeta() Meta {
-	return Meta{ProjectName: "pastebin", ProjectVersion: "1.2.3", AppURL: "https://paste.example.com"}
+	return Meta{ProjectName: "cairnbin", ProjectVersion: "1.2.3", AppURL: "https://paste.example.com"}
 }
 
 func testMsg() Message {
@@ -60,7 +60,7 @@ func TestBuildRequestTransports(t *testing.T) {
 		{"telegram", "https://api.telegram.org/botX/sendMessage?chat_id=5", "POST", "",
 			[]string{"chat_id=5", "text=", "CRITICAL"}, nil},
 		{"discord", "https://discord.com/api/webhooks/1/x", "POST", "application/json",
-			nil, []string{`"content"`, `"username":"pastebin"`, "Backup failed"}},
+			nil, []string{`"content"`, `"username":"cairnbin"`, "Backup failed"}},
 		{"slack", "https://hooks.slack.com/services/a/b/c", "POST", "application/json",
 			nil, []string{`"text"`, "disk full"}},
 		{"mattermost", "https://mm.example.com/hooks/x", "POST", "application/json",
@@ -70,7 +70,7 @@ func TestBuildRequestTransports(t *testing.T) {
 		{"gotify", "https://gotify.example.com/message?token=abc", "POST", "application/json",
 			nil, []string{`"title"`, `"message"`, `"priority"`}},
 		{"generic", "https://hook.example.com/in", "POST", "application/json",
-			nil, []string{`"role":"admin"`, `"event":"admin.backup_failed"`, `"project_name":"pastebin"`, `"timestamp":1700000000`}},
+			nil, []string{`"role":"admin"`, `"event":"admin.backup_failed"`, `"project_name":"cairnbin"`, `"timestamp":1700000000`}},
 		{"unknownxyz", "https://hook.example.com/in", "POST", "application/json",
 			nil, []string{`"role":"admin"`, `"project_version":"1.2.3"`}},
 	}
@@ -171,11 +171,11 @@ func TestHostOf(t *testing.T) {
 
 func TestUserAgent(t *testing.T) {
 	d := New(testMeta(), nil)
-	if got := d.userAgent(); got != "pastebin/1.2.3 (+https://paste.example.com)" {
+	if got := d.userAgent(); got != "cairnbin/1.2.3 (+https://paste.example.com)" {
 		t.Errorf("userAgent = %q", got)
 	}
 	d2 := New(Meta{}, nil)
-	if got := d2.userAgent(); got != "pastebin/0.0.0" {
+	if got := d2.userAgent(); got != "cairnbin/0.0.0" {
 		t.Errorf("default userAgent = %q", got)
 	}
 }
@@ -219,7 +219,7 @@ func TestSendSignedHeadersRoundTrip(t *testing.T) {
 	if gotHdr.Get("X-Webhook-Timestamp") != strconv.FormatInt(msg.Timestamp.Unix(), 10) {
 		t.Errorf("X-Webhook-Timestamp = %q", gotHdr.Get("X-Webhook-Timestamp"))
 	}
-	if gotHdr.Get("User-Agent") != "pastebin/1.2.3 (+https://paste.example.com)" {
+	if gotHdr.Get("User-Agent") != "cairnbin/1.2.3 (+https://paste.example.com)" {
 		t.Errorf("User-Agent = %q", gotHdr.Get("User-Agent"))
 	}
 	if want := signBody("topsecret", gotBody); gotHdr.Get("X-Webhook-Signature") != want {

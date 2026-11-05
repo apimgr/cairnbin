@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // TestBlocklistSources_Enabled verifies configured sources map to task.Source

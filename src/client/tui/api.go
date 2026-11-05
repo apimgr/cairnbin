@@ -51,7 +51,7 @@ func (a *apiClient) get(path string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "pastebin-cli/"+clientVersion)
+	req.Header.Set("User-Agent", "cairnbin-cli/"+clientVersion)
 	req.Header.Set("Accept", "application/json")
 	if a.lang != "" {
 		req.Header.Set("Accept-Language", a.lang)
@@ -111,7 +111,7 @@ func deletePaste(server, lang, id, token string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "pastebin-cli/"+clientVersion)
+	req.Header.Set("User-Agent", "cairnbin-cli/"+clientVersion)
 	if lang != "" {
 		req.Header.Set("Accept-Language", lang)
 	}

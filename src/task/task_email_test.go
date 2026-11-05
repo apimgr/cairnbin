@@ -51,7 +51,7 @@ func TestBackupSendFailed_SendsFailed(t *testing.T) {
 		OperatorEmail: "admin@example.com",
 		Mailer:        m,
 	}
-	backupSendFailed(cfg, "pastebin_backup_2025-01-01.tar.gz", "disk full")
+	backupSendFailed(cfg, "cairnbin_backup_2025-01-01.tar.gz", "disk full")
 	if len(m.calls) != 1 {
 		t.Fatalf("expected 1 email call, got %d", len(m.calls))
 	}
@@ -61,7 +61,7 @@ func TestBackupSendFailed_SendsFailed(t *testing.T) {
 	if m.calls[0].vars["error"] != "disk full" {
 		t.Errorf("error var: got %q, want %q", m.calls[0].vars["error"], "disk full")
 	}
-	if m.calls[0].vars["filename"] != "pastebin_backup_2025-01-01.tar.gz" {
+	if m.calls[0].vars["filename"] != "cairnbin_backup_2025-01-01.tar.gz" {
 		t.Errorf("filename var: got %q", m.calls[0].vars["filename"])
 	}
 }
@@ -251,7 +251,7 @@ func TestBackupSendComplete_SendsComplete(t *testing.T) {
 		OperatorEmail:  "admin@example.com",
 		Mailer:         m,
 	}
-	backupSendComplete(cfg, "pastebin_backup_2025-01-01.tar.gz", "128 KB")
+	backupSendComplete(cfg, "cairnbin_backup_2025-01-01.tar.gz", "128 KB")
 	if len(m.calls) != 1 {
 		t.Fatalf("expected 1 email call, got %d", len(m.calls))
 	}
@@ -629,7 +629,7 @@ func TestBackupHourly_SendsFailedEmail(t *testing.T) {
 
 	m := &mockMailer{enabled: true}
 	cfg := BackupConfig{
-		ProjectName:   "pastebin",
+		ProjectName:   "cairnbin",
 		ConfigDir:     filepath.Join(root, "config"),
 		DataDir:       filepath.Join(root, "data"),
 		BackupDir:     bkpDir,
@@ -662,7 +662,7 @@ func TestBackupHourly_SendsFailedEmailOnBackupError(t *testing.T) {
 
 	m := &mockMailer{enabled: true}
 	cfg := BackupConfig{
-		ProjectName:   "pastebin",
+		ProjectName:   "cairnbin",
 		ConfigDir:     filepath.Join(root, "nonexistent_config"),
 		DataDir:       filepath.Join(root, "nonexistent_data"),
 		BackupDir:     bkpDir,
@@ -710,7 +710,7 @@ func TestBackupDaily_SendsCompleteEmail(t *testing.T) {
 
 	m := &mockMailer{enabled: true}
 	cfg := BackupConfig{
-		ProjectName:    "pastebin",
+		ProjectName:    "cairnbin",
 		ConfigDir:      cfgDir,
 		DataDir:        dataDir,
 		BackupDir:      bkpDir,
@@ -749,7 +749,7 @@ func TestBackupDaily_SendsFailedEmail(t *testing.T) {
 
 	m := &mockMailer{enabled: true}
 	cfg := BackupConfig{
-		ProjectName:   "pastebin",
+		ProjectName:   "cairnbin",
 		ConfigDir:     filepath.Join(root, "config"),
 		DataDir:       filepath.Join(root, "data"),
 		BackupDir:     bkpPath,

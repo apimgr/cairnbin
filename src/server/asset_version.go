@@ -3,13 +3,13 @@ package server
 import (
 	"net/http"
 
-	"github.com/apimgr/pastebin/src/common/buildinfo"
+	"github.com/apimgr/cairnbin/src/common/buildinfo"
 )
 
 // buildCookieName carries the running build stamp to the browser so the next
 // HTML request can be detected as stale (AI.md PART 9, line 13332:
 // `{project_name}_build`). Essential cookie — no consent required.
-const buildCookieName = "pastebin_build"
+const buildCookieName = "cairnbin_build"
 
 // assetURL appends the running build stamp to a static asset path
 // (`/static/css/common.css?v={version}-{short_commit}`). Registered as the
@@ -52,7 +52,7 @@ func setHTMLCacheHeaders(w http.ResponseWriter) {
 }
 
 // versionPurge is the forced recovery path for a browser already holding
-// caches from an older build: a mismatched `pastebin_build` cookie triggers
+// caches from an older build: a mismatched `cairnbin_build` cookie triggers
 // `Clear-Site-Data: "cache", "storage"`, evicting the HTTP cache, the Cache API
 // caches, and any registered service worker in one response (AI.md
 // 13323-13351). `"cookies"` is deliberately absent — it would destroy the

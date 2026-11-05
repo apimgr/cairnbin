@@ -44,24 +44,24 @@ func applyEnv(t *testing.T, e pathEnv) {
 func TestGetConfigDir_Container(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: true})
 	os.Unsetenv("CONFIG_DIR")
-	if got := GetConfigDir("pastebin"); got != "/config/pastebin" {
-		t.Errorf("GetConfigDir container: got %q, want %q", got, "/config/pastebin")
+	if got := GetConfigDir("cairnbin"); got != "/config/cairnbin" {
+		t.Errorf("GetConfigDir container: got %q, want %q", got, "/config/cairnbin")
 	}
 }
 
 func TestGetDataDir_Container(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: true})
 	os.Unsetenv("DATA_DIR")
-	if got := GetDataDir("pastebin"); got != "/data/pastebin" {
-		t.Errorf("GetDataDir container: got %q, want %q", got, "/data/pastebin")
+	if got := GetDataDir("cairnbin"); got != "/data/cairnbin" {
+		t.Errorf("GetDataDir container: got %q, want %q", got, "/data/cairnbin")
 	}
 }
 
 func TestGetBackupDir_Container(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: true})
 	os.Unsetenv("BACKUP_DIR")
-	want := "/data/backups/pastebin"
-	if got := GetBackupDir("pastebin"); got != want {
+	want := "/data/backups/cairnbin"
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("GetBackupDir container: got %q, want %q", got, want)
 	}
 }
@@ -70,32 +70,32 @@ func TestGetPIDFile_Container(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: true})
 	os.Unsetenv("PID_FILE")
 	os.Unsetenv("DATA_DIR")
-	got := GetPIDFile("pastebin")
-	if filepath.Base(got) != "pastebin.pid" {
-		t.Errorf("GetPIDFile container: base=%q, want pastebin.pid", filepath.Base(got))
+	got := GetPIDFile("cairnbin")
+	if filepath.Base(got) != "cairnbin.pid" {
+		t.Errorf("GetPIDFile container: base=%q, want cairnbin.pid", filepath.Base(got))
 	}
 }
 
 func TestGetLogsDir_Container(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: true})
 	os.Unsetenv("LOGS_DIR")
-	if got := GetLogsDir("pastebin"); got != "/data/log/pastebin" {
-		t.Errorf("GetLogsDir container: got %q, want %q", got, "/data/log/pastebin")
+	if got := GetLogsDir("cairnbin"); got != "/data/log/cairnbin" {
+		t.Errorf("GetLogsDir container: got %q, want %q", got, "/data/log/cairnbin")
 	}
 }
 
 func TestGetCacheDir_Container(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: true})
 	os.Unsetenv("CACHE_DIR")
-	if got := GetCacheDir("pastebin"); got != "/data/pastebin/cache" {
-		t.Errorf("GetCacheDir container: got %q, want %q", got, "/data/pastebin/cache")
+	if got := GetCacheDir("cairnbin"); got != "/data/cairnbin/cache" {
+		t.Errorf("GetCacheDir container: got %q, want %q", got, "/data/cairnbin/cache")
 	}
 }
 
 func TestGetDBPath_Container(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: true})
 	os.Unsetenv("DB_PATH")
-	if got := GetDBPath("pastebin"); got != "/data/db/sqlite/server.db" {
+	if got := GetDBPath("cairnbin"); got != "/data/db/sqlite/server.db" {
 		t.Errorf("GetDBPath container: got %q, want %q", got, "/data/db/sqlite/server.db")
 	}
 }
@@ -105,8 +105,8 @@ func TestGetDBPath_Container(t *testing.T) {
 func TestGetConfigDir_LinuxRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
 	os.Unsetenv("CONFIG_DIR")
-	want := "/etc/apimgr/pastebin"
-	if got := GetConfigDir("pastebin"); got != want {
+	want := "/etc/apimgr/cairnbin"
+	if got := GetConfigDir("cairnbin"); got != want {
 		t.Errorf("GetConfigDir linux root: got %q, want %q", got, want)
 	}
 }
@@ -114,8 +114,8 @@ func TestGetConfigDir_LinuxRoot(t *testing.T) {
 func TestGetDataDir_LinuxRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
 	os.Unsetenv("DATA_DIR")
-	want := "/var/lib/apimgr/pastebin"
-	if got := GetDataDir("pastebin"); got != want {
+	want := "/var/lib/apimgr/cairnbin"
+	if got := GetDataDir("cairnbin"); got != want {
 		t.Errorf("GetDataDir linux root: got %q, want %q", got, want)
 	}
 }
@@ -123,8 +123,8 @@ func TestGetDataDir_LinuxRoot(t *testing.T) {
 func TestGetBackupDir_LinuxRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
 	os.Unsetenv("BACKUP_DIR")
-	want := "/mnt/Backups/apimgr/pastebin"
-	if got := GetBackupDir("pastebin"); got != want {
+	want := "/mnt/Backups/apimgr/cairnbin"
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("GetBackupDir linux root: got %q, want %q", got, want)
 	}
 }
@@ -132,8 +132,8 @@ func TestGetBackupDir_LinuxRoot(t *testing.T) {
 func TestGetPIDFile_LinuxRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
 	os.Unsetenv("PID_FILE")
-	want := "/var/run/apimgr/pastebin.pid"
-	if got := GetPIDFile("pastebin"); got != want {
+	want := "/var/run/apimgr/cairnbin.pid"
+	if got := GetPIDFile("cairnbin"); got != want {
 		t.Errorf("GetPIDFile linux root: got %q, want %q", got, want)
 	}
 }
@@ -141,8 +141,8 @@ func TestGetPIDFile_LinuxRoot(t *testing.T) {
 func TestGetLogsDir_LinuxRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
 	os.Unsetenv("LOGS_DIR")
-	want := "/var/log/apimgr/pastebin"
-	if got := GetLogsDir("pastebin"); got != want {
+	want := "/var/log/apimgr/cairnbin"
+	if got := GetLogsDir("cairnbin"); got != want {
 		t.Errorf("GetLogsDir linux root: got %q, want %q", got, want)
 	}
 }
@@ -150,8 +150,8 @@ func TestGetLogsDir_LinuxRoot(t *testing.T) {
 func TestGetCacheDir_LinuxRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
 	os.Unsetenv("CACHE_DIR")
-	want := "/var/cache/apimgr/pastebin"
-	if got := GetCacheDir("pastebin"); got != want {
+	want := "/var/cache/apimgr/cairnbin"
+	if got := GetCacheDir("cairnbin"); got != want {
 		t.Errorf("GetCacheDir linux root: got %q, want %q", got, want)
 	}
 }
@@ -160,8 +160,8 @@ func TestGetDBPath_LinuxRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
 	os.Unsetenv("DB_PATH")
 	os.Unsetenv("DATA_DIR")
-	want := filepath.Join("/var/lib/apimgr/pastebin", "db", "server.db")
-	if got := GetDBPath("pastebin"); got != want {
+	want := filepath.Join("/var/lib/apimgr/cairnbin", "db", "server.db")
+	if got := GetDBPath("cairnbin"); got != want {
 		t.Errorf("GetDBPath linux root: got %q, want %q", got, want)
 	}
 }
@@ -174,8 +174,8 @@ func TestGetConfigDir_LinuxUser_IgnoresXDG(t *testing.T) {
 	os.Unsetenv("CONFIG_DIR")
 	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-ignored")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".config", "apimgr", "pastebin")
-	if got := GetConfigDir("pastebin"); got != want {
+	want := filepath.Join(home, ".config", "apimgr", "cairnbin")
+	if got := GetConfigDir("cairnbin"); got != want {
 		t.Errorf("GetConfigDir linux user with XDG set: got %q, want %q", got, want)
 	}
 }
@@ -186,8 +186,8 @@ func TestGetDataDir_LinuxUser_IgnoresXDG(t *testing.T) {
 	os.Unsetenv("DATA_DIR")
 	t.Setenv("XDG_DATA_HOME", "/tmp/xdg-ignored")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".local", "share", "apimgr", "pastebin")
-	if got := GetDataDir("pastebin"); got != want {
+	want := filepath.Join(home, ".local", "share", "apimgr", "cairnbin")
+	if got := GetDataDir("cairnbin"); got != want {
 		t.Errorf("GetDataDir linux user with XDG set: got %q, want %q", got, want)
 	}
 }
@@ -198,8 +198,8 @@ func TestGetCacheDir_LinuxUser_IgnoresXDG(t *testing.T) {
 	os.Unsetenv("CACHE_DIR")
 	t.Setenv("XDG_CACHE_HOME", "/tmp/xdg-ignored")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".cache", "apimgr", "pastebin")
-	if got := GetCacheDir("pastebin"); got != want {
+	want := filepath.Join(home, ".cache", "apimgr", "cairnbin")
+	if got := GetCacheDir("cairnbin"); got != want {
 		t.Errorf("GetCacheDir linux user with XDG set: got %q, want %q", got, want)
 	}
 }
@@ -208,8 +208,8 @@ func TestGetLogsDir_LinuxUser_Home(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "linux"})
 	os.Unsetenv("LOGS_DIR")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".local", "log", "apimgr", "pastebin")
-	if got := GetLogsDir("pastebin"); got != want {
+	want := filepath.Join(home, ".local", "log", "apimgr", "cairnbin")
+	if got := GetLogsDir("cairnbin"); got != want {
 		t.Errorf("GetLogsDir linux user home: got %q, want %q", got, want)
 	}
 }
@@ -219,8 +219,8 @@ func TestGetBackupDir_LinuxUser_Home(t *testing.T) {
 	writableCheck = func(string) bool { return false }
 	os.Unsetenv("BACKUP_DIR")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".local", "share", "Backups", "apimgr", "pastebin")
-	if got := GetBackupDir("pastebin"); got != want {
+	want := filepath.Join(home, ".local", "share", "Backups", "apimgr", "cairnbin")
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("GetBackupDir linux user home: got %q, want %q", got, want)
 	}
 }
@@ -230,9 +230,9 @@ func TestGetPIDFile_LinuxUser(t *testing.T) {
 	os.Unsetenv("PID_FILE")
 	os.Unsetenv("DATA_DIR")
 	os.Unsetenv("XDG_DATA_HOME")
-	got := GetPIDFile("pastebin")
-	if filepath.Base(got) != "pastebin.pid" {
-		t.Errorf("GetPIDFile linux user: base=%q, want pastebin.pid", filepath.Base(got))
+	got := GetPIDFile("cairnbin")
+	if filepath.Base(got) != "cairnbin.pid" {
+		t.Errorf("GetPIDFile linux user: base=%q, want cairnbin.pid", filepath.Base(got))
 	}
 }
 
@@ -241,8 +241,8 @@ func TestGetPIDFile_LinuxUser(t *testing.T) {
 func TestGetConfigDir_DarwinRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "darwin"})
 	os.Unsetenv("CONFIG_DIR")
-	want := "/Library/Application Support/apimgr/pastebin"
-	if got := GetConfigDir("pastebin"); got != want {
+	want := "/Library/Application Support/apimgr/cairnbin"
+	if got := GetConfigDir("cairnbin"); got != want {
 		t.Errorf("GetConfigDir darwin root: got %q, want %q", got, want)
 	}
 }
@@ -250,8 +250,8 @@ func TestGetConfigDir_DarwinRoot(t *testing.T) {
 func TestGetDataDir_DarwinRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "darwin"})
 	os.Unsetenv("DATA_DIR")
-	want := "/Library/Application Support/apimgr/pastebin/data"
-	if got := GetDataDir("pastebin"); got != want {
+	want := "/Library/Application Support/apimgr/cairnbin/data"
+	if got := GetDataDir("cairnbin"); got != want {
 		t.Errorf("GetDataDir darwin root: got %q, want %q", got, want)
 	}
 }
@@ -259,8 +259,8 @@ func TestGetDataDir_DarwinRoot(t *testing.T) {
 func TestGetLogsDir_DarwinRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "darwin"})
 	os.Unsetenv("LOGS_DIR")
-	want := "/Library/Logs/apimgr/pastebin"
-	if got := GetLogsDir("pastebin"); got != want {
+	want := "/Library/Logs/apimgr/cairnbin"
+	if got := GetLogsDir("cairnbin"); got != want {
 		t.Errorf("GetLogsDir darwin root: got %q, want %q", got, want)
 	}
 }
@@ -268,8 +268,8 @@ func TestGetLogsDir_DarwinRoot(t *testing.T) {
 func TestGetCacheDir_DarwinRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "darwin"})
 	os.Unsetenv("CACHE_DIR")
-	want := "/Library/Caches/apimgr/pastebin"
-	if got := GetCacheDir("pastebin"); got != want {
+	want := "/Library/Caches/apimgr/cairnbin"
+	if got := GetCacheDir("cairnbin"); got != want {
 		t.Errorf("GetCacheDir darwin root: got %q, want %q", got, want)
 	}
 }
@@ -277,8 +277,8 @@ func TestGetCacheDir_DarwinRoot(t *testing.T) {
 func TestGetBackupDir_DarwinRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "darwin"})
 	os.Unsetenv("BACKUP_DIR")
-	want := "/Library/Backups/apimgr/pastebin"
-	if got := GetBackupDir("pastebin"); got != want {
+	want := "/Library/Backups/apimgr/cairnbin"
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("GetBackupDir darwin root: got %q, want %q", got, want)
 	}
 }
@@ -287,8 +287,8 @@ func TestGetConfigDir_DarwinUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "darwin"})
 	os.Unsetenv("CONFIG_DIR")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, "Library", "Application Support", "apimgr", "pastebin")
-	if got := GetConfigDir("pastebin"); got != want {
+	want := filepath.Join(home, "Library", "Application Support", "apimgr", "cairnbin")
+	if got := GetConfigDir("cairnbin"); got != want {
 		t.Errorf("GetConfigDir darwin user: got %q, want %q", got, want)
 	}
 }
@@ -297,8 +297,8 @@ func TestGetDataDir_DarwinUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "darwin"})
 	os.Unsetenv("DATA_DIR")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, "Library", "Application Support", "apimgr", "pastebin")
-	if got := GetDataDir("pastebin"); got != want {
+	want := filepath.Join(home, "Library", "Application Support", "apimgr", "cairnbin")
+	if got := GetDataDir("cairnbin"); got != want {
 		t.Errorf("GetDataDir darwin user: got %q, want %q", got, want)
 	}
 }
@@ -307,8 +307,8 @@ func TestGetLogsDir_DarwinUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "darwin"})
 	os.Unsetenv("LOGS_DIR")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, "Library", "Logs", "apimgr", "pastebin")
-	if got := GetLogsDir("pastebin"); got != want {
+	want := filepath.Join(home, "Library", "Logs", "apimgr", "cairnbin")
+	if got := GetLogsDir("cairnbin"); got != want {
 		t.Errorf("GetLogsDir darwin user: got %q, want %q", got, want)
 	}
 }
@@ -317,8 +317,8 @@ func TestGetCacheDir_DarwinUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "darwin"})
 	os.Unsetenv("CACHE_DIR")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, "Library", "Caches", "apimgr", "pastebin")
-	if got := GetCacheDir("pastebin"); got != want {
+	want := filepath.Join(home, "Library", "Caches", "apimgr", "cairnbin")
+	if got := GetCacheDir("cairnbin"); got != want {
 		t.Errorf("GetCacheDir darwin user: got %q, want %q", got, want)
 	}
 }
@@ -328,8 +328,8 @@ func TestGetBackupDir_DarwinUser(t *testing.T) {
 	writableCheck = func(string) bool { return false }
 	os.Unsetenv("BACKUP_DIR")
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, "Library", "Backups", "apimgr", "pastebin")
-	if got := GetBackupDir("pastebin"); got != want {
+	want := filepath.Join(home, "Library", "Backups", "apimgr", "cairnbin")
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("GetBackupDir darwin user: got %q, want %q", got, want)
 	}
 }
@@ -339,8 +339,8 @@ func TestGetBackupDir_DarwinUser(t *testing.T) {
 func TestGetConfigDir_FreeBSDRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "freebsd"})
 	os.Unsetenv("CONFIG_DIR")
-	want := "/usr/local/etc/apimgr/pastebin"
-	if got := GetConfigDir("pastebin"); got != want {
+	want := "/usr/local/etc/apimgr/cairnbin"
+	if got := GetConfigDir("cairnbin"); got != want {
 		t.Errorf("GetConfigDir freebsd root: got %q, want %q", got, want)
 	}
 }
@@ -348,8 +348,8 @@ func TestGetConfigDir_FreeBSDRoot(t *testing.T) {
 func TestGetDataDir_FreeBSDRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "freebsd"})
 	os.Unsetenv("DATA_DIR")
-	want := "/var/db/apimgr/pastebin"
-	if got := GetDataDir("pastebin"); got != want {
+	want := "/var/db/apimgr/cairnbin"
+	if got := GetDataDir("cairnbin"); got != want {
 		t.Errorf("GetDataDir freebsd root: got %q, want %q", got, want)
 	}
 }
@@ -357,8 +357,8 @@ func TestGetDataDir_FreeBSDRoot(t *testing.T) {
 func TestGetBackupDir_FreeBSDRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "freebsd"})
 	os.Unsetenv("BACKUP_DIR")
-	want := "/var/backups/apimgr/pastebin"
-	if got := GetBackupDir("pastebin"); got != want {
+	want := "/var/backups/apimgr/cairnbin"
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("GetBackupDir freebsd root: got %q, want %q", got, want)
 	}
 }
@@ -369,8 +369,8 @@ func TestGetConfigDir_WindowsUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "windows"})
 	os.Unsetenv("CONFIG_DIR")
 	t.Setenv("APPDATA", "C:\\Users\\test\\AppData\\Roaming")
-	want := filepath.Join("C:\\Users\\test\\AppData\\Roaming", "apimgr", "pastebin")
-	if got := GetConfigDir("pastebin"); got != want {
+	want := filepath.Join("C:\\Users\\test\\AppData\\Roaming", "apimgr", "cairnbin")
+	if got := GetConfigDir("cairnbin"); got != want {
 		t.Errorf("GetConfigDir windows user: got %q, want %q", got, want)
 	}
 }
@@ -379,8 +379,8 @@ func TestGetDataDir_WindowsUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "windows"})
 	os.Unsetenv("DATA_DIR")
 	t.Setenv("LOCALAPPDATA", "C:\\Users\\test\\AppData\\Local")
-	want := filepath.Join("C:\\Users\\test\\AppData\\Local", "apimgr", "pastebin")
-	if got := GetDataDir("pastebin"); got != want {
+	want := filepath.Join("C:\\Users\\test\\AppData\\Local", "apimgr", "cairnbin")
+	if got := GetDataDir("cairnbin"); got != want {
 		t.Errorf("GetDataDir windows user: got %q, want %q", got, want)
 	}
 }
@@ -389,8 +389,8 @@ func TestGetLogsDir_WindowsUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "windows"})
 	os.Unsetenv("LOGS_DIR")
 	t.Setenv("LOCALAPPDATA", "C:\\Users\\test\\AppData\\Local")
-	want := filepath.Join("C:\\Users\\test\\AppData\\Local", "apimgr", "pastebin", "logs")
-	if got := GetLogsDir("pastebin"); got != want {
+	want := filepath.Join("C:\\Users\\test\\AppData\\Local", "apimgr", "cairnbin", "logs")
+	if got := GetLogsDir("cairnbin"); got != want {
 		t.Errorf("GetLogsDir windows user: got %q, want %q", got, want)
 	}
 }
@@ -399,8 +399,8 @@ func TestGetCacheDir_WindowsUser(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "windows"})
 	os.Unsetenv("CACHE_DIR")
 	t.Setenv("LOCALAPPDATA", "C:\\Users\\test\\AppData\\Local")
-	want := filepath.Join("C:\\Users\\test\\AppData\\Local", "apimgr", "pastebin", "cache")
-	if got := GetCacheDir("pastebin"); got != want {
+	want := filepath.Join("C:\\Users\\test\\AppData\\Local", "apimgr", "cairnbin", "cache")
+	if got := GetCacheDir("cairnbin"); got != want {
 		t.Errorf("GetCacheDir windows user: got %q, want %q", got, want)
 	}
 }
@@ -410,8 +410,8 @@ func TestGetBackupDir_WindowsUser(t *testing.T) {
 	writableCheck = func(string) bool { return false }
 	os.Unsetenv("BACKUP_DIR")
 	t.Setenv("LOCALAPPDATA", "C:\\Users\\test\\AppData\\Local")
-	want := filepath.Join("C:\\Users\\test\\AppData\\Local", "Backups", "apimgr", "pastebin")
-	if got := GetBackupDir("pastebin"); got != want {
+	want := filepath.Join("C:\\Users\\test\\AppData\\Local", "Backups", "apimgr", "cairnbin")
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("GetBackupDir windows user: got %q, want %q", got, want)
 	}
 }
@@ -420,8 +420,8 @@ func TestGetBackupDir_WindowsRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "windows"})
 	os.Unsetenv("BACKUP_DIR")
 	t.Setenv("ProgramData", "C:\\ProgramData")
-	want := filepath.Join("C:\\ProgramData", "Backups", "apimgr", "pastebin")
-	if got := GetBackupDir("pastebin"); got != want {
+	want := filepath.Join("C:\\ProgramData", "Backups", "apimgr", "cairnbin")
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("GetBackupDir windows root: got %q, want %q", got, want)
 	}
 }
@@ -430,8 +430,8 @@ func TestGetPIDFile_WindowsRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "windows"})
 	os.Unsetenv("PID_FILE")
 	t.Setenv("ProgramData", "C:\\ProgramData")
-	want := filepath.Join("C:\\ProgramData", "apimgr", "pastebin", "pastebin.pid")
-	if got := GetPIDFile("pastebin"); got != want {
+	want := filepath.Join("C:\\ProgramData", "apimgr", "cairnbin", "cairnbin.pid")
+	if got := GetPIDFile("cairnbin"); got != want {
 		t.Errorf("GetPIDFile windows root: got %q, want %q", got, want)
 	}
 }
@@ -443,12 +443,12 @@ func TestEnsureDir_NonRoot(t *testing.T) {
 	rootCheck = func() bool { return false }
 	defer func() { rootCheck = oldR }()
 
-	// Use the required /tmp/apimgr/pastebin-XXXXXX structure (PART 28).
+	// Use the required /tmp/apimgr/cairnbin-XXXXXX structure (PART 28).
 	base := filepath.Join(os.TempDir(), "apimgr")
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(base, "pastebin-")
+	dir, err := os.MkdirTemp(base, "cairnbin-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,13 +475,13 @@ func TestWindowsRootPaths(t *testing.T) {
 		os.Unsetenv(k)
 	}
 	t.Setenv("ProgramData", "C:\\ProgramData")
-	base := filepath.Join("C:\\ProgramData", "apimgr", "pastebin")
+	base := filepath.Join("C:\\ProgramData", "apimgr", "cairnbin")
 	cases := map[string][2]string{
-		"config": {GetConfigDir("pastebin"), base},
-		"data":   {GetDataDir("pastebin"), filepath.Join(base, "data")},
-		"cache":  {GetCacheDir("pastebin"), filepath.Join(base, "cache")},
-		"logs":   {GetLogsDir("pastebin"), filepath.Join(base, "logs")},
-		"db":     {GetDBPath("pastebin"), filepath.Join(base, "db", "server.db")},
+		"config": {GetConfigDir("cairnbin"), base},
+		"data":   {GetDataDir("cairnbin"), filepath.Join(base, "data")},
+		"cache":  {GetCacheDir("cairnbin"), filepath.Join(base, "cache")},
+		"logs":   {GetLogsDir("cairnbin"), filepath.Join(base, "logs")},
+		"db":     {GetDBPath("cairnbin"), filepath.Join(base, "db", "server.db")},
 	}
 	for name, c := range cases {
 		if c[0] != c[1] {
@@ -495,8 +495,8 @@ func TestGetDBPath_DarwinRoot(t *testing.T) {
 	os.Unsetenv("DATA_DIR")
 	os.Unsetenv("DATABASE_DIR")
 	os.Unsetenv("DB_PATH")
-	want := filepath.Join("/Library", "Application Support", "apimgr", "pastebin", "db", "server.db")
-	if got := GetDBPath("pastebin"); got != want {
+	want := filepath.Join("/Library", "Application Support", "apimgr", "cairnbin", "db", "server.db")
+	if got := GetDBPath("cairnbin"); got != want {
 		t.Errorf("GetDBPath darwin root: got %q, want %q", got, want)
 	}
 }
@@ -505,12 +505,12 @@ func TestGetDBPath_DarwinRoot(t *testing.T) {
 // back to a $HOME-derived path when the system backup dir is not writable.
 func TestGetBackupDir_RootFallsBackToDataDir(t *testing.T) {
 	t.Setenv("BACKUP_DIR", "")
-	t.Setenv("DATA_DIR", "/var/lib/apimgr/pastebin")
+	t.Setenv("DATA_DIR", "/var/lib/apimgr/cairnbin")
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
 	writableCheck = func(string) bool { return false }
 
-	want := "/var/lib/apimgr/pastebin/backup"
-	if got := GetBackupDir("pastebin"); got != want {
+	want := "/var/lib/apimgr/cairnbin/backup"
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("GetBackupDir root, system dir unwritable: got %q, want %q", got, want)
 	}
 }
@@ -521,14 +521,14 @@ func TestGetBackupDir_UserPrefersWritableSystemDir(t *testing.T) {
 	t.Setenv("BACKUP_DIR", "")
 	applyEnv(t, pathEnv{isContainer: false, isRoot: false, goos: "linux"})
 
-	if got, want := GetBackupDir("pastebin"), "/mnt/Backups/apimgr/pastebin"; got != want {
+	if got, want := GetBackupDir("cairnbin"), "/mnt/Backups/apimgr/cairnbin"; got != want {
 		t.Errorf("writable system dir: got %q, want %q", got, want)
 	}
 
 	writableCheck = func(string) bool { return false }
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".local", "share", "Backups", "apimgr", "pastebin")
-	if got := GetBackupDir("pastebin"); got != want {
+	want := filepath.Join(home, ".local", "share", "Backups", "apimgr", "cairnbin")
+	if got := GetBackupDir("cairnbin"); got != want {
 		t.Errorf("unwritable system dir: got %q, want %q", got, want)
 	}
 }

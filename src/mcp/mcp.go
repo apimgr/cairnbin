@@ -19,7 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/apimgr/pastebin/src/swagger"
+	"github.com/apimgr/cairnbin/src/swagger"
 )
 
 // maxRequestBytes bounds one JSON-RPC request body.

@@ -1,8 +1,8 @@
-// pastebin-cli — command-line client for the pastebin service.
+// cairnbin-cli — command-line client for the cairnbin service.
 //
 // Usage:
 //
-//	pastebin-cli [--server URL] [--output FORMAT] <command> [flags] [args]
+//	cairnbin-cli [--server URL] [--output FORMAT] <command> [flags] [args]
 //
 // Commands:
 //
@@ -35,11 +35,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/apimgr/pastebin/src/client/paths"
-	"github.com/apimgr/pastebin/src/client/tui"
-	"github.com/apimgr/pastebin/src/common/i18n"
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/shell"
+	"github.com/apimgr/cairnbin/src/client/paths"
+	"github.com/apimgr/cairnbin/src/client/tui"
+	"github.com/apimgr/cairnbin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/shell"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
@@ -66,7 +66,7 @@ func init() {
 
 // projectName is the hardcoded internal name used for User-Agent and config paths.
 // Display uses binName() per PART 32.
-const projectName = "pastebin"
+const projectName = "cairnbin"
 
 // apiVersion is the {api_version} route segment (PART 14) this CLI targets.
 // Centralized here rather than scattered per call site; matches the server's
@@ -317,8 +317,8 @@ func readTokenFile(path string) (string, error) {
 
 // argsAreConfigOnly reports whether args holds nothing but the config-only
 // flags — no command name and no flag outside the config allowlist. Those are
-// exactly the invocations that stay interactive (`pastebin-cli`,
-// `pastebin-cli --server URL`) rather than dispatching a command.
+// exactly the invocations that stay interactive (`cairnbin-cli`,
+// `cairnbin-cli --server URL`) rather than dispatching a command.
 func argsAreConfigOnly(args []string) bool {
 	// Config-only flags that still allow an interactive launch (value: flag
 	// consumes the next arg).
@@ -363,7 +363,7 @@ func detectMode(args []string, displayMode string) string {
 	}
 
 	// A command (or a non-config flag) always wins over any display mode:
-	// `pastebin-cli list` must print a list, not open a window, even with
+	// `cairnbin-cli list` must print a list, not open a window, even with
 	// display.mode: gui set. GUI/TUI are only ever candidates for the
 	// config-only invocations, which is the same set the PART 32 table
 	// describes as "Interactive terminal + config flags only".
@@ -649,27 +649,27 @@ func main() {
 		log.Println(tf("err_load_config", "error", cfgErr))
 	}
 
-	server := flag.String("server", envOrDefault("PASTEBIN_SERVER_PRIMARY", fileCfg.Server.Primary), "server base URL")
+	server := flag.String("server", envOrDefault("CAIRNBIN_SERVER_PRIMARY", fileCfg.Server.Primary), "server base URL")
 	// PART 32 config precedence: CLI flag > env var > cli.yml > compiled default.
-	jsonDefault := envOrDefault("PASTEBIN_OUTPUT_FORMAT", fileCfg.Output.Format) == "json"
+	jsonDefault := envOrDefault("CAIRNBIN_OUTPUT_FORMAT", fileCfg.Output.Format) == "json"
 	asJSON := flag.Bool("json", jsonDefault, "machine-readable JSON output (alias for --output json)")
 	// PART 32 "Output Formats": json, table, plain. --json remains as a
 	// back-compat boolean alias, folded into the resolved format below.
 	outputDefault := firstNonEmpty(fileCfg.Defaults.Output, fileCfg.Output.Format)
-	outputFlag := flag.String("output", envOrDefault("PASTEBIN_FORMAT", envOrDefault("PASTEBIN_OUTPUT_FORMAT", firstNonEmpty(outputDefault, "plain"))), "output format: json, yaml, table, plain, csv")
-	colorFlag := flag.String("color", envOrDefault("PASTEBIN_OUTPUT_COLOR", firstNonEmpty(fileCfg.Output.Color, "auto")), "color output: auto, yes, no")
+	outputFlag := flag.String("output", envOrDefault("CAIRNBIN_FORMAT", envOrDefault("CAIRNBIN_OUTPUT_FORMAT", firstNonEmpty(outputDefault, "plain"))), "output format: json, yaml, table, plain, csv")
+	colorFlag := flag.String("color", envOrDefault("CAIRNBIN_OUTPUT_COLOR", firstNonEmpty(fileCfg.Output.Color, "auto")), "color output: auto, yes, no")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	showHelp := flag.Bool("help", false, "show help and exit")
-	debugDefault, _ := config.ParseBool(envOrDefault("PASTEBIN_DEBUG", ""), fileCfg.Debug)
+	debugDefault, _ := config.ParseBool(envOrDefault("CAIRNBIN_DEBUG", ""), fileCfg.Debug)
 	debugFlag := flag.Bool("debug", debugDefault, "enable debug output")
-	verboseDefault, _ := config.ParseBool(envOrDefault("PASTEBIN_OUTPUT_VERBOSE", ""), fileCfg.Output.Verbose)
+	verboseDefault, _ := config.ParseBool(envOrDefault("CAIRNBIN_OUTPUT_VERBOSE", ""), fileCfg.Output.Verbose)
 	verboseFlag := flag.Bool("verbose", verboseDefault, "show extra request diagnostics")
-	quietDefault, _ := config.ParseBool(envOrDefault("PASTEBIN_OUTPUT_QUIET", ""), fileCfg.Output.Quiet)
+	quietDefault, _ := config.ParseBool(envOrDefault("CAIRNBIN_OUTPUT_QUIET", ""), fileCfg.Output.Quiet)
 	doUpdate := flag.String("update", "", "check for CLI updates: 'check' or 'yes'")
 	// PART 32: --lang sets the output/UI language; default auto-detects from the LANG env var.
-	langFlag := flag.String("lang", envOrDefault("PASTEBIN_LANG", "auto"), "output language code (default: auto-detect from LANG)")
-	// PART 32: operator/owner API token. Priority: --token flag → PASTEBIN_TOKEN env → cli.yml auth.token.
-	tokenFlag := flag.String("token", "", "operator/owner API token (or set PASTEBIN_TOKEN)")
+	langFlag := flag.String("lang", envOrDefault("CAIRNBIN_LANG", "auto"), "output language code (default: auto-detect from LANG)")
+	// PART 32: operator/owner API token. Priority: --token flag → CAIRNBIN_TOKEN env → cli.yml auth.token.
+	tokenFlag := flag.String("token", "", "operator/owner API token (or set CAIRNBIN_TOKEN)")
 	// PART 32: alternative to --token — read the token from a file instead of the command line.
 	tokenFileFlag := flag.String("token-file", "", "read API token from file")
 	// PART 32: --config selects a named profile or explicit path to cli.yml.
@@ -820,7 +820,7 @@ func main() {
 	*server = defaultServerURL(*server, OfficialSite)
 
 	// Resolve the API token (PART 32 priority): --token flag → --token-file flag →
-	// PASTEBIN_TOKEN env → cli.yml auth.token → cli.yml auth.token_file.
+	// CAIRNBIN_TOKEN env → cli.yml auth.token → cli.yml auth.token_file.
 	// The env var never persists; the --token/--token-file flags save to cli.yml
 	// only when the stored value is empty/invalid.
 	token := *tokenFlag
@@ -832,7 +832,7 @@ func main() {
 		token = t
 	}
 	if token == "" {
-		token = os.Getenv("PASTEBIN_TOKEN")
+		token = os.Getenv("CAIRNBIN_TOKEN")
 	}
 	if token == "" {
 		token = fileCfg.Auth.Token
@@ -865,10 +865,10 @@ func main() {
 	// _RETRY_DELAY, _API_VERSION) overrides cli.yml before defaults are
 	// resolved, matching the documented CLI flag > env var > cli.yml >
 	// compiled default precedence.
-	fileCfg.Server.Timeout = envOrDefault("PASTEBIN_SERVER_TIMEOUT", fileCfg.Server.Timeout)
-	fileCfg.Server.RetryDelay = envOrDefault("PASTEBIN_SERVER_RETRY_DELAY", fileCfg.Server.RetryDelay)
-	fileCfg.Server.APIVersion = envOrDefault("PASTEBIN_SERVER_API_VERSION", fileCfg.Server.APIVersion)
-	if v := os.Getenv("PASTEBIN_SERVER_RETRY"); v != "" {
+	fileCfg.Server.Timeout = envOrDefault("CAIRNBIN_SERVER_TIMEOUT", fileCfg.Server.Timeout)
+	fileCfg.Server.RetryDelay = envOrDefault("CAIRNBIN_SERVER_RETRY_DELAY", fileCfg.Server.RetryDelay)
+	fileCfg.Server.APIVersion = envOrDefault("CAIRNBIN_SERVER_API_VERSION", fileCfg.Server.APIVersion)
+	if v := os.Getenv("CAIRNBIN_SERVER_RETRY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			fileCfg.Server.Retry = n
 		}
@@ -935,14 +935,14 @@ func main() {
 		os.Exit(exitConnection)
 	}
 
-	c := &client{server: strings.TrimRight(*server, "/"), asJSON: *asJSON, outputFormat: outputFormat, lang: locale, token: token, apiVersion: resolvedAPIVersion, timeout: timeout, retry: retry, retryDelay: retryDelay, quiet: quietDefault, verbose: *verboseFlag, pager: envOrDefault("PASTEBIN_OUTPUT_PAGER", fileCfg.Output.Pager)}
+	c := &client{server: strings.TrimRight(*server, "/"), asJSON: *asJSON, outputFormat: outputFormat, lang: locale, token: token, apiVersion: resolvedAPIVersion, timeout: timeout, retry: retry, retryDelay: retryDelay, quiet: quietDefault, verbose: *verboseFlag, pager: envOrDefault("CAIRNBIN_OUTPUT_PAGER", fileCfg.Output.Pager)}
 	cacheTTL := parseDurationOr(fileCfg.Cache.TTL, 5*time.Minute)
 	cacheMaxSize, _ := parseByteSize(fileCfg.Cache.MaxSize)
 	c.cache = responseCacheConfig{enabled: fileCfg.Cache.Enabled, ttl: cacheTTL, maxSize: cacheMaxSize}
-	c.defaults.Public = envOrDefault("PASTEBIN_PUBLIC", fileCfg.Defaults.Public)
-	c.defaults.Expire = envOrDefault("PASTEBIN_EXPIRE", fileCfg.Defaults.Expire)
-	c.defaults.Syntax = envOrDefault("PASTEBIN_SYNTAX", fileCfg.Defaults.Syntax)
-	if limit := envOrDefault("PASTEBIN_LIMIT", ""); limit != "" {
+	c.defaults.Public = envOrDefault("CAIRNBIN_PUBLIC", fileCfg.Defaults.Public)
+	c.defaults.Expire = envOrDefault("CAIRNBIN_EXPIRE", fileCfg.Defaults.Expire)
+	c.defaults.Syntax = envOrDefault("CAIRNBIN_SYNTAX", fileCfg.Defaults.Syntax)
+	if limit := envOrDefault("CAIRNBIN_LIMIT", ""); limit != "" {
 		if n, err := strconv.Atoi(limit); err == nil {
 			c.defaults.Limit = n
 		}
@@ -962,7 +962,7 @@ func main() {
 	case "scheduler":
 		c.cmdScheduler(args[1:])
 	case "update":
-		// Positional form: pastebin-cli update [check|yes]
+		// Positional form: cairnbin-cli update [check|yes]
 		// Equivalent to --update flag; defaults to "check" when no sub-arg given.
 		action := "check"
 		if len(args) >= 2 {
@@ -1691,7 +1691,7 @@ func renderBorderedTable(w io.Writer, headers []string, rows [][]string) {
 }
 
 // defaultServerURL falls back to the embedded OfficialSite (site.txt at build time)
-// when --server, $PASTEBIN_SERVER_PRIMARY, and cli.yml are all unset. Never persisted to cli.yml.
+// when --server, $CAIRNBIN_SERVER_PRIMARY, and cli.yml are all unset. Never persisted to cli.yml.
 func defaultServerURL(resolved, official string) string {
 	if resolved == "" {
 		return official
@@ -1711,7 +1711,7 @@ func printNoServerError() {
 	fmt.Fprintf(os.Stderr, "%s\n", tf("err_no_server_edit", "path", paths.Resolved()))
 }
 
-// cmdUpdate handles 'pastebin-cli --update check|yes'.
+// cmdUpdate handles 'cairnbin-cli --update check|yes'.
 func (c *client) cmdUpdate(action string) {
 	if c.server == "" {
 		printNoServerError()
@@ -1789,7 +1789,7 @@ func (c *client) downloadAndApplyUpdate(downloadURL, expectedSHA string) error {
 }
 
 func (c *client) downloadAndApplyUpdateAt(downloadURL, expectedSHA, exe string, reexec func(string) error) error {
-	// Download to ${TMPDIR:-/tmp}/apimgr/pastebin-XXXXXX/cli.update.tmp, verify
+	// Download to ${TMPDIR:-/tmp}/apimgr/cairnbin-XXXXXX/cli.update.tmp, verify
 	// there, then atomically replace the installed binary (PART 32 step 3–5).
 	tmpDir, tmpFile, err := updateTempDir()
 	if err != nil {
@@ -1843,7 +1843,7 @@ func (c *client) downloadAndApplyUpdateAt(downloadURL, expectedSHA, exe string, 
 }
 
 // updateTempDir creates the PART 32 CLI update staging directory
-// (${TMPDIR:-/tmp}/apimgr/pastebin-XXXXXX/) and returns both the directory and
+// (${TMPDIR:-/tmp}/apimgr/cairnbin-XXXXXX/) and returns both the directory and
 // the cli.update.tmp file path inside it. The caller removes the directory.
 func updateTempDir() (dir, file string, err error) {
 	base := filepath.Join(os.TempDir(), "apimgr")
@@ -2009,46 +2009,46 @@ func firstNonEmpty(s, def string) string {
 }
 
 func applyCLIConfigEnv(cfg cliConfig) cliConfig {
-	cfg.Server.Primary = envOrDefault("PASTEBIN_SERVER_PRIMARY", cfg.Server.Primary)
-	cfg.Server.APIVersion = envOrDefault("PASTEBIN_SERVER_API_VERSION", cfg.Server.APIVersion)
-	cfg.Server.Timeout = envOrDefault("PASTEBIN_SERVER_TIMEOUT", cfg.Server.Timeout)
-	cfg.Server.RetryDelay = envOrDefault("PASTEBIN_SERVER_RETRY_DELAY", cfg.Server.RetryDelay)
-	if value := os.Getenv("PASTEBIN_SERVER_RETRY"); value != "" {
+	cfg.Server.Primary = envOrDefault("CAIRNBIN_SERVER_PRIMARY", cfg.Server.Primary)
+	cfg.Server.APIVersion = envOrDefault("CAIRNBIN_SERVER_API_VERSION", cfg.Server.APIVersion)
+	cfg.Server.Timeout = envOrDefault("CAIRNBIN_SERVER_TIMEOUT", cfg.Server.Timeout)
+	cfg.Server.RetryDelay = envOrDefault("CAIRNBIN_SERVER_RETRY_DELAY", cfg.Server.RetryDelay)
+	if value := os.Getenv("CAIRNBIN_SERVER_RETRY"); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil {
 			cfg.Server.Retry = parsed
 		}
 	}
-	cfg.Update.Channel = envOrDefault("PASTEBIN_UPDATE_CHANNEL", cfg.Update.Channel)
-	cfg.Update.CheckInterval = envOrDefault("PASTEBIN_UPDATE_CHECK_INTERVAL", cfg.Update.CheckInterval)
-	applyBoolEnv("PASTEBIN_UPDATE_AUTO", &cfg.Update.Auto)
-	cfg.Display.Mode = envOrDefault("PASTEBIN_DISPLAY_MODE", cfg.Display.Mode)
-	cfg.Output.Format = envOrDefault("PASTEBIN_FORMAT", envOrDefault("PASTEBIN_OUTPUT_FORMAT", cfg.Output.Format))
-	cfg.Output.Color = envOrDefault("PASTEBIN_OUTPUT_COLOR", cfg.Output.Color)
-	cfg.Output.Pager = envOrDefault("PASTEBIN_OUTPUT_PAGER", cfg.Output.Pager)
-	applyBoolEnv("PASTEBIN_OUTPUT_QUIET", &cfg.Output.Quiet)
-	applyBoolEnv("PASTEBIN_OUTPUT_VERBOSE", &cfg.Output.Verbose)
-	applyBoolEnv("PASTEBIN_TUI_ENABLED", &cfg.TUI.Enabled)
-	cfg.TUI.Theme = envOrDefault("PASTEBIN_TUI_THEME", cfg.TUI.Theme)
-	applyBoolEnv("PASTEBIN_TUI_MOUSE", &cfg.TUI.Mouse)
-	applyBoolEnv("PASTEBIN_TUI_UNICODE", &cfg.TUI.Unicode)
-	cfg.Logging.Level = envOrDefault("PASTEBIN_LOGGING_LEVEL", cfg.Logging.Level)
-	cfg.Logging.File = envOrDefault("PASTEBIN_LOGGING_FILE", cfg.Logging.File)
-	cfg.Logging.MaxSize = envOrDefault("PASTEBIN_LOGGING_MAX_SIZE", cfg.Logging.MaxSize)
-	if value := os.Getenv("PASTEBIN_LOGGING_MAX_FILES"); value != "" {
+	cfg.Update.Channel = envOrDefault("CAIRNBIN_UPDATE_CHANNEL", cfg.Update.Channel)
+	cfg.Update.CheckInterval = envOrDefault("CAIRNBIN_UPDATE_CHECK_INTERVAL", cfg.Update.CheckInterval)
+	applyBoolEnv("CAIRNBIN_UPDATE_AUTO", &cfg.Update.Auto)
+	cfg.Display.Mode = envOrDefault("CAIRNBIN_DISPLAY_MODE", cfg.Display.Mode)
+	cfg.Output.Format = envOrDefault("CAIRNBIN_FORMAT", envOrDefault("CAIRNBIN_OUTPUT_FORMAT", cfg.Output.Format))
+	cfg.Output.Color = envOrDefault("CAIRNBIN_OUTPUT_COLOR", cfg.Output.Color)
+	cfg.Output.Pager = envOrDefault("CAIRNBIN_OUTPUT_PAGER", cfg.Output.Pager)
+	applyBoolEnv("CAIRNBIN_OUTPUT_QUIET", &cfg.Output.Quiet)
+	applyBoolEnv("CAIRNBIN_OUTPUT_VERBOSE", &cfg.Output.Verbose)
+	applyBoolEnv("CAIRNBIN_TUI_ENABLED", &cfg.TUI.Enabled)
+	cfg.TUI.Theme = envOrDefault("CAIRNBIN_TUI_THEME", cfg.TUI.Theme)
+	applyBoolEnv("CAIRNBIN_TUI_MOUSE", &cfg.TUI.Mouse)
+	applyBoolEnv("CAIRNBIN_TUI_UNICODE", &cfg.TUI.Unicode)
+	cfg.Logging.Level = envOrDefault("CAIRNBIN_LOGGING_LEVEL", cfg.Logging.Level)
+	cfg.Logging.File = envOrDefault("CAIRNBIN_LOGGING_FILE", cfg.Logging.File)
+	cfg.Logging.MaxSize = envOrDefault("CAIRNBIN_LOGGING_MAX_SIZE", cfg.Logging.MaxSize)
+	if value := os.Getenv("CAIRNBIN_LOGGING_MAX_FILES"); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil {
 			cfg.Logging.MaxFiles = parsed
 		}
 	}
-	applyBoolEnv("PASTEBIN_CACHE_ENABLED", &cfg.Cache.Enabled)
-	cfg.Cache.TTL = envOrDefault("PASTEBIN_CACHE_TTL", cfg.Cache.TTL)
-	cfg.Cache.MaxSize = envOrDefault("PASTEBIN_CACHE_MAX_SIZE", cfg.Cache.MaxSize)
-	applyBoolEnv("PASTEBIN_DEBUG", &cfg.Debug)
-	cfg.Defaults.Lang = envOrDefault("PASTEBIN_LANG", envOrDefault("PASTEBIN_DEFAULTS_LANG", cfg.Defaults.Lang))
-	cfg.Defaults.Public = envOrDefault("PASTEBIN_PUBLIC", cfg.Defaults.Public)
-	cfg.Defaults.Expire = envOrDefault("PASTEBIN_EXPIRE", cfg.Defaults.Expire)
-	cfg.Defaults.Syntax = envOrDefault("PASTEBIN_SYNTAX", cfg.Defaults.Syntax)
-	cfg.Defaults.Output = envOrDefault("PASTEBIN_DEFAULTS_OUTPUT", cfg.Defaults.Output)
-	if value := os.Getenv("PASTEBIN_LIMIT"); value != "" {
+	applyBoolEnv("CAIRNBIN_CACHE_ENABLED", &cfg.Cache.Enabled)
+	cfg.Cache.TTL = envOrDefault("CAIRNBIN_CACHE_TTL", cfg.Cache.TTL)
+	cfg.Cache.MaxSize = envOrDefault("CAIRNBIN_CACHE_MAX_SIZE", cfg.Cache.MaxSize)
+	applyBoolEnv("CAIRNBIN_DEBUG", &cfg.Debug)
+	cfg.Defaults.Lang = envOrDefault("CAIRNBIN_LANG", envOrDefault("CAIRNBIN_DEFAULTS_LANG", cfg.Defaults.Lang))
+	cfg.Defaults.Public = envOrDefault("CAIRNBIN_PUBLIC", cfg.Defaults.Public)
+	cfg.Defaults.Expire = envOrDefault("CAIRNBIN_EXPIRE", cfg.Defaults.Expire)
+	cfg.Defaults.Syntax = envOrDefault("CAIRNBIN_SYNTAX", cfg.Defaults.Syntax)
+	cfg.Defaults.Output = envOrDefault("CAIRNBIN_DEFAULTS_OUTPUT", cfg.Defaults.Output)
+	if value := os.Getenv("CAIRNBIN_LIMIT"); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil {
 			cfg.Defaults.Limit = parsed
 		}
@@ -2197,7 +2197,7 @@ func writeUsage(w io.Writer) {
 	writeListFlags(w)
 
 	fmt.Fprintf(w, "\n%s\n", t("help_head_examples"))
-	fmt.Fprintf(w, "  PASTEBIN_SERVER_PRIMARY=https://paste.example.com %s create --lang text < file.txt\n", binaryName)
+	fmt.Fprintf(w, "  CAIRNBIN_SERVER_PRIMARY=https://paste.example.com %s create --lang text < file.txt\n", binaryName)
 	fmt.Fprintf(w, "  %s --server https://paste.example.com create --lang go myfile.go\n", binaryName)
 	fmt.Fprintf(w, "  %s --server https://paste.example.com get abc12345\n", binaryName)
 	fmt.Fprintf(w, "  %s --server https://paste.example.com delete abc12345 <delete-token>\n", binaryName)

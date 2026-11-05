@@ -1,6 +1,6 @@
 //go:build e2e
 
-// Package e2e contains browser/end-to-end tests for pastebin (AI.md PART 28).
+// Package e2e contains browser/end-to-end tests for cairnbin (AI.md PART 28).
 // This file is compiled only with the e2e build tag and targets the live test
 // stack started by tests/e2e.sh.
 package e2e
@@ -77,7 +77,7 @@ func serveE2ESMTP(listener net.Listener) {
 
 func handleE2ESMTP(conn net.Conn) {
 	defer conn.Close()
-	_, _ = io.WriteString(conn, "220 pastebin-e2e ESMTP\r\n")
+	_, _ = io.WriteString(conn, "220 cairnbin-e2e ESMTP\r\n")
 	scanner := bufio.NewScanner(conn)
 	var message strings.Builder
 	data := false
@@ -97,7 +97,7 @@ func handleE2ESMTP(conn net.Conn) {
 		}
 		switch {
 		case strings.HasPrefix(strings.ToUpper(line), "EHLO"), strings.HasPrefix(strings.ToUpper(line), "HELO"):
-			_, _ = io.WriteString(conn, "250-pastebin-e2e\r\n250 OK\r\n")
+			_, _ = io.WriteString(conn, "250-cairnbin-e2e\r\n250 OK\r\n")
 		case strings.HasPrefix(strings.ToUpper(line), "MAIL FROM:"), strings.HasPrefix(strings.ToUpper(line), "RCPT TO:"):
 			_, _ = io.WriteString(conn, "250 OK\r\n")
 		case strings.EqualFold(line, "DATA"):
@@ -245,7 +245,7 @@ func createPaste(t *testing.T, base string, payload map[string]interface{}) (str
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 pastebin-e2e")
+	req.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
 	addCSRFToken(req, csrfToken)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -281,8 +281,8 @@ func TestTier1OwnerAndLinkedTokenLifecycleAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preferencesReq.Header.Set("User-Agent", "Mozilla/5.0 pastebin-e2e")
-	preferencesReq.AddCookie(&http.Cookie{Name: "pastebin_owner_token_rU3uW5Ze", Value: primary})
+	preferencesReq.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
+	preferencesReq.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_rU3uW5Ze", Value: primary})
 	preferencesResp, err := client().Do(preferencesReq)
 	if err != nil {
 		t.Fatalf("render localized owner-token preferences: %v", err)
@@ -442,7 +442,7 @@ func TestTier1OwnerAndLinkedTokenLifecycleAPI(t *testing.T) {
 		t.Fatalf("owner restore status=%d", restoreResp.StatusCode)
 	}
 	ownerCookieSet := strings.Join(restoreResp.Header.Values("Set-Cookie"), "\n")
-	if !strings.Contains(ownerCookieSet, "pastebin_owner_token_rU3uW5Ze=") || !strings.Contains(ownerCookieSet, "HttpOnly") || !strings.Contains(ownerCookieSet, "Secure") {
+	if !strings.Contains(ownerCookieSet, "cairnbin_owner_token_rU3uW5Ze=") || !strings.Contains(ownerCookieSet, "HttpOnly") || !strings.Contains(ownerCookieSet, "Secure") {
 		t.Fatalf("restore did not issue a protected owner cookie: %s", ownerCookieSet)
 	}
 	resp, body = request(http.MethodDelete, "/api/v1/pastes/"+pasteID, rotated.Data.Token, nil)
@@ -515,7 +515,7 @@ func TestTier1RecentSearchAndSavedSort(t *testing.T) {
 		t.Fatal("recent page did not render selected sort and order controls")
 	}
 	setCookies := strings.Join(resp.Header.Values("Set-Cookie"), "\n")
-	for _, preference := range []string{"pastebin_pref_sort=name", "pastebin_pref_order=asc", "pastebin_pref_per_page=50"} {
+	for _, preference := range []string{"cairnbin_pref_sort=name", "cairnbin_pref_order=asc", "cairnbin_pref_per_page=50"} {
 		if !strings.Contains(setCookies, preference) {
 			t.Errorf("recent request did not save %q preference: %s", preference, setCookies)
 		}
@@ -634,7 +634,7 @@ func TestTier1BrowserCacheRefresh(t *testing.T) {
 	base := baseURL(t)
 	request, _ := http.NewRequest(http.MethodGet, base+"/", nil)
 	request.Header.Set("Accept", "text/html")
-	request.Header.Set("Cookie", "pastebin_build=stale-build")
+	request.Header.Set("Cookie", "cairnbin_build=stale-build")
 	resp, err := client().Do(request)
 	if err != nil {
 		t.Fatalf("GET / with stale build cookie: %v", err)
@@ -646,7 +646,7 @@ func TestTier1BrowserCacheRefresh(t *testing.T) {
 	if got := resp.Header.Get("Cache-Control"); got != "no-store" {
 		t.Errorf("HTML Cache-Control = %q, want no-store", got)
 	}
-	if !strings.Contains(strings.Join(resp.Header.Values("Set-Cookie"), "\n"), "pastebin_build=") {
+	if !strings.Contains(strings.Join(resp.Header.Values("Set-Cookie"), "\n"), "cairnbin_build=") {
 		t.Error("HTML response did not refresh the build stamp cookie")
 	}
 
@@ -916,7 +916,7 @@ func TestTier1PasteLifecycle(t *testing.T) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 pastebin-e2e")
+	req.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
 	addCSRFToken(req, csrfToken)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -1159,7 +1159,7 @@ func TestTier1FormValidationErrorsRenderOnServer(t *testing.T) {
 	}
 	req.Header.Set("Accept", "text/html")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", "Mozilla/5.0 pastebin-e2e")
+	req.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
 	resp, err := c.Do(req)
 	if err != nil {
 		t.Fatalf("POST invalid create form: %v", err)
@@ -1254,7 +1254,7 @@ func TestTier1MicrobinRoundTrip(t *testing.T) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 pastebin-e2e")
+	req.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
 	addCSRFToken(req, csrfToken)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -1276,7 +1276,7 @@ func TestTier1MicrobinRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	getReq.Header.Set("Accept", "application/json")
-	getReq.Header.Set("User-Agent", "Mozilla/5.0 pastebin-e2e")
+	getReq.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
 	getResp, err := client().Do(getReq)
 	if err != nil {
 		t.Fatalf("get microbin paste: %v", err)
@@ -1611,7 +1611,7 @@ func captureFailureArtifacts(t *testing.T, ctx context.Context) {
 	t.Helper()
 	dir := os.Getenv("E2E_ARTIFACT_DIR")
 	if dir == "" {
-		dir = filepath.Join(os.TempDir(), "apimgr", "pastebin-e2e-artifacts")
+		dir = filepath.Join(os.TempDir(), "apimgr", "cairnbin-e2e-artifacts")
 	}
 	if os.MkdirAll(dir, 0o700) != nil {
 		return
@@ -1770,9 +1770,9 @@ func TestTier2OwnerTokenManagementFormsWithoutJavaScript(t *testing.T) {
 			t.Fatal(err)
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("User-Agent", "Mozilla/5.0 pastebin-e2e")
+		req.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
 		addCSRFToken(req, csrf)
-		req.AddCookie(&http.Cookie{Name: "pastebin_owner_token_rU3uW5Ze", Value: token})
+		req.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_rU3uW5Ze", Value: token})
 		resp, err := formClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -1828,7 +1828,7 @@ func TestTier3OwnerTokenManagementWithJavaScript(t *testing.T) {
 	setOwnerCookie := func() {
 		t.Helper()
 		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetCookie("pastebin_owner_token_rU3uW5Ze", primary).WithURL(base).WithSecure(false).Do(ctx)
+			return network.SetCookie("cairnbin_owner_token_rU3uW5Ze", primary).WithURL(base).WithSecure(false).Do(ctx)
 		})); err != nil {
 			t.Fatalf("set browser owner cookie: %v", err)
 		}
@@ -2146,7 +2146,7 @@ func TestTier3FullBrowser(t *testing.T) {
 		t.Errorf("dark and light theme styles did not differ: dark=%q light=%q", darkBackground, lightBackground)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.Evaluate(`localStorage.removeItem("pastebin_owner_token_rU3uW5Ze")`, nil),
+		chromedp.Evaluate(`localStorage.removeItem("cairnbin_owner_token_rU3uW5Ze")`, nil),
 		chromedp.Navigate(base+"/remove/"+linkID),
 	); err != nil {
 		t.Fatalf("open owner-token form in browser: %v", err)
@@ -2402,7 +2402,7 @@ func TestTier3RecentSearchAndSavedSort(t *testing.T) {
 	); err != nil {
 		t.Fatalf("search recent pastes in browser: %v", err)
 	}
-	if !strings.Contains(resultTitle, "e2e-browser-recent-target") || !strings.Contains(pageURL, "sort=name") || !strings.Contains(cookies, "pastebin_pref_sort=name") {
+	if !strings.Contains(resultTitle, "e2e-browser-recent-target") || !strings.Contains(pageURL, "sort=name") || !strings.Contains(cookies, "cairnbin_pref_sort=name") {
 		t.Fatalf("browser recent search/saved sort mismatch: title=%q URL=%q cookies=%q", resultTitle, pageURL, cookies)
 	}
 }

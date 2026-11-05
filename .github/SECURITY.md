@@ -15,7 +15,7 @@ We support the latest release. Security fixes are applied to the current release
 
 To report a vulnerability:
 
-1. Open a [GitHub Security Advisory](https://github.com/apimgr/pastebin/security/advisories/new) (preferred — keeps the report private until a fix is available)
+1. Open a [GitHub Security Advisory](https://github.com/apimgr/cairnbin/security/advisories/new) (preferred — keeps the report private until a fix is available)
 2. Or contact the maintainers directly via the email listed on the GitHub profile
 
 Please include:
@@ -36,7 +36,7 @@ We follow coordinated disclosure: please allow us time to fix the issue before m
 
 ## Scope
 
-This policy applies to the `pastebin` binary and its Docker image hosted at `ghcr.io/apimgr/pastebin`.
+This policy applies to the `cairnbin` binary and its Docker image hosted at `ghcr.io/apimgr/cairnbin`.
 
 Out of scope:
 - Vulnerabilities in paste content (operators are responsible for acceptable-use policies)

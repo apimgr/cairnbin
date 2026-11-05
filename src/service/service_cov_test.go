@@ -156,7 +156,7 @@ func TestPrintHelp_ContainsServiceCommands(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	PrintHelp("pastebin")
+	PrintHelp("cairnbin")
 
 	w.Close()
 	os.Stdout = origStdout
@@ -420,8 +420,8 @@ func TestInstallLaunchd_CreatesPlist(t *testing.T) {
 // TestConstants_AppNameAndOrgName verifies that the package-level constants
 // used by all install functions have the expected values.
 func TestConstants_AppNameAndOrgName(t *testing.T) {
-	if appName != "pastebin" {
-		t.Errorf("appName = %q; want 'pastebin'", appName)
+	if appName != "cairnbin" {
+		t.Errorf("appName = %q; want 'cairnbin'", appName)
 	}
 	if orgName != "apimgr" {
 		t.Errorf("orgName = %q; want 'apimgr'", orgName)

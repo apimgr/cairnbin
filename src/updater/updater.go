@@ -19,7 +19,7 @@ import (
 
 const (
 	orgName     = "apimgr"
-	projectName = "pastebin"
+	projectName = "cairnbin"
 	apiBase     = "https://api.github.com/repos/" + orgName + "/" + projectName + "/releases"
 )
 
@@ -229,7 +229,7 @@ func restartArgs(args []string) []string {
 			}
 			continue
 		}
-		// A bare positional such as "pastebin yes" also selects an action.
+		// A bare positional such as "cairnbin yes" also selects an action.
 		if arg == "check" || arg == "yes" || arg == "help" {
 			continue
 		}
@@ -379,7 +379,7 @@ func verifyChecksum(path, expectedHash string) error {
 }
 
 // binaryAssetName returns the expected GitHub release asset name for the
-// current platform (e.g. "pastebin-linux-amd64").
+// current platform (e.g. "cairnbin-linux-amd64").
 func binaryAssetName() string {
 	name := projectName + "-" + runtime.GOOS + "-" + runtime.GOARCH
 	if runtime.GOOS == "windows" {

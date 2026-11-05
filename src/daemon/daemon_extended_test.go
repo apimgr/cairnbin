@@ -276,7 +276,7 @@ func TestDaemonize_SubprocessWithChildEnv(t *testing.T) {
 
 import (
 	"os"
-	"github.com/apimgr/pastebin/src/daemon"
+	"github.com/apimgr/cairnbin/src/daemon"
 )
 
 func main() {
@@ -293,7 +293,11 @@ func main() {
 	// Build the test binary.
 	binFile := filepath.Join(tmp, "testbin")
 	buildCmd := exec.Command("go", "build", "-o", binFile, srcFile)
-	buildCmd.Dir = tmp
+	modRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	buildCmd.Dir = modRoot
 	buildCmd.Env = append(os.Environ(),
 		"CGO_ENABLED=0",
 		"GOFLAGS=-buildvcs=false",

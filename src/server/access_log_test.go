@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/logging"
-	"github.com/apimgr/pastebin/src/mode"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/logging"
+	"github.com/apimgr/cairnbin/src/mode"
 )
 
 // TestIsHealthzPath covers every suppressible endpoint (AI.md "Health-Check
@@ -45,7 +45,7 @@ func newAccessLogTestServer(t *testing.T, logHealthChecks bool) (*Server, string
 	s.SetLogManager(logging.New(logging.Options{
 		Dir:       dir,
 		Level:     "info",
-		Tag:       "pastebin-test",
+		Tag:       "cairnbin-test",
 		DebugGate: mode.IsDebugEnabled,
 		Access: logging.FileOptions{
 			Enabled:  true,

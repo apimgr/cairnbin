@@ -1,5 +1,5 @@
 // Package swagger provides OpenAPI 3.0.3 spec generation and a self-contained
-// Swagger UI viewer for the pastebin API. No external CDN assets are used.
+// Swagger UI viewer for the cairnbin API. No external CDN assets are used.
 package swagger
 
 import (
@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/common/buildinfo"
-	"github.com/apimgr/pastebin/src/common/httputil"
-	"github.com/apimgr/pastebin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/common/buildinfo"
+	"github.com/apimgr/cairnbin/src/common/httputil"
+	"github.com/apimgr/cairnbin/src/common/i18n"
 )
 
 // Handler serves OpenAPI-related endpoints.
@@ -230,7 +230,7 @@ func (h *Handler) buildSpec(base string) map[string]interface{} {
 		"info": map[string]interface{}{
 			"title":   h.title,
 			"version": h.version,
-			"description": "A fast, anonymous pastebin service with REST and GraphQL APIs. " +
+			"description": "A fast, anonymous cairnbin service with REST and GraphQL APIs. " +
 				"Compatible with pastebin.com, microbin, and lenpaste.",
 			"license": map[string]interface{}{
 				"name": "MIT",
@@ -316,7 +316,7 @@ func (h *Handler) renderUI(r *http.Request, specURL string) string {
           <a href="` + assetPrefix + `/server/help" class="footer-link">` + t("footer.help") + `</a>
         </nav>
         <div class="footer-made">
-          <a href="https://github.com/apimgr/pastebin" target="_blank" rel="noopener noreferrer" class="footer-repo">` + t("footer.made_with") + ` Go</a> ❤️
+          <a href="https://github.com/apimgr/cairnbin" target="_blank" rel="noopener noreferrer" class="footer-repo">` + t("footer.made_with") + ` Go</a> ❤️
           <span class="footer-sep" aria-hidden="true">·</span>
           <span class="footer-version">v` + h.version + `</span>
         </div>

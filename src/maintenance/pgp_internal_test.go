@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/database"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/database"
 )
 
 // ─── path helpers ────────────────────────────────────────────────────────────

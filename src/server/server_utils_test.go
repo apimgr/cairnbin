@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // ─── fmtUserDate / fmtUserTime ───────────────────────────────────────────────
@@ -127,7 +127,7 @@ func TestHandlePreferencesSet_CrossOriginReferer_RedirectsToRoot(t *testing.T) {
 	}
 }
 
-// ─── handlePreferencesSet: app-specific pastebin_pref_* fields ─────────────────
+// ─── handlePreferencesSet: app-specific cairnbin_pref_* fields ─────────────────
 
 // setCookiesOf extracts Set-Cookie headers from a recorder.
 func setCookiesOf(w *httptest.ResponseRecorder) map[string]string {
@@ -154,14 +154,14 @@ func postPrefs(t *testing.T, form url.Values) map[string]string {
 
 func TestHandlePreferencesSet_AppPrefFields(t *testing.T) {
 	got := postPrefs(t, url.Values{
-		"pastebin_pref_sort":     {"views"},
-		"pastebin_pref_order":    {"asc"},
-		"pastebin_pref_per_page": {"50"},
+		"cairnbin_pref_sort":     {"views"},
+		"cairnbin_pref_order":    {"asc"},
+		"cairnbin_pref_per_page": {"50"},
 	})
 	for name, want := range map[string]string{
-		"pastebin_pref_sort":     "views",
-		"pastebin_pref_order":    "asc",
-		"pastebin_pref_per_page": "50",
+		"cairnbin_pref_sort":     "views",
+		"cairnbin_pref_order":    "asc",
+		"cairnbin_pref_per_page": "50",
 	} {
 		if got[name] != want {
 			t.Errorf("cookie %s = %q, want %q", name, got[name], want)
@@ -176,28 +176,28 @@ func TestHandlePreferencesSet_AppPrefFields(t *testing.T) {
 
 func TestHandlePreferencesSet_RejectsInvalidAppPrefValues(t *testing.T) {
 	got := postPrefs(t, url.Values{
-		"pastebin_pref_sort": {"bogus"},
+		"cairnbin_pref_sort": {"bogus"},
 		// A value that fails the enum must not be stored, otherwise the
 		// preferences page has no matching <option> to render it as.
-		"pastebin_pref_order": {"sideways"},
+		"cairnbin_pref_order": {"sideways"},
 		// An enum-legal value on a well-formed key is still accepted, so
 		// the test above proves rejection is per-key, not blanket.
-		"pastebin_pref_per_page": {"100"},
+		"cairnbin_pref_per_page": {"100"},
 	})
-	for _, name := range []string{"pastebin_pref_sort", "pastebin_pref_order"} {
+	for _, name := range []string{"cairnbin_pref_sort", "cairnbin_pref_order"} {
 		if v, ok := got[name]; ok {
 			t.Errorf("cookie %s should not be set, got %q", name, v)
 		}
 	}
-	if got["pastebin_pref_per_page"] != "100" {
-		t.Errorf("per_page = %q, want 100", got["pastebin_pref_per_page"])
+	if got["cairnbin_pref_per_page"] != "100" {
+		t.Errorf("per_page = %q, want 100", got["cairnbin_pref_per_page"])
 	}
 }
 
 func TestHandlePreferencesSet_IgnoresMalformedPrefFieldNames(t *testing.T) {
 	got := postPrefs(t, url.Values{
-		"pastebin_pref_BadKey": {"x"},
-		"pastebin_pref_":       {"x"},
+		"cairnbin_pref_BadKey": {"x"},
+		"cairnbin_pref_":       {"x"},
 		"not_a_pref":           {"x"},
 		"theme":                {"light"},
 	})

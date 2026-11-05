@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/audit"
+	"github.com/apimgr/cairnbin/src/audit"
 )
 
 func TestParseMaxTotalSize(t *testing.T) {
@@ -85,7 +85,7 @@ func writeBackupFile(t *testing.T, dir, project, date string, size int) string {
 }
 
 func TestApplySizeCap(t *testing.T) {
-	const project = "pastebin"
+	const project = "cairnbin"
 	tests := []struct {
 		name string
 		// sizes maps date → file size.
@@ -204,7 +204,7 @@ func TestShouldSkipBackup(t *testing.T) {
 }
 
 func TestLatestBackupSize(t *testing.T) {
-	const project = "pastebin"
+	const project = "cairnbin"
 	t.Run("empty dir returns zero", func(t *testing.T) {
 		if got := latestBackupSize(t.TempDir(), project); got != 0 {
 			t.Errorf("latestBackupSize = %d, want 0", got)
@@ -265,7 +265,7 @@ func TestCompliancePreCheck(t *testing.T) {
 // no-op when no Audit writer is configured.
 func TestAuditBackupComplianceBlocked(t *testing.T) {
 	t.Run("nil audit writer is a no-op", func(t *testing.T) {
-		cfg := BackupConfig{BackupDir: t.TempDir(), ProjectName: "pastebin"}
+		cfg := BackupConfig{BackupDir: t.TempDir(), ProjectName: "cairnbin"}
 		auditBackupComplianceBlocked(cfg, "compliance mode requires an encryption password; scheduled backup skipped")
 	})
 
@@ -278,7 +278,7 @@ func TestAuditBackupComplianceBlocked(t *testing.T) {
 		})
 		cfg := BackupConfig{
 			BackupDir:   t.TempDir(),
-			ProjectName: "pastebin",
+			ProjectName: "cairnbin",
 			Audit:       w,
 		}
 		auditBackupComplianceBlocked(cfg, "compliance mode requires an encryption password; scheduled backup skipped")
@@ -317,7 +317,7 @@ func TestAuditBackupRetentionCleanupEmitsDeleted(t *testing.T) {
 		Dir:     auditDir,
 		Events:  audit.EventCategories{Backup: true},
 	})
-	cfg := BackupConfig{BackupDir: t.TempDir(), ProjectName: "pastebin", Audit: w}
+	cfg := BackupConfig{BackupDir: t.TempDir(), ProjectName: "cairnbin", Audit: w}
 	auditBackupRetentionCleanup(cfg, []string{"a.tar.gz", "b.tar.gz"}, "retention policy", 1)
 
 	data, err := os.ReadFile(filepath.Join(auditDir, "audit.log"))

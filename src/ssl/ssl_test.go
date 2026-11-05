@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/ssl"
+	"github.com/apimgr/cairnbin/src/ssl"
 )
 
 // genCertPair generates a self-signed TLS certificate and private key PEM pair

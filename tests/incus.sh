@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # @@License : WTFPL
-# tests/incus.sh — Incus integration tests for pastebin
+# tests/incus.sh — Incus integration tests for cairnbin
 # Launches an Incus system container (Debian, systemd), installs the built
 # binaries, and exercises the full systemd service workflow plus the same
 # API/content-negotiation/endpoint coverage as tests/docker.sh, per PART 28.
@@ -14,7 +14,7 @@ set -eo pipefail
 INCUS_SCRIPT_NAME="$(basename -- "$0")"
 INCUS_PROJECT_DIR="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 INCUS_PROJECT_ORG="apimgr"
-INCUS_PROJECT_NAME="pastebin"
+INCUS_PROJECT_NAME="cairnbin"
 INCUS_CONTAINER_NAME="test-${INCUS_PROJECT_NAME}-$$"
 INCUS_IMAGE="images:debian/trixie"
 INCUS_KEEP=false

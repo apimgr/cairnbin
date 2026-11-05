@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/maintenance"
+	"github.com/apimgr/cairnbin/src/maintenance"
 )
 
 // TestRestore_FilePermissions verifies that every file extracted by Restore

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // TestRenderTrackingScript verifies each analytics platform emits its expected

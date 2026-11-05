@@ -268,7 +268,7 @@ func TestDisable_Runit_RemovesSymlink(t *testing.T) {
 // ─── Service path computation ────────────────────────────────────────────────
 
 func TestServicePath_Systemd(t *testing.T) {
-	expected := "/etc/systemd/system/pastebin.service"
+	expected := "/etc/systemd/system/cairnbin.service"
 	actual := "/etc/systemd/system/" + appName + ".service"
 	if actual != expected {
 		t.Errorf("systemd service path = %q; want %q", actual, expected)
@@ -276,7 +276,7 @@ func TestServicePath_Systemd(t *testing.T) {
 }
 
 func TestServicePath_Launchd(t *testing.T) {
-	expected := "/Library/LaunchDaemons/io.github.apimgr.pastebin.plist"
+	expected := "/Library/LaunchDaemons/io.github.apimgr.cairnbin.plist"
 	actual := "/Library/LaunchDaemons/" + launchdLabel + ".plist"
 	if actual != expected {
 		t.Errorf("launchd plist path = %q; want %q", actual, expected)
@@ -284,7 +284,7 @@ func TestServicePath_Launchd(t *testing.T) {
 }
 
 func TestServicePath_BSDRC(t *testing.T) {
-	expected := "/usr/local/etc/rc.d/pastebin"
+	expected := "/usr/local/etc/rc.d/cairnbin"
 	actual := "/usr/local/etc/rc.d/" + appName
 	if actual != expected {
 		t.Errorf("BSD rc.d path = %q; want %q", actual, expected)
@@ -292,7 +292,7 @@ func TestServicePath_BSDRC(t *testing.T) {
 }
 
 func TestServicePath_OpenRC(t *testing.T) {
-	expected := "/etc/init.d/pastebin"
+	expected := "/etc/init.d/cairnbin"
 	actual := "/etc/init.d/" + appName
 	if actual != expected {
 		t.Errorf("OpenRC init.d path = %q; want %q", actual, expected)
@@ -300,7 +300,7 @@ func TestServicePath_OpenRC(t *testing.T) {
 }
 
 func TestServicePath_Runit(t *testing.T) {
-	expected := "/etc/sv/pastebin"
+	expected := "/etc/sv/cairnbin"
 	actual := "/etc/sv/" + appName
 	if actual != expected {
 		t.Errorf("runit sv path = %q; want %q", actual, expected)

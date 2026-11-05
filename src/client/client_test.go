@@ -168,16 +168,16 @@ func TestIsValidURL_NoScheme(t *testing.T) {
 // ─── envOrDefault ─────────────────────────────────────────────────────────────
 
 func TestEnvOrDefault_Unset(t *testing.T) {
-	os.Unsetenv("TEST_PASTEBIN_CLI_KEY_XYZ")
-	if got := envOrDefault("TEST_PASTEBIN_CLI_KEY_XYZ", "fallback"); got != "fallback" {
+	os.Unsetenv("TEST_CAIRNBIN_CLI_KEY_XYZ")
+	if got := envOrDefault("TEST_CAIRNBIN_CLI_KEY_XYZ", "fallback"); got != "fallback" {
 		t.Errorf("got %q; want fallback", got)
 	}
 }
 
 func TestEnvOrDefault_Set(t *testing.T) {
-	os.Setenv("TEST_PASTEBIN_CLI_KEY_XYZ", "fromenv")
-	defer os.Unsetenv("TEST_PASTEBIN_CLI_KEY_XYZ")
-	if got := envOrDefault("TEST_PASTEBIN_CLI_KEY_XYZ", "fallback"); got != "fromenv" {
+	os.Setenv("TEST_CAIRNBIN_CLI_KEY_XYZ", "fromenv")
+	defer os.Unsetenv("TEST_CAIRNBIN_CLI_KEY_XYZ")
+	if got := envOrDefault("TEST_CAIRNBIN_CLI_KEY_XYZ", "fallback"); got != "fromenv" {
 		t.Errorf("got %q; want fromenv", got)
 	}
 }
@@ -434,8 +434,8 @@ func TestClientGet_Success(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("expected GET, got %s", r.Method)
 		}
-		if !strings.HasPrefix(r.Header.Get("User-Agent"), "pastebin-cli/") {
-			t.Errorf("expected pastebin-cli User-Agent, got %q", r.Header.Get("User-Agent"))
+		if !strings.HasPrefix(r.Header.Get("User-Agent"), "cairnbin-cli/") {
+			t.Errorf("expected cairnbin-cli User-Agent, got %q", r.Header.Get("User-Agent"))
 		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("paste content"))

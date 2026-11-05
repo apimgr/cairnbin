@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/apimgr/pastebin/src/common/terminal"
+	"github.com/apimgr/cairnbin/src/common/terminal"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

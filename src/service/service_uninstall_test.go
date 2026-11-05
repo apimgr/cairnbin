@@ -109,7 +109,7 @@ func TestUninstallRunit_DirectWithDir(t *testing.T) {
 	// Create runit service directory
 	svDir := "/etc/sv/" + appName
 	os.MkdirAll(svDir+"/log", 0o755)
-	os.WriteFile(filepath.Join(svDir, "run"), []byte("#!/bin/sh\nexec pastebin\n"), 0o755)
+	os.WriteFile(filepath.Join(svDir, "run"), []byte("#!/bin/sh\nexec cairnbin\n"), 0o755)
 	os.WriteFile(filepath.Join(svDir, "log", "run"), []byte("#!/bin/sh\n"), 0o755)
 
 	// Create symlink

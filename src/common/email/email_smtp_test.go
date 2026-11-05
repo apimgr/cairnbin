@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // fakeSMTPServer binds on a random port and speaks just enough SMTP to let
@@ -410,9 +410,9 @@ func TestSend_EndToEnd(t *testing.T) {
 			Port: port,
 			TLS:  "",
 		},
-		From: config.EmailFrom{Name: "PastebinApp", Email: "noreply@example.com"},
+		From: config.EmailFrom{Name: "CairnbinApp", Email: "noreply@example.com"},
 	}
-	m := New(cfg, "PastebinApp", "https://example.com", "example.com")
+	m := New(cfg, "CairnbinApp", "https://example.com", "example.com")
 
 	if err := m.Send("dest@example.com", "test", map[string]string{"extra_key": "hello"}); err != nil {
 		t.Fatalf("Send end-to-end: %v", err)
@@ -426,7 +426,7 @@ func TestSend_EndToEnd(t *testing.T) {
 	if len(cap.rcpt) == 0 || cap.rcpt[0] != "dest@example.com" {
 		t.Errorf("rcpt = %v; want [dest@example.com]", cap.rcpt)
 	}
-	if !strings.Contains(cap.body, "PastebinApp") {
+	if !strings.Contains(cap.body, "CairnbinApp") {
 		t.Errorf("body missing app name; got:\n%s", cap.body)
 	}
 }

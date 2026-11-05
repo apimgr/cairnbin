@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/shell"
+	"github.com/apimgr/cairnbin/src/shell"
 )
 
 // ─── Normalize ────────────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ func TestDetect_UnknownSHELL_FallsBack(t *testing.T) {
 // ─── PrintHelp ────────────────────────────────────────────────────────────────
 
 func TestPrintHelp_DoesNotPanic(t *testing.T) {
-	shell.PrintHelp("pastebin")
+	shell.PrintHelp("cairnbin")
 }
 
 // ─── PrintInit ────────────────────────────────────────────────────────────────
@@ -114,14 +114,14 @@ func TestPrintHelp_DoesNotPanic(t *testing.T) {
 func TestPrintInit_AllShells(t *testing.T) {
 	shells := []string{"bash", "zsh", "fish", "sh", "dash", "ksh", "powershell", "pwsh"}
 	for _, sh := range shells {
-		if err := shell.PrintInit("pastebin", sh); err != nil {
+		if err := shell.PrintInit("cairnbin", sh); err != nil {
 			t.Errorf("PrintInit(%q): unexpected error: %v", sh, err)
 		}
 	}
 }
 
 func TestPrintInit_UnknownShell(t *testing.T) {
-	if err := shell.PrintInit("pastebin", "tcsh"); err == nil {
+	if err := shell.PrintInit("cairnbin", "tcsh"); err == nil {
 		t.Error("PrintInit(tcsh): expected error, got nil")
 	}
 }
@@ -131,7 +131,7 @@ func TestPrintInit_EmptyShell_DetectsAuto(t *testing.T) {
 	t.Setenv("ZSH_VERSION", "")
 	t.Setenv("BASH_VERSION", "")
 	t.Setenv("FISH_VERSION", "")
-	if err := shell.PrintInit("pastebin", ""); err != nil {
+	if err := shell.PrintInit("cairnbin", ""); err != nil {
 		t.Errorf("PrintInit(empty): unexpected error: %v", err)
 	}
 }
@@ -141,14 +141,14 @@ func TestPrintInit_EmptyShell_DetectsAuto(t *testing.T) {
 func TestPrintCompletions_AllShells(t *testing.T) {
 	shells := []string{"bash", "zsh", "fish", "sh", "dash", "ksh", "powershell", "pwsh"}
 	for _, sh := range shells {
-		if err := shell.PrintCompletions("pastebin", sh); err != nil {
+		if err := shell.PrintCompletions("cairnbin", sh); err != nil {
 			t.Errorf("PrintCompletions(%q): unexpected error: %v", sh, err)
 		}
 	}
 }
 
 func TestPrintCompletions_UnknownShell(t *testing.T) {
-	if err := shell.PrintCompletions("pastebin", "tcsh"); err == nil {
+	if err := shell.PrintCompletions("cairnbin", "tcsh"); err == nil {
 		t.Error("PrintCompletions(tcsh): expected error, got nil")
 	}
 }
@@ -157,7 +157,7 @@ func TestPrintCompletions_BashContainsExpectedFlags(t *testing.T) {
 	// Capture stdout via a pipe replacement — just ensure no panic and check
 	// that the function runs without error. Content is tested via golden files
 	// in integration tests; here we verify the call completes.
-	if err := shell.PrintCompletions("pastebin", "bash"); err != nil {
+	if err := shell.PrintCompletions("cairnbin", "bash"); err != nil {
 		t.Errorf("PrintCompletions(bash): unexpected error: %v", err)
 	}
 }
@@ -167,14 +167,14 @@ func TestPrintCompletions_BashContainsExpectedFlags(t *testing.T) {
 func TestPrintClientCompletions_AllShells(t *testing.T) {
 	shells := []string{"bash", "zsh", "fish", "sh", "dash", "ksh", "powershell", "pwsh"}
 	for _, sh := range shells {
-		if err := shell.PrintClientCompletions("pastebin-cli", sh); err != nil {
+		if err := shell.PrintClientCompletions("cairnbin-cli", sh); err != nil {
 			t.Errorf("PrintClientCompletions(%q): unexpected error: %v", sh, err)
 		}
 	}
 }
 
 func TestPrintClientCompletions_UnknownShell(t *testing.T) {
-	if err := shell.PrintClientCompletions("pastebin-cli", "tcsh"); err == nil {
+	if err := shell.PrintClientCompletions("cairnbin-cli", "tcsh"); err == nil {
 		t.Error("PrintClientCompletions(tcsh): expected error, got nil")
 	}
 }

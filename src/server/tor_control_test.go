@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/tor"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/tor"
 )
 
 // newTorControlServer builds a minimal Server whose config/data directories

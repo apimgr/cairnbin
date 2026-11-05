@@ -173,7 +173,7 @@ func TestBackupDaily_MkdirFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	taskCfg := BackupConfig{
-		ProjectName: "pastebin",
+		ProjectName: "cairnbin",
 		ConfigDir:   filepath.Join(root, "config"),
 		DataDir:     filepath.Join(root, "data"),
 		BackupDir:   bkpPath,
@@ -204,13 +204,13 @@ func TestBackupDaily_RetentionAppliedWithMultipleExistingBackups(t *testing.T) {
 	}
 	// Pre-populate 3 old dated backup files so retention has something to prune.
 	for _, date := range []string{"2025-01-01", "2025-01-02", "2025-01-03"} {
-		name := filepath.Join(bkpDir, "pastebin_backup_"+date+".tar.gz")
+		name := filepath.Join(bkpDir, "cairnbin_backup_"+date+".tar.gz")
 		if err := os.WriteFile(name, []byte("old"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	cfg := BackupConfig{
-		ProjectName: "pastebin",
+		ProjectName: "cairnbin",
 		ConfigDir:   cfgDir,
 		DataDir:     dataDir,
 		BackupDir:   bkpDir,
@@ -234,7 +234,7 @@ func TestBackupHourly_MkdirFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := BackupConfig{
-		ProjectName: "pastebin",
+		ProjectName: "cairnbin",
 		ConfigDir:   filepath.Join(root, "config"),
 		DataDir:     filepath.Join(root, "data"),
 		BackupDir:   bkpPath,
@@ -258,7 +258,7 @@ func TestBackupHourly_BackupFails(t *testing.T) {
 	// The backup dir is nested under the file — MkdirAll will fail.
 	bkpDir := filepath.Join(parentFile, "backup")
 	cfg := BackupConfig{
-		ProjectName: "pastebin",
+		ProjectName: "cairnbin",
 		ConfigDir:   filepath.Join(root, "config"),
 		DataDir:     filepath.Join(root, "data"),
 		BackupDir:   bkpDir,
@@ -282,7 +282,7 @@ func TestApplyRetention_RemoveFailsGracefully(t *testing.T) {
 	dir := t.TempDir()
 	// Create 3 backup files.
 	for _, date := range []string{"2025-01-01", "2025-01-02", "2025-01-03"} {
-		name := filepath.Join(dir, "pastebin_backup_"+date+".tar.gz")
+		name := filepath.Join(dir, "cairnbin_backup_"+date+".tar.gz")
 		if err := os.WriteFile(name, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -293,7 +293,7 @@ func TestApplyRetention_RemoveFailsGracefully(t *testing.T) {
 	}
 	defer os.Chmod(dir, 0o750)
 	// applyRetention logs the error and returns nil even if removes fail.
-	err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "pastebin", Retention: BackupRetention{MaxBackups: 1}})
+	err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{MaxBackups: 1}})
 	if err != nil {
 		t.Errorf("applyRetention should return nil even when remove fails, got: %v", err)
 	}
@@ -305,11 +305,11 @@ func TestApplyRetention_RemoveFailsGracefully(t *testing.T) {
 // technically valid — it means keep 0 daily backups but we exercise the branch.
 func TestApplyRetention_ZeroMaxBackupsKeepsNone(t *testing.T) {
 	dir := t.TempDir()
-	name := filepath.Join(dir, "pastebin_backup_2025-01-01.tar.gz")
+	name := filepath.Join(dir, "cairnbin_backup_2025-01-01.tar.gz")
 	if err := os.WriteFile(name, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "pastebin", Retention: BackupRetention{MaxBackups: 0}}); err != nil {
+	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{MaxBackups: 0}}); err != nil {
 		t.Fatalf("applyRetention with MaxBackups=0: %v", err)
 	}
 	// With MaxBackups=0, all daily backups are pruned.
@@ -327,15 +327,15 @@ func TestApplyRetention_ZeroMaxBackupsKeepsNone(t *testing.T) {
 func TestApplyRetention_NonMatchingFilesIgnored(t *testing.T) {
 	dir := t.TempDir()
 	// Rolling files that must survive.
-	for _, name := range []string{"pastebin-daily.tar.gz", "pastebin-hourly.tar.gz", "README.txt"} {
+	for _, name := range []string{"cairnbin-daily.tar.gz", "cairnbin-hourly.tar.gz", "README.txt"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "pastebin", Retention: BackupRetention{MaxBackups: 1}}); err != nil {
+	if err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{MaxBackups: 1}}); err != nil {
 		t.Fatalf("applyRetention: %v", err)
 	}
-	for _, name := range []string{"pastebin-daily.tar.gz", "pastebin-hourly.tar.gz", "README.txt"} {
+	for _, name := range []string{"cairnbin-daily.tar.gz", "cairnbin-hourly.tar.gz", "README.txt"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Errorf("file %s should not have been removed: %v", name, err)
 		}

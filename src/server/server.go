@@ -32,31 +32,31 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/cache"
-	"github.com/apimgr/pastebin/src/common/buildinfo"
-	"github.com/apimgr/pastebin/src/common/email"
-	"github.com/apimgr/pastebin/src/common/httputil"
-	"github.com/apimgr/pastebin/src/common/i18n"
-	"github.com/apimgr/pastebin/src/common/theme"
-	"github.com/apimgr/pastebin/src/path"
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/geoip"
-	"github.com/apimgr/pastebin/src/graphql"
-	"github.com/apimgr/pastebin/src/handler"
-	"github.com/apimgr/pastebin/src/handler/compat"
-	"github.com/apimgr/pastebin/src/health"
-	"github.com/apimgr/pastebin/src/i2p"
-	"github.com/apimgr/pastebin/src/logging"
-	"github.com/apimgr/pastebin/src/mcp"
-	"github.com/apimgr/pastebin/src/metric"
-	"github.com/apimgr/pastebin/src/mode"
-	"github.com/apimgr/pastebin/src/model"
-	"github.com/apimgr/pastebin/src/notify"
-	"github.com/apimgr/pastebin/src/ssl"
-	"github.com/apimgr/pastebin/src/swagger"
-	"github.com/apimgr/pastebin/src/tor"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/cache"
+	"github.com/apimgr/cairnbin/src/common/buildinfo"
+	"github.com/apimgr/cairnbin/src/common/email"
+	"github.com/apimgr/cairnbin/src/common/httputil"
+	"github.com/apimgr/cairnbin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/common/theme"
+	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/geoip"
+	"github.com/apimgr/cairnbin/src/graphql"
+	"github.com/apimgr/cairnbin/src/handler"
+	"github.com/apimgr/cairnbin/src/handler/compat"
+	"github.com/apimgr/cairnbin/src/health"
+	"github.com/apimgr/cairnbin/src/i2p"
+	"github.com/apimgr/cairnbin/src/logging"
+	"github.com/apimgr/cairnbin/src/mcp"
+	"github.com/apimgr/cairnbin/src/metric"
+	"github.com/apimgr/cairnbin/src/mode"
+	"github.com/apimgr/cairnbin/src/model"
+	"github.com/apimgr/cairnbin/src/notify"
+	"github.com/apimgr/cairnbin/src/ssl"
+	"github.com/apimgr/cairnbin/src/swagger"
+	"github.com/apimgr/cairnbin/src/tor"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	qrcode "github.com/skip2/go-qrcode"
@@ -339,7 +339,7 @@ func (s *Server) auditLog(r *http.Request, e audit.Entry) {
 // SetPrivilegeDrop registers the service user/group and the runtime paths to chown
 // before dropping privileges. Call from main after constructing the server and
 // resolving all runtime directories, before Run. A nil/empty user means the default
-// service account ("pastebin"); the drop is a no-op when not running as root.
+// service account ("cairnbin"); the drop is a no-op when not running as root.
 func (s *Server) SetPrivilegeDrop(user, group string, chownPaths []string) {
 	s.privDrop = &privDropConfig{user: user, group: group, chown: chownPaths}
 }
@@ -479,7 +479,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 
 	// Webhook dispatcher for outbound role notifications (PART 17).
 	s.notifier = notify.New(notify.Meta{
-		ProjectName:    "pastebin",
+		ProjectName:    "cairnbin",
 		ProjectVersion: version,
 		AppURL:         cfg.Server.BaseURL,
 	}, nil)
@@ -579,7 +579,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		VirtualPort:               cfg.Server.Tor.VirtualPort,
 		ConfigDir:                 configDir,
 		DataDir:                   dataDir,
-		LogDir:                    path.GetLogsDir("pastebin"),
+		LogDir:                    path.GetLogsDir("cairnbin"),
 	}
 	// Forward the hidden service to the server's real HTTP listener. Port may be a
 	// dual "http,https" value (PART 5/15); the onion maps :virtual → the plaintext
@@ -867,7 +867,7 @@ const userDateLayout = "January 2, 2006"
 // ownerTokenCookieName is the project-unique browser storage name for the
 // resource-owner token cookie (and, in app.js, the matching localStorage key).
 // Per AI.md PART 11 "Naming": both MUST share this exact {project_name}_owner_token_XXXXXX
-// name — fixed suffix recorded in IDEA.md (`owner_token: pastebin_owner_token_rU3uW5Ze`).
+// name — fixed suffix recorded in IDEA.md (`owner_token: cairnbin_owner_token_rU3uW5Ze`).
 const ownerTokenCookieName = ownerCookieName
 
 // fmtUserTime renders t in the canonical user-facing timestamp format in the
@@ -1652,7 +1652,7 @@ func (s *Server) requireOperatorToken(next http.Handler) http.Handler {
 		if incoming == "" {
 			metric.AuthAttemptsTotal.WithLabelValues(source, "failure").Inc()
 			s.authLog(r, "operator", "fail", "missing_bearer_token")
-			w.Header().Set("WWW-Authenticate", `Bearer realm="pastebin"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="cairnbin"`)
 			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
 				"ok": false, "error": "UNAUTHORIZED", "message": "operator token required",
 			})
@@ -1671,7 +1671,7 @@ func (s *Server) requireOperatorToken(next http.Handler) http.Handler {
 		if subtle.ConstantTimeCompare(incomingHash[:], s.operatorTokenHash[:]) != 1 {
 			metric.AuthAttemptsTotal.WithLabelValues(source, "failure").Inc()
 			s.authLog(r, "operator", "fail", "invalid_token")
-			w.Header().Set("WWW-Authenticate", `Bearer realm="pastebin"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="cairnbin"`)
 			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
 				"ok": false, "error": "UNAUTHORIZED", "message": "operator token required",
 			})
@@ -3203,7 +3203,7 @@ func (s *Server) handleAPIInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok": true,
 		"data": map[string]interface{}{
-			"name":    "Pastebin API",
+			"name":    "Cairnbin API",
 			"version": s.version,
 			"endpoints": map[string]interface{}{
 				"native": map[string]string{
@@ -3278,7 +3278,7 @@ func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 		"ok": true,
 		"data": map[string]interface{}{
 			// Server identity
-			"server":      "pastebin",
+			"server":      "cairnbin",
 			"version":     s.version,
 			"api_version": s.apiVersion(),
 			"base_url":    base,
@@ -3400,7 +3400,7 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 
 	// Guest preferences (AI.md 23485: results-per-page, sort order): an
 	// explicit query param always wins and is persisted back to the
-	// pastebin_pref_{sort,order,per_page} cookies; otherwise fall back to
+	// cairnbin_pref_{sort,order,per_page} cookies; otherwise fall back to
 	// the visitor's saved preference, then the hard default.
 	prefs := appPreferencesFromRequest(r)
 
@@ -3493,7 +3493,7 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 //
 // Priority order:
 //  1. Explicit Accept header overrides UA detection.
-//  2. Our CLI client (pastebin-cli/) → "json" (INTERACTIVE, renders its own TUI).
+//  2. Our CLI client (cairnbin-cli/) → "json" (INTERACTIVE, renders its own TUI).
 //  3. Text browsers (lynx, w3m, etc.) → "html" (INTERACTIVE, no JavaScript).
 //  4. HTTP tools (curl, wget, empty UA) → "text" (NON-INTERACTIVE, dump output).
 //  5. Anything else (regular browsers) → "html".
@@ -4562,7 +4562,7 @@ func nextTheme(cur string) string {
 // handlePreferencesSet is the single POST endpoint behind every no-JS
 // preference control on /server/preferences (AI.md 23489: "the server sets
 // the same cookies on its POST endpoints"). It persists the `theme` cookie
-// and any `pastebin_pref_*` fields present on the form, then redirects back
+// and any `cairnbin_pref_*` fields present on the form, then redirects back
 // so each control feels in-place. The theme cookie is server-readable so the
 // next render emits the correct class on <html> with no FOUC (AI.md 21588,
 // 23294, 24084).
@@ -4650,7 +4650,7 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"name":             s.liveCfg().Web.SiteTitle,
 		"short_name":       "Paste",
-		"description":      "A fast, public pastebin service",
+		"description":      "A fast, public cairnbin service",
 		"start_url":        "/?source=pwa",
 		"scope":            "/",
 		"display":          "standalone",
@@ -4680,9 +4680,9 @@ func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
 	// The full build stamp changes for every build, including builds in the
 	// same release channel, so controlled browsers install the matching worker.
 	w.Header().Set("ETag", `"`+stamp+`"`)
-	sw := fmt.Sprintf(`// Pastebin Service Worker — build %s
+	sw := fmt.Sprintf(`// Cairnbin Service Worker — build %s
 const CACHE_VERSION = %q;
-const CACHE_NAME = 'pastebin-cache-' + CACHE_VERSION;
+const CACHE_NAME = 'cairnbin-cache-' + CACHE_VERSION;
 const PRECACHE_ASSETS = [
   '/',
   '/create',
@@ -4711,7 +4711,7 @@ self.addEventListener('activate', event => {
     caches.keys()
       .then(keys => Promise.all(
         keys
-          .filter(k => k.startsWith('pastebin-cache-') && k !== CACHE_NAME)
+          .filter(k => k.startsWith('cairnbin-cache-') && k !== CACHE_NAME)
           .map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
@@ -5230,7 +5230,7 @@ func (s *Server) injectFooterData(data map[string]interface{}) {
 
 // Project identity used by the footer variables; fixed regardless of binary rename.
 const (
-	footerProjectName = "pastebin"
+	footerProjectName = "cairnbin"
 	footerProjectOrg  = "apimgr"
 )
 

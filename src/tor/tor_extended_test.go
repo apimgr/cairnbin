@@ -453,8 +453,8 @@ func TestConfig_AllFieldsSettable(t *testing.T) {
 		MaxMonthlyBandwidth:       "100 GB",
 		NumIntroPoints:            3,
 		VirtualPort:               80,
-		ConfigDir:                 "/etc/pastebin",
-		DataDir:                   "/var/lib/pastebin",
+		ConfigDir:                 "/etc/cairnbin",
+		DataDir:                   "/var/lib/cairnbin",
 	}
 	m := NewManager(context.Background(), 8080, cfg, http.NewServeMux())
 	if m.cfg != cfg {

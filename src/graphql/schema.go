@@ -1,4 +1,4 @@
-// Package graphql provides a read-only GraphQL endpoint for the pastebin API.
+// Package graphql provides a read-only GraphQL endpoint for the cairnbin API.
 // Supported queries: paste(id: ID!) and pastes(page: Int, limit: Int).
 // Mutations are intentionally absent; use the REST API for create and delete.
 package graphql

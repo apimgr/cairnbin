@@ -11,14 +11,14 @@ import (
 )
 
 func TestDownloadAndApplyUpdateVerifiesReplacesAndReexecutes(t *testing.T) {
-	newBinary := []byte("updated pastebin cli")
+	newBinary := []byte("updated cairnbin cli")
 	sum := sha256.Sum256(newBinary)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(newBinary)
 	}))
 	defer server.Close()
 
-	executable := filepath.Join(t.TempDir(), "pastebin-cli")
+	executable := filepath.Join(t.TempDir(), "cairnbin-cli")
 	if err := os.WriteFile(executable, []byte("old binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestDownloadAndApplyUpdateRejectsBadChecksumBeforeReplacement(t *testing.T)
 	}))
 	defer server.Close()
 
-	executable := filepath.Join(t.TempDir(), "pastebin-cli")
+	executable := filepath.Join(t.TempDir(), "cairnbin-cli")
 	if err := os.WriteFile(executable, []byte("old binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}

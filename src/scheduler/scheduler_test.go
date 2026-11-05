@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/model"
-	"github.com/apimgr/pastebin/src/scheduler"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/model"
+	"github.com/apimgr/cairnbin/src/scheduler"
 )
 
 // ── Minimal DB mock ──────────────────────────────────────────────────────────

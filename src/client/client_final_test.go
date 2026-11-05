@@ -97,7 +97,7 @@ func TestDetectMode_ExplicitGUIOverride(t *testing.T) {
 }
 
 func TestDetectMode_ExplicitGUIOverrideLosesToCommand(t *testing.T) {
-	// A command argument must beat display.mode: gui — `pastebin-cli list`
+	// A command argument must beat display.mode: gui — `cairnbin-cli list`
 	// with GUI forced has to print a list, not open a window. Same for a flag
 	// outside the config allowlist.
 	for _, args := range [][]string{
@@ -600,7 +600,7 @@ func TestSaveIfEmptyOrInvalid_Table(t *testing.T) {
 // ─── envOrDefault — comprehensive coverage ───────────────────────────────────
 
 func TestEnvOrDefault_Table(t *testing.T) {
-	envKey := "TEST_PASTEBIN_CLI_ENV_TABLE"
+	envKey := "TEST_CAIRNBIN_CLI_ENV_TABLE"
 
 	cases := []struct {
 		envVal string

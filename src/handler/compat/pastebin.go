@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/handler"
-	"github.com/apimgr/pastebin/src/metric"
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/handler"
+	"github.com/apimgr/cairnbin/src/metric"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // ─── pastebin.com compatibility ───────────────────────────────────────────────

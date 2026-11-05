@@ -20,8 +20,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/handler"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/handler"
 )
 
 // errCompatBodyTooLarge is returned by parseFormLimited when the request body

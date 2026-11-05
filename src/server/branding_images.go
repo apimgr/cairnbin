@@ -20,7 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/common/urlutil"
+	"github.com/apimgr/cairnbin/src/common/urlutil"
 )
 
 // brandingSourceKind identifies where a configured branding image value

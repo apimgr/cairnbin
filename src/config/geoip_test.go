@@ -6,7 +6,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 	"gopkg.in/yaml.v3"
 )
 

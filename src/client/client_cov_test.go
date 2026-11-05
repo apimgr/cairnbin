@@ -384,8 +384,8 @@ func TestCmdGet_UserAgentHeader(t *testing.T) {
 	c := &client{server: srv.URL}
 	c.cmdGet([]string{"abc"})
 
-	if !strings.HasPrefix(gotUA, "pastebin-cli/") {
-		t.Errorf("User-Agent = %q; want pastebin-cli/...", gotUA)
+	if !strings.HasPrefix(gotUA, "cairnbin-cli/") {
+		t.Errorf("User-Agent = %q; want cairnbin-cli/...", gotUA)
 	}
 }
 
@@ -579,8 +579,8 @@ func TestCheckCLIUpdate_SendsUserAgentHeader(t *testing.T) {
 
 	checkCLIUpdate(srv.URL, "")
 
-	if gotUA != "pastebin-cli/2.1.0" {
-		t.Errorf("User-Agent = %q; want pastebin-cli/2.1.0", gotUA)
+	if gotUA != "cairnbin-cli/2.1.0" {
+		t.Errorf("User-Agent = %q; want cairnbin-cli/2.1.0", gotUA)
 	}
 }
 
@@ -622,8 +622,8 @@ func TestIsValidURL_HTTPWithPort(t *testing.T) {
 // ─── envOrDefault — empty string treated as unset ────────────────────────────
 
 func TestEnvOrDefault_EmptyValueUsesDefault(t *testing.T) {
-	t.Setenv("TEST_PASTEBIN_EMPTY_VAR", "")
-	got := envOrDefault("TEST_PASTEBIN_EMPTY_VAR", "default-value")
+	t.Setenv("TEST_CAIRNBIN_EMPTY_VAR", "")
+	got := envOrDefault("TEST_CAIRNBIN_EMPTY_VAR", "default-value")
 	if got != "default-value" {
 		t.Errorf("empty env should use default, got %q", got)
 	}
@@ -785,8 +785,8 @@ func TestCmdDelete_UserAgentHeader(t *testing.T) {
 	c := &client{server: srv.URL}
 	c.cmdDelete([]string{"id1", "tok1"})
 
-	if !strings.HasPrefix(gotUA, "pastebin-cli/") {
-		t.Errorf("User-Agent = %q; want pastebin-cli/...", gotUA)
+	if !strings.HasPrefix(gotUA, "cairnbin-cli/") {
+		t.Errorf("User-Agent = %q; want cairnbin-cli/...", gotUA)
 	}
 }
 
@@ -814,8 +814,8 @@ func TestCmdCreate_ContentTypeAndUserAgent(t *testing.T) {
 	if gotCT != "application/json" {
 		t.Errorf("Content-Type = %q; want application/json", gotCT)
 	}
-	if !strings.HasPrefix(gotUA, "pastebin-cli/") {
-		t.Errorf("User-Agent = %q; want pastebin-cli/...", gotUA)
+	if !strings.HasPrefix(gotUA, "cairnbin-cli/") {
+		t.Errorf("User-Agent = %q; want cairnbin-cli/...", gotUA)
 	}
 }
 

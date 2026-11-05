@@ -200,8 +200,8 @@ func TestFormatJSONLine(t *testing.T) {
 
 func TestFormatSyslog(t *testing.T) {
 	ts := time.Date(2026, 5, 13, 10, 58, 0, 0, time.UTC)
-	got := FormatSyslog(ts, "hostname", "pastebin", 123, "auth: token_id=xxx ip=1.2.3.4 result=fail reason=invalid_token")
-	want := "May 13 10:58:00 hostname pastebin[123]: auth: token_id=xxx ip=1.2.3.4 result=fail reason=invalid_token"
+	got := FormatSyslog(ts, "hostname", "cairnbin", 123, "auth: token_id=xxx ip=1.2.3.4 result=fail reason=invalid_token")
+	want := "May 13 10:58:00 hostname cairnbin[123]: auth: token_id=xxx ip=1.2.3.4 result=fail reason=invalid_token"
 	if got != want {
 		t.Errorf("syslog:\n got %s\nwant %s", got, want)
 	}

@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/apimgr/pastebin/src/metric"
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/metric"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // ─── hastebin / haste-server compatibility ──────────────────────────────────

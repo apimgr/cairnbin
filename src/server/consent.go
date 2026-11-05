@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"html/template"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // consentClientConfig is the client-side consent configuration serialized into

@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/mode"
+	"github.com/apimgr/cairnbin/src/mode"
 )
 
 // resetMode restores the global mode to Production and debug to false after

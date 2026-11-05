@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 func newAbuseServer(readLimit, multiplier int) *Server {

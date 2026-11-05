@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/swagger"
+	"github.com/apimgr/cairnbin/src/swagger"
 )
 
 // ─── New ─────────────────────────────────────────────────────────────────────
@@ -26,8 +26,8 @@ func TestNew(t *testing.T) {
 		version string
 		baseURL string
 	}{
-		{"all fields", "Pastebin API", "1.2.3", "https://example.com"},
-		{"empty baseURL", "Pastebin", "0.1.0", ""},
+		{"all fields", "Cairnbin API", "1.2.3", "https://example.com"},
+		{"empty baseURL", "Cairnbin", "0.1.0", ""},
 		{"empty title", "", "1.0.0", "https://example.com"},
 		{"all empty", "", "", ""},
 	}
@@ -376,7 +376,7 @@ func TestServeSpec_CacheControlHeader(t *testing.T) {
 
 // TestServeUI_StatusAndContentType verifies the HTTP status and Content-Type.
 func TestServeUI_StatusAndContentType(t *testing.T) {
-	h := swagger.New("Pastebin", "1.0.0", "https://example.com", "")
+	h := swagger.New("Cairnbin", "1.0.0", "https://example.com", "")
 	req := httptest.NewRequest(http.MethodGet, "/server/swagger", nil)
 	rec := httptest.NewRecorder()
 
@@ -395,7 +395,7 @@ func TestServeUI_StatusAndContentType(t *testing.T) {
 // TestServeUI_BodyContainsSwagger confirms the HTML body contains "swagger"
 // (case-insensitive), proving the UI page was rendered.
 func TestServeUI_BodyContainsSwagger(t *testing.T) {
-	h := swagger.New("Pastebin", "1.0.0", "https://example.com", "")
+	h := swagger.New("Cairnbin", "1.0.0", "https://example.com", "")
 	req := httptest.NewRequest(http.MethodGet, "/server/swagger", nil)
 	rec := httptest.NewRecorder()
 

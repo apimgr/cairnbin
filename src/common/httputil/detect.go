@@ -7,7 +7,7 @@ import (
 )
 
 // projectName is the CLI binary prefix used in User-Agent detection.
-const projectName = "pastebin"
+const projectName = "cairnbin"
 
 // ctxKeyTxtExtension is a private context key set by the txt-extension middleware.
 type ctxKeyTxtExtension struct{}
@@ -24,7 +24,7 @@ func hasTxtExtension(r *http.Request) bool {
 	return v
 }
 
-// IsOurCliClient detects our own client binary (pastebin-cli).
+// IsOurCliClient detects our own client binary (cairnbin-cli).
 // Our client is INTERACTIVE (TUI/GUI) — receives JSON and renders itself.
 func IsOurCliClient(r *http.Request) bool {
 	ua := r.Header.Get("User-Agent")

@@ -23,12 +23,12 @@ import (
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 
-	"github.com/apimgr/pastebin/src/common/secretbox"
-	"github.com/apimgr/pastebin/src/logging"
-	"github.com/apimgr/pastebin/src/updater"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/logging"
+	"github.com/apimgr/cairnbin/src/updater"
 )
 
-// Config is the top-level configuration for the pastebin server.
+// Config is the top-level configuration for the cairnbin server.
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
@@ -706,7 +706,7 @@ type MetricsConfig struct {
 	Endpoint string `yaml:"endpoint"`
 	// IncludeSystem exposes system_* gauges (CPU, memory, disk) when true.
 	IncludeSystem bool `yaml:"include_system"`
-	// IncludeRuntime exposes pastebin_go_* runtime gauges when true.
+	// IncludeRuntime exposes cairnbin_go_* runtime gauges when true.
 	IncludeRuntime bool   `yaml:"include_runtime"`
 	Token          string `yaml:"token"`
 	// Auth carries the per-service tokens and the unauthenticated escape
@@ -1355,7 +1355,7 @@ type BrandingLink struct {
 // when an operator leaves a branding field empty.
 const (
 	defaultBrandingTagline     = "A fast, public paste sharing service — no account required."
-	defaultBrandingDescription = "Pastebin is a fast, public paste sharing service. Share code snippets, configuration files, logs, and any text content instantly — no account required. It is a drop-in replacement for pastebin.com, microbin, and lenpaste, so existing scripts work without changes."
+	defaultBrandingDescription = "Cairnbin is a fast, public paste sharing service. Share code snippets, configuration files, logs, and any text content instantly — no account required. It is a drop-in replacement for pastebin.com, microbin, and lenpaste, so existing scripts work without changes."
 )
 
 // defaultBrandingFeatures is the real feature list drawn from the IDEA.md in-scope
@@ -1373,7 +1373,7 @@ var defaultBrandingFeatures = []string{
 
 // defaultBrandingLinks is the real link list drawn from IDEA.md (PART 16).
 var defaultBrandingLinks = []BrandingLink{
-	{Label: "Source", URL: "https://github.com/apimgr/pastebin"},
+	{Label: "Source", URL: "https://github.com/apimgr/cairnbin"},
 	{Label: "apimgr", URL: "https://github.com/apimgr"},
 }
 
@@ -1382,7 +1382,7 @@ func (b BrandingConfig) EffectiveTitle() string {
 	if v := strings.TrimSpace(b.Title); v != "" {
 		return v
 	}
-	return "Pastebin"
+	return "Cairnbin"
 }
 
 // EffectiveTagline returns the configured tagline or the IDEA.md default.
@@ -1643,7 +1643,7 @@ func DefaultConfig() *Config {
 			APIVersion: "v1",
 			Tokens:     OwnerTokensConfig{MaxLinked: 25, CookieMaxAge: "1y"},
 			Branding: BrandingConfig{
-				Title:       "Pastebin",
+				Title:       "Cairnbin",
 				Tagline:     defaultBrandingTagline,
 				Description: defaultBrandingDescription,
 				Features:    defaultBrandingFeatures,
@@ -1892,7 +1892,7 @@ func DefaultConfig() *Config {
 				PoolSize: 10,
 				MinIdle:  2,
 				Timeout:  "5s",
-				Prefix:   "pastebin:",
+				Prefix:   "cairnbin:",
 				TTL:      "1h",
 			},
 			Limits: LimitsConfig{
@@ -2046,7 +2046,7 @@ func DefaultConfig() *Config {
 			AllowUnlisted:   true,
 		},
 		Web: WebConfig{
-			SiteTitle: "Pastebin",
+			SiteTitle: "Cairnbin",
 			Theme:     "dark",
 			Robots: RobotsConfig{
 				Allow: []string{"/"},
@@ -2280,10 +2280,10 @@ func (c *Config) DecryptDNSCredentials() (map[string]string, error) {
 }
 
 // projectName is the AI.md {project_name} placeholder (PART 12 dynamic
-// project TLD, e.g. "app.pastebin"). The config package cannot import
+// project TLD, e.g. "app.cairnbin"). The config package cannot import
 // package main (which owns the appName constant) without an import cycle,
 // so the literal is duplicated here.
-const projectName = "pastebin"
+const projectName = "cairnbin"
 
 // devModeForValidation reports whether host validation should apply
 // development-mode relaxations (PART 12). It reflects config.Server.Mode as
@@ -2310,7 +2310,7 @@ func (c *Config) fqdn() string {
 	if h, err := os.Hostname(); err == nil {
 		if h = strings.TrimSpace(h); h != "" && !strings.EqualFold(h, "localhost") {
 			// A bare container/host name (e.g. Docker's auto-assigned
-			// short hostname "pastebin") is not a usable public FQDN —
+			// short hostname "cairnbin") is not a usable public FQDN —
 			// validate it the same way the $HOSTNAME env var below is
 			// validated, and fall through to the next source on failure.
 			if IsValidHost(h, devMode, projectName) {
@@ -2444,12 +2444,12 @@ func (c *Config) PublishPGPKeyEnabled() bool {
 
 // SecurityReportURL returns the primary security.txt Contact line — the repo's
 // GitHub private vulnerability reporting URL, listed first per RFC 9116 (PART
-// 11). Falls back to the canonical apimgr/pastebin advisories endpoint.
+// 11). Falls back to the canonical apimgr/cairnbin advisories endpoint.
 func (c *Config) SecurityReportURL() string {
 	if u := strings.TrimSpace(c.Web.Security.ReportURL); u != "" {
 		return u
 	}
-	return "https://github.com/apimgr/pastebin/security/advisories/new"
+	return "https://github.com/apimgr/cairnbin/security/advisories/new"
 }
 
 // SecurityPreferredLanguages returns the security.txt Preferred-Languages value
@@ -2643,12 +2643,12 @@ func (c *Config) loadEnv() {
 	if v := os.Getenv("MODE"); v != "" {
 		c.Server.Mode = v
 	}
-	// PART 8: the canonical env override is {PROJECT_NAME}_PORT (PASTEBIN_PORT);
-	// PORT is the generic docker alias. PASTEBIN_PORT wins when both are set.
+	// PART 8: the canonical env override is {PROJECT_NAME}_PORT (CAIRNBIN_PORT);
+	// PORT is the generic docker alias. CAIRNBIN_PORT wins when both are set.
 	if v := os.Getenv("PORT"); v != "" {
 		c.Server.Port = v
 	}
-	if v := os.Getenv("PASTEBIN_PORT"); v != "" {
+	if v := os.Getenv("CAIRNBIN_PORT"); v != "" {
 		c.Server.Port = v
 	}
 	// LISTEN is the AI.md-canonical name (PART 5); ADDRESS is an accepted alias.
@@ -3314,7 +3314,7 @@ func SetB32Address(path, addr string) error {
 // ResolvePort finalises cfg.Server.Port according to the PART 5 / PART 8 rules.
 // Precedence (highest first):
 //
-//   - Explicit --port flag / $PASTEBIN_PORT / $PORT env / config file value → use as-is
+//   - Explicit --port flag / $CAIRNBIN_PORT / $PORT env / config file value → use as-is
 //   - No port configured (empty), container environment → "80" (docker default)
 //   - No port configured (empty), non-container → pick a random unused port in
 //     64000-64999, persist it to cfgPath so subsequent restarts use the same port

@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/task"
+	"github.com/apimgr/cairnbin/src/task"
 )
 
 // ─── BlocklistUpdate ──────────────────────────────────────────────────────────
@@ -296,7 +296,7 @@ func TestBackupDaily_CreatesBackup(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "pastebin",
+		ProjectName: "cairnbin",
 		ConfigDir:   cfgDir,
 		DataDir:     dataDir,
 		BackupDir:   bkpDir,
@@ -333,7 +333,7 @@ func TestBackupDaily_WithEncryption(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "pastebin",
+		ProjectName: "cairnbin",
 		ConfigDir:   cfgDir,
 		DataDir:     dataDir,
 		BackupDir:   bkpDir,
@@ -370,7 +370,7 @@ func TestBackupDaily_WithRetentionAndMultipleRuns(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "pastebin",
+		ProjectName: "cairnbin",
 		ConfigDir:   cfgDir,
 		DataDir:     dataDir,
 		BackupDir:   bkpDir,
@@ -405,7 +405,7 @@ func TestBackupHourly_CreatesRollingBackup(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "pastebin",
+		ProjectName: "cairnbin",
 		ConfigDir:   cfgDir,
 		DataDir:     dataDir,
 		BackupDir:   bkpDir,
@@ -417,7 +417,7 @@ func TestBackupHourly_CreatesRollingBackup(t *testing.T) {
 	}
 
 	// The hourly backup file should exist.
-	hourlyPath := filepath.Join(bkpDir, "pastebin-hourly.tar.gz")
+	hourlyPath := filepath.Join(bkpDir, "cairnbin-hourly.tar.gz")
 	if _, err := os.Stat(hourlyPath); err != nil {
 		t.Errorf("expected hourly backup at %s: %v", hourlyPath, err)
 	}
@@ -438,7 +438,7 @@ func TestBackupHourly_WithEncryption(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "pastebin",
+		ProjectName: "cairnbin",
 		ConfigDir:   cfgDir,
 		DataDir:     dataDir,
 		BackupDir:   bkpDir,
@@ -450,7 +450,7 @@ func TestBackupHourly_WithEncryption(t *testing.T) {
 		t.Fatalf("BackupHourly with encryption error: %v", err)
 	}
 
-	hourlyPath := filepath.Join(bkpDir, "pastebin-hourly.tar.gz.enc")
+	hourlyPath := filepath.Join(bkpDir, "cairnbin-hourly.tar.gz.enc")
 	if _, err := os.Stat(hourlyPath); err != nil {
 		t.Errorf("expected encrypted hourly backup at %s: %v", hourlyPath, err)
 	}

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 func newTestAuthorizer(t *testing.T, token string, stdin string) (*authorizer, *bytes.Buffer) {
@@ -19,7 +19,7 @@ func newTestAuthorizer(t *testing.T, token string, stdin string) (*authorizer, *
 	cfg.Server.Token = token
 	stderr := &bytes.Buffer{}
 	return &authorizer{
-		opts:          AuthOptions{ServiceUser: "pastebin"},
+		opts:          AuthOptions{ServiceUser: "cairnbin"},
 		cfg:           cfg,
 		stdin:         strings.NewReader(stdin),
 		stderr:        stderr,
@@ -41,7 +41,7 @@ func TestAuthorizeDataOp_Root(t *testing.T) {
 
 func TestAuthorizeDataOp_ServiceUserWithValidToken(t *testing.T) {
 	a, _ := newTestAuthorizer(t, "sekret", "sekret\n")
-	a.currentUserFn = func() (string, error) { return "pastebin", nil }
+	a.currentUserFn = func() (string, error) { return "cairnbin", nil }
 	if err := a.authorizeDataOp(); err != nil {
 		t.Errorf("service user with valid token should be authorized, got %v", err)
 	}
@@ -49,7 +49,7 @@ func TestAuthorizeDataOp_ServiceUserWithValidToken(t *testing.T) {
 
 func TestAuthorizeDataOp_ServiceUserWithInvalidToken(t *testing.T) {
 	a, _ := newTestAuthorizer(t, "sekret", "wrong\n")
-	a.currentUserFn = func() (string, error) { return "pastebin", nil }
+	a.currentUserFn = func() (string, error) { return "cairnbin", nil }
 	if err := a.authorizeDataOp(); err == nil {
 		t.Error("expected error for mismatched operator token")
 	}
@@ -57,7 +57,7 @@ func TestAuthorizeDataOp_ServiceUserWithInvalidToken(t *testing.T) {
 
 func TestAuthorizeDataOp_ServiceUserNoTokenConfigured(t *testing.T) {
 	a, _ := newTestAuthorizer(t, "", "")
-	a.currentUserFn = func() (string, error) { return "pastebin", nil }
+	a.currentUserFn = func() (string, error) { return "cairnbin", nil }
 	if err := a.authorizeDataOp(); err == nil {
 		t.Error("expected error when operator token is not configured")
 	}
@@ -140,7 +140,7 @@ func TestAuthorizeRestore_FirstRunBypass(t *testing.T) {
 
 func TestAuthorizeRestore_ServiceUserWithValidToken(t *testing.T) {
 	a, _ := newTestAuthorizer(t, "sekret", "sekret\n")
-	a.currentUserFn = func() (string, error) { return "pastebin", nil }
+	a.currentUserFn = func() (string, error) { return "cairnbin", nil }
 	if err := a.authorizeRestore(); err != nil {
 		t.Errorf("service user with valid token should be authorized, got %v", err)
 	}
@@ -168,7 +168,7 @@ func TestAuthorizeMode_RootWarnsAndAllows(t *testing.T) {
 
 func TestAuthorizeMode_ServiceUserWithValidToken(t *testing.T) {
 	a, _ := newTestAuthorizer(t, "sekret", "sekret\n")
-	a.currentUserFn = func() (string, error) { return "pastebin", nil }
+	a.currentUserFn = func() (string, error) { return "cairnbin", nil }
 	if err := a.authorizeMode(); err != nil {
 		t.Errorf("service user with valid token should be authorized, got %v", err)
 	}
@@ -185,9 +185,9 @@ func TestAuthorizeMode_UnrelatedUserRejected(t *testing.T) {
 
 func TestIsServiceUser_WindowsDomainPrefixStripped(t *testing.T) {
 	a, _ := newTestAuthorizer(t, "sekret", "")
-	a.currentUserFn = func() (string, error) { return `DOMAIN\pastebin`, nil }
+	a.currentUserFn = func() (string, error) { return `DOMAIN\cairnbin`, nil }
 	if !a.isServiceUser() {
-		t.Error("expected DOMAIN\\pastebin to match service user pastebin")
+		t.Error("expected DOMAIN\\cairnbin to match service user cairnbin")
 	}
 }
 

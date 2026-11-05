@@ -1,6 +1,6 @@
 # Integrations
 
-Pastebin is a drop-in replacement for [pastebin.com](https://pastebin.com), [microbin](https://microbin.eu), and [lenpaste](https://lenpaste.net). Existing clients and tools that target any of those services work without modification.
+Cairnbin is a drop-in replacement for [pastebin.com](https://pastebin.com), [microbin](https://microbin.eu), and [lenpaste](https://lenpaste.net). Existing clients and tools that target any of those services work without modification.
 
 ## Compatible APIs
 
@@ -92,4 +92,4 @@ None enabled: no Android App Links, Apple Universal Links, WebFinger, OpenID Pro
 
 ## CLI Tool
 
-See the [CLI Reference](cli.md) for the `pastebin-cli` tool.
+See the [CLI Reference](cli.md) for the `cairnbin-cli` tool.

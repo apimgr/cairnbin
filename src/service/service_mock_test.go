@@ -231,17 +231,17 @@ func TestReservedIDs_NonReservedRanges(t *testing.T) {
 // ─── Constants validation ────────────────────────────────────────────────────
 
 func TestConstants_Correctness(t *testing.T) {
-	if appName != "pastebin" {
-		t.Errorf("appName = %q; want 'pastebin'", appName)
+	if appName != "cairnbin" {
+		t.Errorf("appName = %q; want 'cairnbin'", appName)
 	}
 	if orgName != "apimgr" {
 		t.Errorf("orgName = %q; want 'apimgr'", orgName)
 	}
-	if serviceUser != "pastebin" {
-		t.Errorf("serviceUser = %q; want 'pastebin'", serviceUser)
+	if serviceUser != "cairnbin" {
+		t.Errorf("serviceUser = %q; want 'cairnbin'", serviceUser)
 	}
 
-	expectedLabel := "io.github.apimgr.pastebin"
+	expectedLabel := "io.github.apimgr.cairnbin"
 	if launchdLabel != expectedLabel {
 		t.Errorf("launchdLabel = %q; want %q", launchdLabel, expectedLabel)
 	}
@@ -309,32 +309,32 @@ func TestServicePaths_Format(t *testing.T) {
 		{
 			name:     "systemd unit",
 			pathFmt:  "/etc/systemd/system/%s.service",
-			expected: "/etc/systemd/system/pastebin.service",
+			expected: "/etc/systemd/system/cairnbin.service",
 		},
 		{
 			name:     "launchd plist",
 			pathFmt:  "/Library/LaunchDaemons/%s.plist",
-			expected: "/Library/LaunchDaemons/io.github.apimgr.pastebin.plist",
+			expected: "/Library/LaunchDaemons/io.github.apimgr.cairnbin.plist",
 		},
 		{
 			name:     "openrc init",
 			pathFmt:  "/etc/init.d/%s",
-			expected: "/etc/init.d/pastebin",
+			expected: "/etc/init.d/cairnbin",
 		},
 		{
 			name:     "sysv init",
 			pathFmt:  "/etc/init.d/%s",
-			expected: "/etc/init.d/pastebin",
+			expected: "/etc/init.d/cairnbin",
 		},
 		{
 			name:     "runit sv",
 			pathFmt:  "/etc/sv/%s",
-			expected: "/etc/sv/pastebin",
+			expected: "/etc/sv/cairnbin",
 		},
 		{
 			name:     "bsd rc.d",
 			pathFmt:  "/usr/local/etc/rc.d/%s",
-			expected: "/usr/local/etc/rc.d/pastebin",
+			expected: "/usr/local/etc/rc.d/cairnbin",
 		},
 	}
 

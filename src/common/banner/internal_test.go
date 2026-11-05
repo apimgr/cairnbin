@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/common/terminal"
+	"github.com/apimgr/cairnbin/src/common/terminal"
 )
 
 // TestPrintStartupBannerCompact verifies the compact banner path runs without panic.
 func TestPrintStartupBannerCompact(t *testing.T) {
 	cfg := BannerConfig{
-		AppName: "pastebin",
+		AppName: "cairnbin",
 		Version: "1.0.0",
 		AppMode: "production",
 		Debug:   false,
@@ -29,7 +29,7 @@ func TestPrintStartupBannerCompact(t *testing.T) {
 // TestPrintStartupBannerMinimal verifies the minimal banner path runs without panic.
 func TestPrintStartupBannerMinimal(t *testing.T) {
 	cfg := BannerConfig{
-		AppName: "pastebin",
+		AppName: "cairnbin",
 		Version: "1.0.0",
 		AppMode: "production",
 		URLs:    []string{"http://localhost:8080", "http://127.0.0.1:8080"},
@@ -40,7 +40,7 @@ func TestPrintStartupBannerMinimal(t *testing.T) {
 // TestPrintStartupBannerMicro verifies the micro banner path runs without panic.
 func TestPrintStartupBannerMicro(t *testing.T) {
 	cfg := BannerConfig{
-		AppName: "pastebin",
+		AppName: "cairnbin",
 		Version: "1.0.0",
 	}
 	printStartupBannerMicro(cfg)
@@ -49,7 +49,7 @@ func TestPrintStartupBannerMicro(t *testing.T) {
 // TestPrintStartupBannerFull_WithURLs verifies the full banner with URLs runs without panic.
 func TestPrintStartupBannerFull_WithURLs(t *testing.T) {
 	cfg := BannerConfig{
-		AppName: "pastebin",
+		AppName: "cairnbin",
 		Version: "1.0.0",
 		AppMode: "development",
 		Debug:   true,
@@ -62,7 +62,7 @@ func TestPrintStartupBannerFull_WithURLs(t *testing.T) {
 // TestPrintStartupBannerFull_NarrowWidth verifies the full banner at width=40 (padding clamped to 0).
 func TestPrintStartupBannerFull_NarrowWidth(t *testing.T) {
 	cfg := BannerConfig{
-		AppName: "pastebin",
+		AppName: "cairnbin",
 		Version: "1.0.0",
 		AppMode: "production",
 		URLs:    []string{},
@@ -75,7 +75,7 @@ func TestPrintStartupBannerFull_NarrowWidth(t *testing.T) {
 func TestPrintStartupBannerFull_NoColor_URLArrow(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	cfg := BannerConfig{
-		AppName: "pastebin",
+		AppName: "cairnbin",
 		Version: "1.0.0",
 		AppMode: "production",
 		URLs:    []string{"http://localhost:8080"},
@@ -167,7 +167,7 @@ func TestModeIconAndSuffix(t *testing.T) {
 // TestPrintStartupBannerMicro_FirstRun verifies the [SETUP] micro variant (AI.md:20115-20117).
 func TestPrintStartupBannerMicro_FirstRun(t *testing.T) {
 	cfg := BannerConfig{
-		AppName:   "pastebin",
+		AppName:   "cairnbin",
 		Version:   "1.0.0",
 		ListenURL: "http://0.0.0.0:8080",
 		FirstRun:  true,
@@ -178,7 +178,7 @@ func TestPrintStartupBannerMicro_FirstRun(t *testing.T) {
 // TestPrintStartupBannerPlain verifies the NO_COLOR/TERM=dumb variant runs without panic.
 func TestPrintStartupBannerPlain(t *testing.T) {
 	cfg := BannerConfig{
-		AppName:   "pastebin",
+		AppName:   "cairnbin",
 		Version:   "1.0.0",
 		AppMode:   "production",
 		Debug:     true,

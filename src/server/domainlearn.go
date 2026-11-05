@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 	"golang.org/x/net/publicsuffix"
 )
 

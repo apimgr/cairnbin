@@ -5,11 +5,11 @@ package geoip
 import "os"
 
 func skipInitialDownload() bool {
-	return os.Getenv("PASTEBIN_E2E_GEOIP_SKIP_INITIAL_DOWNLOAD") == "true"
+	return os.Getenv("CAIRNBIN_E2E_GEOIP_SKIP_INITIAL_DOWNLOAD") == "true"
 }
 
 func init() {
-	base := os.Getenv("PASTEBIN_E2E_GEOIP_BASE_URL")
+	base := os.Getenv("CAIRNBIN_E2E_GEOIP_BASE_URL")
 	if base == "" {
 		return
 	}

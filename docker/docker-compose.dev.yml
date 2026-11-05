@@ -1,9 +1,9 @@
 # nginx proxy address - http://172.17.0.1:64580
-# pastebin - development
+# cairnbin - development
 # FOR HUMAN USE ONLY - AI must never use this file directly.
 # Use temp dir workflow: cp docker/docker-compose.dev.yml $TEMP_DIR/docker-compose.yml
 
-name: pastebin
+name: cairnbin
 
 x-logging: &default-logging
   options:
@@ -12,11 +12,11 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  pastebin:
-    image: ghcr.io/apimgr/pastebin:devel
+  cairnbin:
+    image: ghcr.io/apimgr/cairnbin:devel
     pull_policy: always
-    container_name: pastebin-app
-    hostname: pastebin
+    container_name: cairnbin-app
+    hostname: cairnbin
     restart: always
     logging: *default-logging
     environment:
@@ -35,15 +35,15 @@ services:
       - './volumes/config:/config'
       - './volumes/data:/data'
     healthcheck:
-      test: ['CMD', '/usr/local/bin/pastebin', '--status']
+      test: ['CMD', '/usr/local/bin/cairnbin', '--status']
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 90s
     networks:
-      - pastebin
+      - cairnbin
 
 networks:
-  pastebin:
-    name: pastebin
+  cairnbin:
+    name: cairnbin
     external: false

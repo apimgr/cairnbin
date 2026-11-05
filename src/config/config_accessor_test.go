@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // ─── BrandingConfig accessors ─────────────────────────────────────────────────
@@ -18,8 +18,8 @@ import (
 func TestBrandingEffectiveTitle_Default(t *testing.T) {
 	var b config.BrandingConfig
 	got := b.EffectiveTitle()
-	if got != "Pastebin" {
-		t.Errorf("EffectiveTitle() = %q, want %q", got, "Pastebin")
+	if got != "Cairnbin" {
+		t.Errorf("EffectiveTitle() = %q, want %q", got, "Cairnbin")
 	}
 }
 

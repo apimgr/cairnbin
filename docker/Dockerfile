@@ -27,14 +27,14 @@ RUN mkdir -p /app/binary && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build "$@" \
     -buildvcs=false -trimpath \
     -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
-    -o /app/binary/pastebin ./src
+    -o /app/binary/cairnbin ./src
 
 # Build client binary if src/client/ exists
 RUN if [ -d ./src/client ]; then \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
         -buildvcs=false -trimpath \
         -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
-        -o /app/binary/pastebin-cli ./src/client; \
+        -o /app/binary/cairnbin-cli ./src/client; \
 fi
 
 # =============================================================================
@@ -70,7 +70,7 @@ RUN apk upgrade --no-cache && \
 # This allows users to override CONFIG_DIR, DATA_DIR, etc.
 # Docker volume mounts auto-create mount points
 
-# Copy all built binaries from builder stage (pastebin and pastebin-cli if built)
+# Copy all built binaries from builder stage (cairnbin and cairnbin-cli if built)
 COPY --from=builder /app/binary/ /usr/local/bin/
 
 # Copy BUILD-TIME overlay (entrypoint.sh) from docker/rootfs/ into image
@@ -99,7 +99,7 @@ STOPSIGNAL SIGRTMIN+3
 
 # Health check (long start period for services that need initialization)
 HEALTHCHECK --start-period=10m --interval=5m --timeout=15s --retries=3 \
-    CMD /usr/local/bin/pastebin --status || exit 1
+    CMD /usr/local/bin/cairnbin --status || exit 1
 
 # Use tini as init with signal propagation
 # -p SIGTERM: propagate SIGTERM to child processes

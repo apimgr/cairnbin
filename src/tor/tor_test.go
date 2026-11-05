@@ -470,8 +470,8 @@ func TestGetTorConfig_RelayHardeningAndTuning(t *testing.T) {
 }
 
 func TestGetTorConfig_LogFile(t *testing.T) {
-	out := getTorConfig(&Config{VirtualPort: 80, DataDir: "/d", LogDir: "/var/log/apimgr/pastebin"}, 1)
-	if !strings.Contains(out, "Log notice file /var/log/apimgr/pastebin/tor.log") {
+	out := getTorConfig(&Config{VirtualPort: 80, DataDir: "/d", LogDir: "/var/log/apimgr/cairnbin"}, 1)
+	if !strings.Contains(out, "Log notice file /var/log/apimgr/cairnbin/tor.log") {
 		t.Errorf("torrc missing tor.log directive:\n%s", out)
 	}
 	if strings.Contains(getTorConfig(&Config{VirtualPort: 80, DataDir: "/d"}, 1), "Log notice file") {

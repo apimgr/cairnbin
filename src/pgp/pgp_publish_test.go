@@ -112,7 +112,7 @@ func TestPublicFromPrivate_RejectsPublicKey(t *testing.T) {
 func TestKeyLifetime_WithExpiry(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	lifetime := 2 * 365 * 24 * time.Hour
-	kp, err := Generate("Pastebin", "sec@example.com", now, lifetime)
+	kp, err := Generate("Cairnbin", "sec@example.com", now, lifetime)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -170,11 +170,11 @@ func TestKeyLifetime_WorksOnPrivateKey(t *testing.T) {
 
 func TestSignPublicKey_ProducesSignedKey(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	oldKP, err := Generate("OldPastebin", "sec@example.com", now, 365*24*time.Hour)
+	oldKP, err := Generate("OldCairnbin", "sec@example.com", now, 365*24*time.Hour)
 	if err != nil {
 		t.Fatalf("Generate old keypair: %v", err)
 	}
-	newKP, err := Generate("NewPastebin", "sec@example.com", now, 365*24*time.Hour)
+	newKP, err := Generate("NewCairnbin", "sec@example.com", now, 365*24*time.Hour)
 	if err != nil {
 		t.Fatalf("Generate new keypair: %v", err)
 	}

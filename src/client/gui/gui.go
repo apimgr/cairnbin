@@ -10,14 +10,14 @@ import (
 	"github.com/gogpu/ui/core/textfield"
 	"github.com/gogpu/ui/desktop"
 
-	"github.com/apimgr/pastebin/src/common/display"
+	"github.com/apimgr/cairnbin/src/common/display"
 )
 
 // Config carries the resolved client settings the GUI needs at launch.
 // It mirrors tui.ClientConfig so the CLI's mode dispatch can build either
 // with the same inputs (PART 32).
 type Config struct {
-	// Server is the base URL of the pastebin server (may be empty on first run).
+	// Server is the base URL of the cairnbin server (may be empty on first run).
 	Server string
 	// Lang is the resolved Accept-Language locale string.
 	Lang string
@@ -78,7 +78,7 @@ func LaunchGUI(config *Config) error {
 	setUILang(config.Lang)
 
 	gogpuApp := gogpu.NewApp(gogpu.DefaultConfig().
-		WithTitle("pastebin CLI").
+		WithTitle("cairnbin CLI").
 		WithSize(800, 600))
 
 	uiApp := app.New(

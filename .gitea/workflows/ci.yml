@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PROJECT_NAME: pastebin
+  PROJECT_NAME: cairnbin
 
 jobs:
   lint:
@@ -220,7 +220,7 @@ jobs:
           GOARCH: amd64
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
-          go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o pastebin-linux-amd64 ./src
+          go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o cairnbin-linux-amd64 ./src
       - name: Build linux/amd64 CLI
         if: hashFiles('src/client/**') != ''
         env:
@@ -228,12 +228,12 @@ jobs:
           GOARCH: amd64
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
-          go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o pastebin-cli-linux-amd64 ./src/client
+          go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o cairnbin-cli-linux-amd64 ./src/client
       - name: Upload CI binaries
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ci-binaries-${{ gitea.sha }}
           path: |
-            pastebin-linux-amd64
-            pastebin-cli-linux-amd64
+            cairnbin-linux-amd64
+            cairnbin-cli-linux-amd64
           retention-days: 7

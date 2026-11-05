@@ -14,7 +14,7 @@ import (
 // tempInternalPath returns a path inside a fresh temp directory that does not exist yet.
 func tempInternalPath(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "pastebin-internal-")
+	dir, err := os.MkdirTemp("", "cairnbin-internal-")
 	if err != nil {
 		t.Fatal(err)
 	}

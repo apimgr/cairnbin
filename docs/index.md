@@ -1,4 +1,4 @@
-# Pastebin
+# Cairnbin
 
 A fast, full-stack Go web application for creating and sharing text snippets anonymously.
 Drop-in replacement for pastebin.com, microbin, and lenpaste.
@@ -20,7 +20,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - QR code generation at `/qr/{id}`
 - View count tracking with automatic background cleanup
 - Full web frontend (dark/light/auto theme, PWA, mobile-first)
-- CLI client (`pastebin-cli`)
+- CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only)
 - Full route compatibility with pastebin.com, microbin, and lenpaste
@@ -30,10 +30,10 @@ uses it as the default server; use `--server <url>` to target your own instance.
 
 ```bash
 # Docker
-docker run --name "pastebin-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -p 172.17.0.1:64580:80 ghcr.io/apimgr/pastebin:latest
+docker run --name "cairnbin-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -p 172.17.0.1:64580:80 ghcr.io/apimgr/cairnbin:latest
 
 # Binary
-./pastebin-linux-amd64
+./cairnbin-linux-amd64
 ```
 
 On first run the server binds all interfaces on a random port in the 64000-64999 range and prints the URL to the console. Open that URL in your browser, or pass `--port` to pin a specific port.
@@ -43,7 +43,7 @@ On first run the server binds all interfaces on a random port in the 64000-64999
 - [Installation](installation.md) - How to install and run
 - [Configuration](configuration.md) - All configuration options
 - [API Reference](api.md) - REST API, Swagger, GraphQL
-- [CLI Reference](cli.md) - `pastebin-cli` flags and commands
+- [CLI Reference](cli.md) - `cairnbin-cli` flags and commands
 - [Compatibility](compat.md) - pastebin.com, microbin, lenpaste and more
 - [Security](security.md) - Auth, public endpoints, reporting, and hardening behavior
 - [Integrations](integrations.md) - Discovery, protocol endpoints, and platform integrations
@@ -55,8 +55,8 @@ On first run the server binds all interfaces on a random port in the 64000-64999
 - [Live Demo](https://pste.us)
 - [API Documentation](https://pste.us/server/docs/swagger) (Swagger UI)
 - [GraphQL Playground](https://pste.us/server/docs/graphql)
-- [Source on GitHub](https://github.com/apimgr/pastebin)
+- [Source on GitHub](https://github.com/apimgr/cairnbin)
 
 ## License
 
-MIT - See [LICENSE.md](https://github.com/apimgr/pastebin/blob/main/LICENSE.md)
+MIT - See [LICENSE.md](https://github.com/apimgr/cairnbin/blob/main/LICENSE.md)

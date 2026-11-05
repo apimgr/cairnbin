@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/common/buildinfo"
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/common/buildinfo"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 func TestSetStaticCacheHeadersMatchingStamp(t *testing.T) {

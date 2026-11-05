@@ -155,7 +155,7 @@ func New(opts Options) *Manager {
 		}
 	}
 	if m.tag == "" {
-		m.tag = "pastebin"
+		m.tag = "cairnbin"
 	}
 	m.access = writer(opts.Dir, "access.log", opts.Access, 0o640, true)
 	m.server = writer(opts.Dir, "server.log", opts.Server, 0o640, true)

@@ -1,9 +1,9 @@
-# Pastebin
+# Cairnbin
 
-[![CI](https://github.com/apimgr/pastebin/actions/workflows/ci.yml/badge.svg)](https://github.com/apimgr/pastebin/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/apimgr/pastebin)](https://github.com/apimgr/pastebin/releases)
-[![License](https://img.shields.io/github/license/apimgr/pastebin)](LICENSE.md)
-[![Docs](https://readthedocs.org/projects/apimgr-pastebin/badge/?version=latest)](https://apimgr-pastebin.readthedocs.io)
+[![CI](https://github.com/apimgr/cairnbin/actions/workflows/ci.yml/badge.svg)](https://github.com/apimgr/cairnbin/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/apimgr/cairnbin)](https://github.com/apimgr/cairnbin/releases)
+[![License](https://img.shields.io/github/license/apimgr/cairnbin)](LICENSE.md)
+[![Docs](https://readthedocs.org/projects/apimgr-cairnbin/badge/?version=latest)](https://apimgr-cairnbin.readthedocs.io)
 
 ## About
 
@@ -34,7 +34,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Automatic background cleanup of expired and burned pastes
 - Full web frontend (server-side Go templates, dark/light/auto theme, PWA, mobile-first)
 - Server pages: `/server/about`, `/server/help`, `/server/healthz`, `/server/privacy`, `/server/terms`
-- CLI client (`pastebin-cli`)
+- CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only queries)
 - MCP endpoint at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`) so AI clients can use the API as tools with the same Bearer tokens
@@ -58,17 +58,17 @@ uses it as the default server; use `--server <url>` to target your own instance.
 
 ```bash
 docker run -d \
-  --name pastebin \
+  --name cairnbin \
   -p 172.17.0.1:64580:80 \
   -v ./volumes/config:/config:z \
   -v ./volumes/data:/data:z \
-  ghcr.io/apimgr/pastebin:latest
+  ghcr.io/apimgr/cairnbin:latest
 ```
 
 ### Docker Compose
 
 ```bash
-curl -q -LSsf -O https://raw.githubusercontent.com/apimgr/pastebin/main/docker/docker-compose.yml
+curl -q -LSsf -O https://raw.githubusercontent.com/apimgr/cairnbin/main/docker/docker-compose.yml
 docker compose up -d
 ```
 
@@ -76,58 +76,58 @@ docker compose up -d
 
 ```bash
 # Download latest release
-curl -q -LSsf -O https://github.com/apimgr/pastebin/releases/latest/download/pastebin-linux-amd64
+curl -q -LSsf -O https://github.com/apimgr/cairnbin/releases/latest/download/cairnbin-linux-amd64
 
 # Make executable and run
-chmod +x pastebin-linux-amd64
-./pastebin-linux-amd64
+chmod +x cairnbin-linux-amd64
+./cairnbin-linux-amd64
 ```
 
 ## Client
 
-A companion client, `pastebin-cli`, is available for interacting with the server API.
+A companion client, `cairnbin-cli`, is available for interacting with the server API.
 
 ### Install
 
 ```bash
 # Download latest release
-curl -q -LSsf -O https://github.com/apimgr/pastebin/releases/latest/download/pastebin-cli-linux-amd64
-chmod +x pastebin-cli-linux-amd64
-sudo mv pastebin-cli-linux-amd64 /usr/local/bin/pastebin-cli
+curl -q -LSsf -O https://github.com/apimgr/cairnbin/releases/latest/download/cairnbin-cli-linux-amd64
+chmod +x cairnbin-cli-linux-amd64
+sudo mv cairnbin-cli-linux-amd64 /usr/local/bin/cairnbin-cli
 ```
 
 ### Configure
 
 ```bash
 # Target a custom server (default: https://pste.us)
-pastebin-cli --server https://your-server.example.com create myfile.txt
+cairnbin-cli --server https://your-server.example.com create myfile.txt
 ```
 
 ### Usage
 
 ```bash
 # Create a paste from stdin
-echo "Hello, World!" | pastebin-cli create
+echo "Hello, World!" | cairnbin-cli create
 
 # Create from file
-pastebin-cli create myfile.go --lang go --expiry 1d
+cairnbin-cli create myfile.go --lang go --expiry 1d
 
 # Fetch paste content
-pastebin-cli get abc12345
+cairnbin-cli get abc12345
 
 # Delete paste
-pastebin-cli delete abc12345 <owner-token>
+cairnbin-cli delete abc12345 <owner-token>
 
 # List recent pastes
-pastebin-cli list --limit 20
+cairnbin-cli list --limit 20
 ```
 
 ## Configuration
 
-The server reads `/etc/apimgr/pastebin/server.yml` on Linux (created automatically on
+The server reads `/etc/apimgr/cairnbin/server.yml` on Linux (created automatically on
 first run). All settings can be overridden via CLI flags.
 
-### Server (`pastebin`) Environment Variables
+### Server (`cairnbin`) Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -141,7 +141,7 @@ first run). All settings can be overridden via CLI flags.
 | `ADDRESS` | `0.0.0.0` | Listen address |
 | `BASE_URL` | Auto-detected | Public base URL for link generation |
 | `DB_PATH` | `{data_dir}/db/server.db` | SQLite database path |
-| `SITE_TITLE` | `Pastebin` | Site title shown in the web UI |
+| `SITE_TITLE` | `Cairnbin` | Site title shown in the web UI |
 | `THEME` | `dark` | UI theme: `dark`, `light`, or `auto` |
 | `MAX_SIZE` | `10mb` | Maximum paste size; accepts `kb`/`mb`/`gb`/`tb` suffixes, a bare number (defaults to MB), or `0`/negative for unlimited |
 | `MAX_SIZE_BYTES` | unset | Deprecated alias for `MAX_SIZE` in raw bytes |
@@ -152,25 +152,25 @@ Platform default paths:
 
 | Platform | Config | Data | Logs |
 |----------|--------|------|------|
-| Linux (root/service) | `/etc/apimgr/pastebin/` | `/var/lib/apimgr/pastebin/` | `/var/log/apimgr/pastebin/` |
-| Linux (user) | `~/.config/apimgr/pastebin/` | `~/.local/share/apimgr/pastebin/` | `~/.local/log/apimgr/pastebin/` |
-| Container | `/config/pastebin/` | `/data/pastebin/` | `/data/log/pastebin/` |
-| macOS (user) | `~/Library/Application Support/apimgr/pastebin/` | same | `~/Library/Logs/apimgr/pastebin/` |
-| Windows (user) | `%AppData%\apimgr\pastebin\` | `%LocalAppData%\apimgr\pastebin\` | `%LocalAppData%\apimgr\pastebin\logs\` |
+| Linux (root/service) | `/etc/apimgr/cairnbin/` | `/var/lib/apimgr/cairnbin/` | `/var/log/apimgr/cairnbin/` |
+| Linux (user) | `~/.config/apimgr/cairnbin/` | `~/.local/share/apimgr/cairnbin/` | `~/.local/log/apimgr/cairnbin/` |
+| Container | `/config/cairnbin/` | `/data/cairnbin/` | `/data/log/cairnbin/` |
+| macOS (user) | `~/Library/Application Support/apimgr/cairnbin/` | same | `~/Library/Logs/apimgr/cairnbin/` |
+| Windows (user) | `%AppData%\apimgr\cairnbin\` | `%LocalAppData%\apimgr\cairnbin\` | `%LocalAppData%\apimgr\cairnbin\logs\` |
 
-### Client (`pastebin-cli`) Environment Variables
+### Client (`cairnbin-cli`) Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PASTEBIN_SERVER_PRIMARY` | `https://pste.us` (embedded) | Server base URL override for self-hosted instances |
-| `PASTEBIN_TOKEN` | unset | Operator/owner API token (overridden by `--token`; falls back to `cli.yml` `auth.token`) |
-| `PASTEBIN_SERVER_TIMEOUT` | `cli.yml` value | Server request timeout override |
-| `PASTEBIN_SERVER_RETRY` | `cli.yml` value | Retry count override |
-| `PASTEBIN_SERVER_RETRY_DELAY` | `cli.yml` value | Retry delay override |
-| `PASTEBIN_SERVER_API_VERSION` | `cli.yml` value | API version override |
-| `PASTEBIN_OUTPUT_FORMAT` | `cli.yml` value | Output format override (`json`, `table`, `plain`) |
-| `PASTEBIN_OUTPUT_COLOR` | `auto` | Color output override (`auto`, `yes`, `no`) |
-| `PASTEBIN_DEBUG` | `cli.yml` value | Debug output override (truthy/falsy) |
+| `CAIRNBIN_SERVER_PRIMARY` | `https://pste.us` (embedded) | Server base URL override for self-hosted instances |
+| `CAIRNBIN_TOKEN` | unset | Operator/owner API token (overridden by `--token`; falls back to `cli.yml` `auth.token`) |
+| `CAIRNBIN_SERVER_TIMEOUT` | `cli.yml` value | Server request timeout override |
+| `CAIRNBIN_SERVER_RETRY` | `cli.yml` value | Retry count override |
+| `CAIRNBIN_SERVER_RETRY_DELAY` | `cli.yml` value | Retry delay override |
+| `CAIRNBIN_SERVER_API_VERSION` | `cli.yml` value | API version override |
+| `CAIRNBIN_OUTPUT_FORMAT` | `cli.yml` value | Output format override (`json`, `table`, `plain`) |
+| `CAIRNBIN_OUTPUT_COLOR` | `auto` | Color output override (`auto`, `yes`, `no`) |
+| `CAIRNBIN_DEBUG` | `cli.yml` value | Debug output override (truthy/falsy) |
 | `CLI_CONFIG` | Platform default | Path to the client `cli.yml` configuration file |
 | `NO_COLOR` | unset | Set to any value to disable ANSI color output |
 
@@ -213,7 +213,7 @@ curl -q -LSsf -X POST https://pste.us/api/v1/pastes \
 
 ### Troubleshooting
 
-- Check logs: `docker logs pastebin-app`
+- Check logs: `docker logs cairnbin-app`
 - Health check: `curl -q -LSsf https://pste.us/server/healthz`
 
 ## Development
@@ -233,8 +233,8 @@ Requires Docker (no local Go toolchain needed):
 
 ```bash
 # Clone
-git clone https://github.com/apimgr/pastebin
-cd pastebin
+git clone https://github.com/apimgr/cairnbin
+cd cairnbin
 
 # Full build (all 8 platforms, outputs to binaries/)
 make build
@@ -256,16 +256,16 @@ bash tests/e2e.sh
 
 ```bash
 # Start server (binds all interfaces on a random port in 64000-64999, saved to server.yml on first run)
-./pastebin
+./cairnbin
 
 # Custom address and port
-./pastebin --address 127.0.0.1 --port 8080
+./cairnbin --address 127.0.0.1 --port 8080
 
 # Show version
-./pastebin --version
+./cairnbin --version
 
 # Show status
-./pastebin --status
+./cairnbin --status
 ```
 
 ## Disclaimer

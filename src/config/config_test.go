@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // tempConfigPath returns a path inside a fresh temp directory that does not exist yet.
@@ -20,7 +20,7 @@ func tempConfigPath(t *testing.T) string {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(base, "pastebin-")
+	dir, err := os.MkdirTemp(base, "cairnbin-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestResolvePort_Container(t *testing.T) {
 }
 
 // TestResolvePort_ContainerExplicitPort confirms that an explicit port (from a
-// --port flag or PASTEBIN_PORT/PORT env) wins over the container default of 80.
+// --port flag or CAIRNBIN_PORT/PORT env) wins over the container default of 80.
 func TestResolvePort_ContainerExplicitPort(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Port = "9090"
@@ -1091,11 +1091,11 @@ func TestLoadEnv_AllVars(t *testing.T) {
 		{
 			name:  "SMTP_FROM_NAME",
 			key:   "SMTP_FROM_NAME",
-			value: "Pastebin Alerts",
+			value: "Cairnbin Alerts",
 			check: func(t *testing.T, cfg *config.Config) {
 				t.Helper()
-				if cfg.Server.Notifications.Email.From.Name != "Pastebin Alerts" {
-					t.Errorf("Email.From.Name: got %q, want %q", cfg.Server.Notifications.Email.From.Name, "Pastebin Alerts")
+				if cfg.Server.Notifications.Email.From.Name != "Cairnbin Alerts" {
+					t.Errorf("Email.From.Name: got %q, want %q", cfg.Server.Notifications.Email.From.Name, "Cairnbin Alerts")
 				}
 			},
 		},
@@ -1250,13 +1250,13 @@ func TestContactResolutionNeverLocalhost(t *testing.T) {
 }
 
 // TestContactResolutionRejectsSingleLabelHostname guards against the
-// production bug where a raw-TCP termbin response leaked "http://pastebin/…"
+// production bug where a raw-TCP termbin response leaked "http://cairnbin/…"
 // instead of a real FQDN: a bare single-label host name equal to the project
 // name, or a random hex container ID, must be rejected by IsValidHost in
 // production mode exactly as an invalid $HOSTNAME override already was.
 func TestContactResolutionRejectsSingleLabelHostname(t *testing.T) {
-	for _, host := range []string{"pastebin", "c5d41e68aaf1", "myhost"} {
-		if config.IsValidHost(host, false, "pastebin") {
+	for _, host := range []string{"cairnbin", "c5d41e68aaf1", "myhost"} {
+		if config.IsValidHost(host, false, "cairnbin") {
 			t.Errorf("IsValidHost(%q, devMode=false) = true, want false", host)
 		}
 	}

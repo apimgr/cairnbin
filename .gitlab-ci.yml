@@ -1,8 +1,8 @@
-# GitLab CI/CD Pipeline for pastebin
+# GitLab CI/CD Pipeline for cairnbin
 # Equivalent to GitHub Actions: release.yml, beta.yml, devel.yml, docker.yml
 
 variables:
-  PROJECT_NAME: "pastebin"
+  PROJECT_NAME: "cairnbin"
   PROJECT_ORG: "apimgr"
   CGO_ENABLED: "0"
   GOOS: linux

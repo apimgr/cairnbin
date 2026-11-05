@@ -14,7 +14,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/apimgr/pastebin/src/metric"
+	"github.com/apimgr/cairnbin/src/metric"
 )
 
 // TestTick_NoTasksDue verifies that tick() on an empty scheduler does not

@@ -102,8 +102,8 @@ func TestSystemdUnitContent_HasReadWritePaths(t *testing.T) {
 func TestEnsureSystemdWritablePathsCreatesDirectories(t *testing.T) {
 	root := t.TempDir()
 	paths := []string{
-		filepath.Join(root, "etc", "pastebin"),
-		filepath.Join(root, "lib", "pastebin"),
+		filepath.Join(root, "etc", "cairnbin"),
+		filepath.Join(root, "lib", "cairnbin"),
 	}
 	if err := ensureSystemdWritablePaths(paths); err != nil {
 		t.Fatalf("ensure systemd writable paths: %v", err)

@@ -16,11 +16,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/common/email"
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/pgp"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/email"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/pgp"
 )
 
 // maxResearcherKeyBytes caps the researcher public-key fetch to guard against a
@@ -134,7 +134,7 @@ const defaultDisclosureDays = 90
 
 // securityComponents populates the affected-component dropdown on the security
 // form. AI.md 14439 says to list the project's own features; the spec's
-// "(auth, API, frontend, CLI, etc.)" is generic example text — pastebin has no
+// "(auth, API, frontend, CLI, etc.)" is generic example text — cairnbin has no
 // auth, so it is omitted. "other" pairs with the free-text component_other field.
 var securityComponents = []string{
 	"api", "frontend", "cli", "paste", "storage",

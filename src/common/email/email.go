@@ -1,4 +1,4 @@
-// Package email handles outbound SMTP notifications for the pastebin server.
+// Package email handles outbound SMTP notifications for the cairnbin server.
 // When no SMTP server is configured or reachable, all email features are silently
 // disabled — no queuing, no retry, no "would have sent" logging.
 package email
@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 //go:embed templates/*.txt

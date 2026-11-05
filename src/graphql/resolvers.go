@@ -3,7 +3,7 @@ package graphql
 import (
 	"strings"
 
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // DB is the minimal database interface required by the resolvers.

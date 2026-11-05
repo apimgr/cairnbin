@@ -1,4 +1,4 @@
-// Pastebin — Main JavaScript
+// Cairnbin — Main JavaScript
 // Progressive enhancement only. All core features work without this file.
 
 // ─── i18n ─────────────────────────────────────────────────────────────────────
@@ -587,7 +587,7 @@ async function fetchAPI(endpoint, options) {
 
 // ─── Cookie consent & tracking (merged from consent.js) ───────────────────────
 
-// Pastebin — Cookie Consent & Tracking (PART 31)
+// Cairnbin — Cookie Consent & Tracking (PART 31)
 // Progressive enhancement only. The banner is server-rendered and its forms POST
 // to /server/consent; consent lives in the server-readable cookie_consent cookie
 // (never localStorage). Analytics scripts are shipped inert inside
@@ -902,13 +902,13 @@ async function fetchAPI(endpoint, options) {
 
 // ─── Create page enhancements (merged from create.js) ─────────────────────────
 
-// Pastebin — Create page enhancements
+// Cairnbin — Create page enhancements
 // Progressive enhancement only — the form works as a plain POST without any
 // of this. These handlers add convenience for JS-capable browsers.
 (function () {
     // Canonical browser-storage name shared with the owner_token cookie
     // (AI.md PART 11 "Naming"; suffix recorded in IDEA.md).
-    const TOKEN_KEY = 'pastebin_owner_token_rU3uW5Ze';
+    const TOKEN_KEY = 'cairnbin_owner_token_rU3uW5Ze';
 
     // Persist a freshly issued owner token (rendered server-side after a
     // successful create) so the next paste can reuse it.
@@ -1034,17 +1034,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ─── Remove page enhancements (merged from remove.js) ─────────────────────────
 
-// Pastebin — Remove page enhancements
+// Cairnbin — Remove page enhancements
 // Progressive enhancement only — the form works as a plain POST without
 // this. Pre-fill the delete-token field from the owner token saved at
-// creation time (canonical localStorage key: pastebin_owner_token_rU3uW5Ze,
+// creation time (canonical localStorage key: cairnbin_owner_token_rU3uW5Ze,
 // shared with the owner_token cookie name, per IDEA.md and AI.md:11801).
 // If the page is showing an error, the saved token was invalid — clear it
 // so the user is not silently retrying with a bad token on the next attempt.
 // The error state is passed via the data-token-error attribute (server-
 // rendered, no inline JS needed to read it).
 (function () {
-    const TOKEN_KEY = 'pastebin_owner_token_rU3uW5Ze';
+    const TOKEN_KEY = 'cairnbin_owner_token_rU3uW5Ze';
     const tokenField = document.getElementById('token');
     if (!tokenField) return;
 

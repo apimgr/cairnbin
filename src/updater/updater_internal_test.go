@@ -65,13 +65,13 @@ func TestMatchesBranch(t *testing.T) {
 
 func TestFetchExpectedChecksum_HashAndFilenameFormat(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("abc123def456abc1  pastebin-linux-amd64\n"))
+		w.Write([]byte("abc123def456abc1  cairnbin-linux-amd64\n"))
 	}))
 	defer srv.Close()
 
 	client := &http.Client{}
 	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
-	hash, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
+	hash, err := fetchExpectedChecksum(context.Background(), client, rel, "cairnbin-linux-amd64")
 	if err != nil {
 		t.Fatalf("fetchExpectedChecksum error: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestFetchExpectedChecksum_NoMatch_Errors(t *testing.T) {
 
 	client := &http.Client{}
 	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
-	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
+	_, err := fetchExpectedChecksum(context.Background(), client, rel, "cairnbin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error when no matching entry is found, got nil")
 	}
@@ -96,8 +96,8 @@ func TestFetchExpectedChecksum_NoMatch_Errors(t *testing.T) {
 
 func TestFetchExpectedChecksum_NoChecksumsAsset_Errors(t *testing.T) {
 	client := &http.Client{}
-	rel := &Release{Assets: []Asset{{Name: "pastebin-linux-amd64", BrowserDownloadURL: "http://example.com/bin"}}}
-	_, err := fetchExpectedChecksum(context.Background(), client, rel, "pastebin-linux-amd64")
+	rel := &Release{Assets: []Asset{{Name: "cairnbin-linux-amd64", BrowserDownloadURL: "http://example.com/bin"}}}
+	_, err := fetchExpectedChecksum(context.Background(), client, rel, "cairnbin-linux-amd64")
 	if err == nil {
 		t.Fatal("expected error when release has no sha256.txt asset, got nil")
 	}
@@ -535,104 +535,104 @@ func TestRestartArgs_StripsUpdateSelector(t *testing.T) {
 	}{
 		{
 			name: "space separated update yes",
-			in:   []string{"pastebin", "--update", "yes"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "--update", "yes"},
+			want: []string{"cairnbin"},
 		},
 		{
 			name: "inline update value",
-			in:   []string{"pastebin", "--update=yes"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "--update=yes"},
+			want: []string{"cairnbin"},
 		},
 		{
 			name: "single dash update",
-			in:   []string{"pastebin", "-update", "yes"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "-update", "yes"},
+			want: []string{"cairnbin"},
 		},
 		{
 			name: "update branch consumes the channel",
-			in:   []string{"pastebin", "--update", "branch", "devel"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "--update", "branch", "devel"},
+			want: []string{"cairnbin"},
 		},
 		{
 			name: "bare positional action",
-			in:   []string{"pastebin", "yes"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "yes"},
+			want: []string{"cairnbin"},
 		},
 		{
 			name: "bare positional check",
-			in:   []string{"pastebin", "check"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "check"},
+			want: []string{"cairnbin"},
 		},
 		{
 			name: "bare branch with channel",
-			in:   []string{"pastebin", "branch", "beta"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "branch", "beta"},
+			want: []string{"cairnbin"},
 		},
 		{
 			name: "other flags are preserved",
-			in:   []string{"pastebin", "--update", "yes", "--port", "8080", "--debug"},
-			want: []string{"pastebin", "--port", "8080", "--debug"},
+			in:   []string{"cairnbin", "--update", "yes", "--port", "8080", "--debug"},
+			want: []string{"cairnbin", "--port", "8080", "--debug"},
 		},
 		{
 			name: "flags before the update selector survive",
-			in:   []string{"pastebin", "--config", "/etc/pastebin", "--update", "yes"},
-			want: []string{"pastebin", "--config", "/etc/pastebin"},
+			in:   []string{"cairnbin", "--config", "/etc/cairnbin", "--update", "yes"},
+			want: []string{"cairnbin", "--config", "/etc/cairnbin"},
 		},
 		{
 			name: "value that looks like an action is not stripped",
-			in:   []string{"pastebin", "--update", "yes", "--baseurl", "help"},
-			want: []string{"pastebin", "--baseurl", "help"},
+			in:   []string{"cairnbin", "--update", "yes", "--baseurl", "help"},
+			want: []string{"cairnbin", "--baseurl", "help"},
 		},
 		{
 			// Regression: the flag package accepts the single-dash inline form,
 			// which must not survive the strip or the restarted process re-runs
 			// the update it just installed, looping forever.
 			name: "single dash inline update value",
-			in:   []string{"pastebin", "-update=yes"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "-update=yes"},
+			want: []string{"cairnbin"},
 		},
 		{
 			// Regression: --update followed by another flag must not swallow
 			// that flag as its action, orphaning the flag's value as a stray
 			// positional and dropping the flag entirely.
 			name: "update followed by another flag keeps the flag",
-			in:   []string{"pastebin", "--update", "--port", "8080"},
-			want: []string{"pastebin", "--port", "8080"},
+			in:   []string{"cairnbin", "--update", "--port", "8080"},
+			want: []string{"cairnbin", "--port", "8080"},
 		},
 		{
 			// Regression: "--maintenance update" is a documented alias for
 			// "--update yes". Left in argv it restarts the new binary back into
 			// the update flow, which exits without starting the server.
 			name: "maintenance update alias is stripped",
-			in:   []string{"pastebin", "--maintenance", "update"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "--maintenance", "update"},
+			want: []string{"cairnbin"},
 		},
 		{
 			name: "maintenance update alias is stripped with other flags",
-			in:   []string{"pastebin", "--port", "8090", "--maintenance", "update"},
-			want: []string{"pastebin", "--port", "8090"},
+			in:   []string{"cairnbin", "--port", "8090", "--maintenance", "update"},
+			want: []string{"cairnbin", "--port", "8090"},
 		},
 		{
 			// A different maintenance operation is not an update selector and
 			// must survive the restart untouched.
 			name: "other maintenance operation is preserved",
-			in:   []string{"pastebin", "--maintenance", "backup"},
-			want: []string{"pastebin", "--maintenance", "backup"},
+			in:   []string{"cairnbin", "--maintenance", "backup"},
+			want: []string{"cairnbin", "--maintenance", "backup"},
 		},
 		{
 			name: "update branch followed by a flag keeps the flag",
-			in:   []string{"pastebin", "--update", "branch", "--port", "8080"},
-			want: []string{"pastebin", "--port", "8080"},
+			in:   []string{"cairnbin", "--update", "branch", "--port", "8080"},
+			want: []string{"cairnbin", "--port", "8080"},
 		},
 		{
 			name: "no update selector is unchanged",
-			in:   []string{"pastebin", "--port", "8080"},
-			want: []string{"pastebin", "--port", "8080"},
+			in:   []string{"cairnbin", "--port", "8080"},
+			want: []string{"cairnbin", "--port", "8080"},
 		},
 		{
 			name: "trailing update flag with no value",
-			in:   []string{"pastebin", "--update"},
-			want: []string{"pastebin"},
+			in:   []string{"cairnbin", "--update"},
+			want: []string{"cairnbin"},
 		},
 	}
 
@@ -702,11 +702,11 @@ func TestCheckDeferred_PicksNewestEligible(t *testing.T) {
 
 func TestFetchExpectedChecksum_UsesSha256Txt(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("abc123  pastebin-linux-amd64\n"))
+		_, _ = w.Write([]byte("abc123  cairnbin-linux-amd64\n"))
 	}))
 	defer srv.Close()
 	rel := &Release{Assets: []Asset{{Name: "sha256.txt", BrowserDownloadURL: srv.URL}}}
-	got, err := fetchExpectedChecksum(context.Background(), srv.Client(), rel, "pastebin-linux-amd64")
+	got, err := fetchExpectedChecksum(context.Background(), srv.Client(), rel, "cairnbin-linux-amd64")
 	if err != nil || got != "abc123" {
 		t.Fatalf("got %q, %v", got, err)
 	}

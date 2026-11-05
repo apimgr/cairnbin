@@ -4,11 +4,11 @@ package pid_test
 // corrupt file handling, and duplicate-write guard.
 //
 // Design note: isOurProcess checks whether the running process exe contains
-// "pastebin". Because test binaries are named "pid.test", CheckPIDFile will
+// "cairnbin". Because test binaries are named "pid.test", CheckPIDFile will
 // always clear the PID file written by the current process (isOurProcess
 // returns false → treated as stale). Tests are written around this real
 // behaviour: we verify file creation/removal and error conditions rather than
-// pretending the test binary is named "pastebin".
+// pretending the test binary is named "cairnbin".
 
 import (
 	"os"
@@ -16,23 +16,23 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/pid"
+	"github.com/apimgr/cairnbin/src/pid"
 )
 
 // tempPIDPath returns a path inside a fresh temp dir that follows the required
-// apimgr/pastebin- prefix pattern. The directory is cleaned up automatically.
+// apimgr/cairnbin- prefix pattern. The directory is cleaned up automatically.
 func tempPIDPath(t *testing.T) string {
 	t.Helper()
 	base := filepath.Join(os.TempDir(), "apimgr")
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(base, "pastebin-")
+	dir, err := os.MkdirTemp(base, "cairnbin-")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	return filepath.Join(dir, "pastebin.pid")
+	return filepath.Join(dir, "cairnbin.pid")
 }
 
 // ─── WritePIDFile ─────────────────────────────────────────────────────────────
@@ -76,15 +76,15 @@ func TestWritePIDFile_Idempotent_AfterRemove(t *testing.T) {
 	}
 }
 
-// TestWritePIDFile_AlreadyRunning_PastebinProcess verifies that WritePIDFile
+// TestWritePIDFile_AlreadyRunning_CairnbinProcess verifies that WritePIDFile
 // returns an error containing "already running" when the PID file holds a PID
-// that is live AND whose exe is named "pastebin". We simulate this by writing a
+// that is live AND whose exe is named "cairnbin". We simulate this by writing a
 // PID file pointing at a known non-existent but parseable PID and observing
 // that the stale-removal path runs (no "already running" error is raised when
 // the process is not alive).
 //
 // A true "already running" collision requires a process whose name contains
-// "pastebin" — that process cannot be created in a unit test without spawning
+// "cairnbin" — that process cannot be created in a unit test without spawning
 // an external binary. The following sub-tests document the two observable
 // branches of WritePIDFile: stale PID is silently cleaned, and missing file
 // produces no error.
@@ -223,14 +223,14 @@ func TestCheckPIDFile_StalePID(t *testing.T) {
 	}
 }
 
-// TestCheckPIDFile_WrittenThenChecked_NotPastebinBinary verifies the real
-// behaviour when a valid PID file is written by a non-pastebin process (i.e.
+// TestCheckPIDFile_WrittenThenChecked_NotCairnbinBinary verifies the real
+// behaviour when a valid PID file is written by a non-cairnbin process (i.e.
 // the test binary itself). Because isOurProcess returns false for "pid.test",
 // CheckPIDFile treats the entry as a PID-reuse collision, removes the file, and
 // returns (false, 0, nil). This is correct and expected: the check is designed
-// to protect against a pastebin instance competing with another pastebin binary,
+// to protect against a cairnbin instance competing with another cairnbin binary,
 // not to block unrelated processes.
-func TestCheckPIDFile_WrittenThenChecked_NotPastebinBinary(t *testing.T) {
+func TestCheckPIDFile_WrittenThenChecked_NotCairnbinBinary(t *testing.T) {
 	path := tempPIDPath(t)
 
 	if err := pid.WritePIDFile(path); err != nil {
@@ -243,15 +243,15 @@ func TestCheckPIDFile_WrittenThenChecked_NotPastebinBinary(t *testing.T) {
 	}
 
 	// CheckPIDFile sees our PID is live but isOurProcess returns false (test
-	// binary is not named "pastebin"), so it clears the file.
+	// binary is not named "cairnbin"), so it clears the file.
 	running, retPID, err := pid.CheckPIDFile(path)
 	if err != nil {
 		t.Fatalf("CheckPIDFile: unexpected error: %v", err)
 	}
 	if running {
 		// If this ever becomes true the test binary was renamed to contain
-		// "pastebin" — that would be fine, just update this expectation.
-		t.Log("NOTE: isOurProcess returned true (test binary contains 'pastebin' in name)")
+		// "cairnbin" — that would be fine, just update this expectation.
+		t.Log("NOTE: isOurProcess returned true (test binary contains 'cairnbin' in name)")
 	}
 	_ = retPID
 }

@@ -28,7 +28,7 @@ make docker
 ```
 src/
   main.go          — server binary entry point
-  client/          — pastebin-cli client binary
+  client/          — cairnbin-cli client binary
   config/          — configuration loading
   database/        — SQLite database layer
   handler/         — HTTP request handlers
@@ -50,7 +50,7 @@ tests/             — integration test scripts
 
 ```bash
 # Start in development mode
-./pastebin --mode development --port 8080
+./cairnbin --mode development --port 8080
 
 # Or via Docker Compose
 docker compose -f docker/docker-compose.dev.yml up

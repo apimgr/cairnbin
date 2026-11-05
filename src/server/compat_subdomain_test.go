@@ -5,14 +5,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
-	"github.com/apimgr/pastebin/src/handler/compat"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/handler/compat"
 )
 
 func newCompatTestServer(t *testing.T) *Server {
 	t.Helper()
 	s := &Server{
-		cfg:       &config.Config{Web: config.WebConfig{SiteTitle: "Pastebin", Theme: "dark"}},
+		cfg:       &config.Config{Web: config.WebConfig{SiteTitle: "Cairnbin", Theme: "dark"}},
 		version:   "test",
 		buildDate: "2026-01-01",
 	}
@@ -30,8 +30,8 @@ func TestCompatModeFromLabel(t *testing.T) {
 		"microbin": "microbin",
 		"lp":       "lenpaste",
 		"lenpaste": "lenpaste",
-		"pb":       "pastebin",
-		"pastebin": "pastebin",
+		"pb":       "cairnbin",
+		"cairnbin": "cairnbin",
 		"sk":       "stikked",
 		"stikked":  "stikked",
 		"hb":       "hastebin",

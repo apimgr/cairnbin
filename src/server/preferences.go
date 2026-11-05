@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/apimgr/pastebin/src/common/httputil"
-	"github.com/apimgr/pastebin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/common/httputil"
+	"github.com/apimgr/cairnbin/src/common/i18n"
 )
 
 // prefCookiePrefix names every app-specific guest preference cookie
@@ -20,11 +20,11 @@ import (
 // directly onto this app's existing /pastes recents controls, so the
 // concrete preferences are: sort, order, per_page (see handleRecent in
 // server.go). The export/import mechanism below stays generic so any future
-// `pastebin_pref_*` cookie round-trips automatically without a second
+// `cairnbin_pref_*` cookie round-trips automatically without a second
 // storage mechanism ever being invented (AI.md 23498-23501).
-const prefCookiePrefix = "pastebin_pref_"
+const prefCookiePrefix = "cairnbin_pref_"
 
-// Concrete pastebin_pref_* keys (AI.md 23485 "Client-Side Preferences"):
+// Concrete cairnbin_pref_* keys (AI.md 23485 "Client-Side Preferences"):
 // the /pastes recents list's sort column, sort direction, and page size.
 const (
 	prefKeySort    = "sort"
@@ -32,7 +32,7 @@ const (
 	prefKeyPerPage = "per_page"
 )
 
-// prefKeyPattern constrains the `{key}` portion of a `pastebin_pref_{key}`
+// prefKeyPattern constrains the `{key}` portion of a `cairnbin_pref_{key}`
 // cookie/param name — lowercase alnum and underscores only, matching the
 // project's own naming conventions for config/cookie keys.
 var prefKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
@@ -101,7 +101,7 @@ func resolvedPref(r *http.Request, key string) string {
 	return prefDefaultValue[key]
 }
 
-// appPreferencesFromRequest returns every `pastebin_pref_*` cookie present
+// appPreferencesFromRequest returns every `cairnbin_pref_*` cookie present
 // on the request, keyed by the bare `{key}` suffix (AI.md 23498-23501: "cookie-only,
 // read per request, never persisted server-side").
 func appPreferencesFromRequest(r *http.Request) map[string]string {
@@ -115,7 +115,7 @@ func appPreferencesFromRequest(r *http.Request) map[string]string {
 }
 
 // extractAppPrefs scans a set of query values (either the live request query
-// or a decoded import `code`) for `pastebin_pref_*` params, applying the same
+// or a decoded import `code`) for `cairnbin_pref_*` params, applying the same
 // key/value allowlist as appPreferencesFromRequest — an imported value is
 // still untrusted input (AI.md 23512), so it is revalidated the same way.
 func extractAppPrefs(values url.Values) map[string]string {
@@ -131,7 +131,7 @@ func extractAppPrefs(values url.Values) map[string]string {
 	return prefs
 }
 
-// parseAppPref validates a single `pastebin_pref_{key}` name/value pair
+// parseAppPref validates a single `cairnbin_pref_{key}` name/value pair
 // against prefKeyPattern/prefValuePattern and, for a known key, that key's
 // enum — returning the bare key on success. Anything rejected is treated as
 // absent, so a hand-edited or imported cookie simply falls back to the
@@ -298,13 +298,13 @@ func (s *Server) preferencesPageData(r *http.Request, theme, lang string) map[st
 	return data
 }
 
-// preferencesExportQuery builds the canonical `theme=...&lang=...&pastebin_pref_{key}=...`
+// preferencesExportQuery builds the canonical `theme=...&lang=...&cairnbin_pref_{key}=...`
 // query string for the current preferences — the query string IS the portable
 // preference state (AI.md 23505: "the code/URL is the preference values, not
-// a lookup key"). theme, lang, and every app-specific `pastebin_pref_*`
+// a lookup key"). theme, lang, and every app-specific `cairnbin_pref_*`
 // cookie round-trip (AI.md 23507); `cookie_consent`/`ccpa_opt_out`/
-// `pastebin_build` are never included since they aren't in extra (they don't
-// carry the `pastebin_pref_` prefix appPreferencesFromRequest filters on).
+// `cairnbin_build` are never included since they aren't in extra (they don't
+// carry the `cairnbin_pref_` prefix appPreferencesFromRequest filters on).
 func preferencesExportQuery(theme, lang string, extra map[string]string) string {
 	q := fmt.Sprintf("theme=%s&lang=%s", url.QueryEscape(theme), url.QueryEscape(lang))
 	if len(extra) == 0 {

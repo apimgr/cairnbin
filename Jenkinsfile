@@ -8,8 +8,8 @@ pipeline {
     }
 
     environment {
-        PROJECT_NAME = 'pastebin'
-        INTERNAL_NAME = 'pastebin'
+        PROJECT_NAME = 'cairnbin'
+        INTERNAL_NAME = 'cairnbin'
         PROJECT_ORG = 'apimgr'
         BINDIR = 'binaries'
         RELDIR = 'releases'

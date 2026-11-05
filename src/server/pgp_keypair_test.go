@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/pgp"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/pgp"
 )
 
 func newPGPTestServer(t *testing.T) *Server {
@@ -43,7 +43,7 @@ func TestPGPWrapKeyDeterministic(t *testing.T) {
 
 func TestPrivateKeyRoundTripOnDisk(t *testing.T) {
 	s := newPGPTestServer(t)
-	kp, err := pgp.Generate("Pastebin", "security@example.com", time.Now(), keypairValidity)
+	kp, err := pgp.Generate("Cairnbin", "security@example.com", time.Now(), keypairValidity)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestPrivateKeyRoundTripOnDisk(t *testing.T) {
 
 func TestEncryptSecurityReportPrefersPGP(t *testing.T) {
 	s := newPGPTestServer(t)
-	kp, err := pgp.Generate("Pastebin", "security@example.com", time.Now(), keypairValidity)
+	kp, err := pgp.Generate("Cairnbin", "security@example.com", time.Now(), keypairValidity)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestInstallKeypairCreatesFiles(t *testing.T) {
 	db := &stubDB{}
 	s.db = db
 
-	kp, err := pgp.Generate("Pastebin", "security@example.com", time.Now(), keypairValidity)
+	kp, err := pgp.Generate("Cairnbin", "security@example.com", time.Now(), keypairValidity)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestInstallKeypairWithRotatedFrom(t *testing.T) {
 	s := newPGPTestServer(t)
 	s.db = &stubDB{}
 
-	kp, err := pgp.Generate("Pastebin", "security@example.com", time.Now(), keypairValidity)
+	kp, err := pgp.Generate("Cairnbin", "security@example.com", time.Now(), keypairValidity)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}

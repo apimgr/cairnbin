@@ -3,7 +3,7 @@
 package main
 
 import (
-	"github.com/apimgr/pastebin/src/client/gui"
+	"github.com/apimgr/cairnbin/src/client/gui"
 )
 
 // guiAvailable reports whether a native GUI can actually be launched right

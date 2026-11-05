@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
 )
 
 func newSecurityIDTestServer() *Server {

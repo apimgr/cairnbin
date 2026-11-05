@@ -24,7 +24,7 @@ RUN mkdir -p /app/binary && \
               -X 'main.CommitID=${COMMIT_ID}' \
               -X 'main.BuildEpoch=${BUILD_EPOCH}' \
               -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
-    -o /app/binary/pastebin ./src
+    -o /app/binary/cairnbin ./src
 
 # Build client binary if src/client/ exists (same as release image)
 RUN if [ -d ./src/client ]; then \
@@ -34,7 +34,7 @@ RUN if [ -d ./src/client ]; then \
                   -X 'main.CommitID=${COMMIT_ID}' \
                   -X 'main.BuildEpoch=${BUILD_EPOCH}' \
                   -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
-        -o /app/binary/pastebin-cli ./src/client; \
+        -o /app/binary/cairnbin-cli ./src/client; \
 fi
 
 # =============================================================================
@@ -70,6 +70,6 @@ EXPOSE 9999
 STOPSIGNAL SIGRTMIN+3
 
 HEALTHCHECK --start-period=10m --interval=5m --timeout=15s --retries=3 \
-    CMD /usr/local/bin/pastebin --status || exit 1
+    CMD /usr/local/bin/cairnbin --status || exit 1
 
 ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]

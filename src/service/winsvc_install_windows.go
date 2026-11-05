@@ -35,11 +35,11 @@ func installWindows() error {
 
 	// Create the service with automatic start and a Virtual Service Account
 	// (empty ServiceStartName = NT SERVICE\<name>).
-	displayName := "Pastebin API"
+	displayName := "Cairnbin API"
 	s, err := m.CreateService(appName, binaryPath, mgr.Config{
 		StartType:        mgr.StartAutomatic,
 		DisplayName:      displayName,
-		Description:      "Pastebin API Server — fast, secure paste service",
+		Description:      "Cairnbin API Server — fast, secure paste service",
 		ServiceStartName: "",
 	})
 	if err != nil {

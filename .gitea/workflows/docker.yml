@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
 
 env:
-  PROJECT_NAME: pastebin
+  PROJECT_NAME: cairnbin
   # Registry auto-detected from Gitea instance (works with self-hosted)
   # Format: {gitea-server}/owner/repo -> extracts server for registry
   IMAGE_NAME: ${{ gitea.repository }}

@@ -38,7 +38,7 @@ func Set(version, commit string) {
 
 // AssetStamp returns `{project_version}-{short_commit}` — the value appended to
 // every static asset URL as `?v=`, compared against the request's `?v=` to
-// decide `immutable` vs `no-cache`, and stored in the `pastebin_build` cookie
+// decide `immutable` vs `no-cache`, and stored in the `cairnbin_build` cookie
 // (AI.md PART 9, line 13321).
 func AssetStamp() string {
 	if s, ok := current.Load().(string); ok && s != "" {

@@ -15,10 +15,10 @@ import (
 )
 
 // TestIsOurProcess_CurrentProcess verifies isOurProcess on the current PID.
-// The test binary exe path does NOT contain "pastebin", so the result is false.
+// The test binary exe path does NOT contain "cairnbin", so the result is false.
 func TestIsOurProcess_CurrentProcess(t *testing.T) {
 	result := isOurProcess(os.Getpid())
-	// Test binary is named "pid.test" not "pastebin".
+	// Test binary is named "pid.test" not "cairnbin".
 	// We just want no panic; the result itself is environment-dependent.
 	_ = result
 }
@@ -32,10 +32,10 @@ func TestIsOurProcess_InvalidPID(t *testing.T) {
 }
 
 // TestIsOurProcessDarwin_CurrentProcess verifies ps-based check on current PID.
-// On Linux, ps is available and returns the test binary name (not "pastebin").
+// On Linux, ps is available and returns the test binary name (not "cairnbin").
 func TestIsOurProcessDarwin_CurrentProcess(t *testing.T) {
 	result := isOurProcessDarwin(os.Getpid())
-	// Test binary is not "pastebin", so result should be false.
+	// Test binary is not "cairnbin", so result should be false.
 	_ = result
 }
 
@@ -48,8 +48,8 @@ func TestIsOurProcessDarwin_InvalidPID(t *testing.T) {
 }
 
 // TestSelfPIDHelper is not a real test: it is re-executed as a subprocess by
-// TestCheckPIDFile_SelfPID_PastebinNamedBinary from a binary whose name
-// contains "pastebin", so isOurProcess(self) returns true. It writes its own
+// TestCheckPIDFile_SelfPID_CairnbinNamedBinary from a binary whose name
+// contains "cairnbin", so isOurProcess(self) returns true. It writes its own
 // PID to the pid file, then verifies CheckPIDFile treats it as stale.
 // Exit codes: 0 = stale (correct), 3 = falsely "already running", 4 = error.
 func TestSelfPIDHelper(t *testing.T) {
@@ -71,20 +71,20 @@ func TestSelfPIDHelper(t *testing.T) {
 	os.Exit(0)
 }
 
-// TestCheckPIDFile_SelfPID_PastebinNamedBinary reproduces the container
-// restart bug end-to-end: the running binary IS named "pastebin*" and the pid
+// TestCheckPIDFile_SelfPID_CairnbinNamedBinary reproduces the container
+// restart bug end-to-end: the running binary IS named "cairnbin*" and the pid
 // file contains that process's own PID. Before the self-PID check this
 // falsely reported "already running (pid N)"; it must be treated as stale.
-func TestCheckPIDFile_SelfPID_PastebinNamedBinary(t *testing.T) {
+func TestCheckPIDFile_SelfPID_CairnbinNamedBinary(t *testing.T) {
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatalf("os.Executable: %v", err)
 	}
 
-	// Copy the test binary under a name containing "pastebin" so that
+	// Copy the test binary under a name containing "cairnbin" so that
 	// isOurProcess matches, exactly like the production binary.
 	dir := t.TempDir()
-	copied := filepath.Join(dir, "pastebin-selftest")
+	copied := filepath.Join(dir, "cairnbin-selftest")
 	src, err := os.Open(exe)
 	if err != nil {
 		t.Fatalf("open test binary: %v", err)
@@ -102,7 +102,7 @@ func TestCheckPIDFile_SelfPID_PastebinNamedBinary(t *testing.T) {
 		t.Fatalf("close binary copy: %v", err)
 	}
 
-	pidPath := filepath.Join(dir, "pastebin.pid")
+	pidPath := filepath.Join(dir, "cairnbin.pid")
 	cmd := exec.Command(copied, "-test.run", "TestSelfPIDHelper")
 	cmd.Env = append(os.Environ(),
 		"PID_SELF_HELPER=1",
@@ -145,11 +145,11 @@ func TestIsOurBinaryName(t *testing.T) {
 		in   string
 		want bool
 	}{
-		{"project name", "pastebin", true},
-		{"absolute path", "/usr/local/bin/pastebin", true},
-		{"ps output with newline", "pastebin\n", true},
-		{"cli sibling", "pastebin-cli", false},
-		{"cli sibling path", "/usr/bin/pastebin-cli", false},
+		{"project name", "cairnbin", true},
+		{"absolute path", "/usr/local/bin/cairnbin", true},
+		{"ps output with newline", "cairnbin\n", true},
+		{"cli sibling", "cairnbin-cli", false},
+		{"cli sibling path", "/usr/bin/cairnbin-cli", false},
 		{"unrelated", "nginx", false},
 		{"empty", "", false},
 		{"running executable", self, true},

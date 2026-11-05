@@ -202,7 +202,7 @@ func (d *Dispatcher) buildSigned(ctx context.Context, msg Message, tgt Target, i
 func (d *Dispatcher) userAgent() string {
 	name := d.meta.ProjectName
 	if name == "" {
-		name = "pastebin"
+		name = "cairnbin"
 	}
 	ver := d.meta.ProjectVersion
 	if ver == "" {

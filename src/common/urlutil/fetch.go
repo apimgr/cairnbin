@@ -16,7 +16,7 @@ import (
 
 // projectName is the hardcoded internal project name used in the User-Agent
 // header regardless of binary rename (PART 7/8).
-const projectName = "pastebin"
+const projectName = "cairnbin"
 
 // FetchRemoteImageConfig controls remote image fetch validation and limits.
 type FetchRemoteImageConfig struct {

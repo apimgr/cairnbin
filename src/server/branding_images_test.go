@@ -16,8 +16,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/common/urlutil"
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/common/urlutil"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 func newBrandingTestServer(t *testing.T) *Server {
@@ -53,7 +53,7 @@ func TestClassifyBrandingSource(t *testing.T) {
 		{"whitespace-only is embedded", "   ", brandingSourceEmbedded},
 		{"https URL is remote", "https://example.com/logo.png", brandingSourceRemote},
 		{"http URL is remote", "http://example.com/logo.png", brandingSourceRemote},
-		{"absolute path is local", "/etc/pastebin/logo.png", brandingSourceLocal},
+		{"absolute path is local", "/etc/cairnbin/logo.png", brandingSourceLocal},
 		{"relative path is local", "logo.png", brandingSourceLocal},
 	}
 	for _, tc := range cases {

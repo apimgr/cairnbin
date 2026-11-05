@@ -9,7 +9,7 @@ import (
 func testKeypair(t *testing.T) *Keypair {
 	t.Helper()
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	kp, err := Generate("Pastebin", "security@example.com", now, 2*365*24*time.Hour)
+	kp, err := Generate("Cairnbin", "security@example.com", now, 2*365*24*time.Hour)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -17,8 +17,8 @@ func testKeypair(t *testing.T) *Keypair {
 }
 
 func TestIdentity(t *testing.T) {
-	got := Identity("Pastebin", "security@example.com")
-	want := "Pastebin Security <security@example.com>"
+	got := Identity("Cairnbin", "security@example.com")
+	want := "Cairnbin Security <security@example.com>"
 	if got != want {
 		t.Fatalf("Identity = %q, want %q", got, want)
 	}
@@ -41,7 +41,7 @@ func TestGenerateProducesArmoredKeys(t *testing.T) {
 }
 
 func TestGenerateRequiresEmail(t *testing.T) {
-	if _, err := Generate("Pastebin", "  ", time.Now(), time.Hour); err == nil {
+	if _, err := Generate("Cairnbin", "  ", time.Now(), time.Hour); err == nil {
 		t.Fatal("expected error for empty email")
 	}
 }

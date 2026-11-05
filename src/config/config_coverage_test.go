@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // tempCovPath returns a path inside a fresh temp directory that does not exist.
@@ -20,7 +20,7 @@ func tempCovPath(t *testing.T) string {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(base, "pastebin-cov-")
+	dir, err := os.MkdirTemp(base, "cairnbin-cov-")
 	if err != nil {
 		t.Fatal(err)
 	}

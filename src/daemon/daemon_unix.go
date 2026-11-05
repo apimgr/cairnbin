@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/apimgr/pastebin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/common/i18n"
 )
 
 // Daemonize forks the process and detaches from the terminal (Unix only).

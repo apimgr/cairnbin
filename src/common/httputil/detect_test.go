@@ -19,8 +19,8 @@ func TestIsOurCliClient(t *testing.T) {
 		ua   string
 		want bool
 	}{
-		{"pastebin-cli/1.0.0", true},
-		{"pastebin-cli/0.0.1", true},
+		{"cairnbin-cli/1.0.0", true},
+		{"cairnbin-cli/0.0.1", true},
 		{"curl/7.68.0", false},
 		{"Mozilla/5.0", false},
 		{"lynx/2.9.0", false},
@@ -50,7 +50,7 @@ func TestIsTextBrowser(t *testing.T) {
 		{"NetSurf/3.10", true},
 		{"Mozilla/5.0 (X11; Linux)", false},
 		{"curl/7.68.0", false},
-		{"pastebin-cli/1.0", false},
+		{"cairnbin-cli/1.0", false},
 		{"", false},
 	}
 	for _, tc := range cases {
@@ -76,7 +76,7 @@ func TestIsHttpTool(t *testing.T) {
 		// no UA = non-interactive
 		{"", true},
 		{"Mozilla/5.0", false},
-		{"pastebin-cli/1.0", false},
+		{"cairnbin-cli/1.0", false},
 		{"Lynx/2.9.0", false},
 	}
 	for _, tc := range cases {
@@ -100,7 +100,7 @@ func TestGetAPIResponseFormat(t *testing.T) {
 		{"Wget/1.21", "/api/v1/pastes", "text"},
 		{"", "/api/v1/pastes", "text"},
 		// Our client → JSON (INTERACTIVE)
-		{"pastebin-cli/1.0", "/api/v1/pastes", "json"},
+		{"cairnbin-cli/1.0", "/api/v1/pastes", "json"},
 		// Text browser → JSON (INTERACTIVE)
 		{"Lynx/2.9.0", "/api/v1/pastes", "json"},
 		// Regular browser → JSON
@@ -127,7 +127,7 @@ func TestIsNonInteractiveClient(t *testing.T) {
 		{"Wget/1.21", true},
 		{"", true},
 		// our client is INTERACTIVE
-		{"pastebin-cli/1.0", false},
+		{"cairnbin-cli/1.0", false},
 		// text browser is INTERACTIVE
 		{"Lynx/2.9.0dev", false},
 		// text browser is INTERACTIVE

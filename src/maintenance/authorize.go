@@ -23,8 +23,8 @@ import (
 	// Registers the pure-Go "sqlite" driver for the read-only emptiness check.
 	_ "modernc.org/sqlite"
 
-	"github.com/apimgr/pastebin/src/audit"
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 // AuthOptions carries the inputs needed to authorize a sensitive maintenance

@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/apimgr/pastebin/src/common/theme"
+	"github.com/apimgr/cairnbin/src/common/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 func cfg3samples() *config.URLDetectionConfig {

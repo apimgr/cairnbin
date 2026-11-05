@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/model"
+	"github.com/apimgr/cairnbin/src/model"
 )
 
 // mockDB implements the DB interface for testing without a real database.

@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_NAME: pastebin
+  PROJECT_NAME: cairnbin
 
 jobs:
   build:

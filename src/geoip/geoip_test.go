@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/geoip"
+	"github.com/apimgr/cairnbin/src/geoip"
 )
 
 // ─── Open with all features disabled (no-op DB) ───────────────────────────────

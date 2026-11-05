@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/config"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 func TestHandleSitemap_XML(t *testing.T) {

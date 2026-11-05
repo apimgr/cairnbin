@@ -25,7 +25,7 @@ func testOptions(dir string) Options {
 		Dir:      dir,
 		Level:    "info",
 		Hostname: "testhost",
-		Tag:      "pastebin",
+		Tag:      "cairnbin",
 		Access:   FileOptions{Filename: "access.log", Format: "apache", Rotate: "monthly", Keep: "none"},
 		Server:   FileOptions{Filename: "server.log", Format: "text", Rotate: "weekly,50MB", Keep: "none"},
 		Error:    FileOptions{Filename: "error.log", Format: "text", Rotate: "weekly,50MB", Keep: "none"},
@@ -131,7 +131,7 @@ func TestManager_AuthSyslog(t *testing.T) {
 
 	m.Auth("operator", "1.2.3.4", "fail", "invalid_token")
 	got := readLog(t, dir, "auth.log")
-	if !strings.Contains(got, "testhost pastebin[") {
+	if !strings.Contains(got, "testhost cairnbin[") {
 		t.Errorf("auth line missing syslog host/tag: %q", got)
 	}
 	if !strings.Contains(got, "auth: token_id=operator ip=1.2.3.4 result=fail reason=invalid_token") {

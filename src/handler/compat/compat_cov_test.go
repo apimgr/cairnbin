@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apimgr/pastebin/src/handler"
+	"github.com/apimgr/cairnbin/src/handler"
 )
 
 // seedExpiredPaste creates a paste whose ExpiresAt is 1 hour in the past so

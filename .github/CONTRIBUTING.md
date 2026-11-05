@@ -1,4 +1,4 @@
-# Contributing to Pastebin
+# Contributing to Cairnbin
 
 Thank you for your interest in contributing!
 
@@ -7,8 +7,8 @@ Thank you for your interest in contributing!
 Requires Docker (no local Go toolchain needed).
 
 ```bash
-git clone https://github.com/apimgr/pastebin
-cd pastebin
+git clone https://github.com/apimgr/cairnbin
+cd cairnbin
 make dev          # quick development build
 make test         # run unit tests
 make local        # production build (current platform)

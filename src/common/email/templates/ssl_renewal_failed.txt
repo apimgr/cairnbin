@@ -14,7 +14,7 @@ Next retry: {next_retry}
 
 Please investigate and renew the certificate manually if retries continue
 to fail.
-Run: pastebin --ssl renew
+Run: cairnbin --ssl renew
 
 --
 {app_name}

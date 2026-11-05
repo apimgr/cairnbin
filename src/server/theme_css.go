@@ -6,7 +6,7 @@ import (
 	"sync"
 	"text/template"
 
-	"github.com/apimgr/pastebin/src/common/theme"
+	"github.com/apimgr/cairnbin/src/common/theme"
 )
 
 // cssTemplateData is passed to each *.css.tmpl file so the stylesheets can

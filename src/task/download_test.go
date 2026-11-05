@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/apimgr/pastebin/src/task"
+	"github.com/apimgr/cairnbin/src/task"
 )
 
 // TestBlocklistUpdate_DownloadsSource verifies that a configured source is

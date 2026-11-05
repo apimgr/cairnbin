@@ -13,8 +13,8 @@ import (
 // projectBinaryName is the hardcoded project name; a PID is "ours" only when
 // the process image name matches it exactly (or the running binary's own,
 // possibly renamed, name) — never by substring, which would also match
-// "pastebin-cli".
-const projectBinaryName = "pastebin"
+// "cairnbin-cli".
+const projectBinaryName = "cairnbin"
 
 // isOurBinaryName reports whether an executable path or name refers to this
 // server binary. Comparison is exact on the base name, case-insensitive, with

@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_NAME: pastebin
+  PROJECT_NAME: cairnbin
 
 jobs:
   # Compute VERSION once — matrix legs must never each compute their own timestamp

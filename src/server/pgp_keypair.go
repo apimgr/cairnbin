@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/pastebin/src/common/secretbox"
-	"github.com/apimgr/pastebin/src/database"
-	"github.com/apimgr/pastebin/src/pgp"
+	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/database"
+	"github.com/apimgr/cairnbin/src/pgp"
 )
 
 // keypairValidity is the default project-key lifetime (AI.md 14181: "Expires 2

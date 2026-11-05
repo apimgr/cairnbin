@@ -6,7 +6,7 @@ labels: bug
 
 ## Version / Commit
 
-<!-- Run: ./pastebin --version -->
+<!-- Run: ./cairnbin --version -->
 
 ## Environment
 

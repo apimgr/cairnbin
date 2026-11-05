@@ -1,8 +1,8 @@
 # nginx proxy address - http://172.17.0.1:64580
-# pastebin - fast, public pastebin service
+# cairnbin - fast, public cairnbin service
 # FOR HUMAN USE ONLY - AI must never use this file directly.
 
-name: pastebin
+name: cairnbin
 
 x-logging: &default-logging
   options:
@@ -11,17 +11,17 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  pastebin:
-    image: ghcr.io/apimgr/pastebin:latest
-    container_name: pastebin-app
-    hostname: pastebin
+  cairnbin:
+    image: ghcr.io/apimgr/cairnbin:latest
+    container_name: cairnbin-app
+    hostname: cairnbin
     restart: always
     pull_policy: always
     logging: *default-logging
     environment:
       PORT: 80
       TZ: ${TZ:-America/New_York}
-      CACHE_URL: valkey://pastebin-cache:6379
+      CACHE_URL: valkey://cairnbin-cache:6379
       TERMBIN_ENABLED: true
       # For remote libsql/Turso: set DATABASE_DRIVER=libsql and DATABASE_URL
       # DATABASE_DRIVER: libsql
@@ -34,21 +34,21 @@ services:
       # termbin raw-TCP: no reverse proxy can front it, so bind all interfaces
       - '9999:9999'
     healthcheck:
-      test: ['CMD', '/usr/local/bin/pastebin', '--status']
+      test: ['CMD', '/usr/local/bin/cairnbin', '--status']
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 90s
     depends_on:
-      pastebin-cache:
+      cairnbin-cache:
         condition: service_healthy
     networks:
-      - pastebin
+      - cairnbin
 
-  pastebin-cache:
+  cairnbin-cache:
     image: valkey/valkey:alpine
     pull_policy: always
-    container_name: pastebin-cache
+    container_name: cairnbin-cache
     restart: always
     logging: *default-logging
     volumes:
@@ -60,9 +60,9 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - pastebin
+      - cairnbin
 
 networks:
-  pastebin:
-    name: pastebin
+  cairnbin:
+    name: cairnbin
     external: false

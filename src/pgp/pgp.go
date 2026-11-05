@@ -28,7 +28,7 @@ import (
 
 // wrapKeyInfo domain-separates the private-key wrapping key from every other
 // installation_secret derivation (AI.md 14181/14207).
-const wrapKeyInfo = "pastebin:pgp-private-key:v1"
+const wrapKeyInfo = "cairnbin:pgp-private-key:v1"
 
 // WrapKey derives the 32-byte key that seals the project private key on disk
 // from the installation_secret via HKDF-SHA256. Both the server (at write/read

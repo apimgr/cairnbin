@@ -88,8 +88,8 @@ treated as Tor hidden-service traffic:
 Two secrets can be rotated manually from the command line. There is no web UI or API route for this.
 
 ```bash
-pastebin --maintenance secret rotate installation_secret
-pastebin --maintenance secret rotate encryption_key
+cairnbin --maintenance secret rotate installation_secret
+cairnbin --maintenance secret rotate encryption_key
 ```
 
 Both require root, or the operator token (`server.token`) when run as the service user, plus typing `rotate` to confirm. Restart the server afterwards.
@@ -101,5 +101,5 @@ Both require root, or the operator token (`server.token`) when run as the servic
 
 ## Reporting Vulnerabilities
 
-See [SECURITY.md](https://github.com/apimgr/pastebin/blob/main/.github/SECURITY.md) for the responsible disclosure process.
+See [SECURITY.md](https://github.com/apimgr/cairnbin/blob/main/.github/SECURITY.md) for the responsible disclosure process.
 Do NOT file public issues for security vulnerabilities.

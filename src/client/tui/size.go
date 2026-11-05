@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/apimgr/pastebin/src/common/terminal"
+import "github.com/apimgr/cairnbin/src/common/terminal"
 
 // LayoutConfig describes how a view should be rendered for a given SizeMode.
 type LayoutConfig struct {

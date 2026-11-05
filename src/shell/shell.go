@@ -1,5 +1,5 @@
 // Package shell generates shell completion scripts and init snippets for the
-// pastebin binary. Supported shells: bash, zsh, fish, sh, dash, ksh,
+// cairnbin binary. Supported shells: bash, zsh, fish, sh, dash, ksh,
 // powershell, pwsh.
 package shell
 

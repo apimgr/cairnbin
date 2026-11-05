@@ -463,7 +463,7 @@ func TestModelViewSetup(t *testing.T) {
 	m.height = 24
 
 	view := m.View()
-	if !strings.Contains(view, "pastebin-cli setup") {
+	if !strings.Contains(view, "cairnbin-cli setup") {
 		t.Error("setup view should contain setup title")
 	}
 }
@@ -479,8 +479,8 @@ func TestModelViewListing(t *testing.T) {
 	m.list.filtered = m.list.items
 
 	view := m.View()
-	if !strings.Contains(view, "pastebin") {
-		t.Error("listing view should contain pastebin title")
+	if !strings.Contains(view, "cairnbin") {
+		t.Error("listing view should contain cairnbin title")
 	}
 }
 

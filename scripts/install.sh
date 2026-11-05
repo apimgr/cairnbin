@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# install.sh — installs pastebin binary to /usr/local/bin
-# Usage: curl -sSL https://github.com/apimgr/pastebin/raw/main/scripts/install.sh | bash
+# install.sh — installs cairnbin binary to /usr/local/bin
+# Usage: curl -sSL https://github.com/apimgr/cairnbin/raw/main/scripts/install.sh | bash
 set -euo pipefail
 
-REPO="apimgr/pastebin"
-BINARY="pastebin"
+REPO="apimgr/cairnbin"
+BINARY="cairnbin"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
 detect_platform() {
@@ -26,14 +26,14 @@ URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY}-${PLATFOR
 
 echo "Installing ${BINARY} ${VERSION} for ${PLATFORM}..."
 
-# mktemp: predictable shared paths like /tmp/pastebin are a symlink/hijack
+# mktemp: predictable shared paths like /tmp/cairnbin are a symlink/hijack
 # target when this script runs as root (pass 1 security). The mkdir -p is
 # required, not decorative: mktemp creates the final file but NOT the
 # intervening directory, so without it a fresh machine fails with
 # "No such file or directory" before anything is downloaded. This is the
 # project's documented temp-dir convention (AI.md 32750-32751).
 mkdir -p "${TMPDIR:-/tmp}/apimgr"
-TMP_FILE="$(mktemp "${TMPDIR:-/tmp}/apimgr/pastebin-XXXXXX")"
+TMP_FILE="$(mktemp "${TMPDIR:-/tmp}/apimgr/cairnbin-XXXXXX")"
 
 curl -sSL "${URL}" -o "${TMP_FILE}"
 chmod +x "${TMP_FILE}"
