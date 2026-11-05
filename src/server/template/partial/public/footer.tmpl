@@ -76,7 +76,7 @@
         <button type="submit" value="confirm" class="btn btn-danger">{{t .Lang "common.confirm"}}</button>
     </form>
 </dialog>
-{{if trackingEnabled}}
+{{if .TrackingAllowed}}
 <template id="pb-tracking-snippet">{{trackingScript}}</template>
 {{end}}
 <script type="application/json" id="pb-consent-data">{{consentConfig}}</script>

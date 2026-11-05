@@ -125,3 +125,15 @@ func TestConsentBannerServerRendered(t *testing.T) {
 		t.Error("banner must be omitted once a cookie_consent cookie exists")
 	}
 }
+
+func TestCheckTrackingAllowed(t *testing.T) {
+	s := pagesServer(t)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	if s.checkTrackingAllowed(r) {
+		t.Error("no cookie must not allow tracking")
+	}
+	r.AddCookie(&http.Cookie{Name: "cookie_consent", Value: `{"essential":true,"analytics":true}`})
+	if s.checkTrackingAllowed(r) {
+		t.Error("consent without configured tracking must not allow tracking")
+	}
+}

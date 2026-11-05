@@ -4299,6 +4299,13 @@ func hasConsentCookie(r *http.Request) bool {
 	return err == nil && strings.TrimSpace(c.Value) != ""
 }
 
+// checkTrackingAllowed reports whether analytics may be injected for this
+// request: the cookie_consent cookie grants analytics AND tracking is configured.
+func (s *Server) checkTrackingAllowed(r *http.Request) bool {
+	st, ok := priorConsentState(r)
+	return ok && st.Analytics && s.liveCfg().Server.Tracking.Enabled()
+}
+
 // priorConsentState parses the visitor's existing cookie_consent cookie, if
 // any, so handleConsentSet can detect a withdrawal/downgrade against it.
 // A missing or unparseable cookie yields ok=false — there is nothing to
@@ -5068,6 +5075,9 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	// the footer's no-JS consent form only renders while a decision is still
 	// outstanding, matching the JS banner's own show/hide behavior (AI.md 25598).
 	data["HasConsented"] = hasConsentCookie(r)
+	// Tracking markup is only emitted when the visitor consented to analytics
+	// and server.tracking is configured (AI.md CheckTrackingAllowed).
+	data["TrackingAllowed"] = s.checkTrackingAllowed(r)
 	// Inject CSRF token for forms — templates access it as .CSRFToken
 	data["CSRFToken"] = s.csrfTokenFromRequest(r)
 	// Inject build metadata for the footer — templates access them as .Version and .BuildDate
