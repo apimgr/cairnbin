@@ -5083,6 +5083,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	theme := s.themeFromRequest(r)
 	data["Theme"] = theme
 	data["ThemeColor"] = themeColorFor(theme)
+	data["APIBase"] = "/api/" + s.apiVersion()
 	// Inject the next mode in the cycle so the no-JS toggle form can advance it (AI.md 21588)
 	data["NextTheme"] = nextTheme(theme)
 	// Inject whether the visitor already has a recorded cookie_consent choice so

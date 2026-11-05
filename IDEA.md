@@ -120,6 +120,10 @@ The server must be 100% wire-compatible with the following services — existing
 
 Compatibility is wire-level only: URL paths, request/response field names, HTTP status codes, and content types must match. Internal implementation details (storage, ID format, auth mechanism, delete convention) do not need to match. Compat-created pastes use each target's own deletion convention — not the native owner token system — and the two systems must never be mixed.
 
+### Help Page Structure
+
+`/server/help` presents the native REST API first (route table, envelope, Swagger/GraphiQL links, create/get/delete examples), then the web and curl workflows, then a dedicated **Compatibility** section. The Compatibility section documents every compat target (pastebin.com, microbin, lenpaste, stikked, hastebin, dpaste, the curl-upload family, termbin/fiche) with a copyable example and route table per target, and a table of the subdomain routing labels. API paths on the page use the configured `{api_version}`, never a hardcoded version.
+
 ### Compat Subdomain Routing
 
 Any of the compat targets above can also be reached by putting a recognized short/long label as the leftmost DNS label of the request Host, in addition to their normal path-based routes — no `server.yml` config is involved; recognition is automatic and hardcoded. The trusted-peer FQDN resolution order (reverse-proxy headers only when the peer is trusted) applies exactly as it does elsewhere in the app.

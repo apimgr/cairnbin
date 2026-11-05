@@ -154,3 +154,25 @@ func TestSitemapConfig(t *testing.T) {
 		t.Errorf("disabled sitemap status=%d, want 404", w.Code)
 	}
 }
+
+func TestHelpPageAPIFirstThenCompat(t *testing.T) {
+	s := pagesServer(t)
+	r := httptest.NewRequest(http.MethodGet, "/server/help", nil)
+	r.Header.Set("Accept", "text/html")
+	w := httptest.NewRecorder()
+	s.handleHelp(w, r)
+	body := w.Body.String()
+	api := strings.Index(body, `id="api"`)
+	compat := strings.Index(body, `id="compat"`)
+	if api < 0 || compat < 0 || api > compat {
+		t.Fatalf("REST API section must precede Compatibility (api=%d compat=%d)", api, compat)
+	}
+	for _, want := range []string{"/api/v1/pastes", `id="compat-subdomains"`, `id="compat-hastebin"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("help page missing %q", want)
+		}
+	}
+	if strings.Contains(body, "{{.APIBase}}") {
+		t.Error("APIBase not expanded")
+	}
+}

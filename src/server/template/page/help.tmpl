@@ -12,7 +12,64 @@
 
                 <div class="paste-view page-view">
 
-                    <h2>Create a paste via the web</h2>
+                    <h2 id="api">REST API</h2>
+                    <p>The REST API is the primary interface: every feature of the web UI is available through it. All endpoints live under <code>{{.BaseURL}}{{.APIBase}}</code>, answer <code>application/json</code> by default and wrap results as <code>{"ok": true, "data": ...}</code> (errors: <code>{"ok": false, "error": "CODE", "message": "..."}</code>). Add <code>.txt</code> or send <code>Accept: text/plain</code> for plain text.</p>
+                    <table class="help-table">
+                        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+                        <tr><td>POST</td><td><code>{{.APIBase}}/pastes</code></td><td>Create a paste</td></tr>
+                        <tr><td>GET</td><td><code>{{.APIBase}}/pastes</code></td><td>List public pastes (paginated)</td></tr>
+                        <tr><td>GET</td><td><code>{{.APIBase}}/pastes/{id}</code></td><td>Get a paste</td></tr>
+                        <tr><td>GET</td><td><code>{{.APIBase}}/pastes/{id}/raw</code></td><td>Get raw content</td></tr>
+                        <tr><td>DELETE</td><td><code>{{.APIBase}}/pastes/{id}</code></td><td>Delete a paste (owner token required)</td></tr>
+                        <tr><td>GET</td><td><code>{{.APIBase}}/server/healthz</code></td><td>Health status</td></tr>
+                        <tr><td>GET</td><td><code>{{.APIBase}}/server/version</code></td><td>Server version</td></tr>
+                    </table>
+                    <p>Interactive documentation:</p>
+                    <ul>
+                        <li><a href="{{.AssetPrefix}}/server/docs/swagger">Swagger UI</a> — interactive REST API explorer (OpenAPI)</li>
+                        <li><a href="{{.AssetPrefix}}/server/docs/graphql">GraphiQL</a> — interactive GraphQL explorer</li>
+                    </ul>
+                    <p>The GraphQL endpoint is <code>{{.BaseURL}}/api/graphql</code>; the OpenAPI spec is served at <code>{{.BaseURL}}/api/swagger</code>.</p>
+
+                    <h3>Create a paste</h3>
+                    <div class="code-block-multi">
+                        <div class="code-header">
+                            <span class="code-lang">Bash</span>
+                            <button type="button" class="copy-btn" data-copy-target="help-json-create" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
+                                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                            </button>
+                        </div>
+                        <pre><code id="help-json-create">curl -H "Content-Type: application/json" \
+     -H "Accept: application/json" \
+     -d '{"content":"Hello","language":"text","expires_in":"1d"}' \
+     {{.BaseURL}}{{.APIBase}}/pastes</code></pre>
+                    </div>
+
+                    <h3 class="section-mt">Get raw content</h3>
+                    <div class="code-block-multi">
+                        <div class="code-header">
+                            <span class="code-lang">Bash</span>
+                            <button type="button" class="copy-btn" data-copy-target="help-get-raw" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
+                                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                            </button>
+                        </div>
+                        <pre><code id="help-get-raw">curl {{.BaseURL}}/raw/{id}</code></pre>
+                    </div>
+
+                    <h3 class="section-mt">Delete a paste</h3>
+                    <div class="code-block-multi">
+                        <div class="code-header">
+                            <span class="code-lang">Bash</span>
+                            <button type="button" class="copy-btn" data-copy-target="help-delete" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
+                                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                            </button>
+                        </div>
+                        <pre><code id="help-delete">curl -X DELETE \
+     "{{.BaseURL}}{{.APIBase}}/pastes/{id}?token={delete_token}"</code></pre>
+                    </div>
+
+
+                    <h2 class="section-mt">Create a paste via the web</h2>
                     <p>Go to <a href="{{.AssetPrefix}}/create">/create</a>, fill in your content, choose a language and expiry, then click <strong>Create Paste</strong>. Save the delete token — it is shown only once.</p>
 
                     <h2 class="section-mt">Create via curl — raw body</h2>
@@ -37,43 +94,6 @@
                         <pre><code id="help-pipe">cat myfile.py | curl --data-binary @- {{.BaseURL}}/pastes</code></pre>
                     </div>
 
-                    <h2 class="section-mt">JSON API — create</h2>
-                    <div class="code-block-multi">
-                        <div class="code-header">
-                            <span class="code-lang">Bash</span>
-                            <button type="button" class="copy-btn" data-copy-target="help-json-create" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
-                            </button>
-                        </div>
-                        <pre><code id="help-json-create">curl -H "Content-Type: application/json" \
-     -H "Accept: application/json" \
-     -d '{"content":"Hello","language":"text","expires_in":"1d"}' \
-     {{.BaseURL}}/api/v1/pastes</code></pre>
-                    </div>
-
-                    <h2 class="section-mt">Get raw content</h2>
-                    <div class="code-block-multi">
-                        <div class="code-header">
-                            <span class="code-lang">Bash</span>
-                            <button type="button" class="copy-btn" data-copy-target="help-get-raw" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
-                            </button>
-                        </div>
-                        <pre><code id="help-get-raw">curl {{.BaseURL}}/raw/{id}</code></pre>
-                    </div>
-
-                    <h2 class="section-mt">Delete a paste</h2>
-                    <div class="code-block-multi">
-                        <div class="code-header">
-                            <span class="code-lang">Bash</span>
-                            <button type="button" class="copy-btn" data-copy-target="help-delete" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
-                            </button>
-                        </div>
-                        <pre><code id="help-delete">curl -X DELETE \
-     "{{.BaseURL}}/api/v1/pastes/{id}?token={delete_token}"</code></pre>
-                    </div>
-
                     <h2 class="section-mt">Expiry values</h2>
                     <table class="help-table">
                         <tr><th>Value</th><th>Duration</th></tr>
@@ -92,10 +112,16 @@
                     <h2 class="section-mt">Burn after N views</h2>
                     <p>Set <code>burn_after</code> to a number 1–9999. The paste is deleted after that many views. Set to <code>0</code> to disable.</p>
 
-                    <h2 class="section-mt" id="compat">Compatibility layer</h2>
+                    <h2 class="section-mt" id="compat">Compatibility</h2>
+                    <p>Compatibility endpoints are separate from the native API above. They reproduce the wire protocol of other paste services so existing scripts and CLIs work unmodified. Compat creates are anonymous (any API key is accepted and ignored) and use each service's own delete convention, not the owner token.</p>
+                    <ul>
+                        <li><a href="#compat-pastebin">pastebin.com</a>, <a href="#compat-microbin">microbin</a>, <a href="#compat-lenpaste">lenpaste</a>, <a href="#compat-stikked">stikked</a>, <a href="#compat-hastebin">hastebin</a>, <a href="#compat-dpaste">dpaste</a></li>
+                        <li><a href="#compat-curlupload">0x0.st / sprunge / ix.io</a>, <a href="#termbin">termbin / fiche</a></li>
+                        <li><a href="#compat-subdomains">Subdomain routing</a></li>
+                    </ul>
                     <p>This server is a drop-in replacement for multiple paste services. Point existing scripts and CLIs here without modification:</p>
 
-                    <h3>pastebin.com</h3>
+                    <h3 id="compat-pastebin">pastebin.com</h3>
                     <p>Wire-compatible with the <a href="https://pastebin.com/doc_api" target="_blank" rel="noopener">pastebin.com API</a>:</p>
                     <div class="code-block-multi">
                         <div class="code-header">
@@ -114,7 +140,7 @@
                         <tr><td>POST</td><td><code>/api/api_login.php</code></td><td>Always returns ANONYMOUS (auth stub)</td></tr>
                     </table>
 
-                    <h3 class="section-mt">microbin</h3>
+                    <h3 class="section-mt" id="compat-microbin">microbin</h3>
                     <p>Wire-compatible with the <a href="https://github.com/szabodanika/microbin" target="_blank" rel="noopener">microbin</a> API:</p>
                     <div class="code-block-multi">
                         <div class="code-header">
@@ -123,17 +149,17 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-compat-microbin">curl -d "content=Hello" {{.BaseURL}}/api/v1/pasta</code></pre>
+                        <pre><code id="help-compat-microbin">curl -d "content=Hello" {{.BaseURL}}{{.APIBase}}/pasta</code></pre>
                     </div>
                     <table class="help-table">
                         <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>/api/v1/pasta</code></td><td>Create paste</td></tr>
-                        <tr><td>GET</td><td><code>/api/v1/pasta</code></td><td>List pastes</td></tr>
-                        <tr><td>GET</td><td><code>/api/v1/pasta/{id}</code></td><td>Get paste by ID</td></tr>
-                        <tr><td>DELETE</td><td><code>/api/v1/pasta/{id}</code></td><td>Delete paste by ID</td></tr>
+                        <tr><td>POST</td><td><code>{{.APIBase}}/pasta</code></td><td>Create paste</td></tr>
+                        <tr><td>GET</td><td><code>{{.APIBase}}/pasta</code></td><td>List pastes</td></tr>
+                        <tr><td>GET</td><td><code>{{.APIBase}}/pasta/{id}</code></td><td>Get paste by ID</td></tr>
+                        <tr><td>DELETE</td><td><code>{{.APIBase}}/pasta/{id}</code></td><td>Delete paste by ID</td></tr>
                     </table>
 
-                    <h3 class="section-mt">lenpaste</h3>
+                    <h3 class="section-mt" id="compat-lenpaste">lenpaste</h3>
                     <p>Wire-compatible with the <a href="https://github.com/forksmgr/lcomrade-lenpaste" target="_blank" rel="noopener">lenpaste</a> API:</p>
                     <div class="code-block-multi">
                         <div class="code-header">
@@ -146,14 +172,14 @@
                     </div>
                     <table class="help-table">
                         <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>/api/new</code> or <code>/api/v1/new</code></td><td>Create paste</td></tr>
-                        <tr><td>GET</td><td><code>/api/get</code> or <code>/api/v1/get</code></td><td>Get paste (<code>?id=ID</code>)</td></tr>
-                        <tr><td>DELETE</td><td><code>/api/remove</code> or <code>/api/v1/remove</code></td><td>Delete paste (<code>?id=ID&amp;deleteToken=TOKEN</code>)</td></tr>
-                        <tr><td>GET</td><td><code>/api/list</code> or <code>/api/v1/list</code></td><td>List pastes</td></tr>
-                        <tr><td>GET</td><td><code>/api/v1/getServerInfo</code></td><td>Server metadata</td></tr>
+                        <tr><td>POST</td><td><code>/api/new</code> or <code>{{.APIBase}}/new</code></td><td>Create paste</td></tr>
+                        <tr><td>GET</td><td><code>/api/get</code> or <code>{{.APIBase}}/get</code></td><td>Get paste (<code>?id=ID</code>)</td></tr>
+                        <tr><td>DELETE</td><td><code>/api/remove</code> or <code>{{.APIBase}}/remove</code></td><td>Delete paste (<code>?id=ID&amp;deleteToken=TOKEN</code>)</td></tr>
+                        <tr><td>GET</td><td><code>/api/list</code> or <code>{{.APIBase}}/list</code></td><td>List pastes</td></tr>
+                        <tr><td>GET</td><td><code>{{.APIBase}}/getServerInfo</code></td><td>Server metadata</td></tr>
                     </table>
 
-                    <h3 class="section-mt">stikked</h3>
+                    <h3 class="section-mt" id="compat-stikked">stikked</h3>
                     <p>Wire-compatible with the <a href="https://github.com/claudehohl/Stikked" target="_blank" rel="noopener">stikked</a> API:</p>
                     <div class="code-block-multi">
                         <div class="code-header">
@@ -172,7 +198,7 @@
                         <tr><td>GET</td><td><code>/api/paste/{id}</code></td><td>Get paste as JSON (<code>pid</code>, <code>title</code>, <code>name</code>, <code>created</code>, <code>lang</code>, <code>raw</code>, <code>hits</code>)</td></tr>
                     </table>
 
-                    <h3 class="section-mt">hastebin / haste-server</h3>
+                    <h3 class="section-mt" id="compat-hastebin">hastebin / haste-server</h3>
                     <p>Wire-compatible with the <a href="https://github.com/toptal/haste-server" target="_blank" rel="noopener">haste-server</a> API:</p>
                     <div class="code-block-multi">
                         <div class="code-header">
@@ -192,7 +218,7 @@ curl {{.BaseURL}}/documents/AbCdEfGh</code></pre>
                         <tr><td>GET</td><td><code>/raw/{key}</code></td><td>Raw paste content (native raw route)</td></tr>
                     </table>
 
-                    <h3 class="section-mt">dpaste</h3>
+                    <h3 class="section-mt" id="compat-dpaste">dpaste</h3>
                     <p>Wire-compatible with the <a href="https://github.com/bartTC/dpaste" target="_blank" rel="noopener">dpaste</a> API:</p>
                     <div class="code-block-multi">
                         <div class="code-header">
@@ -209,7 +235,7 @@ curl {{.BaseURL}}/documents/AbCdEfGh</code></pre>
                         <tr><td>POST</td><td><code>/api/</code> or <code>/api/v2/</code></td><td>Create paste; <code>format=url</code> returns bare URL, <code>format=json</code> returns JSON</td></tr>
                     </table>
 
-                    <h3 class="section-mt">0x0.st / sprunge / ix.io (curl-upload family)</h3>
+                    <h3 class="section-mt" id="compat-curlupload">0x0.st / sprunge / ix.io (curl-upload family)</h3>
                     <p>Wire-compatible with the curl-upload one-liner family:</p>
                     <div class="code-block-multi">
                         <div class="code-header">
@@ -249,13 +275,22 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
                     <p>Maximum payload: {{.TermbinMaxSize}} bytes. Idle/read timeout: {{.TermbinTimeout}}. TCP port: <code>{{.TermbinPort}}</code>.</p>
                     {{end}}
 
-                    <h2 class="section-mt" id="api-docs">API Documentation</h2>
-                    <p>This service provides a full REST API and a GraphQL API, each with interactive documentation:</p>
-                    <ul>
-                        <li><a href="{{.AssetPrefix}}/server/docs/swagger">Swagger UI</a> — interactive REST API explorer (OpenAPI)</li>
-                        <li><a href="{{.AssetPrefix}}/server/docs/graphql">GraphiQL</a> — interactive GraphQL explorer</li>
-                    </ul>
-                    <p>The GraphQL endpoint is <code>{{.BaseURL}}/api/graphql</code>; the OpenAPI spec is served at <code>{{.BaseURL}}/api/swagger</code>.</p>
+
+                    <h3 class="section-mt" id="compat-subdomains">Subdomain routing</h3>
+                    <p>Any target can also be reached by using its label as the leftmost part of the hostname (for example <code>hb.</code> before this server's hostname). On a matched subdomain, a bare <code>POST /</code> with a raw body creates a paste for that target, and other targets' routes are hidden.</p>
+                    <table class="help-table">
+                        <tr><th>Label</th><th>Target</th></tr>
+                        <tr><td><code>pb</code>, <code>pastebin</code></td><td>pastebin.com</td></tr>
+                        <tr><td><code>lp</code>, <code>lenpaste</code></td><td>lenpaste</td></tr>
+                        <tr><td><code>sk</code>, <code>stikked</code></td><td>stikked</td></tr>
+                        <tr><td><code>hb</code>, <code>hastebin</code></td><td>hastebin / haste-server</td></tr>
+                        <tr><td><code>dp</code>, <code>dpaste</code></td><td>dpaste</td></tr>
+                        <tr><td><code>mb</code>, <code>microbin</code></td><td>microbin</td></tr>
+                        <tr><td><code>tb</code>, <code>termbin</code></td><td>termbin (HTTP alias)</td></tr>
+                        <tr><td><code>ix</code></td><td>ix.io</td></tr>
+                        <tr><td><code>sprunge</code></td><td>sprunge.us</td></tr>
+                        <tr><td><code>0x0</code>, <code>st</code></td><td>0x0.st</td></tr>
+                    </table>
 
                     {{if and .TorEnabled .TorRunning .OnionAddress}}
                     <h2 class="section-mt" id="tor-access">Tor Access</h2>
