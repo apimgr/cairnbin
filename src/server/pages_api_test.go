@@ -137,3 +137,20 @@ func TestCheckTrackingAllowed(t *testing.T) {
 		t.Error("consent without configured tracking must not allow tracking")
 	}
 }
+
+func TestSitemapConfig(t *testing.T) {
+	s := pagesServer(t)
+	s.cfg.Server.SEO.Sitemap = config.SitemapConfig{Enabled: true, MaxURLs: 2, IncludeImages: true}
+	w := httptest.NewRecorder()
+	s.handleSitemap(w, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	body := w.Body.String()
+	if strings.Count(body, "<url>") != 2 || !strings.Contains(body, "og-image.png") {
+		t.Errorf("max_urls/include_images not honored: %s", body)
+	}
+	s.cfg.Server.SEO.Sitemap.Enabled = false
+	w = httptest.NewRecorder()
+	s.handleSitemap(w, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	if w.Code != http.StatusNotFound {
+		t.Errorf("disabled sitemap status=%d, want 404", w.Code)
+	}
+}

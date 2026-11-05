@@ -1424,6 +1424,26 @@ type SEOConfig struct {
 	OGImage       string                `yaml:"og_image"`
 	TwitterHandle string                `yaml:"twitter_handle"`
 	Verification  SEOVerificationConfig `yaml:"verification"`
+	Sitemap       SitemapConfig         `yaml:"sitemap"`
+}
+
+// SitemapConfig controls /sitemap.xml generation (PART 16 "Sitemap Configuration").
+type SitemapConfig struct {
+	// Enabled turns /sitemap.xml on (default true); when false the route is 404.
+	Enabled bool `yaml:"enabled"`
+	// MaxURLs caps the URLs per sitemap file (protocol limit 50000).
+	MaxURLs int `yaml:"max_urls"`
+	// IncludeImages adds the branding OG image to the homepage entry.
+	IncludeImages bool `yaml:"include_images"`
+}
+
+// validateSitemapConfig warns and substitutes the default for an out-of-range
+// max_urls; startup never fails on it.
+func validateSitemapConfig(c *SitemapConfig) {
+	if c.MaxURLs <= 0 || c.MaxURLs > 50000 {
+		log.Printf("[config] WARNING: invalid server.seo.sitemap.max_urls %d, using default 50000", c.MaxURLs)
+		c.MaxURLs = 50000
+	}
 }
 
 // SEOVerificationConfig holds search-engine and social-platform site-verification
@@ -1631,6 +1651,7 @@ func DefaultConfig() *Config {
 			},
 			SEO: SEOConfig{
 				Keywords: []string{},
+				Sitemap:  SitemapConfig{Enabled: true, MaxURLs: 50000},
 			},
 			PIDFile:   true,
 			Daemonize: false,
@@ -2818,6 +2839,7 @@ func Validate(cfg *Config) {
 	validateRestoreLimits(&cfg.Server.Restore)
 	validateDebugConfig(&cfg.Server.Debug)
 	validateReportsConfig(&cfg.Web.Reports)
+	validateSitemapConfig(&cfg.Server.SEO.Sitemap)
 	validateUpdate(&cfg.Server.Update)
 	validateI18n(&cfg.Server.I18n)
 	validateBackupRetention(&cfg.Server.Backup.Retention)

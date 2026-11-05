@@ -14,6 +14,13 @@ type sitemapURL struct {
 	Lastmod    string `xml:"lastmod,omitempty"`
 	Changefreq string `xml:"changefreq,omitempty"`
 	Priority   string `xml:"priority,omitempty"`
+	// Image is the optional Google image-sitemap extension entry.
+	Image *sitemapImage `xml:"http://www.google.com/schemas/sitemap-image/1.1 image,omitempty"`
+}
+
+// sitemapImage is one image-sitemap <image:image> entry.
+type sitemapImage struct {
+	Loc string `xml:"http://www.google.com/schemas/sitemap-image/1.1 loc"`
 }
 
 // sitemapURLSet is the root <urlset> element.
@@ -29,6 +36,15 @@ type sitemapURLSet struct {
 // /api/* endpoint are excluded. Every URL is resolved per request via
 // baseURL(r) so it matches the Host/proto the client actually used.
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
+	sm := s.liveCfg().Server.SEO.Sitemap
+	if !sm.Enabled {
+		writeJSON(w, http.StatusNotFound, map[string]any{
+			"ok":      false,
+			"error":   "NOT_FOUND",
+			"message": "Resource not found",
+		})
+		return
+	}
 	base := strings.TrimRight(s.baseURL(r), "/")
 	lastmod := time.Now().UTC().Format("2006-01-02")
 
@@ -44,6 +60,9 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	set := sitemapURLSet{Xmlns: "http://www.sitemaps.org/schemas/sitemap/0.9"}
 	// Homepage — always, 1.0, daily.
 	add(&set, "/", "daily", "1.0")
+	if sm.IncludeImages {
+		set.URLs[0].Image = &sitemapImage{Loc: base + "/static/branding/og-image.png"}
+	}
 	// Public pages — always, 0.8, weekly.
 	for _, p := range []string{
 		"/server/about",
@@ -64,6 +83,9 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	add(&set, "/recent", "weekly", "0.6")
 	add(&set, "/pastes", "weekly", "0.6")
 
+	if sm.MaxURLs > 0 && len(set.URLs) > sm.MaxURLs {
+		set.URLs = set.URLs[:sm.MaxURLs]
+	}
 	body, err := xml.MarshalIndent(set, "", "  ")
 	if err != nil {
 		// Sitemaps are fetched by crawlers, not browsers: send the canonical

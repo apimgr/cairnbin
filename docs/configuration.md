@@ -86,6 +86,34 @@ and fall back to the defaults above.
 
 `server.pages.{about,help,privacy,terms}.content` takes Markdown. For `about` and `help` it is appended to the page; for `privacy` and `terms` a non-empty value replaces the default body. `server.pages.contact` has `enabled`, `captcha` and `success_message`.
 
+### Branding and SEO (`server.branding`, `server.seo`)
+
+```yaml
+server:
+  branding:
+    # display name; empty falls back to the project name
+    title: "pastebin"
+    tagline: ""
+    description: ""
+  seo:
+    keywords: []
+    author: ""
+    og_image: ""
+    twitter_handle: ""
+    # only valid, non-empty codes are rendered; invalid ones are logged at startup
+    verification:
+      google: ""
+      bing: ""
+      custom: []
+    sitemap:
+      # false makes /sitemap.xml return 404
+      enabled: true
+      # 1-50000; out-of-range values warn and use 50000
+      max_urls: 50000
+      # add the OpenGraph image to the homepage entry
+      include_images: false
+```
+
 ### Tor (`server.tor`)
 
 Tor hidden-service support is auto-enabled when a Tor binary is found —
