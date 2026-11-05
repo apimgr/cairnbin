@@ -588,10 +588,11 @@ async function fetchAPI(endpoint, options) {
 // ─── Cookie consent & tracking (merged from consent.js) ───────────────────────
 
 // Pastebin — Cookie Consent & Tracking (PART 31)
-// Progressive enhancement only. Consent state lives entirely client-side in
-// localStorage; the server never records per-visitor consent. Analytics scripts
-// are shipped inert inside <template id="pb-tracking-snippet"> and only activated
-// here once the visitor's analytics consent is known.
+// Progressive enhancement only. The banner is server-rendered and its forms POST
+// to /server/consent; consent lives in the server-readable cookie_consent cookie
+// (never localStorage). Analytics scripts are shipped inert inside
+// <template id="pb-tracking-snippet"> and only activated here once the
+// visitor's analytics consent is known.
 //
 // The consent config itself is embedded by the server as an inert JSON
 // script block (id="pb-consent-data") rather than an executable inline
@@ -599,9 +600,6 @@ async function fetchAPI(endpoint, options) {
 
 (function () {
     'use strict';
-
-    var STORAGE_KEY = 'cookieConsent';
-    var CCPA_KEY = 'ccpaDoNotSell';
 
     // loadConsentConfig parses the server-rendered JSON config block.
     // Returns {} when absent or unparsable, matching prior window.PB_CONSENT
@@ -620,55 +618,32 @@ async function fetchAPI(endpoint, options) {
 
     // ─── Consent state ───────────────────────────────────────────────────────
 
-    // readConsent returns the stored ConsentState, or null when absent/corrupt.
+    // readConsent returns the ConsentState from the cookie_consent cookie, or
+    // null when absent/corrupt.
     function readConsent() {
-        var raw = null;
-        try {
-            raw = localStorage.getItem(STORAGE_KEY);
-        } catch (e) {
-            return null;
-        }
-        if (!raw) {
+        var m = document.cookie.match(/(?:^|;\s*)cookie_consent=([^;]+)/);
+        if (!m) {
             return null;
         }
         try {
-            var c = JSON.parse(raw);
-            if (typeof c !== 'object' || c === null) {
-                return null;
-            }
-            return c;
+            var c = JSON.parse(decodeURIComponent(m[1]));
+            return (typeof c === 'object' && c !== null) ? c : null;
         } catch (e) {
-            try {
-                localStorage.removeItem(STORAGE_KEY);
-            } catch (e2) {
-                // ignore
-            }
             return null;
         }
     }
 
-    // writeConsent persists the ConsentState and applies it immediately.
+    // writeConsent persists the ConsentState in the cookie_consent cookie and
+    // applies it immediately.
     function writeConsent(consent) {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(consent));
-        } catch (e) {
-            // ignore
-        }
-        // Mirror into the server-readable cookie_consent cookie so requests
-        // rendered server-side (e.g. the no-JS footer fallback) see the same
-        // choice a JS-enabled visitor already made (AI.md 16934, 25598).
-        try {
-            var cookieState = {
-                essential: true,
-                preferences: !!consent.preferences,
-                analytics: !!consent.analytics,
-                timestamp: consent.timestamp || nowSeconds()
-            };
-            document.cookie = 'cookie_consent=' + encodeURIComponent(JSON.stringify(cookieState)) +
-                '; path=/; max-age=31536000; samesite=lax';
-        } catch (e) {
-            // ignore
-        }
+        var cookieState = {
+            essential: true,
+            preferences: !!consent.preferences,
+            analytics: !!consent.analytics,
+            timestamp: consent.timestamp || nowSeconds()
+        };
+        document.cookie = 'cookie_consent=' + encodeURIComponent(JSON.stringify(cookieState)) +
+            '; path=/; max-age=31536000; samesite=lax';
         applyConsent(consent);
     }
 
@@ -730,11 +705,6 @@ async function fetchAPI(endpoint, options) {
     // ccpaDoNotSell opts the visitor out of data sales and declines non-essential
     // cookies (CCPA right-to-opt-out).
     function ccpaDoNotSell() {
-        try {
-            localStorage.setItem(CCPA_KEY, 'true');
-        } catch (e) {
-            // ignore
-        }
         applyCCPAOptOut();
         writeConsent({
             essential: true,
@@ -763,102 +733,30 @@ async function fetchAPI(endpoint, options) {
 
     // ─── Consent banner ──────────────────────────────────────────────────────
 
-    var bannerEl = null;
-
     function hideBanner() {
-        if (bannerEl && bannerEl.parentNode) {
-            bannerEl.parentNode.removeChild(bannerEl);
-            bannerEl = null;
+        var banner = document.getElementById('cookie-consent');
+        if (banner && banner.parentNode) {
+            banner.parentNode.removeChild(banner);
         }
     }
 
-    function acceptAll() {
-        writeConsent({
-            essential: true,
-            preferences: true,
-            analytics: true,
-            timestamp: nowSeconds()
-        });
-        hideBanner();
-    }
-
-    function declineAll() {
-        writeConsent({
-            essential: true,
-            preferences: false,
-            analytics: false,
-            timestamp: nowSeconds()
-        });
-        hideBanner();
-    }
-
-    // buildBanner constructs and returns the consent banner element.
-    function buildBanner() {
-        var banner = el('div', {
-            id: 'cookie-consent',
-            class: 'cookie-banner cookie-banner-' + (cfg.position === 'top' ? 'top' : 'bottom'),
-            role: 'region',
-            'aria-label': 'Cookie consent',
-            'data-sold': cfg.dataSold ? 'true' : 'false'
-        });
-
-        var content = el('div', { class: 'cookie-banner-content' });
-
-        var message = el('span', { class: 'cookie-message' }, (cfg.message || '') + ' ');
-        if (cfg.policyUrl) {
-            message.appendChild(document.createTextNode('— '));
-            message.appendChild(el('a', {
-                href: cfg.policyUrl,
-                class: 'policy-link'
-            }, cfg.policyText || 'Privacy Policy'));
+    // bindBanner intercepts the server-rendered banner forms so a JS-capable
+    // browser skips the reload; without JS the forms POST to /server/consent.
+    function bindBanner() {
+        var forms = document.querySelectorAll('#cookie-consent form');
+        for (var i = 0; i < forms.length; i++) {
+            forms[i].addEventListener('submit', function (ev) {
+                ev.preventDefault();
+                var accepted = ev.target.elements.choice.value === 'accept';
+                writeConsent({
+                    essential: true,
+                    preferences: accepted,
+                    analytics: accepted && !!cfg.analyticsConfigured,
+                    timestamp: nowSeconds()
+                });
+                hideBanner();
+            });
         }
-        content.appendChild(message);
-
-        var buttons = el('div', { class: 'cookie-buttons' });
-
-        if (cfg.showPreferences) {
-            var prefBtn = el('button', {
-                type: 'button',
-                class: 'btn-preferences'
-            }, cfg.preferencesText || 'Manage Preferences');
-            prefBtn.addEventListener('click', openPreferences);
-            buttons.appendChild(prefBtn);
-        }
-
-        if (cfg.dataSold) {
-            var dnsBtn = el('button', {
-                type: 'button',
-                class: 'btn-do-not-sell'
-            }, 'Do Not Sell My Info');
-            dnsBtn.addEventListener('click', ccpaDoNotSell);
-            buttons.appendChild(dnsBtn);
-        }
-
-        var declineBtn = el('button', {
-            type: 'button',
-            class: 'btn-decline'
-        }, cfg.declineText || 'Decline');
-        declineBtn.addEventListener('click', declineAll);
-        buttons.appendChild(declineBtn);
-
-        var acceptBtn = el('button', {
-            type: 'button',
-            class: 'btn-accept'
-        }, cfg.acceptText || 'Accept');
-        acceptBtn.addEventListener('click', acceptAll);
-        buttons.appendChild(acceptBtn);
-
-        content.appendChild(buttons);
-        banner.appendChild(content);
-        return banner;
-    }
-
-    function showBanner() {
-        if (bannerEl) {
-            return;
-        }
-        bannerEl = buildBanner();
-        document.body.appendChild(bannerEl);
     }
 
     // ─── Preferences modal ───────────────────────────────────────────────────
@@ -970,19 +868,15 @@ async function fetchAPI(endpoint, options) {
 
     function init() {
         // Honor a prior CCPA opt-out immediately.
-        try {
-            if (localStorage.getItem(CCPA_KEY) === 'true') {
-                applyCCPAOptOut();
-            }
-        } catch (e) {
-            // ignore
+        if (/(?:^|;\s*)ccpa_opt_out=true/.test(document.cookie)) {
+            applyCCPAOptOut();
         }
 
         var consent = readConsent();
         if (consent) {
             applyConsent(consent);
-        } else if (cfg.showUntilAcknowledged !== false) {
-            showBanner();
+        } else {
+            bindBanner();
         }
 
         // Expose the preferences modal so any page (e.g. /server/privacy) can

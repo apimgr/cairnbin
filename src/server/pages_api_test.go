@@ -99,3 +99,29 @@ func TestExpandFooterVars(t *testing.T) {
 		t.Error("empty footer must stay empty")
 	}
 }
+
+func TestConsentBannerServerRendered(t *testing.T) {
+	s := pagesServer(t)
+	get := func(cookie string) string {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Accept", "text/html")
+		if cookie != "" {
+			r.AddCookie(&http.Cookie{Name: "cookie_consent", Value: cookie})
+		}
+		w := httptest.NewRecorder()
+		s.handleAbout(w, r)
+		return w.Body.String()
+	}
+	first := get("")
+	for _, want := range []string{`id="cookie-consent"`, `action="/server/consent"`, `value="accept"`, `value="decline"`} {
+		if !strings.Contains(first, want) {
+			t.Errorf("first visit must render %s without JS", want)
+		}
+	}
+	if strings.Contains(first, "<noscript>\n<form class=\"cookie-banner") {
+		t.Error("banner must not be hidden inside noscript")
+	}
+	if got := get(`{"essential":true}`); strings.Contains(got, `id="cookie-consent"`) {
+		t.Error("banner must be omitted once a cookie_consent cookie exists")
+	}
+}
