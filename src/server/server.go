@@ -2094,7 +2094,7 @@ func (s *Server) secFetchMiddleware(next http.Handler) http.Handler {
 				// by browsers, so no CSRF risk.
 				if r.Header.Get("Authorization") == "" && r.Header.Get("X-API-Token") == "" {
 					// Check CSRF exempt paths.
-					if !isCSRFExempt(r.URL.Path, cfg.Web.CSRF.ExemptPaths) {
+					if !isCSRFExempt(r.URL.Path, cfg.Server.CSRF.ExemptPaths) {
 						writeJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "error": "FORBIDDEN", "message": "cross-site state-changing request blocked"})
 						return
 					}
@@ -2244,13 +2244,13 @@ func (s *Server) validateCSRFToken(token string) bool {
 func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg := s.liveCfg()
-		if !cfg.Web.CSRF.Enabled || len(s.csrfSecret) == 0 {
+		if !cfg.Server.CSRF.Enabled || len(s.csrfSecret) == 0 {
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		// Inspect the request's existing CSRF cookie before issuing a new one.
-		reqCookie, cookieErr := r.Cookie(cfg.Web.CSRF.CookieName)
+		reqCookie, cookieErr := r.Cookie(cfg.Server.CSRF.CookieName)
 		hasCookie := cookieErr == nil && reqCookie.Value != ""
 
 		// Reuse a valid existing token; mint a fresh one only when absent/invalid.
@@ -2282,7 +2282,7 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 		hasBearer := r.Header.Get("Authorization") != "" || r.Header.Get("X-API-Token") != ""
 		bypass := !isMutating || hasBearer ||
 			isWebSocketUpgrade(r) ||
-			isCSRFExempt(r.URL.Path, cfg.Web.CSRF.ExemptPaths) ||
+			isCSRFExempt(r.URL.Path, cfg.Server.CSRF.ExemptPaths) ||
 			isCSRFExempt(r.URL.Path, config.CSRFBuiltinExemptPaths)
 
 		if !bypass {
@@ -2292,7 +2292,7 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 			// parse multipart explicitly so the hidden csrf_token field is
 			// visible. ParseMultipartForm caches the parsed form, so the
 			// handler's own later parse of the same body is a no-op.
-			submitted := r.Header.Get(cfg.Web.CSRF.HeaderName)
+			submitted := r.Header.Get(cfg.Server.CSRF.HeaderName)
 			if submitted == "" {
 				if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 					// Malformed multipart falls through to token-absent
@@ -2338,9 +2338,9 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 		}
 
 		secure := r.TLS != nil
-		if cfg.Web.CSRF.Secure == "true" {
+		if cfg.Server.CSRF.Secure == "true" {
 			secure = true
-		} else if cfg.Web.CSRF.Secure == "false" {
+		} else if cfg.Server.CSRF.Secure == "false" {
 			secure = false
 		}
 
@@ -2348,7 +2348,7 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 		// echo the token into the X-CSRF-Token header; SameSite=Strict is the
 		// primary defense (blocks cross-site cookie attachment entirely).
 		http.SetCookie(w, &http.Cookie{
-			Name:     cfg.Web.CSRF.CookieName,
+			Name:     cfg.Server.CSRF.CookieName,
 			Value:    token,
 			Path:     "/",
 			HttpOnly: false,
@@ -4247,9 +4247,9 @@ func safeRedirectPath(u *url.URL) (string, bool) {
 // year. The cookie is readable by client JS so the consent UI can reflect state.
 func (s *Server) handleCCPAOptOut(w http.ResponseWriter, r *http.Request) {
 	secure := r.TLS != nil
-	if s.liveCfg().Web.CSRF.Secure == "true" {
+	if s.liveCfg().Server.CSRF.Secure == "true" {
 		secure = true
-	} else if s.liveCfg().Web.CSRF.Secure == "false" {
+	} else if s.liveCfg().Server.CSRF.Secure == "false" {
 		secure = false
 	}
 	cookie := &http.Cookie{
@@ -4358,9 +4358,9 @@ func (s *Server) handleConsentSet(w http.ResponseWriter, r *http.Request) {
 		b = []byte(`{"essential":true}`)
 	}
 	secure := r.TLS != nil
-	if cfg.Web.CSRF.Secure == "true" {
+	if cfg.Server.CSRF.Secure == "true" {
 		secure = true
-	} else if cfg.Web.CSRF.Secure == "false" {
+	} else if cfg.Server.CSRF.Secure == "false" {
 		secure = false
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -4499,9 +4499,9 @@ func (s *Server) handleAnnouncementDismiss(w http.ResponseWriter, r *http.Reques
 	sort.Strings(list)
 	cfg := s.liveCfg()
 	secure := r.TLS != nil
-	if cfg.Web.CSRF.Secure == "true" {
+	if cfg.Server.CSRF.Secure == "true" {
 		secure = true
-	} else if cfg.Web.CSRF.Secure == "false" {
+	} else if cfg.Server.CSRF.Secure == "false" {
 		secure = false
 	}
 	http.SetCookie(w, &http.Cookie{

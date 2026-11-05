@@ -57,6 +57,8 @@ type ServerConfig struct {
 	Branding BrandingConfig `yaml:"branding"`
 	// SEO holds search-engine metadata such as keywords (PART 12/16).
 	SEO SEOConfig `yaml:"seo"`
+	// CSRF controls double-submit cookie CSRF protection (PART 16 server.csrf).
+	CSRF CSRFConfig `yaml:"csrf"`
 	// User and Group are the system user/group to drop privileges to (PART 12).
 	// Empty or "{auto}" means auto-detect; keep current privileges if unset.
 	User  string `yaml:"user"`
@@ -885,8 +887,6 @@ type WebConfig struct {
 	Reports ReportsConfig `yaml:"reports"`
 	// Headers controls which advanced security headers are emitted.
 	Headers HeadersConfig `yaml:"headers"`
-	// CSRF controls double-submit cookie CSRF protection (PART 16).
-	CSRF CSRFConfig `yaml:"csrf"`
 	// Footer controls operator footer branding (PART 16).
 	Footer FooterConfig `yaml:"footer"`
 	// Announcements controls the server-rendered site banner (PART 16 → Site
@@ -1649,6 +1649,14 @@ func DefaultConfig() *Config {
 				Features:    defaultBrandingFeatures,
 				Links:       defaultBrandingLinks,
 			},
+			CSRF: CSRFConfig{
+				Enabled:     true,
+				TokenLength: 32,
+				CookieName:  "csrf_token",
+				HeaderName:  "X-CSRF-Token",
+				Secure:      "auto",
+				ExemptPaths: []string{},
+			},
 			SEO: SEOConfig{
 				Keywords: []string{},
 				Sitemap:  SitemapConfig{Enabled: true, MaxURLs: 50000},
@@ -2059,14 +2067,6 @@ func DefaultConfig() *Config {
 			},
 			Headers: HeadersConfig{
 				SecFetchValidation: true,
-			},
-			CSRF: CSRFConfig{
-				Enabled:     true,
-				TokenLength: 32,
-				CookieName:  "csrf_token",
-				HeaderName:  "X-CSRF-Token",
-				Secure:      "auto",
-				ExemptPaths: []string{},
 			},
 			Announcements: AnnouncementsConfig{
 				Enabled:  true,

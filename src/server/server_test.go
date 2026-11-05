@@ -162,7 +162,7 @@ func TestIsSameOrigin(t *testing.T) {
 func newCSRFServer() *Server {
 	return &Server{
 		cfg: &config.Config{
-			Web: config.WebConfig{
+			Server: config.ServerConfig{
 				CSRF: config.CSRFConfig{
 					Enabled:     true,
 					TokenLength: 32,

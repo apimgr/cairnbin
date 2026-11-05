@@ -190,10 +190,10 @@ func (s *Server) rememberPreference(w http.ResponseWriter, r *http.Request, key,
 
 // cookieSecure resolves the Secure attribute for every client-readable cookie
 // the server sets: the connection's own TLS state, overridden by an explicit
-// web.csrf.secure config value. Marking a cookie Secure on a plain-HTTP
+// server.csrf.secure config value. Marking a cookie Secure on a plain-HTTP
 // deployment would make the browser drop it entirely.
 func (s *Server) cookieSecure(r *http.Request) bool {
-	switch s.liveCfg().Web.CSRF.Secure {
+	switch s.liveCfg().Server.CSRF.Secure {
 	case "true":
 		return true
 	case "false":

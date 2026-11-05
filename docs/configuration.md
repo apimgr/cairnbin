@@ -114,6 +114,22 @@ server:
       include_images: false
 ```
 
+### CSRF (`server.csrf`)
+
+```yaml
+server:
+  csrf:
+    # double-submit cookie protection for browser forms; Bearer requests are exempt
+    enabled: true
+    token_length: 32
+    cookie_name: csrf_token
+    header_name: X-CSRF-Token
+    # auto sets Secure when the request is https; true | false force it
+    secure: auto
+    # glob patterns that skip CSRF validation
+    exempt_paths: []
+```
+
 ### Tor (`server.tor`)
 
 Tor hidden-service support is auto-enabled when a Tor binary is found —
