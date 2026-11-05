@@ -14,11 +14,11 @@ func TestGetThemePalette(t *testing.T) {
 		wantBackground string
 		anyOf          []string
 	}{
-		{"dark", "dark", "#1a1b26", nil},
+		{"dark", "dark", "#282a36", nil},
 		{"light", "light", "#ffffff", nil},
-		{"empty defaults to dark", "", "#1a1b26", nil},
-		{"unknown defaults to dark", "unknown", "#1a1b26", nil},
-		{"auto returns dark or light", "auto", "", []string{"#1a1b26", "#ffffff"}},
+		{"empty defaults to dark", "", "#282a36", nil},
+		{"unknown defaults to dark", "unknown", "#282a36", nil},
+		{"auto returns dark or light", "auto", "", []string{"#282a36", "#ffffff"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -99,9 +99,9 @@ func TestThemePaletteDark_Fields(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"Background", p.Background, "#1a1b26"},
-		{"Foreground", p.Foreground, "#c0caf5"},
-		{"Primary", p.Primary, "#7aa2f7"},
+		{"Background", p.Background, "#282a36"},
+		{"Foreground", p.Foreground, "#f8f8f2"},
+		{"Primary", p.Primary, "#bd93f9"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -120,8 +120,8 @@ func TestThemePaletteLight_Fields(t *testing.T) {
 		want string
 	}{
 		{"Background", p.Background, "#ffffff"},
-		{"Foreground", p.Foreground, "#1a1b26"},
-		{"Primary", p.Primary, "#2e7de9"},
+		{"Foreground", p.Foreground, "#1f2328"},
+		{"Primary", p.Primary, "#0969da"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
