@@ -38,6 +38,7 @@ import (
 	"github.com/apimgr/pastebin/src/common/email"
 	"github.com/apimgr/pastebin/src/common/httputil"
 	"github.com/apimgr/pastebin/src/common/i18n"
+	"github.com/apimgr/pastebin/src/common/theme"
 	"github.com/apimgr/pastebin/src/path"
 	"github.com/apimgr/pastebin/src/config"
 	"github.com/apimgr/pastebin/src/database"
@@ -4630,6 +4631,15 @@ func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
 
 // ─── Misc handlers ────────────────────────────────────────────────────────────
 
+// themeColorFor returns the browser-chrome color for a theme mode from the
+// canonical palette; "auto" resolves to the dark palette (the default theme).
+func themeColorFor(mode string) string {
+	if mode == "light" {
+		return theme.ThemePaletteLight.Background
+	}
+	return theme.ThemePaletteDark.Background
+}
+
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	// PWA manifest is revalidated on every load (PART 16) so a new build's icons
 	// and metadata are picked up promptly; the version-derived ETag lets the
@@ -4641,10 +4651,13 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 		"name":             s.liveCfg().Web.SiteTitle,
 		"short_name":       "Paste",
 		"description":      "A fast, public pastebin service",
-		"start_url":        "/",
+		"start_url":        "/?source=pwa",
+		"scope":            "/",
 		"display":          "standalone",
-		"background_color": "#1e1e2e",
-		"theme_color":      "#89b4fa",
+		"orientation":      "any",
+		"categories":       []string{"utilities"},
+		"background_color": theme.ThemePaletteDark.Background,
+		"theme_color":      theme.ThemePaletteDark.Primary,
 		"icons": []map[string]interface{}{
 			{"src": "/static/icons/icon-72.png", "sizes": "72x72", "type": "image/png"},
 			{"src": "/static/icons/icon-96.png", "sizes": "96x96", "type": "image/png"},
@@ -5069,6 +5082,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	// <html> renders class="theme-{{.Theme}}" with no init JS and no FOUC (AI.md 23474, 24552)
 	theme := s.themeFromRequest(r)
 	data["Theme"] = theme
+	data["ThemeColor"] = themeColorFor(theme)
 	// Inject the next mode in the cycle so the no-JS toggle form can advance it (AI.md 21588)
 	data["NextTheme"] = nextTheme(theme)
 	// Inject whether the visitor already has a recorded cookie_consent choice so
@@ -5162,6 +5176,7 @@ func (s *Server) renderTemplateToString(r *http.Request, name string, data map[s
 	// Inject the theme resolved from the server-readable `theme` cookie (AI.md 23474)
 	theme := s.themeFromRequest(r)
 	data["Theme"] = theme
+	data["ThemeColor"] = themeColorFor(theme)
 	data["NextTheme"] = nextTheme(theme)
 	// Inject build metadata for the footer — templates access them as .Version and .BuildDate
 	data["Version"] = s.version
@@ -5419,6 +5434,7 @@ func (s *Server) renderErrorPage(w http.ResponseWriter, r *http.Request, status 
 	data["AvailableLanguages"] = i18n.Languages()
 	theme := s.themeFromRequest(r)
 	data["Theme"] = theme
+	data["ThemeColor"] = themeColorFor(theme)
 	data["NextTheme"] = nextTheme(theme)
 	data["CSRFToken"] = s.csrfTokenFromRequest(r)
 	data["Version"] = s.version

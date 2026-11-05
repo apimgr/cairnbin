@@ -1300,6 +1300,14 @@ func TestHandleManifest(t *testing.T) {
 	if body["name"] != "Test Paste" {
 		t.Errorf("manifest name = %v, want Test Paste", body["name"])
 	}
+	for k, want := range map[string]string{"start_url": "/?source=pwa", "scope": "/", "orientation": "any", "background_color": "#282a36"} {
+		if body[k] != want {
+			t.Errorf("manifest %s = %v, want %s", k, body[k], want)
+		}
+	}
+	if cats, _ := body["categories"].([]interface{}); len(cats) != 1 || cats[0] != "utilities" {
+		t.Errorf("manifest categories = %v", body["categories"])
+	}
 }
 
 // ─── Server.handleServiceWorker ───────────────────────────────────────────────
