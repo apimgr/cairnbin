@@ -58,7 +58,7 @@ func RunData(action, prefix string, opts DataOptions) error {
 	if err != nil {
 		return fmt.Errorf("data: open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ac := cfg.Server.Logging.Audit
 	auditW := audit.New(audit.Config{

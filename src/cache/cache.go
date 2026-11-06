@@ -264,7 +264,7 @@ func newRedisCache(cfg Config, prefix string, defaultTTL time.Duration) (*redisC
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
-		client.Close()
+		_ = client.Close()
 		return nil, fmt.Errorf("cache: redis/valkey ping failed: %w", err)
 	}
 

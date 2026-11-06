@@ -38,13 +38,13 @@ func newTestDB(t *testing.T) database.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	db, err := database.NewDatabase("sqlite", filepath.Join(dir, "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -262,7 +262,9 @@ func TestGetPaste(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	if resp["ok"] != true {
 		t.Errorf("ok: got %v", resp["ok"])
 	}
@@ -285,7 +287,9 @@ func TestGetPaste_NotFound(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	if resp["ok"] != false {
 		t.Errorf("ok: got %v, want false", resp["ok"])
 	}
@@ -539,7 +543,9 @@ func TestDeletePaste(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	if resp["ok"] != true {
 		t.Errorf("ok: got %v, want true", resp["ok"])
 	}
@@ -602,7 +608,7 @@ func TestPasteCache_HitAvoidsDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cache.New: %v", err)
 	}
-	t.Cleanup(func() { c.Close() })
+	t.Cleanup(func() { _ = c.Close() })
 	h.SetCache(c)
 
 	m := createViaAPI(t, h, `{"content":"cache hit test"}`)
@@ -637,7 +643,7 @@ func TestPasteCache_PopulatesOnDBRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cache.New: %v", err)
 	}
-	t.Cleanup(func() { c.Close() })
+	t.Cleanup(func() { _ = c.Close() })
 	h.SetCache(c)
 
 	m := createViaAPI(t, h, `{"content":"populate test"}`)
@@ -665,7 +671,7 @@ func TestPasteCache_InvalidatedOnDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cache.New: %v", err)
 	}
-	t.Cleanup(func() { c.Close() })
+	t.Cleanup(func() { _ = c.Close() })
 	h.SetCache(c)
 
 	m := createViaAPI(t, h, `{"content":"invalidate on delete"}`)
@@ -703,7 +709,7 @@ func TestPasteCache_BurnAfterNeverCached(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cache.New: %v", err)
 	}
-	t.Cleanup(func() { c.Close() })
+	t.Cleanup(func() { _ = c.Close() })
 	h.SetCache(c)
 
 	m := createViaAPI(t, h, `{"content":"burn me","burn_after":5}`)

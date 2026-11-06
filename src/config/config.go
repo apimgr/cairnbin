@@ -887,6 +887,11 @@ type WebConfig struct {
 	Reports ReportsConfig `yaml:"reports"`
 	// Headers controls which advanced security headers are emitted.
 	Headers HeadersConfig `yaml:"headers"`
+	// LLMs controls the /.well-known/llms.txt AI-discovery file.
+	LLMs LLMsConfig `yaml:"llms"`
+	// PermissionsPolicy maps each Permissions-Policy feature to its allowlist
+	// ("()", "(self)", "(self https://x)", "*"); an empty value omits the feature.
+	PermissionsPolicy map[string]string `yaml:"permissions_policy"`
 	// Footer controls operator footer branding (PART 16).
 	Footer FooterConfig `yaml:"footer"`
 	// Announcements controls the server-rendered site banner (PART 16 → Site
@@ -1033,6 +1038,99 @@ type HeadersConfig struct {
 	// Sec-Fetch-Site: cross-site is present and no Bearer token is provided.
 	// Absence of the header is treated as pass-through for legacy-browser compat.
 	SecFetchValidation bool `yaml:"sec_fetch_validation"`
+	// COOP is the Cross-Origin-Opener-Policy value (default "unsafe-none").
+	COOP string `yaml:"coop"`
+	// COEP is the Cross-Origin-Embedder-Policy value (default "unsafe-none").
+	COEP string `yaml:"coep"`
+	// CORP is the Cross-Origin-Resource-Policy value (default "cross-origin").
+	CORP string `yaml:"corp"`
+	// OriginAgentCluster emits "Origin-Agent-Cluster: ?1" (default true).
+	OriginAgentCluster bool `yaml:"origin_agent_cluster"`
+	// CrossDomainPolicies is the X-Permitted-Cross-Domain-Policies value (default "none").
+	CrossDomainPolicies string `yaml:"cross_domain_policies"`
+	// DNSPrefetchControl is the X-DNS-Prefetch-Control value; "" omits the header.
+	DNSPrefetchControl string `yaml:"dns_prefetch_control"`
+	// HonorSecGPC treats Sec-GPC: 1 as a privacy opt-out signal (default true).
+	HonorSecGPC bool `yaml:"honor_sec_gpc"`
+	// HonorDNT treats DNT: 1 as a privacy opt-out signal (default false).
+	HonorDNT bool `yaml:"honor_dnt"`
+	// ServerTimingInDebugOnly keeps Server-Timing out of production (default true).
+	ServerTimingInDebugOnly bool `yaml:"server_timing_in_debug_only"`
+	// ClearSiteData controls Clear-Site-Data on token revocation / consent withdrawal.
+	ClearSiteData ClearSiteDataConfig `yaml:"clear_site_data"`
+	// NEL controls the Network Error Logging header.
+	NEL NELConfig `yaml:"nel"`
+}
+
+// ClearSiteDataConfig controls Clear-Site-Data emission (PART 11).
+type ClearSiteDataConfig struct {
+	OnTokenRevocation   bool `yaml:"on_token_revocation"`
+	OnConsentWithdrawal bool `yaml:"on_consent_withdrawal"`
+	// ExecutionContexts also sends "executionContexts" (default false).
+	ExecutionContexts bool `yaml:"execution_contexts"`
+}
+
+// NELConfig controls the NEL response header (PART 11).
+type NELConfig struct {
+	Enabled           bool `yaml:"enabled"`
+	MaxAgeSeconds     int  `yaml:"max_age_seconds"`
+	IncludeSubdomains bool `yaml:"include_subdomains"`
+	// SampleRate is the failure sampling fraction, 0.0 to 1.0.
+	SampleRate float64 `yaml:"sample_rate"`
+}
+
+// DefaultPermissionsPolicy returns the PART 11 spec-default Permissions-Policy
+// feature map: sensors and ad-tracking proposals locked, spec-used features
+// scoped to self.
+func DefaultPermissionsPolicy() map[string]string {
+	m := map[string]string{}
+	for _, f := range []string{
+		"accelerometer", "ambient-light-sensor", "battery", "camera",
+		"display-capture", "geolocation", "gyroscope", "hid", "idle-detection",
+		"magnetometer", "microphone", "midi", "screen-wake-lock", "serial",
+		"usb", "xr-spatial-tracking", "attribution-reporting",
+		"browsing-topics", "interest-cohort",
+	} {
+		m[f] = "()"
+	}
+	for _, f := range []string{
+		"autoplay", "encrypted-media", "fullscreen", "payment",
+		"picture-in-picture", "publickey-credentials-get", "storage-access",
+		"web-share",
+	} {
+		m[f] = "(self)"
+	}
+	return m
+}
+
+// validateHeadersConfig warns and substitutes the PART 11 defaults for
+// invalid header settings; startup never fails on a bad header setting.
+func validateHeadersConfig(h *HeadersConfig) {
+	d := DefaultConfig().Web.Headers
+	if h.COOP == "" {
+		h.COOP = d.COOP
+	}
+	if h.COEP == "" {
+		h.COEP = d.COEP
+	}
+	if h.CORP == "" {
+		h.CORP = d.CORP
+	}
+	if h.CrossDomainPolicies == "" {
+		h.CrossDomainPolicies = d.CrossDomainPolicies
+	}
+	if h.DNSPrefetchControl != "" && h.DNSPrefetchControl != "off" && h.DNSPrefetchControl != "on" {
+		log.Printf("[config] WARNING: invalid web.headers.dns_prefetch_control %q, omitting header", h.DNSPrefetchControl)
+		h.DNSPrefetchControl = ""
+	}
+	if h.NEL.MaxAgeSeconds <= 0 {
+		log.Printf("[config] WARNING: invalid web.headers.nel.max_age_seconds %d, using default %d", h.NEL.MaxAgeSeconds, d.NEL.MaxAgeSeconds)
+		h.NEL.MaxAgeSeconds = d.NEL.MaxAgeSeconds
+	}
+	if h.NEL.SampleRate < 0 || h.NEL.SampleRate > 1 {
+		log.Printf("[config] WARNING: invalid web.headers.nel.sample_rate %v, using default 1.0", h.NEL.SampleRate)
+		h.NEL.SampleRate = 1.0
+	}
 }
 
 // CSRFConfig controls CSRF double-submit cookie protection (PART 16).
@@ -1051,17 +1149,6 @@ type CSRFConfig struct {
 	// Glob patterns are supported (e.g., /api/v1/webhooks/*).
 	ExemptPaths []string `yaml:"exempt_paths"`
 }
-
-// CSRFBuiltinExemptPaths are always exempt from CSRF validation, in addition to
-// server.csrf.exempt_paths. They are the tokenless, cookie-free creation
-// endpoints the compat layer must serve to unmodified third-party clients
-// (curl, CI scripts, pastebin.com / lenpaste / microbin / stikked / hastebin /
-// dpaste / 0x0.st / sprunge / ix.io tooling): every /api/* route (API routes
-// never accept cookie auth, so there is no ambient authority to forge),
-// hastebin's POST /documents, microbin's POST /upload, the Bearer-only MCP
-// endpoint at /mcp, and the curl-upload
-// family's POST /. Browser forms post to /pastes and keep full CSRF validation.
-var CSRFBuiltinExemptPaths = []string{"/api/*", "/documents", "/upload", "/mcp", "/"}
 
 // NotificationsConfig holds email notification settings.
 type NotificationsConfig struct {
@@ -1119,6 +1206,60 @@ type EmailFrom struct {
 type RobotsConfig struct {
 	Allow []string `yaml:"allow"`
 	Deny  []string `yaml:"deny"`
+	// AIBots controls per-AI-crawler access (default: allow all).
+	AIBots AIBotsConfig `yaml:"ai_bots"`
+}
+
+// LLMsConfig controls llms.txt generation (PART 11 llms.txt).
+type LLMsConfig struct {
+	// Enabled serves llms.txt; false makes both paths return 404 (default true).
+	Enabled bool `yaml:"enabled"`
+	// IncludeEndpoints renders the auto-generated "## Endpoints" section (default true).
+	IncludeEndpoints bool `yaml:"include_endpoints"`
+	// IncludeSchemas renders the verbose "## Schemas" request/response section (default false).
+	IncludeSchemas bool `yaml:"include_schemas"`
+	// CustomSections are extra operator-authored sections appended verbatim.
+	CustomSections []string `yaml:"custom_sections"`
+}
+
+// AIBotsConfig is the per-AI-crawler robots.txt policy (PART 11 robots.txt).
+type AIBotsConfig struct {
+	// Default applies to any recognized AI bot not listed in Bots: allow | deny.
+	Default string `yaml:"default"`
+	// Bots maps a crawler user-agent token to allow | deny.
+	Bots map[string]string `yaml:"bots"`
+}
+
+// RecognizedAIBots lists the AI crawler user-agent tokens robots.txt knows.
+var RecognizedAIBots = []string{
+	"GPTBot", "ChatGPT-User", "ClaudeBot", "anthropic-ai", "Claude-Web",
+	"CCBot", "Google-Extended", "Bytespider", "PerplexityBot",
+	"Applebot-Extended", "Amazonbot", "Diffbot", "FacebookBot", "cohere-ai",
+}
+
+// DeniedAIBots returns the AI crawler tokens that must render their own
+// "Disallow: /" stanza: explicit deny entries, plus (when default is deny)
+// every recognized bot not explicitly allowed. Order is stable.
+func (r RobotsConfig) DeniedAIBots() []string {
+	norm := func(v string) string { return strings.ToLower(strings.TrimSpace(v)) }
+	defaultDeny := norm(r.AIBots.Default) == "deny"
+	var out []string
+	seen := map[string]bool{}
+	for _, name := range RecognizedAIBots {
+		v, listed := r.AIBots.Bots[name]
+		if (listed && norm(v) == "deny") || (!listed && defaultDeny) {
+			out = append(out, name)
+		}
+		seen[name] = true
+	}
+	extra := make([]string, 0, len(r.AIBots.Bots))
+	for name, v := range r.AIBots.Bots {
+		if !seen[name] && norm(v) == "deny" && strings.TrimSpace(name) != "" {
+			extra = append(extra, name)
+		}
+	}
+	slices.Sort(extra)
+	return append(out, extra...)
 }
 
 // SecurityConfig holds security.txt metadata and server-wide encryption keys.
@@ -1583,6 +1724,18 @@ type CSPConfig struct {
 	FrameSrcExtra     string `yaml:"frame_src_extra"`
 	FormActionExtra   string `yaml:"form_action_extra"`
 	ScriptSrcOverride string `yaml:"script_src_override"`
+	// Override-style fields REPLACE the directive instead of appending.
+	StyleSrcOverride   string `yaml:"style_src_override"`
+	ImgSrcOverride     string `yaml:"img_src_override"`
+	FontSrcOverride    string `yaml:"font_src_override"`
+	ConnectSrcOverride string `yaml:"connect_src_override"`
+	FrameSrcOverride   string `yaml:"frame_src_override"`
+	FormActionOverride string `yaml:"form_action_override"`
+	// ReportsEnabled adds report-to/report-uri to the policy (default true).
+	ReportsEnabled bool `yaml:"reports_enabled"`
+	// ReportsSampleRate is the fraction (0.0 to 1.0) of received CSP violation
+	// reports that are logged, to control volume on busy sites (default 1.0).
+	ReportsSampleRate float64 `yaml:"reports_sample_rate"`
 	// frame-ancestors value for the embeddable /emb/{id} endpoint only.
 	// Default "*" (any site may iframe embeds); operator can restrict to
 	// specific origins, e.g. "'self' https://example.com". Empty = "*".
@@ -1812,7 +1965,7 @@ func DefaultConfig() *Config {
 					Keep:     "none",
 				},
 				Debug: DebugLogConfig{
-					Enabled:  true,
+					Enabled:  false,
 					Filename: "debug.log",
 					Format:   "text",
 					Custom:   "",
@@ -2049,9 +2202,11 @@ func DefaultConfig() *Config {
 			SiteTitle: "Cairnbin",
 			Theme:     "dark",
 			Robots: RobotsConfig{
-				Allow: []string{"/"},
-				Deny:  []string{},
+				Allow:  []string{"/", "/api"},
+				Deny:   []string{},
+				AIBots: AIBotsConfig{Default: "allow", Bots: map[string]string{}},
 			},
+			LLMs:    LLMsConfig{Enabled: true, IncludeEndpoints: true, CustomSections: []string{}},
 			Reports: ReportsConfig{RateLimitPerMinute: 60, RateLimitPerIPBurst: 10},
 			HSTS: HSTSConfig{
 				Enabled: true,
@@ -2063,11 +2218,32 @@ func DefaultConfig() *Config {
 			CSP: CSPConfig{
 				Enabled:             true,
 				Mode:                "enforce",
+				ReportsEnabled:      true,
+				ReportsSampleRate:   1.0,
 				EmbedFrameAncestors: "*",
 			},
 			Headers: HeadersConfig{
-				SecFetchValidation: true,
+				SecFetchValidation:      true,
+				COOP:                    "unsafe-none",
+				COEP:                    "unsafe-none",
+				CORP:                    "cross-origin",
+				OriginAgentCluster:      true,
+				CrossDomainPolicies:     "none",
+				HonorSecGPC:             true,
+				ServerTimingInDebugOnly: true,
+				ClearSiteData: ClearSiteDataConfig{
+					OnTokenRevocation:   true,
+					OnConsentWithdrawal: true,
+				},
+				NEL: NELConfig{
+					Enabled: true,
+					// 30 days
+					MaxAgeSeconds:     2592000,
+					IncludeSubdomains: true,
+					SampleRate:        1.0,
+				},
 			},
+			PermissionsPolicy: DefaultPermissionsPolicy(),
 			Announcements: AnnouncementsConfig{
 				Enabled:  true,
 				Messages: []AnnouncementMessage{},
@@ -2450,6 +2626,17 @@ func (c *Config) SecurityReportURL() string {
 		return u
 	}
 	return "https://github.com/apimgr/cairnbin/security/advisories/new"
+}
+
+// RepositoryURL returns the public source repository URL shown in the footer.
+// It is derived from the security report URL (config override or default) by
+// stripping the GitHub advisory suffix, so one setting drives both links.
+func (c *Config) RepositoryURL() string {
+	u := c.SecurityReportURL()
+	if i := strings.Index(u, "/security/advisories"); i > 0 {
+		return u[:i]
+	}
+	return strings.TrimRight(u, "/")
 }
 
 // SecurityPreferredLanguages returns the security.txt Preferred-Languages value
@@ -2839,6 +3026,14 @@ func Validate(cfg *Config) {
 	validateRestoreLimits(&cfg.Server.Restore)
 	validateDebugConfig(&cfg.Server.Debug)
 	validateReportsConfig(&cfg.Web.Reports)
+	validateHeadersConfig(&cfg.Web.Headers)
+	if cfg.Web.CSP.ReportsSampleRate < 0 || cfg.Web.CSP.ReportsSampleRate > 1 {
+		log.Printf("[config] WARNING: invalid web.csp.reports_sample_rate %v, using default 1.0", cfg.Web.CSP.ReportsSampleRate)
+		cfg.Web.CSP.ReportsSampleRate = 1.0
+	}
+	if cfg.Web.PermissionsPolicy == nil {
+		cfg.Web.PermissionsPolicy = DefaultPermissionsPolicy()
+	}
 	validateSitemapConfig(&cfg.Server.SEO.Sitemap)
 	validateUpdate(&cfg.Server.Update)
 	validateI18n(&cfg.Server.I18n)
@@ -3234,17 +3429,17 @@ func Save(path string, cfg *Config) error {
 		return fmt.Errorf("creating temp config: %w", err)
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 	if err := tmp.Chmod(0o640); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("chmod temp config: %w", err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("writing temp config: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("syncing temp config: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -3401,7 +3596,7 @@ func randomUnusedPort(lo, hi int) (int, error) {
 		if err != nil {
 			continue
 		}
-		ln.Close()
+		_ = ln.Close()
 		return port, nil
 	}
 	return 0, fmt.Errorf("no unused port found in %d-%d", lo, hi)

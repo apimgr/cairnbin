@@ -1,77 +1,60 @@
 {{define "meta"}}
-    <title>Security Policy - {{.SiteTitle}}</title>
-    <meta name="description" content="Coordinated vulnerability disclosure policy for {{.SiteTitle}} — scope, safe harbor, and how to report">
+    <title>{{t .Lang "security.policy_title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{tf .Lang "security.policy_meta_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
         <section class="search-section">
             <div class="container container-sm">
                 <div class="section-header">
-                    <h1 class="section-title">Security Policy</h1>
-                    <p class="section-subtitle">Coordinated vulnerability disclosure for {{.SiteTitle}}</p>
+                    <h1 class="section-title">{{t .Lang "security.policy_title"}}</h1>
+                    <p class="section-subtitle">{{tf .Lang "security.policy_subtitle" "site" .SiteTitle}}</p>
                 </div>
 
                 <div class="paste-view page-view">
-                    <h2>Reporting a vulnerability</h2>
-                    <p>
-                        We welcome reports from security researchers. Reports are submitted through a
-                        rotating, single-use link published in our
-                        <a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a> file. Following that link
-                        opens an encrypted reporting form; the report body is encrypted at rest and is
-                        never stored in plaintext.
-                    </p>
+                    <h2>{{t .Lang "security.reporting_vuln"}}</h2>
+                    <p>{{t .Lang "security.reporting_text"}}</p>
+                    <p><a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a></p>
                     {{if .SecurityEmail}}
                     <p>
-                        You may also email <a href="mailto:{{.SecurityEmail}}" class="long-string">{{.SecurityEmail}}</a> directly.
+                        {{t .Lang "security.email_directly"}}
+                        <a href="mailto:{{.SecurityEmail}}" class="long-string">{{.SecurityEmail}}</a>
                     </p>
                     {{end}}
                     {{if .HasPGPKey}}
                     <p>
-                        Our PGP public key is available at
-                        <a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">/.well-known/pgp-key.asc</a> for encrypting
-                        sensitive details.
+                        {{t .Lang "security.pgp_available"}}
+                        <a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">/.well-known/pgp-key.asc</a>
                     </p>
                     {{end}}
 
-                    <h2 class="section-mt">Coordinated disclosure window</h2>
-                    <p>
-                        We ask that you give us up to <strong>{{.DisclosureDays}} days</strong> to
-                        investigate and remediate a reported issue before any public disclosure, or until
-                        a coordinated disclosure date is mutually agreed — whichever comes first. We will
-                        keep you updated through your report's status page.
-                    </p>
+                    <h2 class="section-mt">{{t .Lang "security.disclosure_window"}}</h2>
+                    <p>{{tf .Lang "security.disclosure_window_text" "days" .DisclosureDays}}</p>
 
-                    <h2 class="section-mt">In scope</h2>
+                    <h2 class="section-mt">{{t .Lang "security.in_scope"}}</h2>
                     <ul class="feature-list">
-                        <li>This service and its official domains</li>
-                        <li>The server and client (<code>cairnbin</code>, <code>cairnbin-cli</code>) binaries</li>
-                        <li>The public REST, GraphQL, and web endpoints</li>
-                        <li>Authentication, authorization, and token handling</li>
+                        <li>{{t .Lang "security.in_scope_1"}}</li>
+                        <li>{{t .Lang "security.in_scope_2"}} (<code>cairnbin</code>, <code>cairnbin-cli</code>)</li>
+                        <li>{{t .Lang "security.in_scope_3"}}</li>
+                        <li>{{t .Lang "security.in_scope_4"}}</li>
                     </ul>
 
-                    <h2 class="section-mt">Out of scope</h2>
+                    <h2 class="section-mt">{{t .Lang "security.out_of_scope"}}</h2>
                     <ul class="feature-list">
-                        <li>Denial-of-service, volumetric, or rate-limit exhaustion testing</li>
-                        <li>Social engineering, phishing, or physical attacks against staff</li>
-                        <li>Automated scanner output without a demonstrated, reproducible impact</li>
-                        <li>Reports affecting only unsupported or end-of-life versions</li>
-                        <li>Attacks requiring a compromised host, rooted device, or physical access</li>
+                        <li>{{t .Lang "security.out_scope_1"}}</li>
+                        <li>{{t .Lang "security.out_scope_2"}}</li>
+                        <li>{{t .Lang "security.out_scope_3"}}</li>
+                        <li>{{t .Lang "security.out_scope_4"}}</li>
+                        <li>{{t .Lang "security.out_scope_5"}}</li>
                     </ul>
 
-                    <h2 class="section-mt">Safe harbor</h2>
-                    <p>
-                        We will not pursue or support legal action against researchers who act in good
-                        faith, respect this policy, avoid privacy violations and data destruction, and
-                        give us reasonable time to respond before disclosing. Testing must stay within
-                        the scope above, use your own test data, and stop at the first sign of access to
-                        another user's data. Activity conducted consistently with this policy is
-                        considered authorized.
-                    </p>
+                    <h2 class="section-mt">{{t .Lang "security.safe_harbor"}}</h2>
+                    <p>{{t .Lang "security.safe_harbor_text"}}</p>
 
-                    <h2 class="section-mt">Acknowledgments</h2>
+                    <h2 class="section-mt">{{t .Lang "security.link_thanks"}}</h2>
                     <p>
-                        With your permission, we credit researchers who report valid issues on our
-                        <a href="{{.AssetPrefix}}/server/security/thanks">acknowledgments page</a>.
+                        {{t .Lang "security.acknowledgments_text"}}
+                        <a href="{{.AssetPrefix}}/server/security/thanks">{{t .Lang "security.link_thanks"}}</a>
                     </p>
                 </div>
             </div>

@@ -278,7 +278,7 @@ func extractToken(r *http.Request) string {
 		// Peek without consuming — clone the body via a bytes buffer.
 		raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<10))
 		r.Body = io.NopCloser(bytes.NewReader(raw))
-		json.Unmarshal(raw, &body)
+		_ = json.Unmarshal(raw, &body)
 		return body.Token
 	}
 	return ""
@@ -367,7 +367,7 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 		}
 		file, header, err := r.FormFile("files")
 		if err == nil {
-			defer file.Close()
+			defer func() { _ = file.Close() }()
 			raw, tooLarge := readLimited(file, limit)
 			if tooLarge {
 				return nil, http.StatusRequestEntityTooLarge, fmt.Errorf("paste exceeds maximum size of %d bytes", limit)
@@ -675,14 +675,14 @@ func (h *PasteHandler) CreatePaste(w http.ResponseWriter, r *http.Request) {
 	if !isAPI && !isJSON {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, "OK: paste created\n%s\n", resp.Link)
+		_, _ = fmt.Fprintf(w, "OK: paste created\n%s\n", resp.Link)
 		return
 	}
 
 	if httputil.GetAPIResponseFormat(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, "OK: paste created\n%s\n", resp.Link)
+		_, _ = fmt.Fprintf(w, "OK: paste created\n%s\n", resp.Link)
 		return
 	}
 
@@ -726,12 +726,12 @@ func (h *PasteHandler) GetPaste(w http.ResponseWriter, r *http.Request) {
 	// Content negotiation: text format returns key=value summary (PART 14).
 	if httputil.GetAPIResponseFormat(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(w, "OK: paste retrieved\nid: %s\ntitle: %s\nlanguage: %s\nviews: %d\ncreated: %s\n",
+		_, _ = fmt.Fprintf(w, "OK: paste retrieved\nid: %s\ntitle: %s\nlanguage: %s\nviews: %d\ncreated: %s\n",
 			paste.ID, paste.Title, paste.Language, paste.Views, paste.CreatedAt.Format(time.RFC3339))
 		if paste.ExpiresAt != nil {
-			fmt.Fprintf(w, "expires: %s\n", paste.ExpiresAt.Format(time.RFC3339))
+			_, _ = fmt.Fprintf(w, "expires: %s\n", paste.ExpiresAt.Format(time.RFC3339))
 		}
-		fmt.Fprintf(w, "\n%s\n", paste.Content)
+		_, _ = fmt.Fprintf(w, "\n%s\n", paste.Content)
 		return
 	}
 
@@ -793,7 +793,7 @@ func (h *PasteHandler) GetRawPaste(w http.ResponseWriter, r *http.Request) {
 	// mime.ParseMediaType lowercases the base type and trims whitespace;
 	// unparseable values fail closed as a forced download.
 	baseType, params, err := mime.ParseMediaType(detected)
-	served := detected
+	var served string
 	if err != nil {
 		baseType = ""
 		served = "application/octet-stream"
@@ -868,9 +868,9 @@ func (h *PasteHandler) ListPastes(w http.ResponseWriter, r *http.Request) {
 	// Content negotiation: text format returns a tab-separated list (PART 14).
 	if httputil.GetAPIResponseFormat(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(w, "OK: %d pastes found (page %d)\n", total, page)
+		_, _ = fmt.Fprintf(w, "OK: %d pastes found (page %d)\n", total, page)
 		for _, p := range pastes {
-			fmt.Fprintf(w, "%s\t%s\t%s\n", p.ID, p.Language, p.Title)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", p.ID, p.Language, p.Title)
 		}
 		return
 	}
@@ -922,7 +922,7 @@ func (h *PasteHandler) DeletePaste(w http.ResponseWriter, r *http.Request) {
 		metric.PastesDeletedTotal.Inc()
 		if httputil.GetAPIResponseFormat(r) == "text" {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			fmt.Fprintln(w, "OK: paste deleted")
+			_, _ = fmt.Fprintln(w, "OK: paste deleted")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"message": "paste deleted"}})
@@ -944,7 +944,7 @@ func (h *PasteHandler) DeletePaste(w http.ResponseWriter, r *http.Request) {
 
 	if httputil.GetAPIResponseFormat(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintln(w, "OK: paste deleted")
+		_, _ = fmt.Fprintln(w, "OK: paste deleted")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"message": "paste deleted"}})
@@ -982,7 +982,7 @@ func (h *PasteHandler) GetPasteForWeb(id string) (*model.Paste, error) {
 		h.cachePaste(paste)
 	}
 	if paste.ExpiresAt != nil && paste.ExpiresAt.Before(time.Now()) {
-		h.db.DeletePaste(id)
+		_ = h.db.DeletePaste(id)
 		h.InvalidatePasteCache(id)
 		return nil, nil
 	}
@@ -1064,7 +1064,7 @@ func (h *PasteHandler) loadLivePaste(w http.ResponseWriter, r *http.Request, id 
 		h.cachePaste(paste)
 	}
 	if paste.ExpiresAt != nil && paste.ExpiresAt.Before(time.Now()) {
-		h.db.DeletePaste(id)
+		_ = h.db.DeletePaste(id)
 		h.InvalidatePasteCache(id)
 		sendAPIError(w, r, "GONE", "paste has expired")
 		return nil, nil
@@ -1261,7 +1261,7 @@ func sendAPIErrorDetails(w http.ResponseWriter, r *http.Request, code, message s
 	if httputil.GetAPIResponseFormat(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(status)
-		fmt.Fprintf(w, "ERROR: %s: %s\n", code, message)
+		_, _ = fmt.Fprintf(w, "ERROR: %s: %s\n", code, message)
 		return
 	}
 	body := map[string]interface{}{

@@ -44,7 +44,7 @@ func fakeSMTPServer(t *testing.T) (addr string, recorded *smtpCapture, stop func
 	}()
 
 	return ln.Addr().String(), cap, func() {
-		ln.Close()
+		_ = ln.Close()
 		wg.Wait()
 	}
 }
@@ -67,14 +67,14 @@ func (c *smtpCapture) record(from string, rcpt []string, body string) {
 
 // handleFakeSMTPConn processes a single SMTP connection with minimal protocol support.
 func handleFakeSMTPConn(conn net.Conn, cap *smtpCapture) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	var from string
 	var rcpt []string
 	var body strings.Builder
 
 	send := func(line string) {
-		fmt.Fprintf(conn, "%s\r\n", line)
+		_, _ = fmt.Fprintf(conn, "%s\r\n", line)
 	}
 
 	send("220 localhost ESMTP fake")
@@ -350,7 +350,7 @@ func TestSendViaClient_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("smtp.NewClient: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	msg := []byte("From: a@example.com\r\nTo: b@example.com\r\nSubject: Hi\r\n\r\nHello world")
 	if err := sendViaClient(c, "a@example.com", "b@example.com", msg); err != nil {
@@ -386,7 +386,7 @@ func TestSendViaClient_MailError(t *testing.T) {
 	}
 
 	// Closing conn forces a broken-pipe / EOF on the next SMTP command.
-	conn.Close()
+	_ = conn.Close()
 
 	err = sendViaClient(c, "a@example.com", "b@example.com", []byte("msg"))
 	if err == nil {

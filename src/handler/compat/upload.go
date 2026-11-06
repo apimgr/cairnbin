@@ -65,7 +65,7 @@ func (c *Handler) RootUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if file, _, err := r.FormFile("file"); err == nil {
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		body, _ := io.ReadAll(io.LimitReader(file, c.ph.EffectiveReadLimit()))
 		c.zeroXRespond(w, r, string(body), r.FormValue("expires"))
 		return

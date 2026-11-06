@@ -1,10 +1,10 @@
 package i18n
 
 import (
-	"regexp"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -335,8 +335,8 @@ func TestPluralFormFallback(t *testing.T) {
 	}
 }
 
-// TestLocaleFS verifies the embedded FS is accessible and non-empty.
-func TestLocaleFS(t *testing.T) {
+// TestLocalesFS verifies the embedded FS is accessible and non-empty.
+func TestLocalesFS(t *testing.T) {
 	fs := LocaleFS()
 	data, err := fs.ReadFile("locales/en.json")
 	if err != nil {

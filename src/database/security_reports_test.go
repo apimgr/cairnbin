@@ -84,16 +84,26 @@ func TestListDisclosedSecurityReports(t *testing.T) {
 	db := newTestDB(t)
 	// Credited + disclosed → listed.
 	a := sampleReport("sec_creditedaaaaaaaa")
-	db.CreateSecurityReport(a)
-	db.UpdateSecurityReportStatus(a.TrackingID, database.SecStatusDisclosed, "")
+	if err := db.CreateSecurityReport(a); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateSecurityReportStatus(a.TrackingID, database.SecStatusDisclosed, ""); err != nil {
+		t.Fatal(err)
+	}
 	// Opted out of credit → excluded even when disclosed.
 	b := sampleReport("sec_nocreditbbbbbbbb")
 	b.CreditPreference = "no"
-	db.CreateSecurityReport(b)
-	db.UpdateSecurityReportStatus(b.TrackingID, database.SecStatusDisclosed, "")
+	if err := db.CreateSecurityReport(b); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateSecurityReportStatus(b.TrackingID, database.SecStatusDisclosed, ""); err != nil {
+		t.Fatal(err)
+	}
 	// Credited but not yet disclosed → excluded.
 	c := sampleReport("sec_pendingcccccccc")
-	db.CreateSecurityReport(c)
+	if err := db.CreateSecurityReport(c); err != nil {
+		t.Fatal(err)
+	}
 
 	list, err := db.ListDisclosedSecurityReports()
 	if err != nil {

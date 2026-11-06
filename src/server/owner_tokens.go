@@ -594,6 +594,10 @@ func (s *Server) handleLinkedTokenRevoke(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.tokenAudit(r, "token.revoked", "linked", token.TokenPrefix)
+	// Token revocation purges the browser's cache/cookies/storage (PART 11).
+	if csd := s.liveCfg().Web.Headers.ClearSiteData; csd.OnTokenRevocation {
+		w.Header().Set("Clear-Site-Data", clearSiteDataValue(csd))
+	}
 	s.tokenActionSuccess(w, r, map[string]any{"id": id, "revoked": true})
 }
 
@@ -612,10 +616,10 @@ func (s *Server) decryptOwnerToken(encoded string) (string, error) {
 
 func (s *Server) tokenActionError(w http.ResponseWriter, r *http.Request, status int, message string) {
 	if strings.HasPrefix(r.URL.Path, "/api/") {
-		writeJSON(w, status, map[string]any{"ok": false, "error": http.StatusText(status), "message": message})
+		writeJSON(w, status, map[string]any{"ok": false, "error": errorCodeForStatus(status), "message": message})
 		return
 	}
-	http.Error(w, message, status)
+	s.renderErrorPage(w, r, status, message)
 }
 
 func (s *Server) tokenActionSuccess(w http.ResponseWriter, r *http.Request, data any) {

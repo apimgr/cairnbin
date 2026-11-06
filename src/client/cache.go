@@ -78,7 +78,7 @@ func (cfg responseCacheConfig) put(key string, resp *http.Response, body []byte)
 		return
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 	if tmp.Chmod(0o600) != nil {
 		_ = tmp.Close()
 		return

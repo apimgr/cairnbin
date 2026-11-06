@@ -1,6 +1,6 @@
 {{define "meta"}}
-    <title>About - {{.SiteTitle}}</title>
-    <meta name="description" content="About {{.SiteTitle}} — a simple, fast paste sharing service with syntax highlighting and API access">
+    <title>{{t .Lang "about.title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{tf .Lang "about.meta_description" "title" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
@@ -13,7 +13,7 @@
                 <div class="paste-view page-view">
                     <p class="lead">{{.Tagline}}</p>
 
-                    <h2>What is {{.SiteTitle}}?</h2>
+                    <h2>{{tf .Lang "about.what_is" "title" .SiteTitle}}</h2>
                     <p>{{.Description}}</p>
 
                     <h2 class="section-mt">{{t .Lang "about.features"}}</h2>
@@ -25,7 +25,7 @@
                     <h2 class="section-mt">{{t .Lang "about.version"}}</h2>
                     <p class="long-string">{{.Version}} ({{.BuildDate}})</p>
 
-                    <h2 class="section-mt">Source</h2>
+                    <h2 class="section-mt">{{t .Lang "about.source"}}</h2>
                     <p class="about-links">
                         {{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Label}}</a>
                         {{end}}

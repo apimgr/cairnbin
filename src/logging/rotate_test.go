@@ -305,12 +305,12 @@ func TestFileWriter_CompressRotated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	gr, err := gzip.NewReader(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 	got, err := io.ReadAll(gr)
 	if err != nil {
 		t.Fatal(err)

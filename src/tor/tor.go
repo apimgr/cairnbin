@@ -80,8 +80,8 @@ func (p *pidCapturingProcess) Start() error {
 	if err := p.Cmd.Start(); err != nil {
 		return err
 	}
-	if p.onStart != nil && p.Cmd.Process != nil {
-		p.onStart(p.Cmd.Process.Pid)
+	if p.onStart != nil && p.Process != nil {
+		p.onStart(p.Process.Pid)
 	}
 	return nil
 }
@@ -355,7 +355,7 @@ func (m *Manager) startLocked() error {
 	})
 	if err := t.EnableNetwork(dialCtx, true); err != nil {
 		slow.Stop()
-		t.Close()
+		_ = t.Close()
 		removeTorPIDFile(m.cfg.DataDir)
 		_ = backendServer.Close()
 		return fmt.Errorf("tor bootstrap: %w", err)
@@ -367,7 +367,7 @@ func (m *Manager) startLocked() error {
 	// ADD_ONION response.
 	onion, err := waitForHostname(dialCtx, siteDir)
 	if err != nil {
-		t.Close()
+		_ = t.Close()
 		removeTorPIDFile(m.cfg.DataDir)
 		_ = backendServer.Close()
 		return fmt.Errorf("tor hostname: %w", err)

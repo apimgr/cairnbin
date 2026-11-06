@@ -93,7 +93,7 @@ func CheckForUpdateURL(ctx context.Context, currentVersion, branch string, build
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		// no updates available
@@ -271,29 +271,31 @@ func DoUpdate(ctx context.Context, release *Release) error {
 	}
 	tmpPath := tmpFile.Name()
 	// best-effort cleanup on error
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	client := &http.Client{Timeout: 10 * time.Minute}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return err
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return fmt.Errorf("downloading update: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 256 MiB cap
 	lr := io.LimitReader(resp.Body, 256<<20)
 	if _, err := io.Copy(tmpFile, lr); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return fmt.Errorf("writing download: %w", err)
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("closing downloaded update: %w", err)
+	}
 
 	// Verify SHA256 checksum against the release's sha256.txt (MANDATORY)
 	expectedHash, err := fetchExpectedChecksum(ctx, client, release, assetName)
@@ -338,7 +340,7 @@ func fetchExpectedChecksum(ctx context.Context, client *http.Client, release *Re
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("checksum download failed: %d", resp.StatusCode)
 	}
@@ -364,7 +366,7 @@ func verifyChecksum(path, expectedHash string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -408,7 +410,6 @@ func matchesBranch(r Release, branch string) bool {
 	}
 }
 
-
 // CheckForUpdateDeferred is the scheduled-task variant of CheckForUpdate
 // (PART 22 "Defer Semantics"): it selects the newest release on the channel
 // that is newer than the running version AND at least deferDays old
@@ -442,7 +443,7 @@ func checkDeferredURL(ctx context.Context, currentVersion, branch string, deferD
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
 	}

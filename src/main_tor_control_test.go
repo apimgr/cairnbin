@@ -56,7 +56,7 @@ func TestTorServerBaseURL_ServerRunning(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/server/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -109,7 +109,7 @@ func TestTorControlRequest_Success(t *testing.T) {
 			t.Errorf("Content-Type = %q, want application/json", ct)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok":true,"data":{"hostname":"abc.onion"}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"hostname":"abc.onion"}}`))
 	}))
 	defer srv.Close()
 
@@ -127,7 +127,7 @@ func TestTorControlRequest_Success(t *testing.T) {
 func TestTorControlRequest_ErrorEnvelope(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte(`{"ok":false,"error":"CONFLICT","message":"tor manager not running"}`))
+		_, _ = w.Write([]byte(`{"ok":false,"error":"CONFLICT","message":"tor manager not running"}`))
 	}))
 	defer srv.Close()
 
@@ -145,7 +145,7 @@ func TestTorControlRequest_ErrorEnvelope(t *testing.T) {
 func TestTorControlRequest_ErrorEnvelopeNoMessage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"ok":false}`))
+		_, _ = w.Write([]byte(`{"ok":false}`))
 	}))
 	defer srv.Close()
 
@@ -168,7 +168,7 @@ func TestTorControlRequest_NetworkError(t *testing.T) {
 func TestTorControlRequest_BadJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not json`))
+		_, _ = w.Write([]byte(`not json`))
 	}))
 	defer srv.Close()
 
@@ -285,7 +285,7 @@ func TestRunTorVanity_StartSuccess(t *testing.T) {
 			t.Errorf("request body = %s, want workers 2", body)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok":true,"data":{"state":"running","prefix":"abcdef","workers":2}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"state":"running","prefix":"abcdef","workers":2}}`))
 	}))
 	defer srv.Close()
 
@@ -363,7 +363,7 @@ func TestRunTorVanity_StopSuccess(t *testing.T) {
 					t.Errorf("path = %s, want /server/tor/vanity/stop", r.URL.Path)
 				}
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(tc.body))
+				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer srv.Close()
 
@@ -387,7 +387,7 @@ func TestRunTorVanity_ApplySuccess(t *testing.T) {
 			t.Errorf("path = %s, want /server/tor/vanity/apply", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok":true,"data":{"hostname":"abcdefxyz.onion"}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"hostname":"abcdefxyz.onion"}}`))
 	}))
 	defer srv.Close()
 
@@ -432,7 +432,7 @@ func TestRunTorVanity_ApplyDeclined(t *testing.T) {
 func TestRunTorVanity_StartServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte(`{"ok":false,"error":"CONFLICT","message":"a vanity search for \"abcdef\" is already running"}`))
+		_, _ = w.Write([]byte(`{"ok":false,"error":"CONFLICT","message":"a vanity search for \"abcdef\" is already running"}`))
 	}))
 	defer srv.Close()
 
@@ -490,11 +490,11 @@ func TestRunTorCommand_RestartNoServer(t *testing.T) {
 	oldConfig := os.Getenv("CONFIG_DIR")
 	oldData := os.Getenv("DATA_DIR")
 	dir := t.TempDir()
-	os.Setenv("CONFIG_DIR", dir)
-	os.Setenv("DATA_DIR", dir)
+	t.Setenv("CONFIG_DIR", dir)
+	t.Setenv("DATA_DIR", dir)
 	defer func() {
-		os.Setenv("CONFIG_DIR", oldConfig)
-		os.Setenv("DATA_DIR", oldData)
+		_ = os.Setenv("CONFIG_DIR", oldConfig)
+		_ = os.Setenv("DATA_DIR", oldData)
 	}()
 	writeTorTestServerYML(t, dir, "1")
 

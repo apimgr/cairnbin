@@ -3,9 +3,11 @@ package server
 import (
 	"encoding/json"
 	"io"
+	"math/rand/v2"
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -108,6 +110,45 @@ func parseCSPReports(body []byte) []cspViolation {
 	return out
 }
 
+type networkErrorReport struct {
+	errorType string
+	phase     string
+	method    string
+	protocol  string
+	status    string
+}
+
+func parseNetworkErrorReports(body []byte) []networkErrorReport {
+	var batch []struct {
+		Type string         `json:"type"`
+		Body map[string]any `json:"body"`
+	}
+	if json.Unmarshal(body, &batch) != nil {
+		return nil
+	}
+	out := make([]networkErrorReport, 0, len(batch))
+	for _, report := range batch {
+		if report.Type != "network-error" || report.Body == nil {
+			continue
+		}
+		out = append(out, networkErrorReport{
+			errorType: sanitizeReportText(strField(report.Body, "type")),
+			phase:     sanitizeReportText(strField(report.Body, "phase")),
+			method:    sanitizeReportText(strField(report.Body, "method")),
+			protocol:  sanitizeReportText(strField(report.Body, "protocol")),
+			status:    sanitizeReportText(numberField(report.Body, "status_code")),
+		})
+	}
+	return out
+}
+
+func numberField(m map[string]any, key string) string {
+	if v, ok := m[key].(float64); ok {
+		return strconv.FormatInt(int64(v), 10)
+	}
+	return ""
+}
+
 func strField(m map[string]any, keys ...string) string {
 	for _, k := range keys {
 		if v, ok := m[k].(string); ok {
@@ -162,6 +203,15 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "csp" || name == "default" {
+		// web.csp.reports_sample_rate: log only this fraction of reports.
+		sampleRate := 1.0
+		if cfg := s.liveCfg(); cfg != nil {
+			sampleRate = cfg.Web.CSP.ReportsSampleRate
+		}
+		if sampleRate < 1 && rand.Float64() >= sampleRate {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		for _, v := range parseCSPReports(body) {
 			s.securityLog("security.csp_violation",
 				"ip", ip, "blocked_uri", v.blocked, "violated_directive", v.directive, "document_uri", v.document)
@@ -175,6 +225,26 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 					"violated_directive": v.directive,
 				},
 			})
+		}
+	}
+	if name == "nel" {
+		sampleRate := 1.0
+		if cfg := s.liveCfg(); cfg != nil {
+			sampleRate = cfg.Web.Headers.NEL.SampleRate
+		}
+		if sampleRate < 1 && rand.Float64() >= sampleRate {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		for _, report := range parseNetworkErrorReports(body) {
+			s.securityLog("security.network_error_report",
+				"ip", ip,
+				"type", report.errorType,
+				"phase", report.phase,
+				"method", report.method,
+				"protocol", report.protocol,
+				"status", report.status,
+			)
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)

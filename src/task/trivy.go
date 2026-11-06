@@ -119,7 +119,7 @@ func (c *ociClient) get(ctx context.Context, path, accept string) (*http.Respons
 	}
 
 	challenge := resp.Header.Get("WWW-Authenticate")
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if err := c.authenticate(ctx, challenge); err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (c *ociClient) authenticate(ctx context.Context, challenge string) error {
 	if err != nil {
 		return fmt.Errorf("token request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("token request: status %d", resp.StatusCode)
 	}
@@ -205,7 +205,7 @@ func (c *ociClient) manifest(ctx context.Context, reference string) (*ociManifes
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("manifest %s: status %d", reference, resp.StatusCode)
 	}
@@ -254,7 +254,7 @@ func (c *ociClient) blobToFile(ctx context.Context, desc ociDescriptor, dst stri
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("blob %s: status %d", desc.Digest, resp.StatusCode)
 	}
@@ -264,12 +264,12 @@ func (c *ociClient) blobToFile(ctx context.Context, desc ociDescriptor, dst stri
 		return fmt.Errorf("create temp: %w", err)
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 
 	sum := sha256.New()
 	n, err := io.Copy(io.MultiWriter(tmp, sum), resp.Body)
 	if err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("write blob: %w", err)
 	}
 	if err := tmp.Close(); err != nil {

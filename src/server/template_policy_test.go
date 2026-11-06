@@ -136,3 +136,55 @@ func TestTemplatesAccessibilityBasics(t *testing.T) {
 		t.Fatalf("walk templates: %v", err)
 	}
 }
+
+// TestCSSFollowsMobileFirstPolicy enforces the PART 16 stylesheet rules on the
+// three embedded CSS templates: mobile-first (no max-width media queries),
+// only the spec breakpoints, !important only inside print styles, and the
+// CSS Variable Reference custom properties defined once in common.css.
+func TestCSSFollowsMobileFirstPolicy(t *testing.T) {
+	files := []string{"static/css/common.css.tmpl", "static/css/components.css.tmpl", "static/css/public.css.tmpl"}
+	maxWidth := regexp.MustCompile(`@media[^{]*\(max-width`)
+	minWidth := regexp.MustCompile(`@media[^{]*\(min-width:\s*(\d+)px\)`)
+	allowed := map[string]bool{"768": true, "1024": true, "1280": true}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		body := string(data)
+		if maxWidth.MatchString(body) {
+			t.Errorf("%s: desktop-first max-width media query", f)
+		}
+		for _, m := range minWidth.FindAllStringSubmatch(body, -1) {
+			if !allowed[m[1]] {
+				t.Errorf("%s: non-spec breakpoint min-width: %spx", f, m[1])
+			}
+		}
+		// !important is allowed only inside the @media print block, which is
+		// the last block that opens with "@media print" in common.css.
+		stripped := body
+		if i := strings.Index(stripped, "@media print"); i != -1 {
+			if j := strings.Index(stripped[i:], "\n}\n"); j != -1 {
+				stripped = stripped[:i] + stripped[i+j:]
+			}
+		}
+		if strings.Contains(stripped, "!important") {
+			t.Errorf("%s: !important outside print styles", f)
+		}
+	}
+
+	common, err := os.ReadFile("static/css/common.css.tmpl")
+	if err != nil {
+		t.Fatalf("read common.css.tmpl: %v", err)
+	}
+	for _, v := range []string{
+		"--color-info-bg", "--color-secondary", "--color-accent:", "--color-on-error",
+		"--z-modal", "--z-toast", "--focus-ring", "--focus-ring-offset",
+		"--radius-base", "--shadow-xl", "--transition-spring", "--font-serif",
+		"--font-weight-bold", "--line-height-relaxed", "--space-24",
+	} {
+		if !strings.Contains(string(common), v) {
+			t.Errorf("common.css.tmpl: CSS Variable Reference property %s missing", v)
+		}
+	}
+}

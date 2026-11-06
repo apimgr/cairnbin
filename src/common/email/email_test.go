@@ -1,8 +1,10 @@
 package email_test
 
 import (
+	"bufio"
 	"net"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/apimgr/cairnbin/src/common/email"
@@ -97,7 +99,7 @@ func TestTestSMTP_WithListeningServer(t *testing.T) {
 	if err != nil {
 		t.Skipf("could not open local listener: %v", err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	// TestSMTP performs a real EHLO handshake, so the fake server must speak
 	// just enough SMTP to complete it: a 220 greeting, then a 250 reply to EHLO.
@@ -106,13 +108,18 @@ func TestTestSMTP_WithListeningServer(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		_, _ = conn.Write([]byte("220 localhost ESMTP\r\n"))
-		buf := make([]byte, 512)
-		if _, err := conn.Read(buf); err != nil {
+		reader := bufio.NewReader(conn)
+		line, err := reader.ReadString('\n')
+		if err != nil || !strings.HasPrefix(strings.ToUpper(line), "EHLO ") {
 			return
 		}
 		_, _ = conn.Write([]byte("250 localhost\r\n"))
+		line, err = reader.ReadString('\n')
+		if err == nil && strings.HasPrefix(strings.ToUpper(line), "QUIT") {
+			_, _ = conn.Write([]byte("221 localhost closing connection\r\n"))
+		}
 	}()
 
 	port := ln.Addr().(*net.TCPAddr).Port

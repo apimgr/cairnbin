@@ -98,9 +98,9 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.Write([]byte(xml.Header))
-	w.Write(body)
-	w.Write([]byte("\n"))
+	_, _ = w.Write([]byte(xml.Header))
+	_, _ = w.Write(body)
+	_, _ = w.Write([]byte("\n"))
 }
 
 // handleLLMs serves /.well-known/llms.txt and its /llms.txt alias (PART 13/14):
@@ -110,6 +110,10 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 // variant when the request arrives over the onion service).
 func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 	cfg := s.liveCfg()
+	if !cfg.Web.LLMs.Enabled {
+		s.renderErrorPage(w, r, http.StatusNotFound, "")
+		return
+	}
 	base := strings.TrimRight(s.baseURL(r), "/")
 	apiVersion := s.apiVersion()
 	brand := cfg.Server.Branding
@@ -127,17 +131,30 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(&b, "\n")
 
-	fmt.Fprintf(&b, "## Endpoints\n")
-	fmt.Fprintf(&b, "- GET /server/healthz - Health check (no auth)\n")
-	fmt.Fprintf(&b, "- GET /server/about - Server information (no auth)\n")
-	fmt.Fprintf(&b, "- GET /api/%s/pastes - List public pastes (no auth)\n", apiVersion)
-	fmt.Fprintf(&b, "- POST /api/%s/pastes - Create a paste (returns id + owner token)\n", apiVersion)
-	fmt.Fprintf(&b, "- GET /api/%s/pastes/{id} - Fetch a paste (no auth)\n", apiVersion)
-	fmt.Fprintf(&b, "- DELETE /api/%s/pastes/{id} - Delete a paste (owner token or operator auth)\n", apiVersion)
-	if cfg.Server.MCP.Enabled {
-		fmt.Fprintf(&b, "- POST /api/%s/server/mcp - Model Context Protocol endpoint (JSON-RPC 2.0; tools mirror the API)\n", apiVersion)
+	if cfg.Web.LLMs.IncludeEndpoints {
+		fmt.Fprintf(&b, "## Endpoints\n")
+		fmt.Fprintf(&b, "- GET /server/healthz - Health check (no auth)\n")
+		fmt.Fprintf(&b, "- GET /server/about - Server information (no auth)\n")
+		fmt.Fprintf(&b, "- GET /api/%s/pastes - List public pastes (no auth)\n", apiVersion)
+		fmt.Fprintf(&b, "- POST /api/%s/pastes - Create a paste (returns id + owner token)\n", apiVersion)
+		fmt.Fprintf(&b, "- GET /api/%s/pastes/{id} - Fetch a paste (no auth)\n", apiVersion)
+		fmt.Fprintf(&b, "- DELETE /api/%s/pastes/{id} - Delete a paste (owner token or operator auth)\n", apiVersion)
+		if cfg.Server.MCP.Enabled {
+			fmt.Fprintf(&b, "- POST /api/%s/server/mcp - Model Context Protocol endpoint (JSON-RPC 2.0; tools mirror the API)\n", apiVersion)
+		}
+		fmt.Fprintf(&b, "\n")
 	}
-	fmt.Fprintf(&b, "\n")
+
+	if cfg.Web.LLMs.IncludeSchemas {
+		fmt.Fprintf(&b, "## Schemas\n")
+		fmt.Fprintf(&b, "Success envelope: {\"ok\": true, \"data\": {...}}\n")
+		fmt.Fprintf(&b, "Error envelope: {\"ok\": false, \"error\": \"CODE\", \"message\": \"...\", \"details\": {}}\n")
+		fmt.Fprintf(&b, "Paste create request: {\"title\": string, \"content\": string, \"language\": string, \"visibility\": int, \"burn_after\": int, \"expires_at\": RFC3339 timestamp (optional)}\n")
+		fmt.Fprintf(&b, "Paste response: {\"id\": string, \"title\": string, \"language\": string, \"visibility\": int, \"is_link\": bool, \"burn_after\": int, \"expires_at\": RFC3339 timestamp (optional), \"views\": int, \"created_at\": RFC3339 timestamp, \"link\": URL, \"owner_token\": string (create only)}\n")
+		fmt.Fprintf(&b, "Paste list item: {\"id\": string, \"title\": string, \"language\": string, \"views\": int, \"expires_at\": RFC3339 timestamp (optional), \"burn_after\": int, \"created_at\": RFC3339 timestamp}\n")
+		fmt.Fprintf(&b, "List envelope: {\"ok\": true, \"data\": [...], \"pagination\": {\"page\": int, \"limit\": int, \"total\": int, \"pages\": int}}\n")
+		fmt.Fprintf(&b, "Full OpenAPI definition: %s/api/%s/server/swagger\n\n", base, apiVersion)
+	}
 
 	fmt.Fprintf(&b, "## Capabilities\n")
 	fmt.Fprintf(&b, "- Create, fetch, list, and delete public pastes\n")
@@ -160,6 +177,12 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&b, "Security: %s\n", cfg.SecurityReportURL())
 	}
 
+	for _, section := range cfg.Web.LLMs.CustomSections {
+		if section = strings.TrimSpace(section); section != "" {
+			fmt.Fprintf(&b, "\n%s\n", section)
+		}
+	}
+
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Write([]byte(b.String()))
+	_, _ = w.Write([]byte(b.String()))
 }

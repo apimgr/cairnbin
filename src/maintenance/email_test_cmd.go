@@ -59,6 +59,6 @@ func RunEmail(action string, opts EmailOptions) error {
 		return fmt.Errorf("email test: send failed: %w", err)
 	}
 	AuditMaintenanceEvent(auth, "email.test_sent", map[string]any{"recipient": to})
-	fmt.Fprintf(opts.Stdout, "test email sent to %s\n", to)
+	_, _ = fmt.Fprintf(opts.Stdout, "test email sent to %s\n", to)
 	return nil
 }

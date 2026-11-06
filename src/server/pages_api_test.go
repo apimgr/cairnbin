@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -106,7 +107,7 @@ func TestConsentBannerServerRendered(t *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
 		r.Header.Set("Accept", "text/html")
 		if cookie != "" {
-			r.AddCookie(&http.Cookie{Name: "cookie_consent", Value: cookie})
+			addConsentCookie(r, cookie)
 		}
 		w := httptest.NewRecorder()
 		s.handleAbout(w, r)
@@ -132,9 +133,24 @@ func TestCheckTrackingAllowed(t *testing.T) {
 	if s.checkTrackingAllowed(r) {
 		t.Error("no cookie must not allow tracking")
 	}
-	r.AddCookie(&http.Cookie{Name: "cookie_consent", Value: `{"essential":true,"analytics":true}`})
+	addConsentCookie(r, `{"essential":true,"analytics":true}`)
 	if s.checkTrackingAllowed(r) {
 		t.Error("consent without configured tracking must not allow tracking")
+	}
+}
+
+// TestCheckTrackingAllowedHonorsGPC verifies Sec-GPC overrides stored analytics consent.
+func TestCheckTrackingAllowedHonorsGPC(t *testing.T) {
+	s := pagesServer(t)
+	s.cfg.Server.Tracking = config.TrackingConfig{Type: "simple"}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	addConsentCookie(r, `{"essential":true,"analytics":true}`)
+	if !s.checkTrackingAllowed(r) {
+		t.Fatal("consent + configured tracking must allow tracking")
+	}
+	r = r.WithContext(context.WithValue(r.Context(), privacyOptOutKey{}, true))
+	if s.checkTrackingAllowed(r) {
+		t.Error("Sec-GPC opt-out must disable tracking despite consent")
 	}
 }
 

@@ -1,6 +1,6 @@
 {{define "meta"}}
-    <title>Create Paste - {{.SiteTitle}}</title>
-    <meta name="description" content="Create a new paste with syntax highlighting">
+    <title>{{t .Lang "paste.create_new"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{t .Lang "pagemeta.create_description"}}">
 {{end}}
 
 {{define "content"}}
@@ -26,10 +26,12 @@
                         <p>{{t .Lang "paste.download_label"}}: <a href="{{.DownloadLink}}" class="long-string">{{.DownloadLink}}</a></p>
                         <div class="alert alert-warning mt-3">
                             <p class="mb-2">{{t .Lang "paste.owner_token_warning"}}</p>
-                            <code class="long-string" id="created-token">{{.Created.OwnerToken}}</code>
+                            <code class="copy-value" id="created-token">{{.Created.OwnerToken}}</code>
                             <button
                                 type="button"
                                 data-copy-target="created-token"
+                                data-copied-label="{{t .Lang "js.copied"}}"
+                                aria-live="polite"
                                 class="btn btn-secondary d-block mt-2"
                             >{{t .Lang "paste.copy_token"}}</button>
                         </div>
@@ -60,7 +62,7 @@
                             <label for="language" class="form-label">{{t .Lang "paste.language_label"}}</label>
                             <select id="language" name="language" class="form-input"
                                     aria-describedby="language-error" aria-invalid="false">
-                                <option value="text">Plain Text</option>
+                                <option value="text">{{t .Lang "create.plain_text"}}</option>
                                 <option value="bash">Bash</option>
                                 <option value="c">C</option>
                                 <option value="cpp">C++</option>
@@ -138,7 +140,7 @@
                             id="owner_token"
                             name="owner_token"
                             class="form-input"
-                            placeholder="tok_... (optional — saved automatically after first paste)"
+                            placeholder="{{t .Lang "paste.owner_token_placeholder"}}"
                             autocomplete="off"
                             spellcheck="false"
                             aria-describedby="owner_token-error"

@@ -41,7 +41,7 @@ tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and m
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never` (default), or a custom duration in seconds
 - Burn after N reads: paste is permanently deleted once its view count reaches a user-set threshold (1–9999); `0` = disabled
 - Visibility: public (listed in recent pastes) or unlisted (URL-only, not listed)
-- Owner token: a `tok_`-prefixed cryptographically random token returned in every API create response; reusable across pastes created by the same caller; stored as a SHA-256 hash; required to delete the paste before natural expiry
+- Owner token: a `tok_`-prefixed cryptographically random token returned in every API create response; reusable across pastes created by the same caller; stored as a SHA-256 hash with an encrypted recoverable copy; required to delete the paste before natural expiry and viewable, masked by default, in `/server/preferences`
 - Token reuse: callers may supply an existing owner token on paste creation to link the new paste to that token; the web UI saves the token to the `cairnbin_owner_token_rU3uW5Ze` cookie (HttpOnly, primary) and, as a JS convenience copy, to `localStorage` under the same key; the create form is pre-filled by JS only, never load-bearing
 - Raw paste view, file download, iframe-embeddable view with copy-ready HTML and Markdown embed snippets offered on the paste view page, and a QR code available as both a page and a PNG image
 - View count tracking; automatic background cleanup of expired and burned pastes
@@ -85,7 +85,7 @@ tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and m
 - **Expiry options** — `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never` (default), or a custom duration in seconds
 - **Burn after N reads** — paste is permanently deleted once its view count reaches a user-set threshold (1–9999)
 - **Visibility control** — public (listed in recent pastes) or unlisted (URL-only)
-- **Owner token deletion** — a `tok_`-prefixed token returned once at creation; reusable across pastes by the same caller; required to delete a paste before natural expiry
+- **Owner token deletion** — a `tok_`-prefixed token returned at creation; reusable across pastes by the same caller; required to delete a paste before natural expiry and viewable, masked by default, in token management
 - **URL shortening** — a paste whose entire content is exactly one `http`/`https` URL auto-becomes a redirecting short link; the raw and download views always return the literal stored URL text instead of redirecting
 - **Raw view, file download, and embeds** — raw content view, download-as-file, an iframe-embeddable view with copy-ready HTML/Markdown snippets, and a QR code page plus PNG image for every paste
 - **View count tracking** with automatic background cleanup of expired and burned pastes
@@ -151,7 +151,7 @@ Every subdomain-forced compat create path continues to honor the operator-config
 ### Business rules
 
 - Paste IDs are 8-character random alphanumeric strings generated from a cryptographic random source; there are no vanity or user-chosen IDs
-- Owner tokens are `tok_` + 32 random base62 characters; only their SHA-256 hash is stored, and the raw value is shown exactly once at creation
+- Owner tokens are `tok_` + 32 random base62 characters; a SHA-256 hash and encrypted recoverable copy are stored; raw values are shown at creation and remain viewable, masked by default, in token management
 - Maximum paste size is operator-configured (`paste.max_size`, default 10 MiB, `0` = unlimited) and enforced at the HTTP body layer on every create path, native and compat alike, before the body is read into memory
 - Compat request bodies are additionally capped at 10 MiB regardless of `paste.max_size`, because raw-body compat protocols read the whole body into memory
 - Expiry is chosen at creation from `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never` (default), or a custom duration in seconds; pastes are immutable after creation, so expiry cannot be changed later
@@ -259,7 +259,7 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 | `resource_id` | Internal |
 | `created_at`, `expires_at`, `last_used_at`, `revoked_at` | Internal |
 
-**Owner token delivery** — returned in `owner_token` field of every native API create response; shown once in web UI with copy button; saved to `localStorage` in browser; never logged.
+**Owner token delivery** — returned in `owner_token` field of every native API create response; shown at creation and remains viewable, masked by default, on `/server/preferences`; saved to `localStorage` as a convenience; never logged.
 
 ### Trust boundaries & external services
 
@@ -267,8 +267,8 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 |----------|-------|-------|
 | Embedded SQLite | Trusted — local disk only | No network-accessible database |
 | Incoming HTTP requests | **Untrusted** | Paste size capped at HTTP layer before reading |
-| Paste content | **Untrusted** | Stored as opaque text; never executed; HTML-escaped in all web views |
-| Multipart file uploads | **Untrusted** | Content extracted as text only; filename used only for language detection |
+| Paste content | **Untrusted** | Plain text is HTML-escaped in all web views; MIME-detected binary content is base64-stored with its detected media type; user content is never executed as markup |
+| Multipart file uploads | **Untrusted** | MIME is detected from file bytes; text remains text, binary is base64-stored with its detected media type; filename supplies the title and syntax-language hint |
 | Owner token (inbound) | **Untrusted** | Hashed before comparison; constant-time compare enforced |
 | Operator token (inbound) | **Untrusted** | Hashed; constant-time compare against cached hash |
 | Compat delete token (inbound) | **Untrusted** | Hashed before comparison |
@@ -308,7 +308,7 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 - **`POST /api/api_login.php` returns `"ANONYMOUS"`:** intentional — allows pastebin.com API scripts to proceed without modification.
 - **Auth web routes redirect to `/` rather than 404:** intentional — scripts probing `/login` should not hard-fail.
 - **Owner token reuse across pastes:** intentional — one token may authorize deletion of multiple pastes created by the same caller; the server validates the token is active before linking it to a new paste.
-- **Owner token stored as SHA-256 hash only:** intentional — raw token shown once at creation; loss means the paste cannot be deleted early (compat-created pastes are unaffected, they use their own delete-token mechanism).
+- **Owner token stored as a SHA-256 hash with an encrypted recoverable copy:** the token is shown at creation and remains viewable, masked by default, in token management; compat-created pastes use their own delete-token mechanism.
 - **Compat layer uses separate delete-token mechanism (paste row `delete_token_hash`):** intentional — compat protocols have their own delete conventions incompatible with the owner token system; the two systems must not be mixed.
 - **stikked `apikey` / dpaste keyless / hastebin keyless creation accepted without auth:** intentional — these protocols are keyless on a public instance; any supplied API key is accepted and ignored so existing scripts proceed without modification.
 - **`POST /` is a multiplexed dispatcher for the curl-upload family:** intentional — sprunge.us (`sprunge`), ix.io (`f:1`), and 0x0.st (multipart `file`) all upload to the bare root path with mutually exclusive field names; the handler dispatches on the present field and falls through to the native paste-create handler when none match, so native form posts are unaffected.

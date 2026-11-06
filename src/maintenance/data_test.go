@@ -21,7 +21,7 @@ func newDataTestDB(t *testing.T) database.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -115,7 +115,7 @@ func TestRunData_UnknownActionRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.Close()
+	_ = db.Close()
 	if _, err := os.Stat(dbPath); err != nil {
 		t.Fatalf("expected database file to exist: %v", err)
 	}

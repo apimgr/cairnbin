@@ -240,7 +240,7 @@ func TestProbeSAM_Listening(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	go func() {
 		conn, err := ln.Accept()
 		if err == nil {
@@ -273,8 +273,8 @@ func TestSamField_MissingKey(t *testing.T) {
 
 func TestSamSendAndReadLine_RoundTrip(t *testing.T) {
 	server, client := net.Pipe()
-	defer server.Close()
-	defer client.Close()
+	defer func() { _ = server.Close() }()
+	defer func() { _ = client.Close() }()
 
 	go func() {
 		r := bufio.NewReader(server)
@@ -321,7 +321,7 @@ func fakeSAMServer(t *testing.T, conn net.Conn) {
 
 func TestSamCreateSession_Success(t *testing.T) {
 	server, client := net.Pipe()
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 
 	go fakeSAMServer(t, server)
 
@@ -366,7 +366,7 @@ func TestSamCreateSession_Success(t *testing.T) {
 
 func TestSamCreateSession_ReusesPersistedDestination(t *testing.T) {
 	server, client := net.Pipe()
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 
 	tmp := t.TempDir()
 	destPath := filepath.Join(tmp, "sam-dest.dat")
@@ -416,7 +416,7 @@ func TestSamCreateSession_ReusesPersistedDestination(t *testing.T) {
 
 func TestSamCreateSession_HelloFailure(t *testing.T) {
 	server, client := net.Pipe()
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 
 	go func() {
 		r := bufio.NewReader(server)

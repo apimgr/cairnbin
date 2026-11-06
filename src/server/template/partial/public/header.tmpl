@@ -15,6 +15,9 @@
         {{end}}
     </div>
     {{end}}
+    {{if .Flash}}
+    <div class="flash flash-{{.Flash.Kind}}" role="status">{{.Flash.Message}}</div>
+    {{end}}
     <header class="header">
         <a href="{{.AssetPrefix}}/" class="site-brand">
             <img src="{{asset .AssetPrefix "/static/branding/logo-50.png"}}" alt="{{.SiteTitle}}" class="site-brand-logo">

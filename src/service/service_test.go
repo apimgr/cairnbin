@@ -87,8 +87,7 @@ func TestGetBinaryPath_UnixUsrLocalBin(t *testing.T) {
 // ─── ok() ─────────────────────────────────────────────────────────────────────
 
 func TestOk_NoColor(t *testing.T) {
-	os.Setenv("NO_COLOR", "1")
-	defer os.Unsetenv("NO_COLOR")
+	t.Setenv("NO_COLOR", "1")
 
 	got := ok()
 	if got != "[ok] " {
@@ -97,7 +96,7 @@ func TestOk_NoColor(t *testing.T) {
 }
 
 func TestOk_Color(t *testing.T) {
-	os.Unsetenv("NO_COLOR")
+	_ = os.Unsetenv("NO_COLOR")
 	got := ok()
 	if got == "[ok] " {
 		t.Error("ok() without NO_COLOR should not return '[ok] '")
@@ -269,12 +268,13 @@ func TestUninstallBSDRC_NoScript(t *testing.T) {
 }
 
 func TestInstallRunit_AsRoot(t *testing.T) {
+	setupFakeRunit(t)
 	if os.Getuid() != 0 {
 		t.Skip("requires root to create /etc/sv/")
 	}
 	t.Cleanup(func() {
-		os.RemoveAll("/etc/sv/" + appName)
-		os.Remove("/var/service/" + appName)
+		_ = os.RemoveAll("/etc/sv/" + appName)
+		_ = os.Remove("/var/service/" + appName)
 	})
 	err := installRunit()
 	if err != nil {
@@ -297,9 +297,9 @@ func TestInstallSystemd_AsRoot(t *testing.T) {
 		t.Skip("requires root")
 	}
 	t.Cleanup(func() {
-		os.RemoveAll("/var/lib/apimgr")
-		os.RemoveAll("/var/log/apimgr")
-		os.RemoveAll("/etc/apimgr")
+		_ = os.RemoveAll("/var/lib/apimgr")
+		_ = os.RemoveAll("/var/log/apimgr")
+		_ = os.RemoveAll("/etc/apimgr")
 	})
 	// installSystemd creates directories then tries to write to /etc/systemd/system/.
 	// On non-systemd hosts (e.g. Docker containers) this fails at the WriteFile step;
@@ -307,7 +307,9 @@ func TestInstallSystemd_AsRoot(t *testing.T) {
 	err := installSystemd()
 	if err == nil {
 		t.Logf("installSystemd succeeded (host has systemd)")
-		uninstallSystemd()
+		if err := uninstallSystemd(); err != nil {
+			t.Errorf("uninstallSystemd: %v", err)
+		}
 	} else {
 		t.Logf("installSystemd returned (expected on non-systemd host): %v", err)
 	}
@@ -318,15 +320,17 @@ func TestInstallLaunchd_AsRoot(t *testing.T) {
 		t.Skip("requires root")
 	}
 	t.Cleanup(func() {
-		os.RemoveAll("/Library/Application Support/apimgr")
-		os.Remove("/Library/LaunchDaemons/" + launchdLabel + ".plist")
+		_ = os.RemoveAll("/Library/Application Support/apimgr")
+		_ = os.Remove("/Library/LaunchDaemons/" + launchdLabel + ".plist")
 	})
 	// installLaunchd creates directories and writes a plist. On Linux the plist
 	// directory /Library/LaunchDaemons/ does not exist so WriteFile fails.
 	err := installLaunchd()
 	if err == nil {
 		t.Logf("installLaunchd succeeded")
-		uninstallLaunchd()
+		if err := uninstallLaunchd(); err != nil {
+			t.Errorf("uninstallLaunchd: %v", err)
+		}
 	} else {
 		t.Logf("installLaunchd returned (expected on non-macOS host): %v", err)
 	}
@@ -337,14 +341,16 @@ func TestInstallBSDRC_AsRoot(t *testing.T) {
 		t.Skip("requires root")
 	}
 	t.Cleanup(func() {
-		os.Remove("/usr/local/etc/rc.d/" + appName)
+		_ = os.Remove("/usr/local/etc/rc.d/" + appName)
 	})
 	// installBSDRC writes to /usr/local/etc/rc.d/. If the directory does not
 	// exist on this host, WriteFile fails immediately.
 	err := installBSDRC()
 	if err == nil {
 		t.Logf("installBSDRC succeeded")
-		uninstallBSDRC()
+		if err := uninstallBSDRC(); err != nil {
+			t.Errorf("uninstallBSDRC: %v", err)
+		}
 	} else {
 		t.Logf("installBSDRC returned (expected when rc.d dir absent): %v", err)
 	}
@@ -355,7 +361,7 @@ func TestInstallWindows_AsRoot(t *testing.T) {
 		t.Skip("requires root")
 	}
 	t.Cleanup(func() {
-		os.Remove(GetBinaryPath())
+		_ = os.Remove(GetBinaryPath())
 	})
 	// installWindows copies the binary then calls sc.exe which does not exist on
 	// Linux; the binary copy step is covered, the sc.exe step returns an error.

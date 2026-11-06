@@ -4,12 +4,12 @@
 
 {{define "content"}}
         <div class="offline-page">
-            <div class="offline-icon">📡</div>
+            <div class="offline-icon" aria-hidden="true">📡</div>
             <h1 class="offline-title">{{t .Lang "pwa.offline_heading"}}</h1>
             <p class="offline-message">
                 {{t .Lang "pwa.offline_body"}}
             </p>
-            <button class="btn btn-primary" data-action="reload">
+            <button type="button" class="btn btn-primary" data-action="reload">
                 {{t .Lang "pwa.retry"}}
             </button>
         </div>

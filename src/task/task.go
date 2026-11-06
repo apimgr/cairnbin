@@ -24,6 +24,7 @@ import (
 	"github.com/apimgr/cairnbin/src/audit"
 	"github.com/apimgr/cairnbin/src/common/retry"
 	"github.com/apimgr/cairnbin/src/maintenance"
+	"github.com/apimgr/cairnbin/src/service"
 	"github.com/apimgr/cairnbin/src/updater"
 )
 
@@ -314,7 +315,7 @@ func downloadFileOnce(ctx context.Context, url, dst string) error {
 	if err != nil {
 		return fmt.Errorf("get %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &retry.StatusError{Code: resp.StatusCode, URL: url}
@@ -325,11 +326,11 @@ func downloadFileOnce(ctx context.Context, url, dst string) error {
 		return fmt.Errorf("create temp: %w", err)
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 
 	n, err := io.Copy(tmp, resp.Body)
 	if err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("write body: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -423,7 +424,7 @@ func BackupDaily(cfg BackupConfig) func(ctx context.Context) error {
 			ComplianceEnabled: cfg.Compliance,
 			Audit:             cfg.Audit,
 		}); err != nil {
-			os.Remove(fullPath)
+			_ = os.Remove(fullPath)
 			backupSendFailed(cfg, fullName, err.Error())
 			auditBackupFailed(cfg, fullName, err.Error())
 			return fmt.Errorf("backup_daily: create full backup: %w", err)
@@ -431,7 +432,7 @@ func BackupDaily(cfg BackupConfig) func(ctx context.Context) error {
 
 		// Step 2: verify the full backup immediately.
 		if err := maintenance.VerifyBackup(fullPath, cfg.Password); err != nil {
-			os.Remove(fullPath)
+			_ = os.Remove(fullPath)
 			backupSendFailed(cfg, fullName, err.Error())
 			auditBackupVerificationFailed(cfg, fullName, err.Error())
 			return fmt.Errorf("backup_daily: verification failed for %s: %w", fullName, err)
@@ -463,16 +464,16 @@ func BackupDaily(cfg BackupConfig) func(ctx context.Context) error {
 			ComplianceEnabled: cfg.Compliance,
 			Audit:             cfg.Audit,
 		}); err != nil {
-			os.Remove(dailyTmp)
+			_ = os.Remove(dailyTmp)
 			log.Printf("backup_daily: daily incremental create warning: %v", err)
 		} else {
 			// Step 4: verify the daily incremental before replacing the existing one.
 			if err := maintenance.VerifyBackup(dailyTmp, cfg.Password); err != nil {
-				os.Remove(dailyTmp)
+				_ = os.Remove(dailyTmp)
 				log.Printf("backup_daily: daily incremental verification warning: %v", err)
 			} else {
 				if err := os.Rename(dailyTmp, dailyPath); err != nil {
-					os.Remove(dailyTmp)
+					_ = os.Remove(dailyTmp)
 					log.Printf("backup_daily: daily incremental rename warning: %v", err)
 				} else {
 					log.Printf("backup_daily: daily incremental updated: %s", dailyName)
@@ -532,21 +533,21 @@ func BackupHourly(cfg BackupConfig) func(ctx context.Context) error {
 			ComplianceEnabled: cfg.Compliance,
 			Audit:             cfg.Audit,
 		}); err != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			backupSendFailed(cfg, hourlyName, err.Error())
 			auditBackupFailed(cfg, hourlyName, err.Error())
 			return fmt.Errorf("backup_hourly: create archive: %w", err)
 		}
 
 		if err := maintenance.VerifyBackup(tmpPath, cfg.Password); err != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			backupSendFailed(cfg, hourlyName, err.Error())
 			auditBackupVerificationFailed(cfg, hourlyName, err.Error())
 			return fmt.Errorf("backup_hourly: verification failed: %w", err)
 		}
 
 		if err := os.Rename(tmpPath, hourlyPath); err != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			backupSendFailed(cfg, hourlyName, err.Error())
 			auditBackupFailed(cfg, hourlyName, err.Error())
 			return fmt.Errorf("backup_hourly: rename: %w", err)
@@ -762,8 +763,10 @@ func applyRetention(cfg BackupConfig) error {
 // --update yes flow runs; on success, if notifyInstalled is true, an
 // update_installed email is sent before the process restarts. deferDays delays
 // eligibility: a release must be at least that many days old before the task
-// acts on it. A nil mailer or empty operatorEmail silently skips email.
-func UpdateCheck(currentVersion, branch string, buildEpoch int64, operatorEmail string, autoInstall bool, deferDays int, notifyAvailable, notifyInstalled bool, mailer Mailer) func(ctx context.Context) error {
+// acts on it. A nil mailer or empty operatorEmail silently skips email. A
+// successful auto-install records the server.updated audit event on auditW
+// (nil disables audit logging), matching the manual --update yes path.
+func UpdateCheck(currentVersion, branch string, buildEpoch int64, operatorEmail string, autoInstall bool, deferDays int, notifyAvailable, notifyInstalled bool, mailer Mailer, auditW *audit.Writer) func(ctx context.Context) error {
 	// lastAnnounced remembers the version already announced to operators so the
 	// WARN log and email are emitted once per version, not on every run.
 	var lastAnnounced string
@@ -807,12 +810,38 @@ func UpdateCheck(currentVersion, branch string, buildEpoch int64, operatorEmail 
 			return fmt.Errorf("update_check: auto-install failed: %w", err)
 		}
 		log.Printf("update_check: installed %s — restarting", rel.TagName)
+		auditServerUpdated(auditW, currentVersion, rel.TagName)
 		updateSendInstalled(mailer, operatorEmail, notifyInstalled, currentVersion, rel.TagName, branch)
+		// PART 22: prefer a service-manager restart when a system service is
+		// running; fall back to re-exec'ing the new binary in place.
+		if restarted, svcErr := service.RestartAfterUpdate(); restarted {
+			if svcErr != nil {
+				return fmt.Errorf("update_check: service restart failed: %w", svcErr)
+			}
+			return nil
+		}
 		if restartErr := updater.RestartSelf(); restartErr != nil {
 			return fmt.Errorf("update_check: restart failed: %w", restartErr)
 		}
 		return nil
 	}
+}
+
+// auditServerUpdated records the server.updated audit event (old and new
+// version) after the scheduled auto-install path replaces the binary.
+func auditServerUpdated(w *audit.Writer, oldVersion, newVersion string) {
+	if w == nil {
+		return
+	}
+	w.Log(audit.Entry{
+		Event:    "server.updated",
+		Severity: audit.SeverityInfo,
+		Result:   audit.ResultSuccess,
+		Details: map[string]any{
+			"old_version": oldVersion,
+			"new_version": newVersion,
+		},
+	})
 }
 
 // updateSendAvailable sends an update_available email when notify is true and

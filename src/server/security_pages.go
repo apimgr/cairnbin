@@ -91,10 +91,10 @@ func (s *Server) handleSecurityOverview(w http.ResponseWriter, r *http.Request) 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		html, err := s.renderTemplateToString(r, "security_overview.html", data)
 		if err != nil {
-			fmt.Fprintf(w, "Security: report vulnerabilities via %s\n", cfg.SecurityReportURL())
+			_, _ = fmt.Fprintf(w, "Security: report vulnerabilities via %s\n", cfg.SecurityReportURL())
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 	s.renderTemplate(w, r, "security_overview.html", data)
@@ -117,10 +117,10 @@ func (s *Server) handleSecurityPolicy(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		html, err := s.renderTemplateToString(r, "security_policy.html", data)
 		if err != nil {
-			fmt.Fprintf(w, "Security policy: coordinated disclosure within %d days.\n", defaultDisclosureDays)
+			_, _ = fmt.Fprintf(w, "Security policy: coordinated disclosure within %d days.\n", defaultDisclosureDays)
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 	s.renderTemplate(w, r, "security_policy.html", data)
@@ -156,10 +156,10 @@ func (s *Server) handleSecurityThanks(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		html, err := s.renderTemplateToString(r, "security_thanks.html", data)
 		if err != nil {
-			fmt.Fprintf(w, "Security acknowledgments: %d researcher(s).\n", len(entries))
+			_, _ = fmt.Fprintf(w, "Security acknowledgments: %d researcher(s).\n", len(entries))
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 	s.renderTemplate(w, r, "security_thanks.html", data)

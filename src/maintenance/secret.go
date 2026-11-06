@@ -74,8 +74,8 @@ func RunSecret(action, name string, opts SecretOptions) error {
 		return fmt.Errorf("secret: unknown secret %q (want installation_secret or encryption_key)", name)
 	}
 
-	fmt.Fprintf(opts.Stdout, "This rotates %s. Existing data is re-encrypted; restart the server afterwards.\n", name)
-	fmt.Fprint(opts.Stdout, "type 'rotate' to confirm: ")
+	_, _ = fmt.Fprintf(opts.Stdout, "This rotates %s. Existing data is re-encrypted; restart the server afterwards.\n", name)
+	_, _ = fmt.Fprint(opts.Stdout, "type 'rotate' to confirm: ")
 	line, err := bufio.NewReader(opts.Stdin).ReadString('\n')
 	if err != nil && strings.TrimSpace(line) == "" {
 		return errors.New("secret rotate: confirmation not received")
@@ -97,7 +97,7 @@ func RunSecret(action, name string, opts SecretOptions) error {
 	if err != nil {
 		return fmt.Errorf("secret rotate: open database: %w", err)
 	}
-	defer rawDB.Close()
+	defer func() { _ = rawDB.Close() }()
 	db, ok := rawDB.(secretStore)
 	if !ok {
 		return errors.New("secret rotate: the configured database driver does not support secret rotation")
@@ -113,7 +113,7 @@ func RunSecret(action, name string, opts SecretOptions) error {
 			"pgp_keys_rewrapped": n,
 			"grace_days":         7,
 		})
-		fmt.Fprintf(opts.Stdout, "installation_secret rotated (%d PGP key file(s) re-wrapped). The previous secret stays valid for 7 days. Restart the server.\n", n)
+		_, _ = fmt.Fprintf(opts.Stdout, "installation_secret rotated (%d PGP key file(s) re-wrapped). The previous secret stays valid for 7 days. Restart the server.\n", n)
 		return nil
 	}
 
@@ -126,7 +126,7 @@ func RunSecret(action, name string, opts SecretOptions) error {
 		"reports_reencrypted": reports,
 		"grace_days":          30,
 	})
-	fmt.Fprintf(opts.Stdout, "encryption_key rotated (%d token(s), %d report(s) re-encrypted). The previous key stays valid for 30 days. Restart the server.\n", tokens, reports)
+	_, _ = fmt.Fprintf(opts.Stdout, "encryption_key rotated (%d token(s), %d report(s) re-encrypted). The previous key stays valid for 30 days. Restart the server.\n", tokens, reports)
 	return nil
 }
 

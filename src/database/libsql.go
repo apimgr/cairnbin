@@ -57,7 +57,7 @@ func newLibSQLDB(url, token string, pool PoolConfig) (*SQLiteDB, error) {
 	db.SetConnMaxIdleTime(pool.MaxIdleTime)
 
 	if err := ensureSchema(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 

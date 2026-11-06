@@ -23,7 +23,7 @@ import (
 // alias for the tb./termbin. subdomain, for clients that can't open a raw TCP
 // connection; it mirrors the same minimal text-in/URL-out convention.
 func (c *Handler) TermbinServe(conn net.Conn, base string, maxSize int64, timeout time.Duration) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if timeout > 0 {
 		// SetReadDeadline error is non-fatal; the read below still bounds the work.
@@ -33,27 +33,27 @@ func (c *Handler) TermbinServe(conn net.Conn, base string, maxSize int64, timeou
 	// Read one extra byte so an over-limit upload can be detected and rejected.
 	data, err := io.ReadAll(io.LimitReader(conn, maxSize+1))
 	if err != nil && len(data) == 0 {
-		fmt.Fprintln(conn, "Error: read failed")
+		_, _ = fmt.Fprintln(conn, "Error: read failed")
 		return
 	}
 	if int64(len(data)) > maxSize {
-		fmt.Fprintln(conn, "Error: paste too large")
+		_, _ = fmt.Fprintln(conn, "Error: paste too large")
 		return
 	}
 
 	content := strings.TrimRight(string(data), "\r\n")
 	if strings.TrimSpace(content) == "" {
-		fmt.Fprintln(conn, "Error: no content")
+		_, _ = fmt.Fprintln(conn, "Error: no content")
 		return
 	}
 
 	pasteID, _, err := c.ph.CreatePasteInternal("", content, "text", model.VisibilityPublic, 0, nil)
 	if err != nil {
-		fmt.Fprintln(conn, "Error: could not create paste")
+		_, _ = fmt.Fprintln(conn, "Error: could not create paste")
 		return
 	}
 
-	fmt.Fprintf(conn, "%s/%s\n", strings.TrimRight(base, "/"), pasteID)
+	_, _ = fmt.Fprintf(conn, "%s/%s\n", strings.TrimRight(base, "/"), pasteID)
 }
 
 // termbinHTTPRespond creates a paste from a plain-body POST / on the
@@ -74,5 +74,5 @@ func (c *Handler) termbinHTTPRespond(w http.ResponseWriter, r *http.Request, con
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintf(w, "%s/%s\n", strings.TrimRight(c.origin(r), "/"), pasteID)
+	_, _ = fmt.Fprintf(w, "%s/%s\n", strings.TrimRight(c.origin(r), "/"), pasteID)
 }

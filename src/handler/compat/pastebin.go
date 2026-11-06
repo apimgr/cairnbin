@@ -85,7 +85,7 @@ func (c *Handler) pastebinCreate(w http.ResponseWriter, r *http.Request) {
 
 	link := c.ph.PasteURL(r, pasteID)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, link)
+	_, _ = fmt.Fprint(w, link)
 }
 
 // pastebinList handles api_option=list — returns XML paste list.
@@ -106,13 +106,13 @@ func (c *Handler) pastebinList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-	fmt.Fprint(w, "<pastes>")
+	_, _ = fmt.Fprint(w, "<pastes>")
 	for _, p := range pastes {
 		expireDate := "0"
 		if p.ExpiresAt != nil {
 			expireDate = strconv.FormatInt(p.ExpiresAt.Unix(), 10)
 		}
-		fmt.Fprintf(w,
+		_, _ = fmt.Fprintf(w,
 			"<paste><paste_key>%s</paste_key><paste_title>%s</paste_title>"+
 				"<paste_date>%d</paste_date><paste_expire_date>%s</paste_expire_date>"+
 				"<paste_hits>%d</paste_hits><paste_private>0</paste_private></paste>",
@@ -120,7 +120,7 @@ func (c *Handler) pastebinList(w http.ResponseWriter, r *http.Request) {
 			p.Views,
 		)
 	}
-	fmt.Fprint(w, "</pastes>")
+	_, _ = fmt.Fprint(w, "</pastes>")
 }
 
 // pastebinDelete handles api_option=delete.
@@ -145,13 +145,13 @@ func (c *Handler) pastebinDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, "Paste Removed")
+	_, _ = fmt.Fprint(w, "Paste Removed")
 }
 
 // pastebinUserDetails handles api_option=userdetails — returns stub XML.
 func (c *Handler) pastebinUserDetails(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-	fmt.Fprint(w, `<user>`+
+	_, _ = fmt.Fprint(w, `<user>`+
 		`<user_name>anonymous</user_name>`+
 		`<user_email></user_email>`+
 		`<user_website></user_website>`+
@@ -189,7 +189,7 @@ func (c *Handler) PastebinRaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if paste.ExpiresAt != nil && paste.ExpiresAt.Before(time.Now()) {
-		c.db.DeletePaste(id)
+		_ = c.db.DeletePaste(id)
 		http.Error(w, "Bad API request, invalid paste ID", http.StatusNotFound)
 		return
 	}
@@ -200,14 +200,14 @@ func (c *Handler) PastebinRaw(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, paste.Content)
+	_, _ = fmt.Fprint(w, paste.Content)
 }
 
 // PastebinLogin handles POST /api/api_login.php — always returns "ANONYMOUS"
 // because this instance has no user accounts.
 func (c *Handler) PastebinLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, "ANONYMOUS")
+	_, _ = fmt.Fprint(w, "ANONYMOUS")
 }
 
 // parsePastebinExpiry maps pastebin.com expire_date codes to a time.Time.

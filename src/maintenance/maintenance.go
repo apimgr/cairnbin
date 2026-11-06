@@ -125,12 +125,21 @@ func Backup(opts BackupOptions) error {
 			contents = append(contents, name)
 		}
 	}
-	addDir := func(dir, prefix string) {
-		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() {
+	addDir := func(dir, prefix string) error {
+		return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				if os.IsNotExist(err) && path == dir {
+					return nil
+				}
+				return err
+			}
+			if info.IsDir() {
 				return nil
 			}
-			rel, _ := filepath.Rel(dir, path)
+			rel, err := filepath.Rel(dir, path)
+			if err != nil {
+				return err
+			}
 			addFile(path, filepath.Join(prefix, rel))
 			return nil
 		})
@@ -139,18 +148,28 @@ func Backup(opts BackupOptions) error {
 	addFile(filepath.Join(opts.ConfigDir, "server.yml"), "server.yml")
 	addFile(filepath.Join(opts.DataDir, "db", "server.db"), "server.db")
 	addFile(filepath.Join(opts.DataDir, "db", "users.db"), "users.db")
-	addDir(filepath.Join(opts.ConfigDir, "template"), "template")
-	addDir(filepath.Join(opts.ConfigDir, "theme"), "theme")
+	for _, item := range []struct{ dir, prefix string }{
+		{filepath.Join(opts.ConfigDir, "template"), "template"},
+		{filepath.Join(opts.ConfigDir, "theme"), "theme"},
+		{filepath.Join(opts.ConfigDir, "security"), "security"},
+	} {
+		if err := addDir(item.dir, item.prefix); err != nil {
+			return fmt.Errorf("collect backup files from %s: %w", item.dir, err)
+		}
+	}
 	// Security keypair state (PART, AI.md 14206-14209): public key, encrypted
 	// private key, parked rotated key, and per-keyserver publish state. The
 	// private key's KDF input is installation_secret, which lives in server.db
 	// (already archived), so the backup is self-sufficient to restore.
-	addDir(filepath.Join(opts.ConfigDir, "security"), "security")
 	if opts.IncludeSSL {
-		addDir(filepath.Join(opts.ConfigDir, "ssl"), "ssl")
+		if err := addDir(filepath.Join(opts.ConfigDir, "ssl"), "ssl"); err != nil {
+			return fmt.Errorf("collect SSL backup files: %w", err)
+		}
 	}
 	if opts.IncludeData {
-		addDataDir(addFile, opts.DataDir, opts.BackupDir)
+		if err := addDataDir(addFile, opts.DataDir, opts.BackupDir); err != nil {
+			return fmt.Errorf("collect backup data: %w", err)
+		}
 	}
 
 	// Compute content checksum: SHA-256 of all data file bytes in archive order,
@@ -209,8 +228,12 @@ func Backup(opts BackupOptions) error {
 		return fmt.Errorf("write manifest body: %w", err)
 	}
 
-	tw.Close()
-	gz.Close()
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("close backup tar: %w", err)
+	}
+	if err := gz.Close(); err != nil {
+		return fmt.Errorf("close backup gzip: %w", err)
+	}
 
 	archiveBytes := archiveBuf.Bytes()
 
@@ -287,12 +310,12 @@ func RestoreWithLimits(archivePath, configDir, dataDir, password, runningVersion
 			break
 		}
 		if readErr != nil {
-			manifestGzip.Close()
+			_ = manifestGzip.Close()
 			return fmt.Errorf("reading backup manifest: %w", readErr)
 		}
 		if hdr.Name == "manifest.json" {
 			if err := json.NewDecoder(manifestTar).Decode(&manifest); err != nil {
-				manifestGzip.Close()
+				_ = manifestGzip.Close()
 				return fmt.Errorf("reading backup manifest: %w", err)
 			}
 			break
@@ -309,7 +332,7 @@ func RestoreWithLimits(archivePath, configDir, dataDir, password, runningVersion
 	if err != nil {
 		return fmt.Errorf("opening gzip: %w", err)
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 	budget := &extractBudget{limits: limits, compressed: int64(len(data))}
@@ -392,17 +415,17 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("creating temp config: %w", err)
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("chmod temp config: %w", err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("writing temp config: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("syncing temp config: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -555,7 +578,7 @@ func VerifyBackup(path, password string) error {
 	if err != nil {
 		return fmt.Errorf("verify: not a valid gzip archive: %w", err)
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 
@@ -569,7 +592,7 @@ func VerifyBackup(path, password string) error {
 	if err != nil {
 		return fmt.Errorf("verify: temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	for {
 		hdr, err := tr.Next()
@@ -601,10 +624,12 @@ func VerifyBackup(path, password string) error {
 		lr := io.LimitReader(tr, 256<<20)
 		tee := io.TeeReader(lr, contentHash)
 		if _, err := io.Copy(f, tee); err != nil {
-			f.Close()
+			_ = f.Close()
 			return fmt.Errorf("verify: read entry %s: %w", hdr.Name, err)
 		}
-		f.Close()
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("verify: close extracted entry %s: %w", hdr.Name, err)
+		}
 
 		// Check 6: SQLite magic header for .db files.
 		if strings.HasSuffix(hdr.Name, ".db") {
@@ -675,7 +700,7 @@ func verifySQLiteMagic(path string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf := make([]byte, len(sqliteMagic))
 	if _, err := io.ReadFull(f, buf); err != nil {
@@ -705,7 +730,7 @@ func addToTar(tw *tar.Writer, srcPath, archiveName string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil {
@@ -787,7 +812,7 @@ func extractEntryBudget(tr *tar.Reader, hdr *tar.Header, configDir, dataDir stri
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// O_CREATE mode only applies to new files — tighten pre-existing ones too.
 	if err := f.Chmod(0o600); err != nil {
@@ -904,11 +929,11 @@ func argon2Key(password string, salt []byte) []byte {
 // addDataDir walks dataDir for --include-data, skipping db/ (server.db and
 // users.db are always archived on their own) and the backup directory so a
 // backup never contains earlier backups.
-func addDataDir(addFile func(src, name string), dataDir, backupDir string) {
+func addDataDir(addFile func(src, name string), dataDir, backupDir string) error {
 	skipDB := filepath.Join(dataDir, "db")
-	filepath.Walk(dataDir, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(dataDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		if info.IsDir() {
 			if path == skipDB || (backupDir != "" && path == filepath.Clean(backupDir)) {
@@ -921,7 +946,7 @@ func addDataDir(addFile func(src, name string), dataDir, backupDir string) {
 		}
 		rel, relErr := filepath.Rel(dataDir, path)
 		if relErr != nil {
-			return nil
+			return relErr
 		}
 		addFile(path, filepath.Join("data", rel))
 		return nil

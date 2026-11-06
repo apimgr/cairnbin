@@ -168,15 +168,15 @@ func TestIsValidURL_NoScheme(t *testing.T) {
 // ─── envOrDefault ─────────────────────────────────────────────────────────────
 
 func TestEnvOrDefault_Unset(t *testing.T) {
-	os.Unsetenv("TEST_CAIRNBIN_CLI_KEY_XYZ")
+	_ = os.Unsetenv("TEST_CAIRNBIN_CLI_KEY_XYZ")
 	if got := envOrDefault("TEST_CAIRNBIN_CLI_KEY_XYZ", "fallback"); got != "fallback" {
 		t.Errorf("got %q; want fallback", got)
 	}
 }
 
 func TestEnvOrDefault_Set(t *testing.T) {
-	os.Setenv("TEST_CAIRNBIN_CLI_KEY_XYZ", "fromenv")
-	defer os.Unsetenv("TEST_CAIRNBIN_CLI_KEY_XYZ")
+	t.Setenv("TEST_CAIRNBIN_CLI_KEY_XYZ", "fromenv")
+	defer func() { _ = os.Unsetenv("TEST_CAIRNBIN_CLI_KEY_XYZ") }()
 	if got := envOrDefault("TEST_CAIRNBIN_CLI_KEY_XYZ", "fallback"); got != "fromenv" {
 		t.Errorf("got %q; want fromenv", got)
 	}
@@ -438,7 +438,7 @@ func TestClientGet_Success(t *testing.T) {
 			t.Errorf("expected cairnbin-cli User-Agent, got %q", r.Header.Get("User-Agent"))
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("paste content"))
+		_, _ = w.Write([]byte("paste content"))
 	}))
 	defer srv.Close()
 
@@ -447,7 +447,7 @@ func TestClientGet_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d; want 200", resp.StatusCode)
 	}
@@ -472,12 +472,14 @@ func TestClientPostJSON_Success(t *testing.T) {
 			t.Errorf("Content-Type = %q; want application/json", ct)
 		}
 		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		if body["content"] != "hello" {
 			t.Errorf("body content = %v; want hello", body["content"])
 		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "abc", "link": "http://example.com/abc"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "abc", "link": "http://example.com/abc"})
 	}))
 	defer srv.Close()
 
@@ -486,7 +488,7 @@ func TestClientPostJSON_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("postJSON: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		t.Errorf("status = %d; want 201", resp.StatusCode)
 	}
@@ -505,7 +507,7 @@ func TestClientPostJSON_UnmarshalableBody(t *testing.T) {
 
 func TestCmdList_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data":       []interface{}{},
 			"pagination": map[string]int{"total": 0, "pages": 0},
 		})
@@ -519,7 +521,7 @@ func TestCmdList_Empty(t *testing.T) {
 
 func TestCmdList_WithData(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []interface{}{
 				map[string]interface{}{
 					"id": "abc123", "title": "Hello", "language": "go",
@@ -537,7 +539,7 @@ func TestCmdList_WithData(t *testing.T) {
 
 func TestCmdList_AsJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data":       []interface{}{},
 			"pagination": map[string]int{"total": 0, "pages": 0},
 		})
@@ -553,7 +555,7 @@ func TestCmdList_AsJSON(t *testing.T) {
 func TestCmdCreate_FromFile(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"id": "abc123", "link": "http://example.com/abc123", "delete_token": "tok",
 		})
 	}))
@@ -572,7 +574,7 @@ func TestCmdCreate_FromFile(t *testing.T) {
 func TestCmdCreate_AsJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"id": "abc123", "link": "http://example.com/abc123",
 		})
 	}))
@@ -593,7 +595,7 @@ func TestCmdCreate_AsJSON(t *testing.T) {
 func TestCmdGet_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("paste content here"))
+		_, _ = w.Write([]byte("paste content here"))
 	}))
 	defer srv.Close()
 
@@ -609,7 +611,7 @@ func TestCmdDelete_Success(t *testing.T) {
 			t.Errorf("expected DELETE, got %s", r.Method)
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
 	}))
 	defer srv.Close()
 
@@ -620,7 +622,7 @@ func TestCmdDelete_Success(t *testing.T) {
 func TestCmdDelete_AsJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
 	}))
 	defer srv.Close()
 
@@ -636,7 +638,7 @@ func TestCheckCLIUpdate_MinVersionEnforced_ReturnsError(t *testing.T) {
 	defer func() { Version = orig }()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"cli_min_version": "2.0.0",
 			"cli_versions":    map[string]interface{}{},
 		})
@@ -659,7 +661,7 @@ func TestCheckCLIUpdate_NoticeWhenNewerAvailable(t *testing.T) {
 
 	osArch := runtime.GOOS + "-" + runtime.GOARCH
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"cli_min_version": "0.1.0",
 			"cli_versions": map[string]interface{}{
 				osArch: map[string]string{"version": "9.9.9", "sha256": "abc"},
@@ -696,7 +698,7 @@ func TestCheckCLIUpdate_InvalidJSONBody_ReturnsNil(t *testing.T) {
 	defer func() { Version = orig }()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer srv.Close()
 
@@ -710,7 +712,7 @@ func TestCheckCLIUpdate_InvalidJSONBody_ReturnsNil(t *testing.T) {
 func TestCmdCreate_WithFlags(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"id": "abc123", "link": "http://example.com/abc123", "delete_token": "",
 		})
 	}))
@@ -730,7 +732,7 @@ func TestCmdCreate_WithFlags(t *testing.T) {
 func TestCmdCreate_WithBurnFlag(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "xyz", "link": "http://example.com/xyz"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "xyz", "link": "http://example.com/xyz"})
 	}))
 	defer srv.Close()
 
@@ -746,7 +748,7 @@ func TestCmdCreate_WithBurnFlag(t *testing.T) {
 
 func TestCmdList_WithPage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []interface{}{
 				map[string]interface{}{
 					"id": "p1", "title": "A very long title that exceeds forty characters in length for truncation",
@@ -767,7 +769,7 @@ func TestCmdList_WithPage(t *testing.T) {
 
 func TestCmdUpdate_NoBinaryForPlatform(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{},
 		})
 	}))
@@ -785,7 +787,7 @@ func TestCmdUpdate_AlreadyUpToDate(t *testing.T) {
 
 	osArch := runtime.GOOS + "-" + runtime.GOARCH
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{
 				osArch: {Version: "1.0.0"},
 			},
@@ -804,7 +806,7 @@ func TestCmdUpdate_UpdateAvailable_CheckOnly(t *testing.T) {
 
 	osArch := runtime.GOOS + "-" + runtime.GOARCH
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{
 				osArch: {Version: "2.0.0"},
 			},
@@ -822,7 +824,7 @@ func TestCmdUpdate_UpdateAvailable_CheckOnly(t *testing.T) {
 func TestCmdCreate_FromStdin(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"id": "stdin1", "link": "http://example.com/stdin1",
 		})
 	}))
@@ -838,7 +840,7 @@ func TestCmdCreate_FromStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	origStdin := os.Stdin
 	os.Stdin = f

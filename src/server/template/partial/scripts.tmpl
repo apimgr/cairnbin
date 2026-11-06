@@ -1,6 +1,6 @@
 {{define "scripts"}}
-    <div id="toast-container"></div>
+    <div id="toast-container" aria-label="{{t .Lang "common.notifications"}}"></div>
 
-    <script type="application/json" id="pb-i18n-data">{{i18njs .Lang}}</script>
-    <script src="{{asset .AssetPrefix "/static/js/app.js"}}"></script>
+    <script type="application/json" id="pb-i18n-data"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>{{i18njs .Lang}}</script>
+    <script src="{{asset .AssetPrefix "/static/js/app.js"}}"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
 {{end}}

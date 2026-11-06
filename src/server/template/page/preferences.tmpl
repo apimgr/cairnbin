@@ -17,63 +17,67 @@
                         {{t .Lang "preferences.theme_label"}} = {{t .Lang (print "theme." .PrefTheme)}},
                         {{t .Lang "preferences.lang_label"}} = {{t .Lang (print "lang." .PrefLang)}}
                     </p>
+                    {{if .GPCReceived}}
+                    <p class="alert" role="status">{{t .Lang "preferences.gpc_notice"}}</p>
+                    {{end}}
 
-                    <h2 class="section-mt">{{t .Lang "preferences.theme_label"}}</h2>
-                    <p>{{t .Lang "preferences.theme_desc"}}</p>
-                    <div class="pref-options" role="group" aria-label="{{t .Lang "preferences.theme_label"}}">
-                        {{range $mode := (list "dark" "light" "auto")}}
-                        <form method="post" action="{{$.AssetPrefix}}/server/preferences" class="pref-option-form">
-                            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                            <input type="hidden" name="theme" value="{{$mode}}">
-                            <button type="submit" class="btn {{if eq $.PrefTheme $mode}}btn-primary{{else}}btn-secondary{{end}}"
-                                    aria-pressed="{{if eq $.PrefTheme $mode}}true{{else}}false{{end}}"
-                                    data-action="submit-loading" data-loading-text="{{t $.Lang "js.saving"}}">{{t $.Lang (print "theme." $mode)}}</button>
-                        </form>
-                        {{end}}
-                    </div>
-
-                    <h2 class="section-mt">{{t .Lang "preferences.lang_label"}}</h2>
-                    <p>{{t .Lang "preferences.lang_desc"}}</p>
-                    <div class="pref-options" role="group" aria-label="{{t .Lang "preferences.lang_label"}}">
-                        {{range $code := (list "en" "es" "fr" "de" "zh" "ar" "ja")}}
-                        <a href="{{$.AssetPrefix}}/server/preferences?lang={{$code}}"
-                           class="btn {{if eq $.PrefLang $code}}btn-primary{{else}}btn-secondary{{end}}"
-                           aria-pressed="{{if eq $.PrefLang $code}}true{{else}}false{{end}}">{{t $.Lang (print "lang." $code)}}</a>
-                        {{end}}
-                    </div>
-
-                    <h2 class="section-mt">{{t .Lang "preferences.app_pref_title"}}</h2>
-                    <p>{{t .Lang "preferences.app_pref_desc"}}</p>
-                    <form method="post" action="{{.AssetPrefix}}/server/preferences" class="pref-form">
+                    <form method="POST" action="/server/preferences" class="pref-form">
                         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                        <div class="form-group">
-                            <label class="form-label" for="pref-sort">{{t .Lang "recent.sort_label"}}</label>
-                            <select id="pref-sort" name="cairnbin_pref_sort" class="form-select">
-                                {{$sort := .PrefSort}}
-                                {{range $col := (list "date" "name" "views")}}
-                                <option value="{{$col}}" {{if eq $sort $col}}selected{{end}}>{{t $.Lang (print "recent.sort_" $col)}}</option>
-                                {{end}}
-                            </select>
+                        <input type="hidden" name="consent_form" value="1">
+                        <input type="hidden" name="redirect" value="{{.CancelURL}}">
+                        <h2 class="section-mt">{{t .Lang "preferences.theme_label"}}</h2>
+                        <p>{{t .Lang "preferences.theme_desc"}}</p>
+                        <fieldset class="form-group">
+                            <legend>{{t .Lang "preferences.theme_label"}}</legend>
+                            {{range $mode := (list "dark" "light" "auto")}}
+                            <label><input type="radio" name="theme" value="{{$mode}}"{{if eq $.PrefTheme $mode}} checked{{end}}> {{t $.Lang (print "theme." $mode)}}</label>
+                            {{end}}
+                        </fieldset>
+                        <h2 class="section-mt">{{t .Lang "preferences.lang_label"}}</h2>
+                        <label class="form-label" for="pref-language">{{t .Lang "preferences.lang_label"}}</label>
+                        <select id="pref-language" name="lang" class="form-select">
+                            {{range $code := (list "en" "es" "fr" "de" "zh" "ar" "ja")}}
+                            <option value="{{$code}}"{{if eq $.PrefLang $code}} selected{{end}}>{{t $.Lang (print "lang." $code)}}</option>
+                            {{end}}
+                        </select>
+                        <h2 class="section-mt">{{t .Lang "preferences.consent_title"}}</h2>
+                        <p>{{t .Lang "preferences.consent_desc"}}</p>
+                        {{$c := consentInfo}}
+                        <p class="cookie-category"><label><input type="checkbox" checked disabled><span>{{$c.Descriptions.Essential}}</span></label></p>
+                        <p class="cookie-category"><label><input type="checkbox" name="consent_preferences" value="1"{{if .ConsentPreferences}} checked{{end}}><span>{{$c.Descriptions.Preferences}}</span></label></p>
+                        <p class="cookie-category"><label><input type="checkbox" name="consent_analytics" value="1"{{if .ConsentAnalytics}} checked{{end}}{{if not .ConsentAnalyticsConfigured}} disabled{{end}}><span>{{$c.Descriptions.Analytics}}</span></label></p>
+                        <p class="cookie-category"><label><input type="checkbox" name="ccpa_opt_out" value="1"{{if .CCPAOptedOut}} checked{{end}}><span>{{t .Lang "privacy.ccpa_do_not_sell"}}</span></label></p>
+                        <h2 class="section-mt">{{t .Lang "preferences.app_pref_title"}}</h2>
+                        <p>{{t .Lang "preferences.app_pref_desc"}}</p>
+                        <label class="form-label" for="pref-sort">{{t .Lang "recent.sort_label"}}</label>
+                        <select id="pref-sort" name="cairnbin_pref_sort" class="form-select">
+                            {{$sort := .PrefSort}}{{range $col := (list "date" "name" "views")}}<option value="{{$col}}"{{if eq $sort $col}} selected{{end}}>{{t $.Lang (print "recent.sort_" $col)}}</option>{{end}}
+                        </select>
+                        <label class="form-label" for="pref-order">{{t .Lang "recent.order_label"}}</label>
+                        <select id="pref-order" name="cairnbin_pref_order" class="form-select">
+                            {{$order := .PrefOrder}}<option value="desc"{{if eq $order "desc"}} selected{{end}}>{{t .Lang "recent.order_desc"}}</option><option value="asc"{{if eq $order "asc"}} selected{{end}}>{{t .Lang "recent.order_asc"}}</option>
+                        </select>
+                        <label class="form-label" for="pref-per-page">{{t .Lang "recent.limit_label"}}</label>
+                        <select id="pref-per-page" name="cairnbin_pref_per_page" class="form-select">
+                            {{$perPage := .PrefPerPage}}{{range $n := (list "20" "50" "100" "250")}}<option value="{{$n}}"{{if eq $perPage $n}} selected{{end}}>{{$n}}</option>{{end}}
+                        </select>
+                        <h2 class="section-mt">{{t .Lang "preferences.export_title"}}</h2>
+                        <label class="form-label" for="pref-export-url">{{t .Lang "preferences.export_url"}}</label>
+                        <div class="copy-field"><input type="text" id="pref-export-url" class="form-input long-string preferences-export-value" value="{{.ExportURL}}" readonly><button type="button" class="copy-btn" data-copy="{{.ExportURL}}" aria-label="{{t .Lang "preferences.copy"}}">{{t .Lang "preferences.copy"}}</button></div>
+                        <label class="form-label" for="pref-export-code">{{t .Lang "preferences.export_code"}}</label>
+                        <div class="copy-field"><input type="text" id="pref-export-code" class="form-input long-string preferences-export-value" value="{{.ExportCode}}" readonly><button type="button" class="copy-btn" data-copy="{{.ExportCode}}" aria-label="{{t .Lang "preferences.copy"}}">{{t .Lang "preferences.copy"}}</button></div>
+                        <label class="form-label" for="pref-import-code">{{t .Lang "preferences.import_code"}}</label>
+                        <input type="text" id="pref-import-code" name="code" class="form-input long-string preferences-export-value" maxlength="2048" placeholder="{{t .Lang "preferences.import_placeholder"}}">
+                        <div class="form-actions">
+                            <a class="btn btn-secondary" href="{{.CancelURL}}">{{t .Lang "common.cancel"}}</a>
+                            <button type="button" class="btn btn-secondary" popovertarget="preferences-reset">{{t .Lang "preferences.reset"}}</button>
+                            <button type="submit" class="btn btn-primary">{{t .Lang "common.save"}}</button>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="pref-order">{{t .Lang "recent.order_label"}}</label>
-                            <select id="pref-order" name="cairnbin_pref_order" class="form-select">
-                                {{$order := .PrefOrder}}
-                                <option value="desc" {{if eq $order "desc"}}selected{{end}}>{{t .Lang "recent.order_desc"}}</option>
-                                <option value="asc" {{if eq $order "asc"}}selected{{end}}>{{t .Lang "recent.order_asc"}}</option>
-                            </select>
+                        <div id="preferences-reset" popover>
+                            <p>{{t .Lang "preferences.reset_warning"}}</p>
+                            <button type="button" class="btn btn-secondary" popovertarget="preferences-reset" popovertargetaction="hide">{{t .Lang "common.cancel"}}</button>
+                            <button type="submit" class="btn btn-danger" name="action" value="reset">{{t .Lang "preferences.erase"}}</button>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="pref-per-page">{{t .Lang "recent.limit_label"}}</label>
-                            <select id="pref-per-page" name="cairnbin_pref_per_page" class="form-select">
-                                {{$perPage := .PrefPerPage}}
-                                {{range $n := (list "20" "50" "100" "250")}}
-                                <option value="{{$n}}" {{if eq $perPage $n}}selected{{end}}>{{$n}}</option>
-                                {{end}}
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-primary"
-                                data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "common.save"}}</button>
                     </form>
 
                     <h2 class="section-mt">{{t .Lang "preferences.token_title"}}</h2>
@@ -137,99 +141,6 @@
                     </form>
                     {{end}}
 
-                    <h2 class="section-mt">{{t .Lang "preferences.export_title"}}</h2>
-                    <p>{{t .Lang "preferences.export_desc"}}</p>
-                    {{if .ExportURL}}
-                    <div class="form-group">
-                        <label for="pref-export-url" class="form-label">{{t .Lang "preferences.export_url"}}</label>
-                        <div class="copy-field">
-                            <input type="text" id="pref-export-url" class="form-input long-string" value="{{.ExportURL}}" readonly
-                                   aria-describedby="pref-export-url-error" aria-invalid="false">
-                            <button type="button" class="copy-btn" data-copy="{{.ExportURL}}" aria-live="polite" aria-label="{{t .Lang "preferences.copy"}}">
-                                <span class="copy-text">📋</span>
-                            </button>
-                        </div>
-                        <span id="pref-export-url-error" class="field-error" role="alert" hidden></span>
-                    </div>
-                    <div class="form-group">
-                        <label for="pref-export-code" class="form-label">{{t .Lang "preferences.export_code"}}</label>
-                        <div class="copy-field">
-                            <input type="text" id="pref-export-code" class="form-input long-string" value="{{.ExportCode}}" readonly
-                                   aria-describedby="pref-export-code-error" aria-invalid="false">
-                            <button type="button" class="copy-btn" data-copy="{{.ExportCode}}" aria-live="polite" aria-label="{{t .Lang "preferences.copy"}}">
-                                <span class="copy-text">📋</span>
-                            </button>
-                        </div>
-                        <span id="pref-export-code-error" class="field-error" role="alert" hidden></span>
-                    </div>
-                    {{else}}
-                    <p><a href="{{.AssetPrefix}}/server/preferences/export" class="btn btn-secondary">{{t .Lang "preferences.export_action"}}</a></p>
-                    {{end}}
-
-                    <h2 class="section-mt">{{t .Lang "preferences.import_title"}}</h2>
-                    <p>{{t .Lang "preferences.import_desc"}}</p>
-                    <form method="get" action="{{.AssetPrefix}}/server/preferences/import" class="contact-form">
-                        <div class="form-group">
-                            <label for="pref-import-code" class="form-label">{{t .Lang "preferences.import_code"}}</label>
-                            <input type="text" id="pref-import-code" name="code" class="form-input long-string"
-                                   maxlength="500" placeholder="{{t .Lang "preferences.import_placeholder"}}"
-                                   aria-describedby="pref-import-code-error" aria-invalid="false">
-                            <span id="pref-import-code-error" class="field-error" role="alert" hidden></span>
-                        </div>
-                        <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.importing"}}">{{t .Lang "preferences.import_action"}}</button>
-                    </form>
-
-                    <h2 id="ccpa-opt-out" class="section-mt">{{t .Lang "privacy.ccpa_do_not_sell"}}</h2>
-                    {{if .Privacy.IsCCPAApplicable}}
-                        {{if .CCPAOptedOut}}
-                        <p>{{t .Lang "privacy.ccpa_opted_out_full"}}</p>
-                        <form method="POST" action="{{.AssetPrefix}}/server/privacy/ccpa">
-                            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                            <input type="hidden" name="action" value="opt_in">
-                            <button type="submit" class="btn btn-secondary" data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "privacy.ccpa_opt_back_in"}}</button>
-                        </form>
-                        {{else}}
-                        <p>{{t .Lang "privacy.ccpa_intro"}}</p>
-                        <form method="POST" action="{{.AssetPrefix}}/server/privacy/ccpa">
-                            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                            <input type="hidden" name="action" value="opt_out">
-                            <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "privacy.ccpa_do_not_sell"}}</button>
-                        </form>
-                        {{end}}
-                    {{else}}
-                    <p>{{t .Lang "privacy.ccpa_not_applicable"}}</p>
-                    {{end}}
-
-                    {{$c := consentInfo}}
-                    <h2 class="section-mt">{{t .Lang "preferences.consent_title"}}</h2>
-                    <p>{{t .Lang "preferences.consent_desc"}}</p>
-                    <form method="post" action="{{.AssetPrefix}}/server/consent" class="contact-form">
-                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                        <p class="cookie-category">
-                            <label>
-                                <input type="checkbox" checked disabled aria-describedby="pref-consent-essential">
-                                <span id="pref-consent-essential">{{$c.Descriptions.Essential}}</span>
-                            </label>
-                        </p>
-                        <p class="cookie-category">
-                            <label>
-                                <input type="checkbox" name="preferences" value="1"{{if .ConsentPreferences}} checked{{end}}
-                                       aria-describedby="pref-consent-preferences">
-                                <span id="pref-consent-preferences">{{$c.Descriptions.Preferences}}</span>
-                            </label>
-                        </p>
-                        {{if $c.AnalyticsConfigured}}
-                        <p class="cookie-category">
-                            <label>
-                                <input type="checkbox" name="analytics" value="1"{{if .ConsentAnalytics}} checked{{end}}
-                                       aria-describedby="pref-consent-analytics">
-                                <span id="pref-consent-analytics">{{$c.Descriptions.Analytics}}</span>
-                            </label>
-                        </p>
-                        {{end}}
-                        <button type="submit" name="choice" value="save" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "cookie_consent.save_preferences"}}</button>
-                        <button type="submit" name="choice" value="decline" class="btn btn-secondary">{{t .Lang "cookie_consent.decline"}}</button>
-                    </form>
                 </div>
             </div>
         </section>

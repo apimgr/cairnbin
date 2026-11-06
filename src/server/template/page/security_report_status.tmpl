@@ -1,57 +1,56 @@
 {{define "meta"}}
-    <title>Report Status - {{.SiteTitle}}</title>
+    <title>{{t .Lang "security.status_meta_title"}} - {{.SiteTitle}}</title>
 {{end}}
 
 {{define "content"}}
         <section class="search-section">
             <div class="container container-sm">
                 <div class="section-header">
-                    <h1 class="section-title">Security Report Status</h1>
-                    <p class="section-subtitle long-string">Tracking ID: <code>{{.TrackingID}}</code></p>
+                    <h1 class="section-title">{{t .Lang "security.status_title"}}</h1>
+                    <p class="section-subtitle long-string">{{t .Lang "security.tracking_id"}}: <code>{{.TrackingID}}</code></p>
                 </div>
 
                 <div class="paste-view page-view">
                     {{if .RateLimited}}
                     <div class="alert alert-warning" role="alert">
-                        This status link may only be opened once per day. You are seeing the last
-                        loaded state; please check back tomorrow for a fresh view.
+                        {{t .Lang "security.status_rate_limited"}}
                     </div>
                     {{end}}
 
                     <dl class="detail-list">
                         <div class="detail-row">
-                            <dt>Current status</dt>
+                            <dt>{{t .Lang "security.current_status"}}</dt>
                             <dd><strong>{{.Status}}</strong></dd>
                         </div>
                         <div class="detail-row">
-                            <dt>Severity</dt>
-                            <dd>{{if .Severity}}{{.Severity}}{{else}}Pending triage{{end}}</dd>
+                            <dt>{{t .Lang "security.severity"}}</dt>
+                            <dd>{{if .Severity}}{{.Severity}}{{else}}{{t .Lang "security.pending_triage"}}{{end}}</dd>
                         </div>
                         <div class="detail-row">
-                            <dt>Component</dt>
+                            <dt>{{t .Lang "security.component"}}</dt>
                             <dd>{{if .Component}}{{.Component}}{{else}}—{{end}}</dd>
                         </div>
                         <div class="detail-row">
-                            <dt>Received</dt>
+                            <dt>{{t .Lang "security.received"}}</dt>
                             <dd>{{.ReceivedAt}}</dd>
                         </div>
                         <div class="detail-row">
-                            <dt>Last updated</dt>
+                            <dt>{{t .Lang "security.last_updated"}}</dt>
                             <dd>{{.UpdatedAt}}</dd>
                         </div>
                         <div class="detail-row">
-                            <dt>Expected disclosure</dt>
+                            <dt>{{t .Lang "security.expected_disclosure"}}</dt>
                             <dd>{{.ExpectedDate}}</dd>
                         </div>
                         {{if .DisclosedAt}}
                         <div class="detail-row">
-                            <dt>Disclosed</dt>
+                            <dt>{{t .Lang "security.disclosed"}}</dt>
                             <dd>{{.DisclosedAt}}</dd>
                         </div>
                         {{end}}
                     </dl>
 
-                    <h2 class="section-mt">Progress</h2>
+                    <h2 class="section-mt">{{t .Lang "security.progress"}}</h2>
                     <ol class="progress-stages">
                         {{range .Stages}}
                         <li class="progress-stage{{if eq . $.CurrentStage}} progress-stage-current{{end}}">{{.}}</li>
@@ -59,16 +58,15 @@
                     </ol>
 
                     {{if .Comment}}
-                    <h2 class="section-mt">Maintainer note</h2>
+                    <h2 class="section-mt">{{t .Lang "security.maintainer_note"}}</h2>
                     <blockquote class="maintainer-comment">{{.Comment}}</blockquote>
                     {{end}}
 
-                    <h2 class="section-mt">Contact</h2>
+                    <h2 class="section-mt">{{t .Lang "security.contact"}}</h2>
                     <p>
-                        To add information to this report, reply to the acknowledgment email
-                        {{if .SecurityEmail}}or write to
+                        {{t .Lang "security.status_contact_text"}}
+                        {{if .SecurityEmail}}{{t .Lang "security.status_contact_email"}}
                         <a href="mailto:{{.SecurityEmail}}" class="long-string">{{.SecurityEmail}}</a>{{end}}
-                        and include your tracking ID.
                     </p>
                 </div>
             </div>

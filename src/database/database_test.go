@@ -33,13 +33,13 @@ func newTestDB(t *testing.T) database.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	db, err := database.NewDatabase("sqlite", filepath.Join(dir, "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -1049,7 +1049,7 @@ func TestNewDatabase_DefaultType(t *testing.T) {
 	if db == nil {
 		t.Fatal("NewDatabase returned nil")
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 
 	if got := db.Type(); got != "sqlite" {
 		t.Errorf("Type: got %q, want %q", got, "sqlite")

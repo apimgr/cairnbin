@@ -21,12 +21,12 @@ func TestUninstallSystemd_DirectWithFile(t *testing.T) {
 
 	// Create systemd service file
 	systemdDir := "/etc/systemd/system"
-	os.MkdirAll(systemdDir, 0o755)
+	_ = os.MkdirAll(systemdDir, 0o755)
 	serviceFile := filepath.Join(systemdDir, appName+".service")
-	os.WriteFile(serviceFile, []byte("[Unit]\nDescription=Test\n"), 0o644)
+	_ = os.WriteFile(serviceFile, []byte("[Unit]\nDescription=Test\n"), 0o644)
 
 	t.Cleanup(func() {
-		os.Remove(serviceFile)
+		_ = os.Remove(serviceFile)
 	})
 
 	err := uninstallSystemd()
@@ -50,12 +50,12 @@ func TestUninstallOpenRC_DirectWithScript(t *testing.T) {
 
 	// Create init script
 	initDir := "/etc/init.d"
-	os.MkdirAll(initDir, 0o755)
+	_ = os.MkdirAll(initDir, 0o755)
 	initScript := filepath.Join(initDir, appName)
-	os.WriteFile(initScript, []byte("#!/sbin/openrc-run\n"), 0o755)
+	_ = os.WriteFile(initScript, []byte("#!/sbin/openrc-run\n"), 0o755)
 
 	t.Cleanup(func() {
-		os.Remove(initScript)
+		_ = os.Remove(initScript)
 	})
 
 	err := uninstallOpenRC()
@@ -79,12 +79,12 @@ func TestUninstallSysV_DirectWithScript(t *testing.T) {
 
 	// Create init script
 	initDir := "/etc/init.d"
-	os.MkdirAll(initDir, 0o755)
+	_ = os.MkdirAll(initDir, 0o755)
 	initScript := filepath.Join(initDir, appName)
-	os.WriteFile(initScript, []byte("#!/bin/sh\n"), 0o755)
+	_ = os.WriteFile(initScript, []byte("#!/bin/sh\n"), 0o755)
 
 	t.Cleanup(func() {
-		os.Remove(initScript)
+		_ = os.Remove(initScript)
 	})
 
 	err := uninstallSysV()
@@ -99,6 +99,7 @@ func TestUninstallSysV_DirectWithScript(t *testing.T) {
 }
 
 func TestUninstallRunit_DirectWithDir(t *testing.T) {
+	setupFakeRunit(t)
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux only")
 	}
@@ -108,17 +109,19 @@ func TestUninstallRunit_DirectWithDir(t *testing.T) {
 
 	// Create runit service directory
 	svDir := "/etc/sv/" + appName
-	os.MkdirAll(svDir+"/log", 0o755)
-	os.WriteFile(filepath.Join(svDir, "run"), []byte("#!/bin/sh\nexec cairnbin\n"), 0o755)
-	os.WriteFile(filepath.Join(svDir, "log", "run"), []byte("#!/bin/sh\n"), 0o755)
+	_ = os.MkdirAll(svDir+"/log", 0o755)
+	_ = os.WriteFile(filepath.Join(svDir, "run"), []byte("#!/bin/sh\nexec cairnbin\n"), 0o755)
+	_ = os.WriteFile(filepath.Join(svDir, "log", "run"), []byte("#!/bin/sh\n"), 0o755)
 
 	// Create symlink
-	os.MkdirAll("/var/service", 0o755)
-	os.Symlink(svDir, "/var/service/"+appName)
+	_ = os.MkdirAll("/var/service", 0o755)
+	if err := os.Symlink(svDir, "/var/service/"+appName); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Cleanup(func() {
-		os.RemoveAll(svDir)
-		os.Remove("/var/service/" + appName)
+		_ = os.RemoveAll(svDir)
+		_ = os.Remove("/var/service/" + appName)
 	})
 
 	err := uninstallRunit()
@@ -142,9 +145,9 @@ func TestUninstallLaunchd_DirectWithPlist(t *testing.T) {
 
 	// Create plist
 	launchDir := "/Library/LaunchDaemons"
-	os.MkdirAll(launchDir, 0o755)
+	_ = os.MkdirAll(launchDir, 0o755)
 	plistFile := filepath.Join(launchDir, launchdLabel+".plist")
-	os.WriteFile(plistFile, []byte(`<?xml version="1.0"?>
+	_ = os.WriteFile(plistFile, []byte(`<?xml version="1.0"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN">
 <plist version="1.0">
 <dict><key>Label</key><string>test</string></dict>
@@ -152,7 +155,7 @@ func TestUninstallLaunchd_DirectWithPlist(t *testing.T) {
 `), 0o644)
 
 	t.Cleanup(func() {
-		os.Remove(plistFile)
+		_ = os.Remove(plistFile)
 	})
 
 	err := uninstallLaunchd()
@@ -173,12 +176,12 @@ func TestUninstallBSDRC_DirectWithScript(t *testing.T) {
 
 	// Create rc.d script
 	rcDir := "/usr/local/etc/rc.d"
-	os.MkdirAll(rcDir, 0o755)
+	_ = os.MkdirAll(rcDir, 0o755)
 	rcScript := filepath.Join(rcDir, appName)
-	os.WriteFile(rcScript, []byte("#!/bin/sh\n. /etc/rc.subr\n"), 0o755)
+	_ = os.WriteFile(rcScript, []byte("#!/bin/sh\n. /etc/rc.subr\n"), 0o755)
 
 	t.Cleanup(func() {
-		os.Remove(rcScript)
+		_ = os.Remove(rcScript)
 	})
 
 	err := uninstallBSDRC()
@@ -206,14 +209,14 @@ func TestPurgeData_RemovesDirectories(t *testing.T) {
 	testDirs := purgeDirs()
 
 	for _, dir := range testDirs {
-		os.MkdirAll(dir, 0o755)
-		os.WriteFile(filepath.Join(dir, "test.txt"), []byte("test"), 0o644)
+		_ = os.MkdirAll(dir, 0o755)
+		_ = os.WriteFile(filepath.Join(dir, "test.txt"), []byte("test"), 0o644)
 	}
 
 	t.Cleanup(func() {
 		// Clean up any remaining dirs
 		for _, dir := range testDirs {
-			os.RemoveAll(dir)
+			_ = os.RemoveAll(dir)
 		}
 	})
 
@@ -238,9 +241,9 @@ func TestUninstall_SystemdPath_Cancelled(t *testing.T) {
 	}
 
 	// Ensure systemd detection
-	os.MkdirAll("/run/systemd/system", 0o755)
+	_ = os.MkdirAll("/run/systemd/system", 0o755)
 	t.Cleanup(func() {
-		os.RemoveAll("/run/systemd")
+		_ = os.RemoveAll("/run/systemd")
 	})
 
 	// Uninstall prompts for confirmation, stdin not terminal = cancellation
@@ -260,13 +263,13 @@ func TestUninstall_RunitPath_Cancelled(t *testing.T) {
 	}
 
 	// Setup runit detection
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
-	os.MkdirAll("/run/runit", 0o755)
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.MkdirAll("/run/runit", 0o755)
 
 	t.Cleanup(func() {
-		os.RemoveAll("/run/runit")
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.RemoveAll("/run/runit")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
 	})
 
 	err := Uninstall()

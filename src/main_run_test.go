@@ -43,8 +43,8 @@ func TestRunVersion(t *testing.T) {
 		if code != 0 {
 			t.Errorf("run(%v) = %d, want 0", args, code)
 		}
-		if !strings.Contains(out, "Built:") {
-			t.Errorf("run(%v): version output missing 'Built:'", args)
+		if !strings.Contains(out, ") built ") {
+			t.Errorf("run(%v): version output missing ') built '", args)
 		}
 		if !strings.Contains(out, "Go:") {
 			t.Errorf("run(%v): version output missing 'Go:'", args)
@@ -295,8 +295,8 @@ func TestRunColorFlags(t *testing.T) {
 	if code != 0 {
 		t.Errorf("--color yes --version: exit %d, want 0", code)
 	}
-	if !strings.Contains(out, "Built:") {
-		t.Errorf("--color yes --version: output missing 'Built:'; got %q", out)
+	if !strings.Contains(out, ") built ") {
+		t.Errorf("--color yes --version: output missing ') built '; got %q", out)
 	}
 }
 
@@ -651,10 +651,10 @@ func TestRunStatusWithConfig(t *testing.T) {
 // value is exported as CONFIG_DIR while run() executes and restored after.
 func TestRunConfigFlagIsDirectory(t *testing.T) {
 	t.Setenv("CONFIG_DIR", "")
-	os.Unsetenv("CONFIG_DIR")
+	original, wasSet := os.LookupEnv("CONFIG_DIR")
 	tmp := t.TempDir()
 	runCapture("--config", tmp, "--status")
-	if v, set := os.LookupEnv("CONFIG_DIR"); set {
-		t.Errorf("CONFIG_DIR leaked after run(): %q", v)
+	if v, set := os.LookupEnv("CONFIG_DIR"); set != wasSet || v != original {
+		t.Errorf("CONFIG_DIR after run() = (%q, set=%v), want (%q, set=%v)", v, set, original, wasSet)
 	}
 }

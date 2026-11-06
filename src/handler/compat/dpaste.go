@@ -61,7 +61,7 @@ func (c *Handler) DpasteCreate(w http.ResponseWriter, r *http.Request) {
 	switch r.FormValue("format") {
 	case "url":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintln(w, link)
+		_, _ = fmt.Fprintln(w, link)
 	case "json":
 		writeJSON(w, http.StatusOK, map[string]string{
 			"url":     link,
@@ -70,6 +70,6 @@ func (c *Handler) DpasteCreate(w http.ResponseWriter, r *http.Request) {
 		})
 	default:
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(w, "%q", link)
+		_, _ = fmt.Fprintf(w, "%q", link)
 	}
 }

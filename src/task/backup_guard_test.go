@@ -331,3 +331,27 @@ func TestAuditBackupRetentionCleanupEmitsDeleted(t *testing.T) {
 		t.Fatalf("missing backup.retention_cleanup: %s", data)
 	}
 }
+
+// TestAuditServerUpdated verifies the scheduled auto-install path records the
+// server.updated event with old and new versions, and tolerates a nil writer.
+func TestAuditServerUpdated(t *testing.T) {
+	auditServerUpdated(nil, "1.0.0", "1.1.0")
+
+	auditDir := t.TempDir()
+	w := audit.New(audit.Config{
+		Enabled: true,
+		Dir:     auditDir,
+		Events:  audit.EventCategories{Server: true},
+	})
+	auditServerUpdated(w, "1.0.0", "1.1.0")
+
+	data, err := os.ReadFile(filepath.Join(auditDir, "audit.log"))
+	if err != nil {
+		t.Fatalf("audit log not written: %v", err)
+	}
+	for _, want := range []string{`"event":"server.updated"`, `"old_version":"1.0.0"`, `"new_version":"1.1.0"`} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("audit log missing %s: %s", want, data)
+		}
+	}
+}

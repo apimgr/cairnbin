@@ -1,6 +1,6 @@
 {{define "meta"}}
-    <title>Contact - {{.SiteTitle}}</title>
-    <meta name="description" content="Contact information for {{.SiteTitle}}">
+    <title>{{t .Lang "contact.title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{tf .Lang "pagemeta.contact_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
@@ -48,7 +48,7 @@
                         <div class="form-group">
                             <label for="sec-gpg" class="form-label">{{t .Lang "contact.sec_gpg"}}</label>
                             <textarea id="sec-gpg" name="researcher_gpg" class="form-input long-string" rows="3"
-                                      maxlength="20000" placeholder="https://keys.openpgp.org/... or -----BEGIN PGP PUBLIC KEY BLOCK-----"
+                                      maxlength="20000" placeholder="{{t .Lang "contact.sec_gpg_placeholder"}}"
                                       aria-describedby="sec-gpg-error" aria-invalid="false">{{.FormGPG}}</textarea>
                             <span id="sec-gpg-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -78,11 +78,11 @@
                             <label for="sec-severity" class="form-label">{{t .Lang "contact.sec_severity"}}</label>
                             <select id="sec-severity" name="severity" class="form-input" required
                                     aria-describedby="sec-severity-error" aria-invalid="false">
-                                <option value="Critical">Critical</option>
-                                <option value="High">High</option>
-                                <option value="Medium" selected>Medium</option>
-                                <option value="Low">Low</option>
-                                <option value="Informational">Informational</option>
+                                <option value="Critical">{{t .Lang "contact.severity_critical"}}</option>
+                                <option value="High">{{t .Lang "contact.severity_high"}}</option>
+                                <option value="Medium" selected>{{t .Lang "contact.severity_medium"}}</option>
+                                <option value="Low">{{t .Lang "contact.severity_low"}}</option>
+                                <option value="Informational">{{t .Lang "contact.severity_informational"}}</option>
                             </select>
                             <span id="sec-severity-error" class="field-error" role="alert" hidden></span>
                         </div>

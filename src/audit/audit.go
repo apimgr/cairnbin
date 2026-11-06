@@ -172,7 +172,11 @@ func (w *Writer) Log(e Entry) {
 		log.Printf("audit: open failed: %v", err)
 		return
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("audit: close failed: %v", err)
+		}
+	}()
 	if _, err := f.Write(line); err != nil {
 		log.Printf("audit: write failed: %v", err)
 	}

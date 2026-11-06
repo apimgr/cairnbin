@@ -3,6 +3,7 @@
 package paths
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -174,11 +175,16 @@ func EnsureDirs() {
 		LogDir(),
 	}
 	for _, d := range dirs {
-		os.MkdirAll(d, 0o700)
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			log.Printf("client paths: create directory %s: %v", d, err)
+			continue
+		}
 		// PART 32 CLI Startup Sequence step 2: re-assert 0700 on every startup —
 		// MkdirAll leaves an already-existing directory's permissions untouched.
 		if runtime.GOOS != "windows" {
-			os.Chmod(d, 0o700)
+			if err := os.Chmod(d, 0o700); err != nil {
+				log.Printf("client paths: secure directory %s: %v", d, err)
+			}
 		}
 	}
 }

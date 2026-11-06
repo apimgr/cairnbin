@@ -136,7 +136,7 @@ func TestEnsureTorDirs_MkdirError(t *testing.T) {
 	if err := os.Mkdir(locked, 0o000); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(locked, 0o700) })
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
 
 	configDir := filepath.Join(locked, "config")
 	dataDir := filepath.Join(tmp, "data")

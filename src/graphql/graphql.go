@@ -136,7 +136,7 @@ func (h *Handler) serveUI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("ETag", `"`+buildinfo.AssetStamp()+`"`)
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, h.renderUI(r))
+	_, _ = fmt.Fprint(w, h.renderUI(r))
 }
 
 // writeJSON encodes v as indented JSON and writes it to w.
@@ -149,12 +149,12 @@ func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 	if err := enc.Encode(v); err != nil {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"errors":[{"message":"internal server error"}]}` + "\n"))
+		_, _ = w.Write([]byte(`{"errors":[{"message":"internal server error"}]}` + "\n"))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
-	w.Write(buf.Bytes())
+	_, _ = w.Write(buf.Bytes())
 }
 
 // renderUI returns the GraphiQL viewer shell. Component styling lives in

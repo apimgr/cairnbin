@@ -46,9 +46,9 @@ func TestDetectServiceManager_CreatePaths(t *testing.T) {
 
 	// Create /run/systemd/system to force systemd detection
 	systemdPath := "/run/systemd/system"
-	os.MkdirAll(systemdPath, 0o755)
+	_ = os.MkdirAll(systemdPath, 0o755)
 	t.Cleanup(func() {
-		os.RemoveAll("/run/systemd")
+		_ = os.RemoveAll("/run/systemd")
 	})
 
 	result := DetectServiceManager()
@@ -66,17 +66,17 @@ func TestDetectServiceManager_OpenRCPath(t *testing.T) {
 	}
 
 	// Remove systemd indicators, create openrc indicator
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
 	t.Cleanup(func() {
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
 	})
 
 	openrcPath := "/sbin/openrc-run"
-	os.MkdirAll("/sbin", 0o755)
-	os.WriteFile(openrcPath, []byte("#!/bin/sh\n"), 0o755)
+	_ = os.MkdirAll("/sbin", 0o755)
+	_ = os.WriteFile(openrcPath, []byte("#!/bin/sh\n"), 0o755)
 	t.Cleanup(func() {
-		os.Remove(openrcPath)
+		_ = os.Remove(openrcPath)
 	})
 
 	result := DetectServiceManager()
@@ -94,17 +94,17 @@ func TestDetectServiceManager_RunitPath(t *testing.T) {
 	}
 
 	// Remove other indicators
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
-	os.Remove("/sbin/openrc-run")
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.Remove("/sbin/openrc-run")
 	t.Cleanup(func() {
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
 	})
 
 	runitPath := "/run/runit"
-	os.MkdirAll(runitPath, 0o755)
+	_ = os.MkdirAll(runitPath, 0o755)
 	t.Cleanup(func() {
-		os.RemoveAll(runitPath)
+		_ = os.RemoveAll(runitPath)
 	})
 
 	result := DetectServiceManager()
@@ -151,16 +151,16 @@ func TestInstall_SwitchCoverage(t *testing.T) {
 	}
 
 	// Ensure systemd paths exist for consistent detection
-	os.MkdirAll("/etc/systemd/system", 0o755)
-	os.MkdirAll("/var/lib/"+orgName+"/"+appName, 0o755)
-	os.MkdirAll("/var/log/"+orgName+"/"+appName, 0o755)
-	os.MkdirAll("/etc/"+orgName+"/"+appName, 0o755)
+	_ = os.MkdirAll("/etc/systemd/system", 0o755)
+	_ = os.MkdirAll("/var/lib/"+orgName+"/"+appName, 0o755)
+	_ = os.MkdirAll("/var/log/"+orgName+"/"+appName, 0o755)
+	_ = os.MkdirAll("/etc/"+orgName+"/"+appName, 0o755)
 
 	t.Cleanup(func() {
-		os.Remove(filepath.Join("/etc/systemd/system", appName+".service"))
-		os.RemoveAll("/var/lib/" + orgName)
-		os.RemoveAll("/var/log/" + orgName)
-		os.RemoveAll("/etc/" + orgName)
+		_ = os.Remove(filepath.Join("/etc/systemd/system", appName+".service"))
+		_ = os.RemoveAll("/var/lib/" + orgName)
+		_ = os.RemoveAll("/var/log/" + orgName)
+		_ = os.RemoveAll("/etc/" + orgName)
 	})
 
 	err := Install()
@@ -177,8 +177,8 @@ func TestUninstall_SwitchCoverage(t *testing.T) {
 
 	// Create service file to uninstall
 	systemdDir := "/etc/systemd/system"
-	os.MkdirAll(systemdDir, 0o755)
-	os.WriteFile(filepath.Join(systemdDir, appName+".service"), []byte("[Unit]\n"), 0o644)
+	_ = os.MkdirAll(systemdDir, 0o755)
+	_ = os.WriteFile(filepath.Join(systemdDir, appName+".service"), []byte("[Unit]\n"), 0o644)
 
 	// Run Uninstall - will prompt and cancel (stdin is not a terminal)
 	err := Uninstall()

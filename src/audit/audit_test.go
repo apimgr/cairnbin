@@ -25,7 +25,7 @@ func readEntries(t *testing.T, path string) []Entry {
 	if err != nil {
 		t.Fatalf("open log: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var out []Entry
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {

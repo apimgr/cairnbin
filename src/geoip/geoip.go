@@ -1,5 +1,5 @@
 // Package geoip provides GeoIP lookup and country-blocking middleware using
-// ip-location-db MMDB files (MIT-licensed, no API key required).
+// ip-location-db MMDB files (CC BY 4.0 licensed, attribution required, no API key required).
 // Databases are downloaded on first use and stored in a configurable directory.
 // The package uses maxminddb-golang directly because ip-location-db uses
 // non-MaxMind database_type strings that geoip2-golang rejects.
@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	maxminddb "github.com/oschwald/maxminddb-golang"
 	"github.com/apimgr/cairnbin/src/common/retry"
+	maxminddb "github.com/oschwald/maxminddb-golang"
 )
 
 // Database URLs from sapics/ip-location-db. ASN/Country are served via
@@ -513,7 +513,7 @@ func downloadOnce(ctx context.Context, dst, src string) error {
 	if err != nil {
 		return fmt.Errorf("download: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return &retry.StatusError{Code: resp.StatusCode, URL: src}

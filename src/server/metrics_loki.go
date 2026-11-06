@@ -60,7 +60,7 @@ func tailLogFile(path, name string) []metric.LokiEntry {
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil || info.Size() == 0 {

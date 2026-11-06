@@ -91,7 +91,7 @@ func TestRandomHexLengthAndUniqueness(t *testing.T) {
 			t.Errorf("randomHex(%d) length = %d", n, len(a))
 		}
 		for _, r := range a {
-			if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 				t.Errorf("randomHex(%d) has non-hex char %q", n, r)
 			}
 		}

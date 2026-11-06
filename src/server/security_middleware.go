@@ -184,7 +184,7 @@ func loadBlocklists(dir string) *blocklistStore {
 				bs.ips[ip.String()] = struct{}{}
 			}
 		}
-		f.Close()
+		_ = f.Close()
 	}
 	return bs
 }

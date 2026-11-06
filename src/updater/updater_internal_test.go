@@ -65,7 +65,7 @@ func TestMatchesBranch(t *testing.T) {
 
 func TestFetchExpectedChecksum_HashAndFilenameFormat(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("abc123def456abc1  cairnbin-linux-amd64\n"))
+		_, _ = w.Write([]byte("abc123def456abc1  cairnbin-linux-amd64\n"))
 	}))
 	defer srv.Close()
 
@@ -82,7 +82,7 @@ func TestFetchExpectedChecksum_HashAndFilenameFormat(t *testing.T) {
 
 func TestFetchExpectedChecksum_NoMatch_Errors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("abc  other-binary\n"))
+		_, _ = w.Write([]byte("abc  other-binary\n"))
 	}))
 	defer srv.Close()
 
@@ -189,7 +189,7 @@ func TestDoUpdate_DownloadsAsset(t *testing.T) {
 	served := []byte("fake binary v2")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(served)
+		_, _ = w.Write(served)
 	}))
 	defer srv.Close()
 
@@ -237,7 +237,7 @@ func TestCheckForUpdate_Stable_HitsLatestEndpoint(t *testing.T) {
 		if r.URL.Path == "/releases/latest" {
 			latestCalled = true
 		}
-		json.NewEncoder(w).Encode(Release{TagName: "v2.0.0"})
+		_ = json.NewEncoder(w).Encode(Release{TagName: "v2.0.0"})
 	}))
 	defer srv.Close()
 
@@ -252,7 +252,7 @@ func TestCheckForUpdateURL_BetaAlreadyUpToDate(t *testing.T) {
 		{TagName: "v1.0.0-beta", Prerelease: false},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(releases)
+		_ = json.NewEncoder(w).Encode(releases)
 	}))
 	defer srv.Close()
 
@@ -268,7 +268,7 @@ func TestCheckForUpdateURL_BetaAlreadyUpToDate(t *testing.T) {
 
 func TestCheckForUpdateURL_NonStableInvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not a json array"))
+		_, _ = w.Write([]byte("not a json array"))
 	}))
 	defer srv.Close()
 
@@ -293,9 +293,9 @@ func TestDoUpdate_WithChecksumAsset(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "sha256.txt") {
-			w.Write([]byte(expectedHash + "  " + assetName + "\n"))
+			_, _ = w.Write([]byte(expectedHash + "  " + assetName + "\n"))
 		} else {
-			w.Write(fakeContent)
+			_, _ = w.Write(fakeContent)
 		}
 	}))
 	defer srv.Close()
@@ -328,9 +328,9 @@ func TestDoUpdate_ChecksumMismatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "sha256.txt") {
 			// Return a wrong hash for the asset.
-			w.Write([]byte("0000000000000000000000000000000000000000000000000000000000000000  " + assetName + "\n"))
+			_, _ = w.Write([]byte("0000000000000000000000000000000000000000000000000000000000000000  " + assetName + "\n"))
 		} else {
-			w.Write([]byte("some binary content"))
+			_, _ = w.Write([]byte("some binary content"))
 		}
 	}))
 	defer srv.Close()
@@ -362,7 +362,7 @@ func TestDoUpdate_NoChecksumRefuses(t *testing.T) {
 	assetName := binaryAssetName()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("unverified binary content"))
+		_, _ = w.Write([]byte("unverified binary content"))
 	}))
 	defer srv.Close()
 

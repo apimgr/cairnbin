@@ -91,7 +91,7 @@ func (c *Handler) LenGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if paste.ExpiresAt != nil && paste.ExpiresAt.Before(time.Now()) {
-		c.db.DeletePaste(id)
+		_ = c.db.DeletePaste(id)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "paste has expired"})
 		return
 	}

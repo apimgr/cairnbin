@@ -291,7 +291,7 @@ func TestApplyRetention_RemoveFailsGracefully(t *testing.T) {
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(dir, 0o750)
+	defer func() { _ = os.Chmod(dir, 0o750) }()
 	// applyRetention logs the error and returns nil even if removes fail.
 	err := applyRetention(BackupConfig{BackupDir: dir, ProjectName: "cairnbin", Retention: BackupRetention{MaxBackups: 1}})
 	if err != nil {

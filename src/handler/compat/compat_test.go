@@ -3,6 +3,7 @@ package compat
 // Tests for Handler — pastebin.com, microbin, and lenpaste compat routes.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -31,13 +32,13 @@ func newCompatTestDB(t *testing.T) database.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	db, err := database.NewDatabase("sqlite", filepath.Join(dir, "compat.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -535,18 +536,26 @@ func TestLenServerInfo(t *testing.T) {
 func TestMicrobinCreate_Success(t *testing.T) {
 	ch, _ := newCompatHandler(t)
 
-	form := url.Values{}
-	form.Set("content", "microbin paste content")
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/pasta",
-		strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/pasta", strings.NewReader(`{"content":"microbin paste content","title":"microbin title"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 	rr := httptest.NewRecorder()
 
 	ch.MicrobinCreate(rr, req)
 
-	if rr.Code != http.StatusCreated && rr.Code != http.StatusOK {
-		t.Errorf("MicrobinCreate: got status %d, want 200 or 201\nbody: %s",
+	if rr.Code != http.StatusCreated {
+		t.Errorf("MicrobinCreate: got status %d, want 201\nbody: %s",
 			rr.Code, rr.Body.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got["id"] == "" || got["url"] == "" || got["deleteToken"] == "" {
+		t.Fatalf("missing compat response fields: %#v", got)
+	}
+	if got["ok"] != "" {
+		t.Fatalf("compat response unexpectedly uses native envelope: %#v", got)
 	}
 }
 
@@ -563,24 +572,25 @@ func TestMicrobinList_Empty(t *testing.T) {
 	}
 }
 
-func TestMicrobinDelete_Delegates(t *testing.T) {
+func TestMicrobinDelete_UsesCompatibilityToken(t *testing.T) {
 	ch, _ := newCompatHandler(t)
 
 	// Seed a paste so the handler has something to delete.
 	id, token := seedPaste(t, ch.ph, "to delete via microbin")
 
 	req := httptest.NewRequest(http.MethodDelete,
-		"/api/v1/pasta/"+id+"?token="+token, nil)
+		"/api/v1/pasta/"+id+"?deleteToken="+token, nil)
 	req = withID(req, id)
-	req.Header.Set("X-Delete-Token", token)
 	rr := httptest.NewRecorder()
 
 	ch.MicrobinDelete(rr, req)
 
-	// Accept any non-500 status: 200 / 204 / 404 are all reasonable outcomes.
-	if rr.Code >= http.StatusInternalServerError {
-		t.Errorf("MicrobinDelete: got status %d, want < 500\nbody: %s",
+	if rr.Code != http.StatusOK {
+		t.Errorf("MicrobinDelete: got status %d, want 200\nbody: %s",
 			rr.Code, rr.Body.String())
+	}
+	if paste, err := ch.db.GetPasteByID(id); err != nil || paste != nil {
+		t.Fatalf("compat delete left paste in storage: paste=%v err=%v", paste, err)
 	}
 }
 
@@ -595,7 +605,29 @@ func TestMicrobinGet_Delegates(t *testing.T) {
 
 	ch.MicrobinGet(rr, req)
 
-	if rr.Code != http.StatusOK {
+	if rr.Code != http.StatusOK || rr.Body.String() != "microbin get test" {
 		t.Errorf("MicrobinGet: got status %d, want 200\nbody: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestMicrobinGetReturnsBinaryBytes(t *testing.T) {
+	ch, _ := newCompatHandler(t)
+	want := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F'}
+	id, _, err := ch.ph.CreatePasteInternal("microbin.jpg", string(want), "", 0, 0, nil)
+	if err != nil {
+		t.Fatalf("CreatePasteInternal: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pasta/"+id, nil)
+	req = withID(req, id)
+	rec := httptest.NewRecorder()
+	ch.MicrobinGet(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("MicrobinGet status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/jpeg" {
+		t.Errorf("Content-Type = %q, want image/jpeg", got)
+	}
+	if !bytes.Equal(rec.Body.Bytes(), want) {
+		t.Errorf("MicrobinGet returned %v, want raw binary bytes %v", rec.Body.Bytes(), want)
 	}
 }

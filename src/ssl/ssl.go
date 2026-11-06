@@ -33,6 +33,8 @@ import (
 // LetsEncryptStagingURL is the ACME directory URL for the Let's Encrypt staging CA.
 const LetsEncryptStagingURL = "https://acme-staging-v02.api.letsencrypt.org/directory"
 
+const appRenewBefore = 7 * 24 * time.Hour
+
 // Config holds SSL/TLS configuration.
 type Config struct {
 	Enabled bool
@@ -183,11 +185,14 @@ func (m *Manager) getLetsEncryptTLSConfig(domains []string) (*tls.Config, error)
 		return nil, fmt.Errorf("ssl: failed to create cert cache dir %s: %w", cacheDir, err)
 	}
 
+	// RenewBefore: app-managed certs renew 7 days before expiry (PART 15);
+	// autocert defaults to 30 days.
 	acmeMgr := &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(domains...),
-		Cache:      autocert.DirCache(cacheDir),
-		Email:      m.config.LetsEncrypt.Email,
+		Prompt:      autocert.AcceptTOS,
+		HostPolicy:  autocert.HostWhitelist(domains...),
+		Cache:       autocert.DirCache(cacheDir),
+		Email:       m.config.LetsEncrypt.Email,
+		RenewBefore: appRenewBefore,
 	}
 
 	// Use staging CA when requested (e.g., for testing).
@@ -325,17 +330,17 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("chmod temp file: %w", err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("writing temp file: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("syncing temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -550,6 +555,22 @@ func validateCertFile(certPath, fqdn string) error {
 		return nil
 	}
 	return cert.VerifyHostname(fqdn)
+}
+
+func certNeedsRenewal(certPath string) bool {
+	data, err := os.ReadFile(certPath)
+	if err != nil {
+		return true
+	}
+	block, _ := pem.Decode(data)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return true
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return true
+	}
+	return time.Until(cert.NotAfter) <= appRenewBefore
 }
 
 // tlsConfigFromFiles loads a TLS certificate and key from disk.

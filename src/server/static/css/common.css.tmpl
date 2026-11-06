@@ -25,7 +25,6 @@
     --color-bg-secondary: {{.Dark.SurfaceAlt}};
     --color-bg-tertiary: {{.Dark.Background}};
     --color-bg-elevated: {{.Dark.Surface}};
-    --color-bg-hover: {{.Dark.Border}};
 
     --color-text-primary: {{.Dark.Foreground}};
     --color-text-secondary: {{.Dark.Foreground}};
@@ -44,13 +43,12 @@
     --color-info: {{.Dark.Info}};
 
     --color-border: rgba(255, 255, 255, 0.08);
-    --color-border-hover: rgba(255, 255, 255, 0.15);
     --color-border-focus: var(--color-accent-primary);
 
     /* Text color rendered on top of accent / status fills */
     --color-on-accent: #ffffff;
 
-    /* Translucent surface overlay used behind the sticky header */
+    /* Translucent surface overlay used behind the header */
     --color-surface-blur: rgba(30, 30, 46, 0.85);
 
     /* Tinted status / accent backgrounds (subtle fills) */
@@ -74,8 +72,20 @@
     --shadow-glow: 0 0 40px var(--color-accent-glow);
 
     /* Typography */
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace,
+        SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+        monospace;
+    --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Lora", Georgia, "Times New Roman", Times, serif;
+
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    --line-height-tight: 1.25;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.75;
 
     --font-size-xs: 0.75rem;
     --font-size-sm: 0.875rem;
@@ -99,6 +109,10 @@
     --space-12: 3rem;
     --space-16: 4rem;
     --space-20: 5rem;
+    --space-0: 0;
+    --space-px: 1px;
+    --space-7: 1.75rem;
+    --space-24: 6rem;
 
     /* Border Radius */
     --radius-sm: 0.375rem;
@@ -107,20 +121,50 @@
     --radius-xl: 1rem;
     --radius-2xl: 1.5rem;
     --radius-full: 9999px;
+    --radius-none: 0;
+    --radius-base: 0.25rem;
+    --radius-3xl: 1.5rem;
+
+    /* Z-index layers */
+    --z-below: -1;
+    --z-base: 0;
+    --z-raised: 10;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-overlay: 300;
+    --z-modal: 400;
+    --z-toast: 500;
+    --z-tooltip: 600;
+
+    /* Extra shadow steps */
+    --shadow-base: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+
+    /* Focus ring */
+    --focus-ring: 0 0 0 3px var(--color-primary);
+    --focus-ring-offset: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-primary);
 
     /* Transitions */
     --motion-scale: 1;
     --transition-fast: 150ms ease;
     --transition-base: 200ms ease;
     --transition-slow: 300ms ease;
+    --transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 
     /* Spec-exact aliases (AI.md PART 16, CSS Variable Reference §21415) —
        every component is required to be themeable through these exact
        property names; they resolve to the same tokens defined above. */
     --color-bg: {{.Dark.Background}};
     --color-bg-card: {{.Dark.Surface}};
+    --color-bg-hover: #343746;
     --color-bg-active: {{.Dark.Border}};
     --color-code-bg: rgba(255, 255, 255, 0.1);
+    --color-border-hover: {{.Dark.Muted}};
+    --color-info-bg: rgba(139, 233, 253, 0.15);
+    --color-secondary: {{.Dark.Secondary}};
+    --color-accent: {{.Dark.Accent}};
+    --color-on-error: #ffffff;
     --color-text: {{.Dark.Foreground}};
     --color-muted: {{.Dark.Muted}};
     --color-primary: {{.Dark.Primary}};
@@ -139,10 +183,10 @@
         --accent: {{.Light.Primary}};
 
         --color-bg-primary: {{.Light.Background}};
-        --color-bg-secondary: {{.Light.SurfaceAlt}};
+        --color-bg-secondary: {{.Light.Surface}};
         --color-bg-tertiary: {{.Light.Background}};
         --color-bg-elevated: {{.Light.Surface}};
-        --color-bg-hover: {{.Light.Border}};
+        --color-bg-hover: {{.Light.SurfaceAlt}};
 
         --color-text-primary: {{.Light.Foreground}};
         --color-text-secondary: {{.Light.Foreground}};
@@ -160,7 +204,7 @@
         --color-info: {{.Light.Info}};
 
         --color-border: rgba(0, 0, 0, 0.08);
-        --color-border-hover: rgba(0, 0, 0, 0.15);
+        --color-border-hover: #818b98;
 
         --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
         --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -170,8 +214,12 @@
 
         /* Spec-exact aliases (AI.md PART 16, CSS Variable Reference §21415) */
         --color-bg: {{.Light.Background}};
-        --color-bg-card: {{.Light.Surface}};
-        --color-bg-active: {{.Light.Border}};
+        --color-bg-card: {{.Light.Background}};
+        --color-bg-active: #e6eaef;
+        --color-info-bg: rgba(9, 105, 218, 0.12);
+        --color-secondary: {{.Light.Secondary}};
+        --color-accent: {{.Light.Accent}};
+        --color-on-error: #ffffff;
         --color-code-bg: rgba(0, 0, 0, 0.05);
         --color-text: {{.Light.Foreground}};
         --color-muted: {{.Light.Muted}};
@@ -190,10 +238,10 @@ html.theme-light {
     --accent: {{.Light.Primary}};
 
     --color-bg-primary: {{.Light.Background}};
-    --color-bg-secondary: {{.Light.SurfaceAlt}};
+    --color-bg-secondary: {{.Light.Surface}};
     --color-bg-tertiary: {{.Light.Background}};
     --color-bg-elevated: {{.Light.Surface}};
-    --color-bg-hover: {{.Light.Border}};
+    --color-bg-hover: {{.Light.SurfaceAlt}};
 
     --color-text-primary: {{.Light.Foreground}};
     --color-text-secondary: {{.Light.Foreground}};
@@ -211,7 +259,7 @@ html.theme-light {
     --color-info: {{.Light.Info}};
 
     --color-border: rgba(0, 0, 0, 0.08);
-    --color-border-hover: rgba(0, 0, 0, 0.15);
+    --color-border-hover: #818b98;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -221,8 +269,12 @@ html.theme-light {
 
     /* Spec-exact aliases (AI.md PART 16, CSS Variable Reference §21415) */
     --color-bg: {{.Light.Background}};
-    --color-bg-card: {{.Light.Surface}};
-    --color-bg-active: {{.Light.Border}};
+    --color-bg-card: {{.Light.Background}};
+    --color-bg-active: #e6eaef;
+    --color-info-bg: rgba(9, 105, 218, 0.12);
+    --color-secondary: {{.Light.Secondary}};
+    --color-accent: {{.Light.Accent}};
+    --color-on-error: #ffffff;
     --color-code-bg: rgba(0, 0, 0, 0.05);
     --color-text: {{.Light.Foreground}};
     --color-muted: {{.Light.Muted}};
@@ -280,10 +332,53 @@ a:hover {
 
 code {
     font-family: var(--font-mono);
-    font-size: 0.9em;
-    background: var(--color-bg-tertiary);
-    padding: 0.2em 0.4em;
-    border-radius: var(--radius-sm);
+    font-size: 0.875em;
+    padding: 0.125rem 0.375rem;
+    background: var(--color-code-bg);
+    border-radius: var(--radius-base);
+    word-break: break-word;
+}
+
+/* Semantic inline elements (PART 16 Semantic HTML Elements) */
+kbd {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    padding: 0.125rem 0.375rem;
+    color: var(--color-text);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-bottom-width: 2px;
+    border-radius: var(--radius-base);
+}
+
+samp {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    padding: 0.125rem 0.375rem;
+    color: var(--color-muted);
+    background: var(--color-code-bg);
+    border-radius: var(--radius-base);
+}
+
+var {
+    font-family: var(--font-mono);
+    font-style: italic;
+}
+
+mark {
+    padding: 0 0.25rem;
+    color: var(--color-text);
+    background: var(--color-warning-bg);
+    border-radius: var(--radius-base);
+}
+
+abbr[title] {
+    text-decoration: underline dotted;
+    cursor: help;
+}
+
+time {
+    white-space: nowrap;
 }
 
 
@@ -378,6 +473,11 @@ code {
 /* ============================================
    Screen-Reader-Only Text (WCAG 2.1 AA — PART 16, PART 28-30)
    ============================================ */
+/* The hidden attribute must win over component display rules */
+[hidden] {
+    display: none;
+}
+
 .sr-only {
     position: absolute;
     width: 1px;
@@ -411,6 +511,22 @@ code {
 
 .skip-link:focus {
     top: var(--space-4);
+}
+
+
+/* ============================================
+   Focus Indicators (WCAG 2.1 AA — PART 16)
+   Visible :focus-visible ring on every focusable element
+   ============================================ */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
 }
 
 

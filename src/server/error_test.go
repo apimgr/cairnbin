@@ -34,6 +34,8 @@ func TestErrorCodeForStatus(t *testing.T) {
 		http.StatusForbidden:           "FORBIDDEN",
 		http.StatusNotFound:            "NOT_FOUND",
 		http.StatusMethodNotAllowed:    "METHOD_NOT_ALLOWED",
+		http.StatusConflict:            "CONFLICT",
+		http.StatusTooManyRequests:     "RATE_LIMITED",
 		http.StatusBadGateway:          "BAD_GATEWAY",
 		http.StatusServiceUnavailable:  "MAINTENANCE",
 		http.StatusInternalServerError: "SERVER_ERROR",
@@ -137,5 +139,25 @@ func TestRecovererRendersThemed500(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "500") {
 		t.Errorf("expected themed 500 page")
+	}
+}
+
+// TestRenderFallbackError verifies the last-resort error response honors
+// content negotiation using plain strings only.
+func TestRenderFallbackError(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/x", nil)
+	r.Header.Set("Accept", "text/html")
+	w := httptest.NewRecorder()
+	renderFallbackError(w, r, http.StatusInternalServerError)
+	if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), "<h1>500 Internal Server Error</h1>") {
+		t.Errorf("html fallback = %d %q", w.Code, w.Body.String())
+	}
+
+	r = httptest.NewRequest(http.MethodGet, "/x", nil)
+	r.Header.Set("Accept", "application/json")
+	w = httptest.NewRecorder()
+	renderFallbackError(w, r, http.StatusInternalServerError)
+	if w.Header().Get("Content-Type") != "application/json" || !strings.Contains(w.Body.String(), `"error":"SERVER_ERROR"`) || !strings.HasSuffix(w.Body.String(), "\n") {
+		t.Errorf("json fallback = %q", w.Body.String())
 	}
 }

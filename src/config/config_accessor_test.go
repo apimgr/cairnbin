@@ -129,6 +129,21 @@ func TestSecurityReportURL_Custom(t *testing.T) {
 	}
 }
 
+func TestRepositoryURL(t *testing.T) {
+	cfg := config.DefaultConfig()
+	if got := cfg.RepositoryURL(); got != "https://github.com/apimgr/cairnbin" {
+		t.Errorf("RepositoryURL() default = %q", got)
+	}
+	cfg.Web.Security.ReportURL = "https://github.com/acme/fork/security/advisories/new"
+	if got := cfg.RepositoryURL(); got != "https://github.com/acme/fork" {
+		t.Errorf("RepositoryURL() derived = %q", got)
+	}
+	cfg.Web.Security.ReportURL = "https://example.com/report/"
+	if got := cfg.RepositoryURL(); got != "https://example.com/report" {
+		t.Errorf("RepositoryURL() custom = %q", got)
+	}
+}
+
 func TestSecurityPreferredLanguages_Default(t *testing.T) {
 	cfg := config.DefaultConfig()
 	got := cfg.SecurityPreferredLanguages()

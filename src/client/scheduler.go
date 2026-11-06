@@ -91,7 +91,7 @@ func (c *client) schedulerCall(method, path, id string) json.RawMessage {
 	if err != nil {
 		printConnectionError(c.server, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
@@ -113,7 +113,7 @@ func (c *client) schedulerCall(method, path, id string) json.RawMessage {
 		os.Exit(exitGeneral)
 	}
 	if c.outputFormat == "json" {
-		os.Stdout.Write(append(bytes.TrimSpace(raw), '\n'))
+		_, _ = os.Stdout.Write(append(bytes.TrimSpace(raw), '\n'))
 		os.Exit(0)
 	}
 	return env.Data

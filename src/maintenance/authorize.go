@@ -134,7 +134,7 @@ func (a *authorizer) authorizeRestore() error {
 
 func (a *authorizer) authorizeMode() error {
 	if a.isRootFn() {
-		fmt.Fprintln(a.stderr, "warning: changing the server mode alters security-relevant behavior (debug endpoints, error detail)")
+		_, _ = fmt.Fprintln(a.stderr, "warning: changing the server mode alters security-relevant behavior (debug endpoints, error detail)")
 		return nil
 	}
 	if a.isServiceUser() {
@@ -196,7 +196,7 @@ func (a *authorizer) requireOperatorToken(prompt string) error {
 	if token == "" {
 		return errors.New("operator token not configured — run as root instead")
 	}
-	fmt.Fprintf(a.stderr, "%s\nOperator token: ", prompt)
+	_, _ = fmt.Fprintf(a.stderr, "%s\nOperator token: ", prompt)
 	entered, err := a.readSecret()
 	if err != nil {
 		return fmt.Errorf("read operator token: %w", err)
@@ -214,7 +214,7 @@ func (a *authorizer) requireOperatorToken(prompt string) error {
 func (a *authorizer) readSecret() (string, error) {
 	if f, ok := a.stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
 		pw, err := term.ReadPassword(int(f.Fd()))
-		fmt.Fprintln(a.stderr)
+		_, _ = fmt.Fprintln(a.stderr)
 		if err != nil {
 			return "", err
 		}
@@ -230,7 +230,7 @@ func (a *authorizer) readSecret() (string, error) {
 // confirm prints prompt and reads one line; any config truthy value ("y",
 // "yes", "1", ...) confirms.
 func (a *authorizer) confirm(prompt string) bool {
-	fmt.Fprint(a.stderr, prompt)
+	_, _ = fmt.Fprint(a.stderr, prompt)
 	line, err := bufio.NewReader(a.stdin).ReadString('\n')
 	if err != nil && strings.TrimSpace(line) == "" {
 		return false
@@ -264,7 +264,7 @@ func databaseEmpty(dbPath string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("open database read-only: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	var pastes int64
 	if err := db.QueryRow(`SELECT COUNT(id) FROM pastes`).Scan(&pastes); err != nil {

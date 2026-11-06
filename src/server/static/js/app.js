@@ -25,6 +25,19 @@ const I18N_FALLBACK = {
     working: '…',
     offline: 'You are offline',
     content_link_label: 'Target URL',
+    failed: 'Failed',
+    running: 'Running…',
+    load_spec_failed: 'Failed to load spec',
+    invalid_variables: 'Invalid variables JSON',
+    cancel: 'Cancel',
+    save: 'Save',
+    cookie_essential: 'Essential',
+    cookie_preferences: 'Preferences',
+    cookie_analytics: 'Analytics',
+    cookie_desc_essential: 'Required for the site to function.',
+    cookie_desc_preferences: 'Remember theme and language.',
+    cookie_desc_analytics: 'Anonymous usage statistics.',
+    manage_preferences: 'Manage Preferences',
 };
 
 // loadI18nBundle parses the server-rendered <script type="application/json"
@@ -322,7 +335,10 @@ document.addEventListener('submit', function (event) {
     }
     const dlg = document.getElementById('confirm-dialog');
     if (!dlg || typeof dlg.showModal !== 'function') return;
+    // Stop the event before the form's own listeners (submit-loading) see it,
+    // so cancelling the dialog leaves the submit button untouched.
     event.preventDefault();
+    event.stopPropagation();
     const message = document.getElementById('confirm-dialog-message');
     if (message) message.textContent = form.getAttribute('data-confirm');
     dlg.returnValue = '';
@@ -334,6 +350,18 @@ document.addEventListener('submit', function (event) {
         }
     });
     dlg.showModal();
+}, true);
+
+// Backdrop click closes any open native <dialog> (PART 16 Modals). A click on
+// the dialog's own padding reports the dialog as target, so the pointer
+// coordinates are compared with the dialog box to tell backdrop from content.
+document.addEventListener('click', function (event) {
+    const dlg = event.target;
+    if (!(dlg instanceof HTMLDialogElement) || !dlg.open) return;
+    const box = dlg.getBoundingClientRect();
+    const outside = event.clientX < box.left || event.clientX > box.right
+        || event.clientY < box.top || event.clientY > box.bottom;
+    if (outside) dlg.close();
 });
 
 // Capture the install prompt; never show the browser default automatically.
@@ -387,18 +415,15 @@ document.addEventListener('DOMContentLoaded', updateOfflineIndicator);
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
 // Source of truth is the server-readable `theme` cookie rendered as the class on
-// <html> (PART 16). No preference is read from localStorage. Without JS, the
-// header <form> POSTs to /server/preferences, sets the cookie, and reloads. This enhancement
-// intercepts the submit to cycle the theme in place — no reload, no FOUC.
+// <html> (PART 16). No preference is read from localStorage. The header <form>
+// POSTs to /server/preferences and the server sets the cookie on every click,
+// with or without JS. This enhancement is an instant preview only: it never
+// calls preventDefault(), so the real POST still happens on submit.
 
-// themeCycle advances dark → light → auto → dark, matching nextTheme() on the server.
-function themeCycle(current) {
-    if (current === 'dark') return 'light';
-    if (current === 'light') return 'auto';
-    return 'dark';
-}
+// THEME_CYCLE is the cycle order, matching nextTheme() on the server.
+const THEME_CYCLE = ['dark', 'light', 'auto'];
 
-// currentTheme reads the active mode from the class on <html> (theme-dark by default).
+// currentTheme reads the LIVE active mode from the class on <html> (theme-dark by default).
 function currentTheme() {
     const cls = document.documentElement.className || '';
     const m = cls.match(/theme-(dark|light|auto)/);
@@ -406,15 +431,11 @@ function currentTheme() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const form = document.querySelector('form.theme-toggle');
-    if (!form) return;
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const next = themeCycle(currentTheme());
-        document.documentElement.className = `theme-${next}`;
-        document.cookie = `theme=${next}; path=/; max-age=31536000; SameSite=Lax`;
-        const hidden = form.querySelector('input[name="theme"]');
-        if (hidden) hidden.value = themeCycle(next);
+    document.querySelectorAll('.theme-toggle-form').forEach((form) => {
+        form.addEventListener('submit', () => {
+            const next = THEME_CYCLE[(THEME_CYCLE.indexOf(currentTheme()) + 1) % THEME_CYCLE.length];
+            document.documentElement.className = `theme-${next}`;
+        });
     });
 });
 
@@ -430,13 +451,18 @@ function copyToClipboard(elementId, btn) {
     navigator.clipboard.writeText(el.textContent).then(() => {
         if (btn) {
             const orig = btn.textContent;
-            btn.textContent = t('copied');
-            setTimeout(() => { btn.textContent = orig; }, 2000);
+            btn.textContent = '✓ ' + (btn.getAttribute('data-copied-label') || t('copied'));
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.textContent = orig;
+                btn.classList.remove('copied');
+            }, 2000);
         }
     }).catch(() => {
         if (btn) {
-            btn.textContent = 'Failed';
-            setTimeout(() => { btn.textContent = t('copy'); }, 2000);
+            const orig = btn.textContent;
+            btn.textContent = t('failed');
+            setTimeout(() => { btn.textContent = orig; }, 2000);
         }
     });
 }
@@ -529,21 +555,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const banner = form.closest('.site-banner');
             if (banner) banner.remove();
         });
-    });
-});
-
-// ─── QR download ─────────────────────────────────────────────────────────────
-
-document.addEventListener('DOMContentLoaded', () => {
-    const dlBtn = document.querySelector('[data-qr-download]');
-    if (!dlBtn) return;
-    dlBtn.addEventListener('click', () => {
-        const src = dlBtn.getAttribute('data-qr-download');
-        const name = dlBtn.getAttribute('data-qr-name') || 'paste-qr.png';
-        const a = document.createElement('a');
-        a.href = src;
-        a.download = name;
-        a.click();
     });
 });
 
@@ -685,11 +696,8 @@ async function fetchAPI(endpoint, options) {
         }
     }
 
-    // applyConsent enacts a ConsentState: preference cookie + analytics loading.
+    // applyConsent enacts a ConsentState by loading analytics when allowed.
     function applyConsent(consent) {
-        if (consent.preferences) {
-            document.cookie = 'preferencesEnabled=true; path=/; max-age=31536000; samesite=lax';
-        }
         if (consent.analytics && cfg.analyticsConfigured) {
             activateTracking();
         }
@@ -762,12 +770,26 @@ async function fetchAPI(endpoint, options) {
     // ─── Preferences modal ───────────────────────────────────────────────────
 
     var modalEl = null;
+    var modalTrigger = null;
 
+    // closePreferences closes and removes the native <dialog>, then returns
+    // focus to the control that opened it.
     function closePreferences() {
-        if (modalEl && modalEl.parentNode) {
-            modalEl.parentNode.removeChild(modalEl);
-            modalEl = null;
+        if (!modalEl) {
+            return;
         }
+        var dlg = modalEl;
+        modalEl = null;
+        if (dlg.open) {
+            dlg.close();
+        }
+        if (dlg.parentNode) {
+            dlg.parentNode.removeChild(dlg);
+        }
+        if (modalTrigger && typeof modalTrigger.focus === 'function') {
+            modalTrigger.focus();
+        }
+        modalTrigger = null;
     }
 
     // categoryRow builds one cookie-category toggle row.
@@ -791,7 +813,9 @@ async function fetchAPI(endpoint, options) {
         return row;
     }
 
-    // openPreferences renders the granular preferences modal.
+    // openPreferences renders the granular preferences modal as a native
+    // <dialog>: showModal() supplies the focus trap, Escape-to-close and
+    // backdrop; focus returns to the trigger on close.
     function openPreferences() {
         if (modalEl) {
             return;
@@ -801,53 +825,45 @@ async function fetchAPI(endpoint, options) {
             analytics: !!cfg.defaultAnalytics
         };
         var desc = cfg.descriptions || {};
+        var title = cfg.preferencesText || t('manage_preferences');
 
-        var overlay = el('div', {
+        modalTrigger = document.activeElement;
+        var dialog = el('dialog', {
             id: 'cookie-preferences-modal',
-            class: 'cookie-modal-overlay',
-            role: 'dialog',
-            'aria-modal': 'true',
-            'aria-label': cfg.preferencesText || 'Manage Preferences'
+            class: 'cookie-modal',
+            'aria-labelledby': 'cookie-preferences-title'
         });
-        var dialog = el('div', { class: 'cookie-modal' });
-        dialog.appendChild(el('h2', { class: 'cookie-modal-title' }, cfg.preferencesText || 'Manage Preferences'));
+        dialog.appendChild(el('h2', { class: 'cookie-modal-title', id: 'cookie-preferences-title' }, title));
 
-        dialog.appendChild(categoryRow('pref-essential', 'Essential',
-            desc.essential || 'Required for the site to function.', true, true));
-        dialog.appendChild(categoryRow('pref-preferences', 'Preferences',
-            desc.preferences || 'Remember theme and language.', !!current.preferences, false));
+        dialog.appendChild(categoryRow('pref-essential', t('cookie_essential'),
+            desc.essential || t('cookie_desc_essential'), true, true));
+        dialog.appendChild(categoryRow('pref-preferences', t('cookie_preferences'),
+            desc.preferences || t('cookie_desc_preferences'), !!current.preferences, false));
 
         if (cfg.analyticsConfigured) {
-            dialog.appendChild(categoryRow('pref-analytics', 'Analytics',
-                desc.analytics || 'Anonymous usage statistics.', !!current.analytics, false));
+            dialog.appendChild(categoryRow('pref-analytics', t('cookie_analytics'),
+                desc.analytics || t('cookie_desc_analytics'), !!current.analytics, false));
         }
 
         var actions = el('div', { class: 'cookie-modal-actions' });
-        var cancelBtn = el('button', { type: 'button', class: 'btn-decline' }, 'Cancel');
+        var cancelBtn = el('button', { type: 'button', class: 'btn-decline' }, t('cancel'));
         cancelBtn.addEventListener('click', closePreferences);
-        var saveBtn = el('button', { type: 'button', class: 'btn-accept' }, 'Save');
+        var saveBtn = el('button', { type: 'button', class: 'btn-accept' }, t('save'));
         saveBtn.addEventListener('click', savePreferences);
         actions.appendChild(cancelBtn);
         actions.appendChild(saveBtn);
         dialog.appendChild(actions);
 
-        overlay.appendChild(dialog);
-        overlay.addEventListener('click', function (ev) {
-            if (ev.target === overlay) {
+        // Native Escape closes the dialog; keep our state in sync.
+        dialog.addEventListener('close', function () {
+            if (modalEl === dialog) {
                 closePreferences();
             }
         });
-        document.addEventListener('keydown', escClose);
-        modalEl = overlay;
-        document.body.appendChild(overlay);
+        modalEl = dialog;
+        document.body.appendChild(dialog);
+        dialog.showModal();
         saveBtn.focus();
-    }
-
-    function escClose(ev) {
-        if (ev.key === 'Escape') {
-            closePreferences();
-            document.removeEventListener('keydown', escClose);
-        }
     }
 
     // savePreferences persists the granular selections from the modal.
@@ -883,8 +899,21 @@ async function fetchAPI(endpoint, options) {
         // reopen it via a "Manage Preferences" control.
         window.pbShowCookiePreferences = openPreferences;
 
+        // Intercept the CCPA opt-out form (POST /server/ccpa) to skip the
+        // reload; the opt-in variant stays a server round-trip because it
+        // must clear the cookie server-side.
+        var ccpaForms = document.querySelectorAll('form[action$="/server/ccpa"]');
+        for (var j = 0; j < ccpaForms.length; j++) {
+            ccpaForms[j].addEventListener('submit', function (ev) {
+                if (ev.target.elements.choice && ev.target.elements.choice.value === 'opt-out') {
+                    ev.preventDefault();
+                    ccpaDoNotSell();
+                }
+            });
+        }
+
         // Wire any server-rendered "Manage Preferences" trigger.
-        var triggers = document.querySelectorAll('[data-cookie-preferences]');
+        var triggers = document.querySelectorAll('[data-action="cookie-preferences"]');
         for (var i = 0; i < triggers.length; i++) {
             triggers[i].addEventListener('click', function (ev) {
                 ev.preventDefault();
@@ -952,8 +981,12 @@ async function fetchAPI(endpoint, options) {
                         }, 2000);
                     } else {
                         const original = this.textContent;
-                        this.textContent = copiedLabel;
-                        setTimeout(() => { this.textContent = original; }, 2000);
+                        this.textContent = '✓ ' + copiedLabel;
+                        this.classList.add('copied');
+                        setTimeout(() => {
+                            this.textContent = original;
+                            this.classList.remove('copied');
+                        }, 2000);
                     }
                 });
             });
@@ -1024,7 +1057,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isLink = singleURLPattern.test(trimmed);
         contentLabel.textContent = isLink ? linkLabel : textLabel;
         if (languageGroup) {
-            languageGroup.style.display = isLink ? 'none' : '';
+            languageGroup.hidden = isLink;
         }
     };
 
@@ -1218,7 +1251,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(function (r) { return r.json(); })
         .then(render)
         .catch(function (e) {
-            app.innerHTML = '<p class="error-message">Failed to load spec: ' + esc(String(e)) + '</p>';
+            app.innerHTML = '<p class="error-message">' + esc(t('load_spec_failed')) + ': ' + esc(String(e)) + '</p>';
         });
 })();
 
@@ -1254,11 +1287,11 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 variables = JSON.parse(varsRaw);
             } catch (e) {
-                showResult({ errors: [{ message: 'Invalid variables JSON: ' + e.message }] }, true);
+                showResult({ errors: [{ message: t('invalid_variables') + ': ' + e.message }] }, true);
                 return;
             }
         }
-        result.textContent = 'Running…';
+        result.textContent = t('running');
         result.className = 'result-window';
         fetch(apiURL, {
             method: 'POST',
@@ -1348,3 +1381,42 @@ function initFormValidation() {
 }
 
 document.addEventListener('DOMContentLoaded', initFormValidation);
+
+// ─── Smart menu (PART 16) ─────────────────────────────────────────────────────
+
+// Inline links when they all fit next to the brand and header actions, the
+// hamburger otherwise; re-evaluated on load, font load, and resize. Without JS
+// the width-based CSS defaults apply.
+(function () {
+    const header = document.querySelector('.header');
+    if (!header) return;
+    const links = header.querySelector('.nav-links');
+    const brand = header.querySelector('.site-brand');
+    const actions = header.querySelector('.header-actions');
+    if (!links || !brand || !actions) return;
+
+    function update() {
+        header.classList.remove('nav-fit', 'nav-overflow');
+        header.classList.add('nav-measure');
+        const needed = links.offsetWidth;
+        header.classList.remove('nav-measure');
+        const cs = getComputedStyle(header);
+        const gap = parseFloat(cs.columnGap) || 0;
+        const padding = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        const available = header.clientWidth - padding - brand.offsetWidth - actions.offsetWidth - gap * 2;
+        header.classList.add(needed <= available ? 'nav-fit' : 'nav-overflow');
+    }
+
+    let pending = 0;
+    function schedule() {
+        if (pending) return;
+        pending = window.requestAnimationFrame(() => {
+            pending = 0;
+            update();
+        });
+    }
+
+    window.addEventListener('resize', schedule);
+    window.addEventListener('load', schedule);
+    schedule();
+})();

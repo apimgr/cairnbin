@@ -503,7 +503,9 @@ func TestScheduler_RunNow_FailingTask_WithDB_PersistsFailure(t *testing.T) {
 		t.Fatalf("Register: %v", err)
 	}
 
-	s.RunNow("persist-fail") //nolint:errcheck — error path covered in another test
+	if err := s.RunNow("persist-fail"); err == nil {
+		t.Fatal("expected persistence error")
+	}
 
 	// execute() calls UpdateTaskRun with status="failed" for the run result.
 	db.mu.Lock()

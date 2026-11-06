@@ -462,7 +462,7 @@ func printVersionInfo(serverURL string) {
 	if err != nil {
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return
 	}
@@ -560,7 +560,7 @@ func checkCLIUpdate(serverURL, lang string) error {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil
@@ -706,14 +706,14 @@ func main() {
 	// always/never are accepted as backward-compatible aliases.
 	switch *colorFlag {
 	case "never", "no":
-		os.Setenv("NO_COLOR", "1")
+		_ = os.Setenv("NO_COLOR", "1")
 	case "always", "yes":
-		os.Unsetenv("NO_COLOR")
+		_ = os.Unsetenv("NO_COLOR")
 	}
 
 	// PART 8: TERM=dumb forces plain output — no colors, no emoji, no ANSI.
 	if os.Getenv("TERM") == "dumb" {
-		os.Setenv("NO_COLOR", "1")
+		_ = os.Setenv("NO_COLOR", "1")
 	}
 
 	// PART 30 CLI detection chain: --lang flag > cli.yml > LANG/LC_ALL > en.
@@ -1108,7 +1108,7 @@ func (c *client) doWithRetry(httpClient *http.Client, req *http.Request) (*http.
 			return resp, nil
 		}
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			lastErr = errors.New(tf("err_server_status", "status", resp.StatusCode))
 		} else {
 			lastErr = err
@@ -1297,7 +1297,7 @@ func (c *client) cmdCreate(args []string) {
 	if err != nil {
 		printConnectionError(c.server, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -1318,7 +1318,7 @@ func (c *client) cmdCreate(args []string) {
 		var output bytes.Buffer
 		enc := json.NewEncoder(&output)
 		enc.SetIndent("", "  ")
-		enc.Encode(result)
+		_ = enc.Encode(result)
 		_ = writePagedOutput(output.Bytes(), c.pager)
 		return
 	}
@@ -1389,7 +1389,7 @@ func (c *client) cmdGet(args []string) {
 	if err != nil {
 		printConnectionError(c.server, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		printNotFoundError(id)
@@ -1470,7 +1470,7 @@ func (c *client) cmdDelete(args []string) {
 	if err != nil {
 		printConnectionError(c.server, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		printNotFoundError(id)
@@ -1485,7 +1485,7 @@ func (c *client) cmdDelete(args []string) {
 	c.cache.invalidate()
 
 	if c.outputFormat == "json" {
-		io.Copy(os.Stdout, resp.Body)
+		_, _ = io.Copy(os.Stdout, resp.Body)
 		return
 	}
 	if c.outputFormat == "yaml" {
@@ -1538,7 +1538,7 @@ func (c *client) cmdList(args []string) {
 	if err != nil {
 		printConnectionError(c.server, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		printAuthError()
@@ -1566,7 +1566,7 @@ func (c *client) cmdList(args []string) {
 		var output bytes.Buffer
 		enc := json.NewEncoder(&output)
 		enc.SetIndent("", "  ")
-		enc.Encode(result)
+		_ = enc.Encode(result)
 		_ = writePagedOutput(output.Bytes(), c.pager)
 		return
 	}
@@ -1618,19 +1618,19 @@ func (c *client) cmdList(args []string) {
 
 	var output bytes.Buffer
 	tw := tabwriter.NewWriter(&output, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+	_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
 		t("list_col_id"), t("list_col_title"), t("list_col_lang"), t("list_col_views"), t("list_col_created"))
 	for _, p := range result.Pastes {
 		title := p.Title
 		if len(title) > 40 {
 			title = title[:37] + "..."
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n",
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n",
 			p.ID, title, p.Language, p.Views,
 			p.CreatedAt.Format("2006-01-02 15:04"),
 		)
 	}
-	tw.Flush()
+	_ = tw.Flush()
 	fmt.Fprintf(&output, "\n%s\n", tf("list_footer",
 		"total", result.Pagination.Total, "page", *page, "pages", result.Pagination.Pages))
 	_ = writePagedOutput(output.Bytes(), c.pager)
@@ -1655,18 +1655,18 @@ func renderBorderedTable(w io.Writer, headers []string, rows [][]string) {
 	}
 
 	border := func(left, mid, right string) {
-		fmt.Fprint(w, left)
+		_, _ = fmt.Fprint(w, left)
 		for i, wd := range widths {
-			fmt.Fprint(w, strings.Repeat("─", wd+2))
+			_, _ = fmt.Fprint(w, strings.Repeat("─", wd+2))
 			if i < len(widths)-1 {
-				fmt.Fprint(w, mid)
+				_, _ = fmt.Fprint(w, mid)
 			}
 		}
-		fmt.Fprintln(w, right)
+		_, _ = fmt.Fprintln(w, right)
 	}
 
 	printRow := func(cells []string) {
-		fmt.Fprint(w, "│")
+		_, _ = fmt.Fprint(w, "│")
 		for i, wd := range widths {
 			cell := ""
 			if i < len(cells) {
@@ -1676,9 +1676,9 @@ func renderBorderedTable(w io.Writer, headers []string, rows [][]string) {
 			if pad < 0 {
 				pad = 0
 			}
-			fmt.Fprintf(w, " %s%s │", cell, strings.Repeat(" ", pad))
+			_, _ = fmt.Fprintf(w, " %s%s │", cell, strings.Repeat(" ", pad))
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 
 	border("┌", "┬", "┐")
@@ -1733,7 +1733,7 @@ func (c *client) cmdUpdate(action string) {
 	if err != nil {
 		printConnectionError(c.server, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var disc autodiscoverResponse
 	if err := json.NewDecoder(resp.Body).Decode(&disc); err != nil {
@@ -1795,7 +1795,7 @@ func (c *client) downloadAndApplyUpdateAt(downloadURL, expectedSHA, exe string, 
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	f, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
@@ -1805,15 +1805,15 @@ func (c *client) downloadAndApplyUpdateAt(downloadURL, expectedSHA, exe string, 
 	httpClient := &http.Client{Timeout: 5 * time.Minute}
 	resp, err := httpClient.Get(downloadURL)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("%s: %w", t("err_download"), err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Write and hash simultaneously so we only stream the body once.
 	h := sha256.New()
 	if _, err := io.Copy(io.MultiWriter(f, h), resp.Body); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("%s: %w", t("err_write"), err)
 	}
 	if err := f.Close(); err != nil {
@@ -1866,23 +1866,23 @@ func replaceCrossDevice(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", t("err_open_staged_binary"), err)
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	out, err := os.OpenFile(staging, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
 		return fmt.Errorf("%s: %w", t("err_create_staging_file"), err)
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		os.Remove(staging)
+		_ = out.Close()
+		_ = os.Remove(staging)
 		return fmt.Errorf("%s: %w", t("err_copy_staged_binary"), err)
 	}
 	if err := out.Close(); err != nil {
-		os.Remove(staging)
+		_ = os.Remove(staging)
 		return fmt.Errorf("%s: %w", t("err_close_staging_file"), err)
 	}
 	if err := os.Rename(staging, dst); err != nil {
-		os.Remove(staging)
+		_ = os.Remove(staging)
 		return fmt.Errorf("%s: %w", t("err_replace_binary"), err)
 	}
 	return nil
@@ -2139,7 +2139,7 @@ func reorderCommandArgs(args []string, valueFlags ...string) []string {
 
 // helpRow prints one spec-style flag row: "--flag ARG        - description".
 func helpRow(w io.Writer, flagSpec, desc string) {
-	fmt.Fprintf(w, "%-39s- %s\n", flagSpec, desc)
+	_, _ = fmt.Fprintf(w, "%-39s- %s\n", flagSpec, desc)
 }
 
 // printUsage writes the spec --help layout (PART 32 "--help Output") to
@@ -2154,18 +2154,18 @@ func writeUsage(w io.Writer) {
 	if OfficialSite != "" {
 		serverFlagHelp = tf("help_flag_server_default", "site", OfficialSite)
 	}
-	fmt.Fprintf(w, "%s\n\n", tf("help_tagline", "binary", binaryName, "version", Version))
-	fmt.Fprintf(w, "%s\n", t("help_head_usage"))
-	fmt.Fprintf(w, "  %s [command] [flags]\n", binaryName)
-	fmt.Fprintf(w, "  # %s\n  %s\n\n", t("help_tui_comment"), binaryName)
+	_, _ = fmt.Fprintf(w, "%s\n\n", tf("help_tagline", "binary", binaryName, "version", Version))
+	_, _ = fmt.Fprintf(w, "%s\n", t("help_head_usage"))
+	_, _ = fmt.Fprintf(w, "  %s [command] [flags]\n", binaryName)
+	_, _ = fmt.Fprintf(w, "  # %s\n  %s\n\n", t("help_tui_comment"), binaryName)
 
-	fmt.Fprintf(w, "%s\n", t("help_head_flags"))
+	_, _ = fmt.Fprintf(w, "%s\n", t("help_head_flags"))
 	helpRow(w, "-h, --help", t("help_flag_help"))
 	helpRow(w, "-v, --version", t("help_flag_version"))
 	helpRow(w, "--shell completions [SHELL]", t("help_flag_shell_completions"))
 	helpRow(w, "--shell init [SHELL]", t("help_flag_shell_init"))
 	helpRow(w, "--shell help", t("help_flag_shell_help"))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 	helpRow(w, "--server URL", serverFlagHelp)
 	helpRow(w, "--token TOKEN", t("help_flag_token"))
 	helpRow(w, "--token-file FILE", t("help_flag_token_file"))
@@ -2173,39 +2173,39 @@ func writeUsage(w io.Writer) {
 	helpRow(w, "--debug", t("help_flag_debug"))
 	helpRow(w, "--color {auto|yes|no}", t("help_flag_color"))
 	helpRow(w, "--lang CODE", t("help_flag_lang"))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "%s\n", t("help_head_global_flags"))
+	_, _ = fmt.Fprintf(w, "%s\n", t("help_head_global_flags"))
 	helpRow(w, "--output FORMAT", t("help_flag_output"))
 	helpRow(w, "--json", t("help_flag_json"))
 	helpRow(w, "--verbose", t("help_flag_verbose"))
 	helpRow(w, "--update check|yes", t("help_flag_update"))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "%s\n", t("help_head_commands"))
+	_, _ = fmt.Fprintf(w, "%s\n", t("help_head_commands"))
 	helpRow(w, "create [file]", t("help_cmd_create"))
 	helpRow(w, "get <id>", t("help_cmd_get"))
 	helpRow(w, "delete <id> <token>", t("help_cmd_delete"))
 	helpRow(w, "list", t("help_cmd_list"))
 	helpRow(w, "scheduler <action> [id]", t("help_cmd_scheduler"))
 	helpRow(w, "update [check|yes]", t("help_cmd_update"))
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "%s\n", t("help_head_create_flags"))
+	_, _ = fmt.Fprintf(w, "%s\n", t("help_head_create_flags"))
 	writeCreateFlags(w)
-	fmt.Fprintf(w, "\n%s\n", t("help_head_list_flags"))
+	_, _ = fmt.Fprintf(w, "\n%s\n", t("help_head_list_flags"))
 	writeListFlags(w)
 
-	fmt.Fprintf(w, "\n%s\n", t("help_head_examples"))
-	fmt.Fprintf(w, "  CAIRNBIN_SERVER_PRIMARY=https://paste.example.com %s create --lang text < file.txt\n", binaryName)
-	fmt.Fprintf(w, "  %s --server https://paste.example.com create --lang go myfile.go\n", binaryName)
-	fmt.Fprintf(w, "  %s --server https://paste.example.com get abc12345\n", binaryName)
-	fmt.Fprintf(w, "  %s --server https://paste.example.com delete abc12345 <delete-token>\n", binaryName)
-	fmt.Fprintf(w, "  %s --server https://paste.example.com list --limit 10\n\n", binaryName)
+	_, _ = fmt.Fprintf(w, "\n%s\n", t("help_head_examples"))
+	_, _ = fmt.Fprintf(w, "  CAIRNBIN_SERVER_PRIMARY=https://paste.example.com %s create --lang text < file.txt\n", binaryName)
+	_, _ = fmt.Fprintf(w, "  %s --server https://paste.example.com create --lang go myfile.go\n", binaryName)
+	_, _ = fmt.Fprintf(w, "  %s --server https://paste.example.com get abc12345\n", binaryName)
+	_, _ = fmt.Fprintf(w, "  %s --server https://paste.example.com delete abc12345 <delete-token>\n", binaryName)
+	_, _ = fmt.Fprintf(w, "  %s --server https://paste.example.com list --limit 10\n\n", binaryName)
 
-	fmt.Fprintf(w, "%s: bash, zsh, fish, sh, dash, ksh, powershell, pwsh\n\n", t("help_shells_label"))
-	fmt.Fprintf(w, "%s\n", t("help_footer_tui"))
-	fmt.Fprintf(w, "%s\n", tf("help_footer_cmd", "binary", binaryName))
+	_, _ = fmt.Fprintf(w, "%s: bash, zsh, fish, sh, dash, ksh, powershell, pwsh\n\n", t("help_shells_label"))
+	_, _ = fmt.Fprintf(w, "%s\n", t("help_footer_tui"))
+	_, _ = fmt.Fprintf(w, "%s\n", tf("help_footer_cmd", "binary", binaryName))
 }
 
 func writeCreateFlags(w io.Writer) {
@@ -2230,24 +2230,24 @@ func writeListFlags(w io.Writer) {
 func printCommandHelp(w io.Writer, command string) bool {
 	binaryName := binName()
 	usage := map[string]struct{ line, desc string }{
-		"create": {"create [file] [flags]", "help_cmd_create"},
-		"get":    {"get <id>", "help_cmd_get"},
-		"delete": {"delete <id> <token>", "help_cmd_delete"},
-		"list":   {"list [flags]", "help_cmd_list"},
+		"create":    {"create [file] [flags]", "help_cmd_create"},
+		"get":       {"get <id>", "help_cmd_get"},
+		"delete":    {"delete <id> <token>", "help_cmd_delete"},
+		"list":      {"list [flags]", "help_cmd_list"},
 		"scheduler": {"scheduler {list|show|run|enable|disable|history} [id]", "help_cmd_scheduler"},
-		"update": {"update [check|yes]", "help_cmd_update"},
+		"update":    {"update [check|yes]", "help_cmd_update"},
 	}
 	u, ok := usage[command]
 	if !ok {
 		return false
 	}
-	fmt.Fprintf(w, "%s\n  %s [global flags] %s\n\n%s\n", t("help_head_usage"), binaryName, u.line, t(u.desc))
+	_, _ = fmt.Fprintf(w, "%s\n  %s [global flags] %s\n\n%s\n", t("help_head_usage"), binaryName, u.line, t(u.desc))
 	switch command {
 	case "create":
-		fmt.Fprintf(w, "\n%s\n", t("help_head_create_flags"))
+		_, _ = fmt.Fprintf(w, "\n%s\n", t("help_head_create_flags"))
 		writeCreateFlags(w)
 	case "list":
-		fmt.Fprintf(w, "\n%s\n", t("help_head_list_flags"))
+		_, _ = fmt.Fprintf(w, "\n%s\n", t("help_head_list_flags"))
 		writeListFlags(w)
 	}
 	return true

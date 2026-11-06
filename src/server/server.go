@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -39,7 +40,6 @@ import (
 	"github.com/apimgr/cairnbin/src/common/httputil"
 	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/common/theme"
-	"github.com/apimgr/cairnbin/src/path"
 	"github.com/apimgr/cairnbin/src/config"
 	"github.com/apimgr/cairnbin/src/database"
 	"github.com/apimgr/cairnbin/src/geoip"
@@ -54,6 +54,7 @@ import (
 	"github.com/apimgr/cairnbin/src/mode"
 	"github.com/apimgr/cairnbin/src/model"
 	"github.com/apimgr/cairnbin/src/notify"
+	"github.com/apimgr/cairnbin/src/path"
 	"github.com/apimgr/cairnbin/src/ssl"
 	"github.com/apimgr/cairnbin/src/swagger"
 	"github.com/apimgr/cairnbin/src/tor"
@@ -353,7 +354,7 @@ func (s *Server) bindAndDrop(addr string) (net.Listener, error) {
 		return nil, err
 	}
 	if err := s.applyPrivilegeDrop(); err != nil {
-		ln.Close()
+		_ = ln.Close()
 		return nil, err
 	}
 	return ln, nil
@@ -788,6 +789,19 @@ func (s *Server) buildTemplates() (map[string]*template.Template, error) {
 		"tf": func(lang, key string, args ...interface{}) string {
 			return i18n.TranslateFormat(lang, key, i18n.Args(args...))
 		},
+		// th and tfh return a translation as trusted HTML: the embedded locale
+		// strings may carry inline <code>/<a> markup, while every interpolated
+		// argument is HTML-escaped so runtime values can never inject markup.
+		"th": func(lang, key string) template.HTML {
+			return template.HTML(i18n.Translate(lang, key))
+		},
+		"tfh": func(lang, key string, args ...interface{}) template.HTML {
+			escaped := make(map[string]string)
+			for k, v := range i18n.Args(args...) {
+				escaped[k] = template.HTMLEscapeString(v)
+			}
+			return template.HTML(i18n.TranslateFormat(lang, key, escaped))
+		},
 		"i18njs": func(lang string) template.JS {
 			return template.JS(i18n.JSBundle(lang))
 		},
@@ -951,6 +965,76 @@ func (s *Server) OnConfigChange(next *config.Config) {
 	}
 	if loggingFileOrFormatChanged(prev.Server.Logging, next.Server.Logging) {
 		s.MarkPendingRestart("logging")
+	}
+	s.auditConfigChange(prev, next)
+}
+
+// auditConfigChange records the PART 11 configuration audit events for a
+// hot-reloaded server.yml: config.updated with the changed top-level keys
+// (never values), plus the specific smtp / ssl / branding events. Secrets and
+// credentials are never written because only key names are logged.
+func (s *Server) auditConfigChange(prev, next *config.Config) {
+	if s.auditLogger == nil || prev == nil || next == nil {
+		return
+	}
+	emit := func(event string, keys []string) {
+		details := map[string]any{}
+		if keys != nil {
+			details["changed_keys"] = keys
+		}
+		s.auditLog(nil, audit.Entry{Event: event, Category: "config", Severity: audit.SeverityInfo, Result: audit.ResultSuccess, Target: &audit.Target{Type: "config", ID: "server.yml"}, Details: details})
+	}
+	// Standards toggled on or off get their own compliance events (PART 11).
+	pv, nv := reflect.ValueOf(prev.Server.Compliance), reflect.ValueOf(next.Server.Compliance)
+	for i := 0; i < pv.NumField(); i++ {
+		if pv.Field(i).Bool() == nv.Field(i).Bool() || pv.Type().Field(i).Name == "Enabled" {
+			continue
+		}
+		event := "compliance.standard_disabled"
+		if nv.Field(i).Bool() {
+			event = "compliance.standard_enabled"
+		}
+		name := strings.Split(pv.Type().Field(i).Tag.Get("yaml"), ",")[0]
+		s.auditLog(nil, audit.Entry{Event: event, Category: "security", Severity: audit.SeverityInfo, Result: audit.ResultSuccess, Details: map[string]any{"standard": name, "enabled_by": "config"}})
+	}
+	// Allowlist additions / removals (PART 11 audit events).
+	prevAllow, nextAllow := map[string]config.AllowlistEntry{}, map[string]config.AllowlistEntry{}
+	for _, e := range prev.Server.Security.Allowlist {
+		prevAllow[e.CIDR] = e
+	}
+	for _, e := range next.Server.Security.Allowlist {
+		nextAllow[e.CIDR] = e
+		if _, ok := prevAllow[e.CIDR]; !ok {
+			s.auditLog(nil, audit.Entry{Event: "security.ip_allowlisted", Category: "security", Severity: audit.SeverityInfo, Result: audit.ResultSuccess, Details: map[string]any{"cidr": e.CIDR, "description": e.Description}})
+		}
+	}
+	for cidr := range prevAllow {
+		if _, ok := nextAllow[cidr]; !ok {
+			s.auditLog(nil, audit.Entry{Event: "security.ip_allowlist_removed", Category: "security", Severity: audit.SeverityInfo, Result: audit.ResultSuccess, Details: map[string]any{"cidr": cidr}})
+		}
+	}
+	var keys []string
+	if !reflect.DeepEqual(prev.Server, next.Server) {
+		keys = append(keys, "server")
+	}
+	if !reflect.DeepEqual(prev.Web, next.Web) {
+		keys = append(keys, "web")
+	}
+	if !reflect.DeepEqual(prev.Database, next.Database) {
+		keys = append(keys, "database")
+	}
+	if len(keys) == 0 {
+		return
+	}
+	emit("config.updated", keys)
+	if !reflect.DeepEqual(prev.Server.Notifications.Email, next.Server.Notifications.Email) {
+		emit("config.smtp_updated", nil)
+	}
+	if !reflect.DeepEqual(prev.Server.TLS, next.Server.TLS) {
+		emit("config.ssl_updated", nil)
+	}
+	if !reflect.DeepEqual(prev.Server.Branding, next.Server.Branding) {
+		emit("config.branding_updated", nil)
 	}
 }
 
@@ -1285,6 +1369,10 @@ func (s *Server) setupRoutes() {
 	// Coordinated-disclosure PGP public key — 404 until a keypair is generated
 	// and publishing is enabled (PART 11, AI.md 14156).
 	r.Get("/.well-known/pgp-key.asc", s.handlePGPKey)
+	// Well-known namespace contract (PART 11): only GET/HEAD are valid, every
+	// other method is 405, and any non-allowlisted entry is 404 with no listing.
+	r.HandleFunc("/.well-known/*", wellKnownFallback(s))
+	r.HandleFunc("/.well-known", wellKnownFallback(s))
 	r.Get("/favicon.ico", s.handleFavicon)
 	// Branding images (AI.md PART 16 "Image Sources"/"Image Scaling") — cached,
 	// pre-scaled PNGs resolved from server.branding.favicon/.logo/
@@ -1358,7 +1446,7 @@ func (s *Server) setupRoutes() {
 	r.Get("/server/privacy", s.handlePrivacy)
 	// CCPA "Do Not Sell" opt-out toggle — sets/clears the ccpa_opt_out cookie
 	// (PART 31). Only meaningful when server.privacy.data.sold is true.
-	r.Post("/server/privacy/ccpa", s.handleCCPAOptOut)
+	r.Post("/server/ccpa", s.handleCCPAOptOut)
 	// Cookie-consent endpoint — persists the `cookie_consent` cookie server-side
 	// and redirects back so the no-JS <noscript> banner/preferences form works
 	// (AI.md 25598), not just the JS-driven banner in app.js.
@@ -1500,7 +1588,7 @@ func (s *Server) setupRoutes() {
 		r.Get("/getServerInfo", s.maybeReadRateLimit(s.compatHandler.LenServerInfo))
 
 		// Server info
-		r.Get("/server/healthz", s.maybeHealthRateLimit(s.handleHealthzJSON))
+		r.Get("/server/healthz", s.maybeHealthRateLimit(s.handleHealthzAPI))
 		r.Get("/server/version", s.handleVersion)
 		r.Get("/server/about", s.handleAboutAPI)
 		r.Get("/server/privacy", s.handlePrivacyAPI)
@@ -1552,7 +1640,7 @@ func (s *Server) setupRoutes() {
 	// MCP: the same handler at all three paths, never a redirect (PART 11).
 	r.Handle("/api/mcp", s.mcpHandler)
 	r.Handle("/mcp", s.mcpHandler)
-	r.Get("/api/healthz", s.maybeHealthRateLimit(s.handleHealthzJSON))
+	r.Get("/api/healthz", s.maybeHealthRateLimit(s.handleHealthzAPI))
 	// PART 20: unversioned machine-friendly metrics alias, same handlers.
 	if s.cfg.Server.Metrics.Enabled {
 		s.mountMetricsServices(r, "/api/metrics", true)
@@ -1607,8 +1695,8 @@ func (s *Server) setupRoutes() {
 	r.Get("/qr/{id}/image", s.maybeReadRateLimit(s.handleQRImage))
 	r.Get("/remove/{id}", s.handleRemovePage)
 	r.Post("/remove/{id}", s.maybeDeleteRateLimit(s.handleRemoveSubmit))
-	// microbin upload
-	r.Post("/upload", s.maybeRateLimit(s.pasteHandler.CreatePaste))
+	// microbin upload compatibility alias uses the compat token and response contract.
+	r.Post("/upload", s.maybeRateLimit(s.compatHandler.MicrobinCreate))
 	// microbin upload alias
 	r.Get("/upload/{id}", s.maybeReadRateLimit(s.handleViewPaste))
 	// microbin short URL
@@ -1621,7 +1709,6 @@ func (s *Server) setupRoutes() {
 	r.Get("/u/{id}", s.maybeReadRateLimit(s.handleURLRedirect))
 
 	// Swagger UI (human-readable docs page)
-	r.Get("/server/swagger", s.swaggerHandler.ServeUI)
 	r.Get("/server/docs/swagger", s.swaggerHandler.ServeUI)
 	r.Get("/server/docs/graphql", s.graphqlHandler.ServeHTTP)
 
@@ -1843,18 +1930,74 @@ func (s *Server) resolveCORSOrigin(r *http.Request) (origin string, allowCredent
 	return "*", false, false
 }
 
-// permissionsPolicy is the default Permissions-Policy header value built from
-// the PART 11 spec defaults at package init time.
-var permissionsPolicy = strings.Join([]string{
-	"accelerometer=()", "ambient-light-sensor=()", "battery=()", "camera=()",
-	"display-capture=()", "geolocation=()", "gyroscope=()", "hid=()",
-	"idle-detection=()", "magnetometer=()", "microphone=()", "midi=()",
-	"screen-wake-lock=()", "serial=()", "usb=()", "xr-spatial-tracking=()",
-	"attribution-reporting=()", "browsing-topics=()", "interest-cohort=()",
-	"autoplay=(self)", "encrypted-media=(self)", "fullscreen=(self)",
-	"payment=(self)", "picture-in-picture=(self)",
-	"publickey-credentials-get=(self)", "storage-access=(self)", "web-share=(self)",
-}, ", ")
+// buildPermissionsPolicy joins the web.permissions_policy feature map into the
+// Permissions-Policy header value (PART 11 generation rule): features sorted for
+// a stable header, empty values skipped so the browser default applies.
+func buildPermissionsPolicy(features map[string]string) string {
+	if features == nil {
+		features = config.DefaultPermissionsPolicy()
+	}
+	names := make([]string, 0, len(features))
+	for name, value := range features {
+		if strings.TrimSpace(value) != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, name+"="+strings.TrimSpace(features[name]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// cspNonceKey is the request-context key holding the per-request CSP nonce.
+type cspNonceKey struct{}
+
+// cspNonceToken is the placeholder operators put in *_override CSP values; the
+// middleware substitutes a fresh nonce per response (PART 11 nonce-based CSP).
+const cspNonceToken = "{request_nonce}"
+
+// cspNonce returns the per-request CSP nonce, or "" when nonce-based CSP is not
+// in use for this request.
+func cspNonce(r *http.Request) string {
+	v, _ := r.Context().Value(cspNonceKey{}).(string)
+	return v
+}
+
+// cspUsesNonce reports whether any configured CSP override references {request_nonce}.
+func cspUsesNonce(c config.CSPConfig) bool {
+	for _, v := range []string{
+		c.ScriptSrcOverride, c.StyleSrcOverride, c.ImgSrcOverride, c.FontSrcOverride,
+		c.ConnectSrcOverride, c.FrameSrcOverride, c.FormActionOverride,
+	} {
+		if strings.Contains(v, cspNonceToken) {
+			return true
+		}
+	}
+	return false
+}
+
+// newCSPNonce returns 16 random bytes, base64-encoded (128 bits, per the CSP spec minimum).
+func newCSPNonce() (string, error) {
+	b := make([]byte, 16)
+	if _, err := crand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
+}
+
+// cspDirective returns the override when set, otherwise base plus the extra
+// sources (PART 11 per-directive append / override configuration).
+func cspDirective(base, extra, override, nonce string) string {
+	if override != "" {
+		return strings.ReplaceAll(override, cspNonceToken, nonce)
+	}
+	if extra != "" {
+		return base + " " + extra
+	}
+	return base
+}
 
 // buildCSP returns the Content-Security-Policy header value for a request,
 // using the server config's CSP settings.  When TLS is off, upgrade-insecure-requests
@@ -1869,38 +2012,20 @@ func (s *Server) buildCSP(r *http.Request) (header string, reportOnly bool) {
 	reportURI := "/api/" + s.apiVersion() + "/server/reports/csp"
 
 	csp := cfg.Web.CSP
+	nonce := cspNonce(r)
 	// script-src stays 'self' only — no 'unsafe-inline' — per the CSP spec
 	// (AI.md "Content Security Policy" table): all JS lives in
 	// static/js/app.js, so this blocks every injected inline <script>.
-	scriptSrc := "'self'"
-	if csp.ScriptSrcOverride != "" {
-		scriptSrc = csp.ScriptSrcOverride
-	} else if csp.ScriptSrcExtra != "" {
-		scriptSrc += " " + csp.ScriptSrcExtra
-	}
-	styleSrc := "'self' 'unsafe-inline'"
-	if csp.StyleSrcExtra != "" {
-		styleSrc += " " + csp.StyleSrcExtra
-	}
-	imgSrc := "'self' data: blob: https:"
-	if csp.ImgSrcExtra != "" {
-		imgSrc += " " + csp.ImgSrcExtra
-	}
-	fontSrc := "'self' https:"
-	if csp.FontSrcExtra != "" {
-		fontSrc += " " + csp.FontSrcExtra
-	}
-	connectSrc := "'self'"
+	scriptSrc := cspDirective("'self'", csp.ScriptSrcExtra, csp.ScriptSrcOverride, nonce)
+	styleSrc := cspDirective("'self' 'unsafe-inline'", csp.StyleSrcExtra, csp.StyleSrcOverride, nonce)
+	imgSrc := cspDirective("'self' data: blob: https:", csp.ImgSrcExtra, csp.ImgSrcOverride, nonce)
+	fontSrc := cspDirective("'self' https:", csp.FontSrcExtra, csp.FontSrcOverride, nonce)
+	connectBase := "'self'"
 	if fqdn != "" && fqdn != "localhost" {
-		connectSrc += " https://" + fqdn
+		connectBase += " https://" + fqdn
 	}
-	if csp.ConnectSrcExtra != "" {
-		connectSrc += " " + csp.ConnectSrcExtra
-	}
-	frameSrc := "'self'"
-	if csp.FrameSrcExtra != "" {
-		frameSrc += " " + csp.FrameSrcExtra
-	}
+	connectSrc := cspDirective(connectBase, csp.ConnectSrcExtra, csp.ConnectSrcOverride, nonce)
+	frameSrc := cspDirective("'self'", csp.FrameSrcExtra, csp.FrameSrcOverride, nonce)
 	// /emb/{id} is the frame-ancestors allow-listed endpoint (PART 11) — it is
 	// designed to be iframed by third-party sites. Everything else stays 'self'.
 	frameAncestors := "'self'"
@@ -1910,10 +2035,7 @@ func (s *Server) buildCSP(r *http.Request) (header string, reportOnly bool) {
 			frameAncestors = "*"
 		}
 	}
-	formAction := "'self'"
-	if csp.FormActionExtra != "" {
-		formAction += " " + csp.FormActionExtra
-	}
+	formAction := cspDirective("'self'", csp.FormActionExtra, csp.FormActionOverride, nonce)
 
 	directives := []string{
 		"default-src 'self'",
@@ -1932,15 +2054,18 @@ func (s *Server) buildCSP(r *http.Request) (header string, reportOnly bool) {
 		"object-src 'none'",
 	}
 
-	// Only include upgrade-insecure-requests when TLS is enabled.
-	if cfg.Server.TLS.Enabled {
+	// Only include upgrade-insecure-requests when TLS is enabled, and never for
+	// Tor / I2P requests (it would rewrite same-origin http:// to a nonexistent https://).
+	if cfg.Server.TLS.Enabled && !s.isOverlayRequest(r) {
 		directives = append(directives, "upgrade-insecure-requests")
 	}
 
-	directives = append(directives,
-		"report-to default",
-		"report-uri "+reportURI,
-	)
+	if csp.ReportsEnabled {
+		directives = append(directives,
+			"report-to default",
+			"report-uri "+reportURI,
+		)
+	}
 
 	policy := strings.Join(directives, "; ")
 	isReportOnly := csp.Mode == "report-only" || cfg.Server.Mode == "development" || cfg.Server.Mode == "debug"
@@ -1948,17 +2073,94 @@ func (s *Server) buildCSP(r *http.Request) (header string, reportOnly bool) {
 }
 
 // buildReportingHeaders returns the Reporting-Endpoints, Report-To, and NEL header values.
+// Per PART 11 these ride on every response (the endpoint URL is always https://),
+// independent of whether this listener terminates TLS itself — a TLS-terminating
+// reverse proxy in front is the common case. Only an unresolvable FQDN omits them.
 func (s *Server) buildReportingHeaders() (endpoints, reportTo, nel string) {
 	cfg := s.liveCfg()
 	fqdn := cfg.Server.FQDN
-	if fqdn == "" || fqdn == "localhost" || !cfg.Server.TLS.Enabled {
+	if fqdn == "" || fqdn == "localhost" {
 		return "", "", ""
 	}
 	base := "https://" + fqdn + "/api/" + s.apiVersion() + "/server/reports"
 	endpoints = `default="` + base + `/default"`
-	reportTo = `{"group":"default","max_age":10886400,"endpoints":[{"url":"` + base + `/default"}]}`
-	nel = `{"report_to":"default","max_age":2592000,"include_subdomains":true}`
+	defaultGroup := `{"group":"default","max_age":10886400,"endpoints":[{"url":"` + base + `/default"}]}`
+	if n := cfg.Web.Headers.NEL; n.Enabled {
+		endpoints += `, nel="` + base + `/nel"`
+		reportTo = `[` + defaultGroup + `,{"group":"nel","max_age":10886400,"endpoints":[{"url":"` + base + `/nel"}]}]`
+		nel = fmt.Sprintf(`{"report_to":"nel","max_age":%d,"include_subdomains":%t`, n.MaxAgeSeconds, n.IncludeSubdomains)
+		if n.SampleRate < 1 {
+			nel += fmt.Sprintf(`,"failure_fraction":%g`, n.SampleRate)
+		}
+		nel += "}"
+	} else {
+		reportTo = defaultGroup
+	}
 	return endpoints, reportTo, nel
+}
+
+// wellKnownFallback handles every /.well-known/** request that no allowlisted
+// handler claimed: 405 (with Allow) for non-GET/HEAD methods, otherwise 404.
+func wellKnownFallback(s *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			s.renderErrorPage(w, r, http.StatusMethodNotAllowed, "That method is not allowed for this resource.")
+			return
+		}
+		s.renderErrorPage(w, r, http.StatusNotFound, "")
+	}
+}
+
+// privacyOptOutKey marks any honored request privacy signal.
+type privacyOptOutKey struct{}
+
+// gpcReceivedKey marks a Sec-GPC signal separately from the optional DNT signal.
+type gpcReceivedKey struct{}
+
+// privacyOptOut reports whether the request carried an honored privacy opt-out
+// signal (PART 11 "Privacy Signal Headers").
+func privacyOptOut(r *http.Request) bool {
+	v, _ := r.Context().Value(privacyOptOutKey{}).(bool)
+	return v
+}
+
+// gpcReceived reports whether this request carried an honored Sec-GPC signal.
+func gpcReceived(r *http.Request) bool {
+	v, _ := r.Context().Value(gpcReceivedKey{}).(bool)
+	return v
+}
+
+// gpcSignalHonored reports whether Sec-GPC: 1 is enabled and present.
+func gpcSignalHonored(r *http.Request, hc config.HeadersConfig) bool {
+	return hc.HonorSecGPC && r.Header.Get("Sec-GPC") == "1"
+}
+
+// privacySignalOptOut reports whether Sec-GPC: 1 is honored or DNT: 1 is
+// explicitly enabled by web.headers.honor_dnt.
+func privacySignalOptOut(r *http.Request, hc config.HeadersConfig) bool {
+	if gpcSignalHonored(r, hc) {
+		return true
+	}
+	return hc.HonorDNT && r.Header.Get("DNT") == "1"
+}
+
+// headerOrDefault returns v, or def when v is empty.
+func headerOrDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+// clearSiteDataValue builds the Clear-Site-Data header value for token
+// revocation / consent withdrawal, honoring execution_contexts (PART 11).
+func clearSiteDataValue(c config.ClearSiteDataConfig) string {
+	v := `"cache", "cookies", "storage"`
+	if c.ExecutionContexts {
+		v += `, "executionContexts"`
+	}
+	return v
 }
 
 // securityHeadersMiddleware sets all mandatory security response headers per PART 11.
@@ -1977,13 +2179,39 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 		}
 		h.Set("X-XSS-Protection", "1; mode=block")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		h.Set("X-Permitted-Cross-Domain-Policies", "none")
-		h.Set("Origin-Agent-Cluster", "?1")
+		hc := cfg.Web.Headers
+		h.Set("X-Permitted-Cross-Domain-Policies", headerOrDefault(hc.CrossDomainPolicies, "none"))
+		if hc.OriginAgentCluster {
+			h.Set("Origin-Agent-Cluster", "?1")
+		}
+		if hc.DNSPrefetchControl != "" {
+			h.Set("X-DNS-Prefetch-Control", hc.DNSPrefetchControl)
+		}
 
 		// Cross-origin isolation headers — defaults keep broad compatibility (PART 11).
-		h.Set("Cross-Origin-Opener-Policy", "unsafe-none")
-		h.Set("Cross-Origin-Embedder-Policy", "unsafe-none")
-		h.Set("Cross-Origin-Resource-Policy", "cross-origin")
+		h.Set("Cross-Origin-Opener-Policy", headerOrDefault(hc.COOP, "unsafe-none"))
+		h.Set("Cross-Origin-Embedder-Policy", headerOrDefault(hc.COEP, "unsafe-none"))
+		h.Set("Cross-Origin-Resource-Policy", headerOrDefault(hc.CORP, "cross-origin"))
+
+		// Honored privacy signals suppress non-essential cookies and tracking.
+		if privacySignalOptOut(r, hc) {
+			r = r.WithContext(context.WithValue(r.Context(), privacyOptOutKey{}, true))
+		}
+		if gpcSignalHonored(r, hc) {
+			r = r.WithContext(context.WithValue(r.Context(), gpcReceivedKey{}, true))
+			if !strings.HasPrefix(r.URL.Path, "/static/") {
+				s.auditLog(r, audit.Entry{Event: "compliance.gpc_honored", Category: "security", Severity: audit.SeverityInfo, Result: audit.ResultSuccess})
+			}
+		}
+
+		// Per-request nonce for operators using nonce-based CSP overrides
+		// ({request_nonce}); the same value is rendered into every server-side
+		// <script> tag via the CSPNonce template variable.
+		if cspUsesNonce(cfg.Web.CSP) {
+			if nonce, err := newCSPNonce(); err == nil {
+				r = r.WithContext(context.WithValue(r.Context(), cspNonceKey{}, nonce))
+			}
+		}
 
 		// Content-Security-Policy.
 		if policy, reportOnly := s.buildCSP(r); policy != "" {
@@ -1995,10 +2223,11 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Permissions-Policy.
-		h.Set("Permissions-Policy", permissionsPolicy)
+		h.Set("Permissions-Policy", buildPermissionsPolicy(cfg.Web.PermissionsPolicy))
 
 		// Strict-Transport-Security — only when TLS is active (RFC 6797).
-		if cfg.Server.TLS.Enabled {
+		overlay := s.isOverlayRequest(r)
+		if cfg.Server.TLS.Enabled && !overlay {
 			hsts := cfg.Web.HSTS
 			if hsts.Enabled {
 				hstsVal := fmt.Sprintf("max-age=%d", hsts.MaxAgeSeconds)
@@ -2012,11 +2241,13 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
-		// Reporting API (modern + legacy NEL) — only when TLS is enabled.
-		if endpoints, reportTo, nel := s.buildReportingHeaders(); endpoints != "" {
+		// Reporting API (modern + legacy NEL) — every clearnet response (PART 11).
+		if endpoints, reportTo, nel := s.buildReportingHeaders(); endpoints != "" && !overlay {
 			h.Set("Reporting-Endpoints", endpoints)
 			h.Set("Report-To", reportTo)
-			h.Set("NEL", nel)
+			if nel != "" {
+				h.Set("NEL", nel)
+			}
 		}
 
 		// The X-Request-ID response header is set by requestIDMiddleware
@@ -2058,15 +2289,14 @@ func (s *Server) mountMetricsServices(r chi.Router, base string, withBare bool) 
 	})
 }
 
-// secFetchMiddleware rejects cross-site state-changing requests per PART 11.
-// Validation rules (when sec_fetch_validation=true):
-//   - Reject POST/PUT/PATCH/DELETE where Sec-Fetch-Site: cross-site AND no Bearer/API token.
-//   - Reject POST/PUT/PATCH/DELETE to /api/* where Sec-Fetch-Mode: navigate (form-based nav CSRF).
-//   - GET/HEAD navigation to /api/* is ALLOWED (AI.md:13931): opening an API URL in a browser
-//     returns the JSON normally, since GETs are side-effect-free and responses carry nosniff.
-//   - Absence of Sec-Fetch-* is treated as pass-through (legacy-browser compat).
+// secFetchMiddleware rejects cross-site state-changing frontend requests per
+// PART 11. Backend and compatibility routes bypass this middleware behavior.
 func (s *Server) secFetchMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.csrfOutOfScope(w, r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		cfg := s.liveCfg()
 		if !cfg.Web.Headers.SecFetchValidation {
 			next.ServeHTTP(w, r)
@@ -2093,24 +2323,13 @@ func (s *Server) secFetchMiddleware(next http.Handler) http.Handler {
 			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 				// Allow if Bearer or API-token auth is present — Bearer is not auto-attached
 				// by browsers, so no CSRF risk.
-				if r.Header.Get("Authorization") == "" && r.Header.Get("X-API-Token") == "" {
+				if !hasBearerCredential(r) {
 					// Check CSRF exempt paths.
 					if !isCSRFExempt(r.URL.Path, cfg.Server.CSRF.ExemptPaths) {
 						writeJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "error": "FORBIDDEN", "message": "cross-site state-changing request blocked"})
 						return
 					}
 				}
-			}
-		}
-
-		// Reject form-based navigation CSRF on /api/* — only for state-changing methods.
-		// GET/HEAD navigation is explicitly allowed (AI.md:13931): opening an API URL in a
-		// browser must return the JSON normally.
-		if r.Header.Get("Sec-Fetch-Mode") == "navigate" && strings.HasPrefix(r.URL.Path, "/api/") {
-			switch r.Method {
-			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-				writeJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "error": "FORBIDDEN", "message": "direct navigation to API endpoint blocked"})
-				return
 			}
 		}
 
@@ -2236,14 +2455,23 @@ func (s *Server) validateCSRFToken(token string) bool {
 // csrfMiddleware implements the double-submit CSRF protection pattern (PART 11,
 // AI.md "CSRF Protection"). The token cookie is stable across requests (reused
 // while valid, re-minted only when absent or invalid) so tokens embedded in
-// already-rendered forms keep working. Validation runs ONLY when the request is
-// state-mutating AND carries a CSRF cookie (i.e. it is a browser that loaded a
-// page from us) AND is from a cross-site/unknown origin. Bearer/API-token,
-// read-only, WebSocket-upgrade, same-origin, exempt-path, and cookie-less
-// (non-browser: CLI, compat, webhook) requests are bypassed — those callers
-// carry no auto-attached credential, so there is nothing to forge.
+// already-rendered forms keep working. Every mutating frontend request without
+// a bearer header validates the double-submit token, regardless of Origin,
+// Referer, or cookie presence. Backend and compatibility paths are filtered
+// before token issuance.
 func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.csrfOutOfScope(w, r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		isMutating := r.Method == http.MethodPost || r.Method == http.MethodPut ||
+			r.Method == http.MethodPatch || r.Method == http.MethodDelete
+		if isWebSocketUpgrade(r) || (isMutating && hasBearerCredential(r)) ||
+			(!isMutating && !csrfHTMLNavigation(r)) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		cfg := s.liveCfg()
 		if !cfg.Server.CSRF.Enabled || len(s.csrfSecret) == 0 {
 			next.ServeHTTP(w, r)
@@ -2272,19 +2500,14 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 
 		// Validate the token if and only if ALL hold (AI.md "When CSRF
 		// Validation Runs"): mutating method, cookie-authenticated, cross-site.
-		isMutating := r.Method == http.MethodPost || r.Method == http.MethodPut ||
-			r.Method == http.MethodPatch || r.Method == http.MethodDelete
-
 		// Bypass conditions (any one is sufficient). Exactly the AI.md PART 11
-		// bypass list — non-mutating methods, Bearer credentials, WebSocket
-		// upgrades, and operator-declared exempt paths. A missing CSRF cookie
+		// bypass list — non-mutating methods and operator-declared exempt paths.
+		// Bearer and WebSocket requests returned before token setup. A missing CSRF cookie
 		// is NOT a bypass: a mutating request without Bearer must present a
 		// valid token, and "token absent" is a rejection reason, not an escape.
-		hasBearer := r.Header.Get("Authorization") != "" || r.Header.Get("X-API-Token") != ""
-		bypass := !isMutating || hasBearer ||
+		bypass := !isMutating ||
 			isWebSocketUpgrade(r) ||
-			isCSRFExempt(r.URL.Path, cfg.Server.CSRF.ExemptPaths) ||
-			isCSRFExempt(r.URL.Path, config.CSRFBuiltinExemptPaths)
+			isCSRFExempt(r.URL.Path, cfg.Server.CSRF.ExemptPaths)
 
 		if !bypass {
 			// Read the submitted token from the header, falling back to the form
@@ -2338,10 +2561,11 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
-		secure := r.TLS != nil
-		if cfg.Server.CSRF.Secure == "true" {
+		secure := s.cookieSecure(r)
+		switch cfg.Server.CSRF.Secure {
+		case "true":
 			secure = true
-		} else if cfg.Server.CSRF.Secure == "false" {
+		case "false":
 			secure = false
 		}
 
@@ -2361,6 +2585,14 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), csrfTokenKey, token)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// csrfHTMLNavigation limits token issuance on safe requests to HTML page
+// navigations. Static assets, raw/download responses, and non-browser API
+// consumers do not need a frontend form token cookie.
+func csrfHTMLNavigation(r *http.Request) bool {
+	return r.Method == http.MethodGet && (strings.Contains(r.Header.Get("Accept"), "text/html") ||
+		r.Header.Get("Sec-Fetch-Dest") == "document")
 }
 
 // isWebSocketUpgrade reports whether the request is a WebSocket upgrade handshake.
@@ -2535,7 +2767,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		defer s.geoipDB.Close()
 	}
 	if s.cacheStore != nil {
-		defer s.cacheStore.Close()
+		defer func() { _ = s.cacheStore.Close() }()
 	}
 	if s.notifier != nil {
 		// Cap at 10s so an in-flight webhook retry ladder can't stall shutdown;
@@ -3076,11 +3308,6 @@ func formatUptime(d time.Duration) string {
 	}
 }
 
-// handleHealthz serves /server/healthz using the standard frontend content
-// negotiation rules (PART 13/14): JSON for clients that ask for
-// "Accept: application/json" (mirrors the versioned
-// /api/{api_version}/server/healthz endpoint), plain text for non-interactive
-// HTTP tools, and HTML for browsers.
 // httpStatusForHealth maps a HealthResponse.Status value to its HTTP response
 // code per the "Health Status Values & HTTP Codes" table (AI.md PART 13):
 // unhealthy, maintenance, and shutting_down all report 503; every other
@@ -3095,6 +3322,10 @@ func httpStatusForHealth(status string) int {
 	}
 }
 
+// handleHealthz serves /server/healthz using the standard frontend content
+// negotiation rules (PART 13/14): JSON for clients that ask for
+// "Accept: application/json", plain text for non-interactive HTTP tools, and
+// HTML for browsers.
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	switch detectClientType(r) {
 	case "json":
@@ -3118,67 +3349,78 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 // writeHealthText emits the /server/healthz response in the canonical
 // flattened dot-notation plain-text format defined in PART 13.
 func writeHealthText(w http.ResponseWriter, hr HealthResponse) {
-	fmt.Fprintf(w, "project.name: %s\n", hr.Project.Name)
-	fmt.Fprintf(w, "project.tagline: %s\n", hr.Project.Tagline)
-	fmt.Fprintf(w, "project.description: %s\n", hr.Project.Description)
-	fmt.Fprintf(w, "status: %s\n", hr.Status)
-	fmt.Fprintf(w, "version: %s\n", hr.Version)
-	fmt.Fprintf(w, "go_version: %s\n", hr.GoVersion)
-	fmt.Fprintf(w, "build.commit: %s\n", hr.Build.Commit)
-	fmt.Fprintf(w, "build.date: %s\n", hr.Build.Date)
-	fmt.Fprintf(w, "uptime: %s\n", hr.Uptime)
-	fmt.Fprintf(w, "mode: %s\n", hr.Mode)
-	fmt.Fprintf(w, "timestamp: %s\n", hr.Timestamp.UTC().Format(time.RFC3339))
+	_, _ = fmt.Fprintf(w, "project.name: %s\n", hr.Project.Name)
+	_, _ = fmt.Fprintf(w, "project.tagline: %s\n", hr.Project.Tagline)
+	_, _ = fmt.Fprintf(w, "project.description: %s\n", hr.Project.Description)
+	_, _ = fmt.Fprintf(w, "status: %s\n", hr.Status)
+	_, _ = fmt.Fprintf(w, "version: %s\n", hr.Version)
+	_, _ = fmt.Fprintf(w, "go_version: %s\n", hr.GoVersion)
+	_, _ = fmt.Fprintf(w, "build.commit: %s\n", hr.Build.Commit)
+	_, _ = fmt.Fprintf(w, "build.date: %s\n", hr.Build.Date)
+	_, _ = fmt.Fprintf(w, "uptime: %s\n", hr.Uptime)
+	_, _ = fmt.Fprintf(w, "mode: %s\n", hr.Mode)
+	_, _ = fmt.Fprintf(w, "timestamp: %s\n", hr.Timestamp.UTC().Format(time.RFC3339))
 	if hr.Maintenance != nil {
-		fmt.Fprintf(w, "maintenance.reason: %s\n", hr.Maintenance.Reason)
-		fmt.Fprintf(w, "maintenance.message: %s\n", hr.Maintenance.Message)
-		fmt.Fprintf(w, "maintenance.since: %s\n", hr.Maintenance.Since.UTC().Format(time.RFC3339))
-		fmt.Fprintf(w, "maintenance.self_healing.enabled: %t\n", hr.Maintenance.SelfHealing.Enabled)
-		fmt.Fprintf(w, "maintenance.self_healing.attempts: %d\n", hr.Maintenance.SelfHealing.Attempts)
+		_, _ = fmt.Fprintf(w, "maintenance.reason: %s\n", hr.Maintenance.Reason)
+		_, _ = fmt.Fprintf(w, "maintenance.message: %s\n", hr.Maintenance.Message)
+		_, _ = fmt.Fprintf(w, "maintenance.since: %s\n", hr.Maintenance.Since.UTC().Format(time.RFC3339))
+		_, _ = fmt.Fprintf(w, "maintenance.self_healing.enabled: %t\n", hr.Maintenance.SelfHealing.Enabled)
+		_, _ = fmt.Fprintf(w, "maintenance.self_healing.attempts: %d\n", hr.Maintenance.SelfHealing.Attempts)
 		if hr.Maintenance.SelfHealing.LastAttempt != nil {
-			fmt.Fprintf(w, "maintenance.self_healing.last_attempt: %s\n", hr.Maintenance.SelfHealing.LastAttempt.UTC().Format(time.RFC3339))
+			_, _ = fmt.Fprintf(w, "maintenance.self_healing.last_attempt: %s\n", hr.Maintenance.SelfHealing.LastAttempt.UTC().Format(time.RFC3339))
 		}
 		if hr.Maintenance.SelfHealing.NextAttempt != nil {
-			fmt.Fprintf(w, "maintenance.self_healing.next_attempt: %s\n", hr.Maintenance.SelfHealing.NextAttempt.UTC().Format(time.RFC3339))
+			_, _ = fmt.Fprintf(w, "maintenance.self_healing.next_attempt: %s\n", hr.Maintenance.SelfHealing.NextAttempt.UTC().Format(time.RFC3339))
 		}
 	}
-	fmt.Fprintf(w, "features.tor.enabled: %t\n", hr.Features.Tor.Enabled)
-	fmt.Fprintf(w, "features.tor.running: %t\n", hr.Features.Tor.Running)
+	_, _ = fmt.Fprintf(w, "features.tor.enabled: %t\n", hr.Features.Tor.Enabled)
+	_, _ = fmt.Fprintf(w, "features.tor.running: %t\n", hr.Features.Tor.Running)
 	if hr.Features.Tor.Status != "" {
-		fmt.Fprintf(w, "features.tor.status: %s\n", hr.Features.Tor.Status)
+		_, _ = fmt.Fprintf(w, "features.tor.status: %s\n", hr.Features.Tor.Status)
 	}
 	if hr.Features.Tor.Hostname != "" {
-		fmt.Fprintf(w, "features.tor.hostname: %s\n", hr.Features.Tor.Hostname)
+		_, _ = fmt.Fprintf(w, "features.tor.hostname: %s\n", hr.Features.Tor.Hostname)
 	}
-	fmt.Fprintf(w, "features.i2p.enabled: %t\n", hr.Features.I2P.Enabled)
-	fmt.Fprintf(w, "features.i2p.running: %t\n", hr.Features.I2P.Running)
-	if hr.Features.I2P.Status != "" {
-		fmt.Fprintf(w, "features.i2p.status: %s\n", hr.Features.I2P.Status)
-		fmt.Fprintf(w, "features.i2p.provider: %s\n", hr.Features.I2P.Provider)
-	}
-	if hr.Features.I2P.Hostname != "" {
-		fmt.Fprintf(w, "features.i2p.hostname: %s\n", hr.Features.I2P.Hostname)
-	}
-	fmt.Fprintf(w, "features.geoip: %t\n", hr.Features.GeoIP)
-	fmt.Fprintf(w, "checks.database: %s\n", hr.Checks.Database)
-	fmt.Fprintf(w, "checks.cache: %s\n", hr.Checks.Cache)
-	fmt.Fprintf(w, "checks.disk: %s\n", hr.Checks.Disk)
-	fmt.Fprintf(w, "checks.config: %s\n", hr.Checks.Config)
-	fmt.Fprintf(w, "checks.scheduler: %s\n", hr.Checks.Scheduler)
+	_, _ = fmt.Fprintf(w, "features.i2p.enabled: %t\n", hr.Features.I2P.Enabled)
+	_, _ = fmt.Fprintf(w, "features.i2p.running: %t\n", hr.Features.I2P.Running)
+	_, _ = fmt.Fprintf(w, "features.i2p.status: %s\n", hr.Features.I2P.Status)
+	_, _ = fmt.Fprintf(w, "features.i2p.hostname: %s\n", hr.Features.I2P.Hostname)
+	_, _ = fmt.Fprintf(w, "features.i2p.provider: %s\n", hr.Features.I2P.Provider)
+	_, _ = fmt.Fprintf(w, "features.geoip: %t\n", hr.Features.GeoIP)
+	_, _ = fmt.Fprintf(w, "checks.database: %s\n", hr.Checks.Database)
+	_, _ = fmt.Fprintf(w, "checks.cache: %s\n", hr.Checks.Cache)
+	_, _ = fmt.Fprintf(w, "checks.disk: %s\n", hr.Checks.Disk)
+	_, _ = fmt.Fprintf(w, "checks.config: %s\n", hr.Checks.Config)
+	_, _ = fmt.Fprintf(w, "checks.scheduler: %s\n", hr.Checks.Scheduler)
 	if hr.Checks.Tor != "" {
-		fmt.Fprintf(w, "checks.tor: %s\n", hr.Checks.Tor)
+		_, _ = fmt.Fprintf(w, "checks.tor: %s\n", hr.Checks.Tor)
 	}
 	if hr.Checks.I2P != "" {
-		fmt.Fprintf(w, "checks.i2p: %s\n", hr.Checks.I2P)
+		_, _ = fmt.Fprintf(w, "checks.i2p: %s\n", hr.Checks.I2P)
 	}
-	fmt.Fprintf(w, "stats.requests_total: %d\n", hr.Stats.RequestsTotal)
-	fmt.Fprintf(w, "stats.requests_24h: %d\n", hr.Stats.Requests24h)
-	fmt.Fprintf(w, "stats.active_connections: %d\n", hr.Stats.ActiveConns)
+	_, _ = fmt.Fprintf(w, "stats.requests_total: %d\n", hr.Stats.RequestsTotal)
+	_, _ = fmt.Fprintf(w, "stats.requests_24h: %d\n", hr.Stats.Requests24h)
+	_, _ = fmt.Fprintf(w, "stats.active_connections: %d\n", hr.Stats.ActiveConns)
 }
 
 func (s *Server) handleHealthzJSON(w http.ResponseWriter, r *http.Request) {
 	hr := s.buildHealthResponse()
 	writeJSON(w, httpStatusForHealth(hr.Status), hr)
+}
+
+// handleHealthzAPI serves the /api/** health routes (versioned and the
+// unversioned /api/healthz alias) using the PART 14 API negotiation rules:
+// JSON by default, plain text for the .txt extension, Accept: text/plain, or
+// non-interactive clients.
+func (s *Server) handleHealthzAPI(w http.ResponseWriter, r *http.Request) {
+	if httputil.GetAPIResponseFormat(r) == "text" {
+		hr := s.buildHealthResponse()
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(httpStatusForHealth(hr.Status))
+		writeHealthText(w, hr)
+		return
+	}
+	s.handleHealthzJSON(w, r)
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
@@ -3321,13 +3563,13 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		html, err := s.renderTemplateToString(r, "home.html", data)
 		if err != nil {
 			// Fallback when templates are unavailable: minimal plain text.
-			fmt.Fprintf(w, "%s\nPOST %s/api/%s/pastes to create a paste.\n", s.liveCfg().Web.SiteTitle, s.baseURL(r), s.apiVersion())
+			_, _ = fmt.Fprintf(w, "%s\nPOST %s/api/%s/pastes to create a paste.\n", s.liveCfg().Web.SiteTitle, s.baseURL(r), s.apiVersion())
 			for _, p := range pastes {
-				fmt.Fprintf(w, "%s/%s\t%s\n", s.baseURL(r), p.ID, p.Title)
+				_, _ = fmt.Fprintf(w, "%s/%s\t%s\n", s.baseURL(r), p.ID, p.Title)
 			}
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 
@@ -3475,13 +3717,13 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 		html, err := s.renderTemplateToString(r, "recent.html", data)
 		if err != nil {
 			// Fallback when templates are unavailable: minimal plain text.
-			fmt.Fprintf(w, "# Recent pastes (%d total)\n", total)
+			_, _ = fmt.Fprintf(w, "# Recent pastes (%d total)\n", total)
 			for _, p := range pastes {
-				fmt.Fprintf(w, "%s/%s\t%s\t%s\n", s.baseURL(r), p.ID, p.Language, p.Title)
+				_, _ = fmt.Fprintf(w, "%s/%s\t%s\t%s\n", s.baseURL(r), p.ID, p.Language, p.Title)
 			}
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 
@@ -3492,21 +3734,22 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 // Accept header per PART 14 content negotiation rules.
 //
 // Priority order:
-//  1. Explicit Accept header overrides UA detection.
+//  1. Explicit Accept header overrides UA detection, checked text/html, then
+//     text/plain, then application/json (PART 16 Smart Content Detection).
 //  2. Our CLI client (cairnbin-cli/) → "json" (INTERACTIVE, renders its own TUI).
 //  3. Text browsers (lynx, w3m, etc.) → "html" (INTERACTIVE, no JavaScript).
 //  4. HTTP tools (curl, wget, empty UA) → "text" (NON-INTERACTIVE, dump output).
 //  5. Anything else (regular browsers) → "html".
 func detectClientType(r *http.Request) string {
 	accept := r.Header.Get("Accept")
-	if strings.Contains(accept, "application/json") {
-		return "json"
-	}
 	if strings.Contains(accept, "text/html") {
 		return "html"
 	}
 	if strings.Contains(accept, "text/plain") {
 		return "text"
+	}
+	if strings.Contains(accept, "application/json") {
+		return "json"
 	}
 
 	// Our client is INTERACTIVE — receives JSON, renders own TUI/GUI.
@@ -3773,7 +4016,27 @@ func (s *Server) handleQRImage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
+	// ?download=1 hands the file to the browser's native save flow via a plain
+	// link (PART 16 Import/Export UI Convention); the inline <img> omits it.
+	if r.URL.Query().Get("download") != "" {
+		w.Header().Set("Content-Disposition", `attachment; filename="`+qrDownloadName(id)+`"`)
+	}
 	w.Write(png) //nolint:errcheck
+}
+
+// qrDownloadName builds the attachment filename for a QR download, keeping
+// only characters that are safe inside a quoted Content-Disposition value.
+func qrDownloadName(id string) string {
+	var b strings.Builder
+	for _, c := range id {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
+			b.WriteRune(c)
+		}
+	}
+	if b.Len() == 0 {
+		return "paste-qr.png"
+	}
+	return "paste-" + b.String() + "-qr.png"
 }
 
 func (s *Server) handleRemovePage(w http.ResponseWriter, r *http.Request) {
@@ -3962,10 +4225,10 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		html, err := s.renderTemplateToString(r, "about.html", s.aboutPageData())
 		if err != nil {
-			fmt.Fprintf(w, "%s\n%s/server/about\n", s.liveCfg().Web.SiteTitle, s.baseURL(r))
+			_, _ = fmt.Fprintf(w, "%s\n%s/server/about\n", s.liveCfg().Web.SiteTitle, s.baseURL(r))
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 	s.renderTemplate(w, r, "about.html", s.aboutPageData())
@@ -3999,10 +4262,10 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		html, err := s.renderTemplateToString(r, "help.html", data)
 		if err != nil {
-			fmt.Fprintf(w, "Usage: curl %s/create\nAPI docs: %s/server/docs/swagger\n", s.baseURL(r), s.baseURL(r))
+			_, _ = fmt.Fprintf(w, "Usage: curl %s/create\nAPI docs: %s/server/docs/swagger\n", s.baseURL(r), s.baseURL(r))
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 	s.renderTemplate(w, r, "help.html", data)
@@ -4048,11 +4311,11 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 		html, err := s.renderTemplateToString(r, "contact.html", data)
 		if err != nil {
 			if email := s.publicContactEmail(r); email != "" {
-				fmt.Fprintf(w, "Contact: %s\n", email)
+				_, _ = fmt.Fprintf(w, "Contact: %s\n", email)
 			}
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 	s.renderTemplate(w, r, "contact.html", data)
@@ -4198,10 +4461,10 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		html, err := s.renderTemplateToString(r, "privacy.html", s.privacyPageData(r))
 		if err != nil {
-			fmt.Fprintf(w, "Privacy Policy — %s/server/privacy\n", s.baseURL(r))
+			_, _ = fmt.Fprintf(w, "Privacy Policy — %s/server/privacy\n", s.baseURL(r))
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 	s.renderTemplate(w, r, "privacy.html", s.privacyPageData(r))
@@ -4260,7 +4523,7 @@ func (s *Server) handleCCPAOptOut(w http.ResponseWriter, r *http.Request) {
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
-	if strings.TrimSpace(r.PostFormValue("action")) == "opt_in" {
+	if strings.TrimSpace(r.PostFormValue("choice")) == "opt-in" {
 		cookie.Value = ""
 		cookie.MaxAge = -1
 	} else {
@@ -4303,6 +4566,11 @@ func hasConsentCookie(r *http.Request) bool {
 // checkTrackingAllowed reports whether analytics may be injected for this
 // request: the cookie_consent cookie grants analytics AND tracking is configured.
 func (s *Server) checkTrackingAllowed(r *http.Request) bool {
+	// Sec-GPC: 1 is an opt-out of behavioral analytics regardless of any
+	// stored consent (PART 11 "Privacy Signal Headers").
+	if privacyOptOut(r) {
+		return false
+	}
 	st, ok := priorConsentState(r)
 	return ok && st.Analytics && s.liveCfg().Server.Tracking.Enabled()
 }
@@ -4317,7 +4585,11 @@ func priorConsentState(r *http.Request) (consentState, bool) {
 		return consentState{}, false
 	}
 	var prior consentState
-	if err := json.Unmarshal([]byte(c.Value), &prior); err != nil {
+	value, err := url.PathUnescape(c.Value)
+	if err != nil {
+		return consentState{}, false
+	}
+	if err := json.Unmarshal([]byte(value), &prior); err != nil {
 		return consentState{}, false
 	}
 	return prior, true
@@ -4351,28 +4623,37 @@ func (s *Server) handleConsentSet(w http.ResponseWriter, r *http.Request) {
 	// that non-essential category may have written (AI.md 14078: "On
 	// token-revocation and consent-withdrawal responses, also include:
 	// Clear-Site-Data: \"cache\", \"cookies\", \"storage\"").
-	if hadPrior && ((prior.Preferences && !state.Preferences) || (prior.Analytics && !state.Analytics)) {
-		w.Header().Set("Clear-Site-Data", `"cache", "cookies", "storage"`)
+	if hadPrior && cfg.Web.Headers.ClearSiteData.OnConsentWithdrawal && ((prior.Preferences && !state.Preferences) || (prior.Analytics && !state.Analytics)) {
+		w.Header().Set("Clear-Site-Data", clearSiteDataValue(cfg.Web.Headers.ClearSiteData))
 	}
 	b, err := json.Marshal(state)
 	if err != nil {
 		b = []byte(`{"essential":true}`)
 	}
 	secure := r.TLS != nil
-	if cfg.Server.CSRF.Secure == "true" {
+	switch cfg.Server.CSRF.Secure {
+	case "true":
 		secure = true
-	} else if cfg.Server.CSRF.Secure == "false" {
+	case "false":
 		secure = false
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "cookie_consent",
-		Value:    string(b),
+		Value:    url.PathEscape(string(b)),
 		Path:     "/",
 		MaxAge:   365 * 24 * 60 * 60,
 		HttpOnly: false,
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
+	// Consent changes are always audited with a timestamp (PART 11: "All
+	// consents logged with timestamp"); the entry carries the new categories.
+	s.auditLog(r, audit.Entry{Event: "compliance.consent_updated", Category: "security", Severity: audit.SeverityInfo, Result: audit.ResultSuccess, Details: map[string]any{
+		"essential":   state.Essential,
+		"preferences": state.Preferences,
+		"analytics":   state.Analytics,
+		"timestamp":   state.Timestamp,
+	}})
 	// Return to the referring page so the visitor lands back where they were;
 	// fall back to the site root when no same-origin referer is present.
 	dest := "/"
@@ -4500,9 +4781,10 @@ func (s *Server) handleAnnouncementDismiss(w http.ResponseWriter, r *http.Reques
 	sort.Strings(list)
 	cfg := s.liveCfg()
 	secure := r.TLS != nil
-	if cfg.Server.CSRF.Secure == "true" {
+	switch cfg.Server.CSRF.Secure {
+	case "true":
 		secure = true
-	} else if cfg.Server.CSRF.Secure == "false" {
+	case "false":
 		secure = false
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -4574,43 +4856,73 @@ func nextTheme(cur string) string {
 // never set a cookie the preferences page has no `<option>` to render.
 func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.renderErrorPage(w, r, http.StatusBadRequest, "Invalid form submission.")
+		r.PostForm = url.Values{}
+	}
+	if r.PostFormValue("action") == "reset" {
+		s.resetPreferences(w, r)
+		w.Header().Set("Clear-Site-Data", `"storage"`)
+		prefSeeOther(w, prefRedirectDest(r, r.PostFormValue("redirect")))
 		return
 	}
 
-	// Only treat `theme` as submitted when the form actually carried the
-	// field — an app-pref form omits it, and must not reset the visitor's
-	// theme to the default as a side effect.
-	if _, submitted := r.PostForm["theme"]; submitted {
-		theme := strings.TrimSpace(r.PostFormValue("theme"))
-		if !validThemes[theme] {
-			theme = "dark"
+	// Only fields the form actually carried are considered, so an app-pref
+	// form never resets the visitor's theme as a side effect. Invalid values
+	// are dropped; a save always answers 303, never a 4xx page (rule 9).
+	merged := url.Values{}
+	for name, values := range r.PostForm {
+		if name != "code" {
+			merged[name] = values
 		}
-		s.setPreferenceCookie(w, r, "theme", theme)
 	}
-
-	for key, values := range r.PostForm {
-		if !strings.HasPrefix(key, prefCookiePrefix) || len(values) == 0 {
-			continue
-		}
-		prefKey := strings.TrimPrefix(key, prefCookiePrefix)
-		value := strings.TrimSpace(values[0])
-		if !prefKeyPattern.MatchString(prefKey) || !validAppPrefValue(prefKey, value) {
-			continue
-		}
-		s.setPreferenceCookie(w, r, key, value)
+	for name, values := range decodePrefCode(r.PostFormValue("code")) {
+		merged[name] = values
 	}
-	// Return to the referring page so the toggle feels in-place; fall back to
-	// the site root when no same-origin referer is present.
-	dest := "/"
-	if ref := r.Header.Get("Referer"); ref != "" {
-		if u, err := url.Parse(ref); err == nil && u.Host == r.Host {
-			if p, ok := safeRedirectPath(u); ok {
-				dest = p
+	valid, _, _ := validateGuestPrefs(merged)
+	var applied []string
+	if r.PostFormValue("consent_form") == "1" {
+		state := consentState{
+			Essential: true, Preferences: r.PostForm.Has("consent_preferences"),
+			Analytics: s.liveCfg().Server.Tracking.Enabled() && r.PostForm.Has("consent_analytics"),
+			Timestamp: time.Now().Unix(),
+		}
+		encoded, _ := json.Marshal(state)
+		http.SetCookie(w, &http.Cookie{Name: "cookie_consent", Value: url.PathEscape(string(encoded)), Path: "/", MaxAge: prefCookieMaxAge, Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
+		ccpa := "false"
+		if r.PostForm.Has("ccpa_opt_out") {
+			ccpa = "true"
+		}
+		http.SetCookie(w, &http.Cookie{Name: "ccpa_opt_out", Value: ccpa, Path: "/", MaxAge: prefCookieMaxAge, Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
+		if state.Preferences {
+			prefsReq := r.Clone(r.Context())
+			cookiePairs := make([]string, 0, len(r.Cookies())+1)
+			for _, cookie := range r.Cookies() {
+				if cookie.Name != "cookie_consent" {
+					cookiePairs = append(cookiePairs, cookie.Name+"="+cookie.Value)
+				}
 			}
+			cookiePairs = append(cookiePairs, "cookie_consent="+url.PathEscape(string(encoded)))
+			prefsReq.Header.Set("Cookie", strings.Join(cookiePairs, "; "))
+			applied, _ = s.applyGuestPrefs(w, prefsReq, valid)
+		}
+	} else {
+		applied, _ = s.applyGuestPrefs(w, r, valid)
+	}
+	if len(applied) > 0 && refererIsPreferencesPage(r) {
+		setFlash(w, r, "preferences_saved")
+	}
+	prefSeeOther(w, prefRedirectDest(r, r.PostFormValue("redirect")))
+}
+
+func (s *Server) resetPreferences(w http.ResponseWriter, r *http.Request) {
+	seen := map[string]bool{"theme": true, i18n.CookieName(): true, "cookie_consent": true, "ccpa_opt_out": true, "cairnbin_build": true, "dismissed_announcements": true, flashCookieName: true}
+	for _, cookie := range r.Cookies() {
+		if strings.HasPrefix(cookie.Name, prefCookiePrefix) {
+			seen[cookie.Name] = true
 		}
 	}
-	http.Redirect(w, r, dest, http.StatusSeeOther)
+	for name := range seen {
+		http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
+	}
 }
 
 func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
@@ -4620,10 +4932,10 @@ func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		html, err := s.renderTemplateToString(r, "terms.html", data)
 		if err != nil {
-			fmt.Fprintf(w, "Terms of Service — %s/server/terms\n", s.baseURL(r))
+			_, _ = fmt.Fprintf(w, "Terms of Service — %s/server/terms\n", s.baseURL(r))
 			return
 		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
 	s.renderTemplate(w, r, "terms.html", data)
@@ -4799,7 +5111,7 @@ function offlineFallbackResponse() {
   );
 }
 `, stamp, stamp)
-	w.Write([]byte(sw))
+	_, _ = w.Write([]byte(sw))
 }
 
 // handlePWAIcon serves a generated PNG PWA icon at one of the fixed sizes
@@ -4831,8 +5143,13 @@ func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	// Sitemap reference (PART 16) — resolved per request so it matches the
 	// Host/proto the client actually used (and the onion service over Tor).
 	b.WriteString("Sitemap: " + strings.TrimRight(s.baseURL(r), "/") + "/sitemap.xml\n")
+	// Denied AI crawlers each get their own stanza, since a bot's own
+	// User-agent block overrides the wildcard block for that bot only.
+	for _, bot := range s.liveCfg().Web.Robots.DeniedAIBots() {
+		b.WriteString("\nUser-agent: " + bot + "\nDisallow: /\n")
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Write([]byte(b.String()))
+	_, _ = w.Write([]byte(b.String()))
 }
 
 // handleSecurity serves /.well-known/security.txt (RFC 9116). The Contact line
@@ -4851,40 +5168,40 @@ func (s *Server) handleSecurity(w http.ResponseWriter, r *http.Request) {
 	// per-request via Tor detection — never cached.
 	if onion := s.torRequestOnion(r); onion != "" {
 		var b strings.Builder
-		fmt.Fprintf(&b, "Contact: %s\n", cfg.SecurityReportURL())
+		_, _ = fmt.Fprintf(&b, "Contact: %s\n", cfg.SecurityReportURL())
 		if id := s.currentSecurityID(); id != "" {
-			fmt.Fprintf(&b, "Contact: http://%s/server/contact?security_id=%s\n", onion, id)
+			_, _ = fmt.Fprintf(&b, "Contact: http://%s/server/contact?security_id=%s\n", onion, id)
 		}
 		if email := strings.TrimSpace(cfg.Server.Tor.ContactEmail); email != "" {
-			fmt.Fprintf(&b, "Contact: mailto:%s\n", email)
+			_, _ = fmt.Fprintf(&b, "Contact: mailto:%s\n", email)
 		}
-		fmt.Fprintf(&b, "Policy: http://%s/server/security\n", onion)
-		fmt.Fprintf(&b, "Expires: %s\n", expires)
+		_, _ = fmt.Fprintf(&b, "Policy: http://%s/server/security\n", onion)
+		_, _ = fmt.Fprintf(&b, "Expires: %s\n", expires)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Write([]byte(b.String()))
+		_, _ = w.Write([]byte(b.String()))
 		return
 	}
 	var b strings.Builder
 	// Contact lines in RFC 9116 preference order (PART 11 → security.txt):
 	// (1) GitHub private vulnerability reporting, (2) instance security-report
 	// form with rotating security_id, (3) mailto CC address last.
-	fmt.Fprintf(&b, "Contact: %s\n", cfg.SecurityReportURL())
+	_, _ = fmt.Fprintf(&b, "Contact: %s\n", cfg.SecurityReportURL())
 	// Rotating security_id contact (PART 11 → Coordinated Disclosure Pipeline).
 	// This is the only place the id is ever emitted; it switches the contact
 	// form into security-report mode when a researcher follows it.
 	if id := s.currentSecurityID(); id != "" {
-		fmt.Fprintf(&b, "Contact: %s/server/contact?security_id=%s\n", strings.TrimRight(s.baseURL(r), "/"), id)
+		_, _ = fmt.Fprintf(&b, "Contact: %s/server/contact?security_id=%s\n", strings.TrimRight(s.baseURL(r), "/"), id)
 	}
-	fmt.Fprintf(&b, "Contact: mailto:%s\n", cfg.SecurityEmail())
-	fmt.Fprintf(&b, "Expires: %s\n", expires)
+	_, _ = fmt.Fprintf(&b, "Contact: mailto:%s\n", cfg.SecurityEmail())
+	_, _ = fmt.Fprintf(&b, "Expires: %s\n", expires)
 	// Encryption line seeded from the project PGP key (PART 11 → GPG Keypair
 	// Management). Emitted only when a key exists and publishing is enabled.
 	if s.hasPGPKey() {
-		fmt.Fprintf(&b, "Encryption: %s/.well-known/pgp-key.asc\n", strings.TrimRight(s.baseURL(r), "/"))
+		_, _ = fmt.Fprintf(&b, "Encryption: %s/.well-known/pgp-key.asc\n", strings.TrimRight(s.baseURL(r), "/"))
 	}
-	fmt.Fprintf(&b, "Preferred-Languages: %s\n", cfg.SecurityPreferredLanguages())
+	_, _ = fmt.Fprintf(&b, "Preferred-Languages: %s\n", cfg.SecurityPreferredLanguages())
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Write([]byte(b.String()))
+	_, _ = w.Write([]byte(b.String()))
 }
 
 // handleFavicon serves the operator-configured/embedded-default favicon
@@ -4945,7 +5262,7 @@ func (s *Server) serveBrandingImage(w http.ResponseWriter, r *http.Request, fiel
 	}
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 // handleOffline serves the PWA offline fallback page.
@@ -5099,6 +5416,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	data["Version"] = s.version
 	data["BuildDate"] = s.buildDate
 	data["CommitID"] = s.commitID
+	data["RepoURL"] = s.liveCfg().RepositoryURL()
 	// Inject the request-resolved absolute base URL ({proto}://{fqdn}[:{port}][{baseurl}])
 	// so templates emit full URLs instead of bare paths (AI.md PART 12, 4959)
 	if _, ok := data["BaseURL"]; !ok {
@@ -5109,6 +5427,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	if _, ok := data["AssetPrefix"]; !ok {
 		data["AssetPrefix"] = s.assetPrefix(r)
 	}
+	data["CSPNonce"] = cspNonce(r)
 	// Inject the generated SEO/OpenGraph/Twitter/site-verification <meta> tag
 	// block so templates render it as {{.SEOMeta}} inside <head> (PART 16)
 	if _, ok := data["SEOMeta"]; !ok {
@@ -5131,6 +5450,9 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	// Inject the active, non-dismissed site-wide announcements rendered as the
 	// Site Banner, first element inside <body> (AI.md 22517-22605, 26078-26121)
 	data["Announcements"] = s.activeAnnouncements(r)
+	// Inject the one-shot flash message set by a no-JS form POST redirect
+	// (PART 16 Toast Notifications, "No-JS fallback"); consumed exactly once.
+	data["Flash"] = takeFlash(w, r, lang)
 	// Render into a buffer first so a mid-template failure never leaks a
 	// partially-written, corrupted response — headers/status are only sent
 	// once rendering has fully succeeded. On failure, fall back through
@@ -5155,8 +5477,15 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	if len(status) > 0 {
 		statusCode = status[0]
 	}
+	// Onion-Location (PART 12): advertise the hidden service on clearnet 2xx
+	// HTML document responses only — never on the onion's own responses.
+	if statusCode >= 200 && statusCode < 300 && r.Method == http.MethodGet && !s.isOverlayRequest(r) {
+		if onion := strings.TrimSpace(s.liveCfg().Server.Tor.OnionAddress); onion != "" {
+			w.Header().Set("Onion-Location", "http://"+onion+r.URL.RequestURI())
+		}
+	}
 	w.WriteHeader(statusCode)
-	buf.WriteTo(w)
+	_, _ = buf.WriteTo(w)
 }
 
 // renderTemplateToString renders a named template to a string instead of writing to a ResponseWriter.
@@ -5183,12 +5512,14 @@ func (s *Server) renderTemplateToString(r *http.Request, name string, data map[s
 	data["Version"] = s.version
 	data["BuildDate"] = s.buildDate
 	data["CommitID"] = s.commitID
+	data["RepoURL"] = s.liveCfg().RepositoryURL()
 	if _, ok := data["BaseURL"]; !ok {
 		data["BaseURL"] = s.baseURL(r)
 	}
 	if _, ok := data["AssetPrefix"]; !ok {
 		data["AssetPrefix"] = s.assetPrefix(r)
 	}
+	data["CSPNonce"] = cspNonce(r)
 	// Inject the operator-configured max paste size as a human-readable string
 	// so create/help pages can display the actual limit (server.yml paste.max_size)
 	if _, ok := data["MaxPasteSize"]; !ok {
@@ -5357,6 +5688,14 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 		defer func() {
 			if rec := recover(); rec != nil && rec != http.ErrAbortHandler {
 				log.Printf("panic recovered: %v\n%s", rec, debug.Stack())
+				// The error path itself must never fail the request: if logging
+				// or the themed page panics, fall back to the hardcoded response.
+				defer func() {
+					if again := recover(); again != nil {
+						log.Printf("panic in error path: %v", again)
+						renderFallbackError(w, r, http.StatusInternalServerError)
+					}
+				}()
 				s.logManager.Error("panic recovered",
 					"panic", fmt.Sprintf("%v", rec),
 					"method", r.Method,
@@ -5382,6 +5721,10 @@ func errorCodeForStatus(status int) string {
 		return "NOT_FOUND"
 	case http.StatusMethodNotAllowed:
 		return "METHOD_NOT_ALLOWED"
+	case http.StatusConflict:
+		return "CONFLICT"
+	case http.StatusTooManyRequests:
+		return "RATE_LIMITED"
 	case http.StatusBadGateway:
 		return "BAD_GATEWAY"
 	case http.StatusServiceUnavailable:
@@ -5426,8 +5769,6 @@ func (s *Server) renderErrorPage(w http.ResponseWriter, r *http.Request, status 
 		})
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
 	data["CurrentPath"] = r.URL.Path
 	lang := i18n.LangFromRequest(r)
 	data["Lang"] = lang
@@ -5441,12 +5782,14 @@ func (s *Server) renderErrorPage(w http.ResponseWriter, r *http.Request, status 
 	data["Version"] = s.version
 	data["BuildDate"] = s.buildDate
 	data["CommitID"] = s.commitID
+	data["RepoURL"] = s.liveCfg().RepositoryURL()
 	if _, ok := data["BaseURL"]; !ok {
 		data["BaseURL"] = s.baseURL(r)
 	}
 	if _, ok := data["AssetPrefix"]; !ok {
 		data["AssetPrefix"] = s.assetPrefix(r)
 	}
+	data["CSPNonce"] = cspNonce(r)
 	if _, ok := data["SEOMeta"]; !ok {
 		data["SEOMeta"] = s.seoMetaTags(r)
 	}
@@ -5454,9 +5797,34 @@ func (s *Server) renderErrorPage(w http.ResponseWriter, r *http.Request, status 
 	s.injectTorData(data)
 	s.injectI2PData(data)
 	s.injectOwnerTokenData(r, data)
-	if err := tmpl.ExecuteTemplate(w, "layout", data); err != nil {
+	// Render to a buffer first so a template failure can fall back to the
+	// hardcoded response instead of leaving a truncated page behind.
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "layout", data); err != nil {
 		log.Printf("error template render failed: %v", err)
+		renderFallbackError(w, r, status)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// renderFallbackError is the last-resort error response used when the themed
+// error template fails to render or the error path itself panics. It depends
+// on nothing but plain strings: JSON envelope for API/non-HTML clients, a
+// minimal HTML body for browsers.
+func renderFallbackError(w http.ResponseWriter, r *http.Request, status int) {
+	text := http.StatusText(status)
+	if detectClientType(r) != "html" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = fmt.Fprintf(w, "{\"ok\":false,\"error\":%q,\"message\":%q}\n", errorCodeForStatus(status), text)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = fmt.Fprintf(w, "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>%d %s</title></head><body><h1>%d %s</h1></body></html>", status, text, status, text)
 }
 
 // persistOnionAddress records the generated .onion hostname under
@@ -5522,6 +5890,13 @@ func (s *Server) torRequestOnion(r *http.Request) string {
 		return onion
 	}
 	return ""
+}
+
+// isOverlayRequest reports whether the request arrived through the Tor onion
+// service or the I2P eepsite, where TLS semantics (HSTS, upgrade-insecure-
+// requests, clearnet reporting URLs) must never apply (PART 12).
+func (s *Server) isOverlayRequest(r *http.Request) bool {
+	return s.torRequestOnion(r) != "" || s.i2pRequestB32(r) != ""
 }
 
 // i2pRequestB32 returns the configured .b32.i2p address when the request

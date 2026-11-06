@@ -19,7 +19,7 @@ func TestCheckForUpdate_StableNewerVersion(t *testing.T) {
 		Assets:  []updater.Asset{{Name: "cairnbin-linux-amd64", BrowserDownloadURL: "http://example.com/bin"}},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(release)
+		_ = json.NewEncoder(w).Encode(release)
 	}))
 	defer srv.Close()
 
@@ -39,7 +39,7 @@ func TestCheckForUpdate_StableNewerVersion(t *testing.T) {
 func TestCheckForUpdate_AlreadyUpToDate(t *testing.T) {
 	release := updater.Release{TagName: "v1.0.0"}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(release)
+		_ = json.NewEncoder(w).Encode(release)
 	}))
 	defer srv.Close()
 
@@ -86,7 +86,7 @@ func TestCheckForUpdate_BetaBranch(t *testing.T) {
 		{TagName: "v1.5.0", Prerelease: false},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(releases)
+		_ = json.NewEncoder(w).Encode(releases)
 	}))
 	defer srv.Close()
 
@@ -109,7 +109,7 @@ func TestCheckForUpdate_DailyBranch(t *testing.T) {
 		{TagName: "v1.5.0", Prerelease: false},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(releases)
+		_ = json.NewEncoder(w).Encode(releases)
 	}))
 	defer srv.Close()
 
@@ -124,7 +124,7 @@ func TestCheckForUpdate_DailyBranch(t *testing.T) {
 
 func TestCheckForUpdate_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer srv.Close()
 

@@ -89,7 +89,7 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Write(buf.Bytes())
+	_, _ = w.Write(buf.Bytes())
 }
 
 // expiryUnix returns the Unix timestamp for t, or 0 when t is nil.

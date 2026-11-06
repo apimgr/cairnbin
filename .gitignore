@@ -120,8 +120,29 @@ volumes/
 *.swp
 *.swo
 
-# AI config directories (regenerated from AI.md rules, not committed)
-.claude/
+# Claude Code team configuration
+!.claude/
+!.claude/CLAUDE.md
+!.claude/rules/
+!.claude/rules/**
+!.claude/memory/
+!.claude/memory/**
+!.claude/agents/
+!.claude/agents/**
+!.claude/hooks/
+!.claude/hooks/**
+!.claude/commands/
+!.claude/commands/**
+!.claude/plans/
+!.claude/plans/**
+!.claude/settings.json
+.claude/settings.local.json
+.claude/*.lock
+.claude/backups/
+.claude/cache/
+.claude/history.jsonl
+
+# Other AI configuration directories
 .cursor/
 .aider/
 .ai/

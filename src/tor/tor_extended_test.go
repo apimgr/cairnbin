@@ -202,7 +202,7 @@ func TestApplyKeys_UnwritablePath(t *testing.T) {
 	if err := os.Mkdir(locked, 0o000); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(locked, 0o700) })
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
 
 	cfg := Config{Binary: "/nonexistent/tor", DataDir: filepath.Join(locked, "data")}
 	m := NewManager(context.Background(), 8080, cfg, http.NewServeMux())
@@ -267,7 +267,7 @@ func TestRegenerateAddress_RemoveError(t *testing.T) {
 	if err := os.Chmod(siteDir, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(siteDir, 0o700) })
+	t.Cleanup(func() { _ = os.Chmod(siteDir, 0o700) })
 
 	cfg := Config{Binary: "/nonexistent/tor", DataDir: tmp}
 	m := NewManager(context.Background(), 8080, cfg, http.NewServeMux())
@@ -317,7 +317,7 @@ func TestUpdateConfig_ErrorPropagation(t *testing.T) {
 	if err := os.Mkdir(locked, 0o000); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(locked, 0o700) })
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
 
 	cfg := Config{
 		Binary:    bin,
@@ -417,7 +417,7 @@ func TestStartLocked_EnsureTorDirsError(t *testing.T) {
 	if err := os.Mkdir(locked, 0o000); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(locked, 0o700) })
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
 
 	cfg := Config{
 		Binary:    bin,

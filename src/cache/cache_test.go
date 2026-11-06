@@ -115,7 +115,7 @@ func newMemory(t *testing.T) cache.Cache {
 func TestMemory_SetGet_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 	c := newMemory(t)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Set(ctx, "key1", "hello", 0); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -133,7 +133,7 @@ func TestMemory_SetGet_RoundTrip(t *testing.T) {
 func TestMemory_Get_MissingKey(t *testing.T) {
 	ctx := context.Background()
 	c := newMemory(t)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	_, err := c.Get(ctx, "no-such-key")
 	if !errors.Is(err, cache.ErrCacheMiss) {
@@ -144,7 +144,7 @@ func TestMemory_Get_MissingKey(t *testing.T) {
 func TestMemory_Delete(t *testing.T) {
 	ctx := context.Background()
 	c := newMemory(t)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Set(ctx, "del-key", "value", 0); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -169,7 +169,7 @@ func TestMemory_Delete(t *testing.T) {
 func TestMemory_Delete_NonExistentKey_NoError(t *testing.T) {
 	ctx := context.Background()
 	c := newMemory(t)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Delete(ctx, "ghost-key"); err != nil {
 		t.Errorf("Delete of non-existent key returned error: %v", err)
@@ -179,7 +179,7 @@ func TestMemory_Delete_NonExistentKey_NoError(t *testing.T) {
 func TestMemory_Ping(t *testing.T) {
 	ctx := context.Background()
 	c := newMemory(t)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Ping(ctx); err != nil {
 		t.Errorf("Ping: %v", err)
@@ -201,7 +201,7 @@ func TestMemory_TTL_Expiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cache.New: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// Store with a very short explicit TTL.
 	if err := c.Set(ctx, "expiring", "value", 50*time.Millisecond); err != nil {
@@ -233,13 +233,13 @@ func TestMemory_KeyPrefix_Isolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New c1: %v", err)
 	}
-	defer c1.Close()
+	defer func() { _ = c1.Close() }()
 
 	c2, err := cache.New(cache.Config{Type: "memory", Prefix: "ns2:", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("New c2: %v", err)
 	}
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	if err := c1.Set(ctx, "shared", "from-c1", 0); err != nil {
 		t.Fatalf("c1.Set: %v", err)
@@ -266,7 +266,7 @@ func TestMemory_KeyPrefix_Isolation(t *testing.T) {
 func TestMemory_MultipleKeys(t *testing.T) {
 	ctx := context.Background()
 	c := newMemory(t)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	keys := []string{"a", "b", "c"}
 	for _, k := range keys {
@@ -289,7 +289,7 @@ func TestMemory_MultipleKeys(t *testing.T) {
 func TestMemory_Overwrite(t *testing.T) {
 	ctx := context.Background()
 	c := newMemory(t)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Set(ctx, "k", "first", 0); err != nil {
 		t.Fatalf("Set first: %v", err)
@@ -315,7 +315,7 @@ func TestNoop_AlwaysMiss(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// Set must succeed silently.
 	if err := c.Set(ctx, "k", "v", 0); err != nil {

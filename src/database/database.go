@@ -249,7 +249,7 @@ func newSQLiteDB(path string, pool PoolConfig) (*SQLiteDB, error) {
 	db.SetConnMaxIdleTime(pool.MaxIdleTime)
 
 	if err := ensureSchema(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
@@ -517,13 +517,13 @@ func migrateLegacyOwners(ctx context.Context, db *sql.DB) error {
 	for rows.Next() {
 		var rec legacyToken
 		if err := rows.Scan(&rec.id, &rec.resourceType, &rec.resourceID); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		records = append(records, rec)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return err
 	}
 	if err := rows.Close(); err != nil {
@@ -613,7 +613,7 @@ func (s *SQLiteDB) CreatePasteWithPrimaryToken(p *model.Paste, tokenHash, tokenP
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	_, err = tx.ExecContext(ctx, `INSERT INTO pastes (id, owner_id, title, content, language, content_type, visibility, is_link, expires_at, burn_after, delete_token_hash, views, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, p.ID, p.OwnerID, p.Title, p.Content, p.Language, p.ContentType, p.Visibility, p.IsLink, p.ExpiresAt, p.BurnAfter, p.DeleteTokenHash, p.Views, p.CreatedAt, p.UpdatedAt)
 	if err != nil {
 		return err
@@ -688,7 +688,7 @@ func (s *SQLiteDB) GetPublicPastes(page, limit int) ([]model.PasteListItem, int,
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []model.PasteListItem
 	for rows.Next() {
@@ -774,7 +774,7 @@ func (s *SQLiteDB) SearchPublicPastes(page, limit int, search, sortBy, order str
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []model.PasteListItem
 	for rows.Next() {
@@ -817,7 +817,7 @@ func (s *SQLiteDB) IncrementViewsAndCheckBurn(id string) (views int, burned bool
 	if err != nil {
 		return 0, false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var burnAfter int
 	err = tx.QueryRowContext(ctx,
@@ -969,7 +969,7 @@ func (s *SQLiteDB) ListSchedulerTasks() ([]*TaskState, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tasks []*TaskState
 	for rows.Next() {
@@ -1048,7 +1048,7 @@ func (s *SQLiteDB) ListTaskHistory(taskID string, limit int) ([]*TaskHistory, er
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*TaskHistory
 	for rows.Next() {
 		h := &TaskHistory{}
@@ -1157,7 +1157,7 @@ func (s *SQLiteDB) CreateOwnerWithPrimaryToken(ownerID, tokenHash, tokenPrefix, 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, `INSERT INTO owners(id) VALUES (?)`, ownerID); err != nil {
 		return err
 	}
@@ -1260,7 +1260,7 @@ func (s *SQLiteDB) ListOwnerTokens(ownerID string) ([]*APITokenRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*APITokenRecord
 	for rows.Next() {
 		rec := &APITokenRecord{}
@@ -1480,7 +1480,7 @@ func (s *SQLiteDB) ListAllAPITokens() ([]*APITokenRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*APITokenRecord
 	for rows.Next() {
 		rec := &APITokenRecord{}
@@ -1521,7 +1521,7 @@ func (s *SQLiteDB) PurgeIdleOwners(days int) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM api_tokens WHERE owner_id IN (SELECT o.id FROM owners o WHERE o.last_seen_at <= ? AND NOT EXISTS (SELECT 1 FROM pastes p WHERE p.owner_id = o.id))`, cutoff); err != nil {
 		return 0, err
 	}
@@ -1554,7 +1554,7 @@ func (s *SQLiteDB) ListAPITokens() ([]*APITokenRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []*APITokenRecord
 	for rows.Next() {

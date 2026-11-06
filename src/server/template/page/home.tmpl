@@ -1,6 +1,6 @@
 {{define "meta"}}
-    <title>{{.SiteTitle}} - Paste Sharing Service</title>
-    <meta name="description" content="Simple, fast paste sharing service with syntax highlighting and API access">
+    <title>{{tf .Lang "pagemeta.home_title" "site" .SiteTitle}}</title>
+    <meta name="description" content="{{t .Lang "pagemeta.home_description"}}">
 {{end}}
 
 {{define "content"}}
@@ -10,13 +10,13 @@
                 <div class="hero-content">
                     <div class="hero-badge">
                         <span class="hero-badge-dot"></span>
-                        <span>API v1.0 - Live</span>
+                        <span>{{t .Lang "home.hero_badge"}}</span>
                     </div>
                     <h1 class="hero-title">
-                        Paste <span class="hero-title-gradient">Sharing</span>
+                        {{t .Lang "home.hero_title_1"}} <span class="hero-title-gradient">{{t .Lang "home.hero_title_2"}}</span>
                     </h1>
                     <p class="hero-description">
-                        Share code snippets, text, and files instantly. Syntax highlighting, expiration options, and powerful API for automation.
+                        {{t .Lang "home.hero_description"}}
                     </p>
                     <div class="hero-actions">
                         <a href="{{.AssetPrefix}}/create" class="btn btn-primary btn-lg">
@@ -53,17 +53,17 @@
                 </div>
                 <div class="features-grid">
                     <a href="{{.AssetPrefix}}/create" class="feature-card">
-                        <div class="feature-icon">📝</div>
+                        <div class="feature-icon" aria-hidden="true">📝</div>
                         <h3 class="feature-title">{{t .Lang "home.feature_create_title"}}</h3>
                         <p class="feature-description">{{t .Lang "home.feature_create_desc"}}</p>
                     </a>
                     <a href="{{.AssetPrefix}}/recent" class="feature-card">
-                        <div class="feature-icon">📋</div>
+                        <div class="feature-icon" aria-hidden="true">📋</div>
                         <h3 class="feature-title">{{t .Lang "home.feature_recent_title"}}</h3>
                         <p class="feature-description">{{t .Lang "home.feature_recent_desc"}}</p>
                     </a>
                     <a href="{{.AssetPrefix}}/server/help" class="feature-card">
-                        <div class="feature-icon">⚡</div>
+                        <div class="feature-icon" aria-hidden="true">⚡</div>
                         <h3 class="feature-title">{{t .Lang "home.feature_api_title"}}</h3>
                         <p class="feature-description">{{t .Lang "home.feature_api_desc"}}</p>
                     </a>

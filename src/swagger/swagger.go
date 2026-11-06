@@ -16,7 +16,7 @@ import (
 
 // Handler serves OpenAPI-related endpoints.
 // JSON spec: GET /api/v1/server/swagger
-// HTML UI:   GET /server/swagger (and /server/docs/swagger)
+// HTML UI:   GET /server/docs/swagger
 type Handler struct {
 	title   string
 	version string
@@ -124,7 +124,7 @@ func (h *Handler) ServeSpec(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
-	w.Write(buf.Bytes())
+	_, _ = w.Write(buf.Bytes())
 }
 
 // ServeUI writes the HTML Swagger viewer shell. Styling loads from the
@@ -134,14 +134,14 @@ func (h *Handler) ServeSpec(w http.ResponseWriter, r *http.Request) {
 // static/js/app.js.
 func (h *Handler) ServeUI(w http.ResponseWriter, r *http.Request) {
 	base := h.resolveBase(r)
-	specURL := base + "/api/" + h.apiVersion + "/server/swagger"
+	specURL := base + "/api/swagger"
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// HTML is never cached; the build-stamp ETag makes an intermediary that
 	// ignores no-store revalidate anyway (AI.md PART 9, line 13287).
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("ETag", `"`+buildinfo.AssetStamp()+`"`)
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, h.renderUI(r, specURL))
+	_, _ = fmt.Fprint(w, h.renderUI(r, specURL))
 }
 
 // resolveBase returns the effective base URL for the current request.

@@ -8,9 +8,9 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
-	"github.com/apimgr/cairnbin/src/common/httputil"
 	"github.com/apimgr/cairnbin/src/common/i18n"
 )
 
@@ -114,23 +114,6 @@ func appPreferencesFromRequest(r *http.Request) map[string]string {
 	return prefs
 }
 
-// extractAppPrefs scans a set of query values (either the live request query
-// or a decoded import `code`) for `cairnbin_pref_*` params, applying the same
-// key/value allowlist as appPreferencesFromRequest — an imported value is
-// still untrusted input (AI.md 23512), so it is revalidated the same way.
-func extractAppPrefs(values url.Values) map[string]string {
-	prefs := make(map[string]string)
-	for name, vals := range values {
-		if len(vals) == 0 {
-			continue
-		}
-		if key, value, ok := parseAppPref(name, strings.TrimSpace(vals[0])); ok {
-			prefs[key] = value
-		}
-	}
-	return prefs
-}
-
 // parseAppPref validates a single `cairnbin_pref_{key}` name/value pair
 // against prefKeyPattern/prefValuePattern and, for a known key, that key's
 // enum — returning the bare key on success. Anything rejected is treated as
@@ -150,24 +133,38 @@ func parseAppPref(name, value string) (key string, val string, ok bool) {
 	return key, value, true
 }
 
-// setPreferenceCookie writes a client-side preference cookie using the same
-// Secure/SameSite/MaxAge shape as handlePreferencesSet and handleConsentSet
-// (AI.md 23489: "the server sets the same cookies on its POST endpoints").
+// prefCookieMaxAge is the fixed lifetime of every guest preference cookie
+// (AI.md sync contract rule 8: Max-Age=31536000).
+const prefCookieMaxAge = 365 * 24 * 60 * 60
+
+// setPreferenceCookie writes a guest preference cookie with the attributes
+// the sync contract fixes: Path=/, Max-Age=31536000, SameSite=Lax, not
+// HttpOnly, no Domain, Secure whenever the resolved request scheme is https.
 func (s *Server) setPreferenceCookie(w http.ResponseWriter, r *http.Request, name, value string) {
-	maxAge := 365 * 24 * 60 * 60
+	if !preferenceCookiesAllowed(r) {
+		return
+	}
 	if name == "lang" {
 		name = i18n.CookieName()
-		maxAge = i18n.CookieMaxAge()
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    value,
 		Path:     "/",
-		MaxAge:   maxAge,
+		MaxAge:   prefCookieMaxAge,
 		HttpOnly: false,
 		Secure:   s.cookieSecure(r),
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+// preferenceCookiesAllowed implements AI.md PART 16 "Decline Behavior": once a
+// visitor has recorded a cookie_consent choice that declines the preferences
+// category, theme, lang and cairnbin_pref_* cookies are never written. On a
+// first visit, these cookies wait until the visitor records a choice.
+func preferenceCookiesAllowed(r *http.Request) bool {
+	st, ok := priorConsentState(r)
+	return ok && st.Preferences && !privacyOptOut(r)
 }
 
 // rememberPreference persists an explicit query-param choice as the visitor's
@@ -189,66 +186,34 @@ func (s *Server) rememberPreference(w http.ResponseWriter, r *http.Request, key,
 }
 
 // cookieSecure resolves the Secure attribute for every client-readable cookie
-// the server sets: the connection's own TLS state, overridden by an explicit
-// server.csrf.secure config value. Marking a cookie Secure on a plain-HTTP
+// the server sets: true whenever the request scheme, resolved behind trusted
+// reverse proxies (X-Forwarded-Proto and friends) and falling back to the
+// connection's TLS state, is https; otherwise only an explicit
+// server.csrf.secure=true forces it. Marking a cookie Secure on a plain-HTTP
 // deployment would make the browser drop it entirely.
 func (s *Server) cookieSecure(r *http.Request) bool {
-	switch s.liveCfg().Server.CSRF.Secure {
-	case "true":
+	if s.torRequestOnion(r) != "" {
 		return true
-	case "false":
-		return false
 	}
-	return r.TLS != nil
-}
-
-// handlePreferences serves the guest preferences hub — GET /server/preferences,
-// API-mirrored at GET /api/{api_version}/server/preferences (AI.md 23508). It
-// reports the two exportable preferences (theme, lang) resolved from the
-// request's cookies; nothing is read from or written to the database — there
-// is no preferences table (AI.md 23513).
-func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
-	theme := s.themeFromRequest(r)
-	lang := i18n.LangFromRequest(r)
-
-	// App-specific guest preferences travel with theme/lang everywhere they are
-	// reported, so the hub and the export endpoint describe the same state.
-	appPrefs := appPreferencesFromRequest(r)
-
-	switch detectClientType(r) {
-	case "json":
-		payload := map[string]interface{}{
-			"theme": theme,
-			"lang":  lang,
-		}
-		if len(appPrefs) > 0 {
-			payload["prefs"] = appPrefs
-		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"ok":   true,
-			"data": payload,
-		})
-	case "text":
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		html, err := s.renderTemplateToString(r, "preferences.html", s.preferencesPageData(r, theme, lang))
-		if err != nil {
-			fmt.Fprintf(w, "Preferences — theme=%s lang=%s\n", theme, lang)
-			for _, k := range sortedPrefKeys(appPrefs) {
-				fmt.Fprintf(w, "%s%s: %s\n", prefCookiePrefix, k, appPrefs[k])
-			}
-			return
-		}
-		fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
-	default:
-		s.renderTemplate(w, r, "preferences.html", s.preferencesPageData(r, theme, lang))
+	if forwardedScheme(r, s.isTrustedPeer(r)) == "https" {
+		return true
 	}
+	if forwardedScheme(r, s.isTrustedPeer(r)) == "" && r.TLS != nil {
+		return true
+	}
+	return s.liveCfg().Server.CSRF.Secure == "true"
 }
 
 // preferencesPageData assembles the template data shared by the preferences
 // hub, export, and import-error views.
 func (s *Server) preferencesPageData(r *http.Request, theme, lang string) map[string]interface{} {
 	data := s.pageData()
+	query := preferencesExportQuery(theme, lang, appPreferencesFromRequest(r))
+	data["ExportURL"] = s.baseURL(r) + "/server/preferences/import?" + query
+	data["ExportCode"] = base64.RawURLEncoding.EncodeToString([]byte(query))
+	data["CancelURL"] = prefRedirectDest(r, r.URL.Query().Get("redirect"))
 	data["PrefTheme"] = theme
+	data["GPCReceived"] = gpcReceived(r)
 	data["PrefLang"] = lang
 	// App-specific guest preferences (AI.md 23485: "a control for every
 	// app-specific `{project_name}_pref_*` setting"). Gaps are filled with the
@@ -284,6 +249,7 @@ func (s *Server) preferencesPageData(r *http.Request, theme, lang string) map[st
 		ccpaOptedOut = true
 	}
 	data["CCPAOptedOut"] = ccpaOptedOut
+	data["ConsentAnalyticsConfigured"] = cfg.Server.Tracking.Enabled()
 	if primary, db, ok := s.requireOwnerForPage(r); ok {
 		data["HasOwnerPrimary"] = true
 		tokens, err := db.ListOwnerTokens(primary.OwnerID)
@@ -298,38 +264,26 @@ func (s *Server) preferencesPageData(r *http.Request, theme, lang string) map[st
 	return data
 }
 
-// preferencesExportQuery builds the canonical `theme=...&lang=...&cairnbin_pref_{key}=...`
-// query string for the current preferences — the query string IS the portable
-// preference state (AI.md 23505: "the code/URL is the preference values, not
-// a lookup key"). theme, lang, and every app-specific `cairnbin_pref_*`
-// cookie round-trip (AI.md 23507); `cookie_consent`/`ccpa_opt_out`/
-// `cairnbin_build` are never included since they aren't in extra (they don't
-// carry the `cairnbin_pref_` prefix appPreferencesFromRequest filters on).
+// preferencesExportQuery builds the canonical query string for the current
+// preferences (rule 2): theme and lang always present, each set app preference
+// as `cairnbin_pref_{key}`, keys sorted ascending bytewise and form-encoded, so
+// the same preferences always produce the same string. The query string IS the
+// portable preference state; consent, CCPA and build-stamp cookies are never
+// included (they do not carry the `cairnbin_pref_` prefix extra is built from).
 func preferencesExportQuery(theme, lang string, extra map[string]string) string {
-	q := fmt.Sprintf("theme=%s&lang=%s", url.QueryEscape(theme), url.QueryEscape(lang))
-	if len(extra) == 0 {
-		return q
+	q := url.Values{}
+	q.Set("theme", theme)
+	q.Set("lang", lang)
+	for k, v := range extra {
+		q.Set(prefCookiePrefix+k, v)
 	}
-	keys := make([]string, 0, len(extra))
-	for k := range extra {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var b strings.Builder
-	b.WriteString(q)
-	for _, k := range keys {
-		b.WriteString("&")
-		b.WriteString(url.QueryEscape(prefCookiePrefix + k))
-		b.WriteString("=")
-		b.WriteString(url.QueryEscape(extra[k]))
-	}
-	return b.String()
+	return q.Encode()
 }
 
 // handlePreferencesExport serves GET /server/preferences/export, API-mirrored
-// at GET /api/{api_version}/server/preferences/export (AI.md 23509). It
-// returns the current theme/lang preferences as a full importable URL and as
-// a base64url short code for manual retyping on a device without copy/paste.
+// at GET /api/{api_version}/server/preferences/export (rule 13). It returns the
+// guest preferences as a full importable URL and as a padding-free base64url
+// short code.
 func (s *Server) handlePreferencesExport(w http.ResponseWriter, r *http.Request) {
 	theme := s.themeFromRequest(r)
 	lang := i18n.LangFromRequest(r)
@@ -338,31 +292,20 @@ func (s *Server) handlePreferencesExport(w http.ResponseWriter, r *http.Request)
 	exportURL := s.baseURL(r) + "/server/preferences/import?" + query
 	code := base64.RawURLEncoding.EncodeToString([]byte(query))
 
-	switch detectClientType(r) {
+	switch prefsClientType(r) {
 	case "json":
-		data := map[string]interface{}{
-			"theme": theme,
-			"lang":  lang,
-			"url":   exportURL,
-			"code":  code,
-		}
-		if len(appPrefs) > 0 {
-			data["prefs"] = appPrefs
-		}
+		data := prefsJSON(theme, lang, appPrefs)
+		data["url"] = exportURL
+		data["code"] = code
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"ok":   true,
 			"data": data,
 		})
 	case "text":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(w, "Preferences export\nURL:  %s\nCode: %s\n", exportURL, code)
-		for _, k := range sortedPrefKeys(appPrefs) {
-			fmt.Fprintf(w, "%s%s: %s\n", prefCookiePrefix, k, appPrefs[k])
-		}
+		_, _ = fmt.Fprintf(w, "URL: %s\nCode: %s\n", exportURL, code)
 	default:
 		data := s.preferencesPageData(r, theme, lang)
-		data["ExportURL"] = exportURL
-		data["ExportCode"] = code
 		s.renderTemplate(w, r, "preferences.html", data)
 	}
 }
@@ -379,129 +322,92 @@ func sortedPrefKeys(prefs map[string]string) []string {
 }
 
 // handlePreferencesImport serves GET /server/preferences/import, API-mirrored
-// at GET /api/{api_version}/server/preferences/import (AI.md 23512). It
-// accepts either explicit `theme`/`lang` query params (from a shared full
-// URL) or a `code` param (a pasted base64url short code, with an optional
-// leading full-URL prefix already stripped client-side per AI.md 23511;
-// stripped again here defensively for the no-JS path). Every value is
-// revalidated against its normal allowlist — an imported value is still
-// untrusted input (AI.md 23512) — anything unknown or malformed is silently
-// dropped rather than applied. Nothing is persisted server-side: decode →
-// validate → set cookie → redirect happens in this one request (AI.md 23513).
+// at GET /api/{api_version}/server/preferences/import (rules 5-11). The
+// request's own query parameters and an optional `code` are merged (direct
+// parameters win key by key), validated, and applied additively as cookies.
+// The web route answers 303 even when nothing validated; the API route answers
+// 200 with the resulting state plus applied/ignored. Nothing is stored
+// server-side.
 func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-
-	theme := strings.TrimSpace(q.Get("theme"))
-	lang := strings.TrimSpace(q.Get("lang"))
-	// Values sourced from the query string take precedence; the decoded code
-	// only fills in whatever wasn't given directly (mirrors theme/lang below).
-	appPrefs := extractAppPrefs(q)
-
-	// The code is decoded whenever one is present: it can carry app preferences
-	// the query string never mentions, so gating the decode on a missing
-	// theme/lang would silently drop them. Query values still win key by key.
-	if code := strings.TrimSpace(q.Get("code")); code != "" {
-		if idx := strings.LastIndex(code, "/server/preferences/import?"); idx != -1 {
-			code = code[idx+len("/server/preferences/import?"):]
-		}
-		if decoded, err := base64.RawURLEncoding.DecodeString(code); err == nil {
-			if values, err := url.ParseQuery(string(decoded)); err == nil {
-				if theme == "" {
-					theme = strings.TrimSpace(values.Get("theme"))
-				}
-				if lang == "" {
-					lang = strings.TrimSpace(values.Get("lang"))
-				}
-				for k, v := range extractAppPrefs(values) {
-					if _, exists := appPrefs[k]; !exists {
-						appPrefs[k] = v
-					}
-				}
-			}
-		}
+	merged := url.Values{}
+	for name, vals := range decodePrefCode(q.Get("code")) {
+		merged[name] = vals
+	}
+	for name, vals := range q {
+		merged[name] = vals
 	}
 
-	if validThemes[theme] {
-		s.setPreferenceCookie(w, r, "theme", theme)
-	}
-	if lang != "" && i18n.IsSupported(lang) {
-		s.setPreferenceCookie(w, r, "lang", strings.ToLower(lang))
-	}
-	for key, value := range appPrefs {
-		s.setPreferenceCookie(w, r, prefCookiePrefix+key, value)
-	}
+	valid, _, ignored := validateGuestPrefs(merged)
+	applied, blocked := s.applyGuestPrefs(w, r, valid)
+	ignored = append(ignored, blocked...)
+	sort.Strings(ignored)
 
-	// Never linger on the visible URL/browser history (AI.md 23512).
-	dest := "/"
-	if ref := r.Header.Get("Referer"); ref != "" {
-		if u, err := url.Parse(ref); err == nil && u.Host == r.Host {
-			if p, ok := safeRedirectPath(u); ok {
-				dest = p
-			}
-		}
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		theme, lang, prefs := s.currentGuestPrefs(r, valid)
+		data := prefsJSON(theme, lang, prefs)
+		data["applied"] = applied
+		data["ignored"] = ignored
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": data})
+		return
 	}
-	http.Redirect(w, r, dest, http.StatusSeeOther)
+	prefSeeOther(w, prefRedirectDest(r, q.Get("redirect")))
 }
 
 // handlePreferencesSetAPI is the JSON mirror of the preferences form
-// (`POST /api/{api_version}/server/preferences`, PART 14): a partial update of
-// the guest UI preferences. The body may carry `theme`, `lang`, and a `prefs`
-// object of app-specific keys. Only the fields present are written, each with
-// the same validation as the web form; invalid values are reported in
-// `ignored` rather than failing the whole request. It sets the same UI
-// cookies as the form and accepts no credential, so there is no ambient
+// (`POST /api/{api_version}/server/preferences`): a partial update of the guest
+// UI preferences (rule 11). The body is application/json or form fields
+// (`theme`, `lang`, `cairnbin_pref_{key}`); only fields present are written,
+// each validated like an import. It answers 200 with the resulting state plus
+// applied/ignored, or 400 VALIDATION_FAILED when no supplied value was valid.
+// It sets only UI cookies and accepts no credential, so there is no ambient
 // authority to forge.
 func (s *Server) handlePreferencesSetAPI(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Theme *string           `json:"theme"`
-		Lang  *string           `json:"lang"`
-		Prefs map[string]string `json:"prefs"`
+	values := url.Values{}
+	if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+		var body map[string]interface{}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"ok": false, "error": "BAD_REQUEST", "message": "invalid JSON",
+			})
+			return
+		}
+		for name, raw := range body {
+			switch v := raw.(type) {
+			case string:
+				values.Set(name, v)
+			case float64:
+				values.Set(name, strconv.FormatFloat(v, 'f', -1, 64))
+			default:
+				// A non-scalar value can never be valid; an empty value is
+				// rejected by validation and reported in ignored.
+				values.Set(name, "")
+			}
+		}
+	} else {
+		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+		if err := r.ParseForm(); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"ok": false, "error": "BAD_REQUEST", "message": "invalid form",
+			})
+			return
+		}
+		values = r.PostForm
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body); err != nil {
+
+	valid, _, ignored := validateGuestPrefs(values)
+	if len(valid) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "error": "BAD_REQUEST", "message": "invalid JSON",
+			"ok": false, "error": "VALIDATION_FAILED", "message": "Validation failed: no valid preference supplied",
 		})
 		return
 	}
-
-	applied := map[string]interface{}{}
-	ignored := []string{}
-
-	if body.Theme != nil {
-		theme := strings.TrimSpace(*body.Theme)
-		if validThemes[theme] {
-			s.setPreferenceCookie(w, r, "theme", theme)
-			applied["theme"] = theme
-		} else {
-			ignored = append(ignored, "theme")
-		}
-	}
-	if body.Lang != nil {
-		lang := strings.ToLower(strings.TrimSpace(*body.Lang))
-		if i18n.IsSupported(lang) {
-			s.setPreferenceCookie(w, r, "lang", lang)
-			applied["lang"] = lang
-		} else {
-			ignored = append(ignored, "lang")
-		}
-	}
-	appliedPrefs := map[string]string{}
-	for key, value := range body.Prefs {
-		value = strings.TrimSpace(value)
-		if !prefKeyPattern.MatchString(key) || !prefValuePattern.MatchString(value) || !validAppPrefValue(key, value) {
-			ignored = append(ignored, "prefs."+sanitizeReportText(key))
-			continue
-		}
-		s.setPreferenceCookie(w, r, prefCookiePrefix+key, value)
-		appliedPrefs[key] = value
-	}
-	if len(appliedPrefs) > 0 {
-		applied["prefs"] = appliedPrefs
-	}
+	applied, blocked := s.applyGuestPrefs(w, r, valid)
+	ignored = append(ignored, blocked...)
 	sort.Strings(ignored)
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":   true,
-		"data": map[string]interface{}{"applied": applied, "ignored": ignored},
-	})
+	theme, lang, prefs := s.currentGuestPrefs(r, valid)
+	data := prefsJSON(theme, lang, prefs)
+	data["applied"] = applied
+	data["ignored"] = ignored
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": data})
 }

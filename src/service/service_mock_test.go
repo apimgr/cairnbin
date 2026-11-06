@@ -386,7 +386,7 @@ func TestPrintHelp_Structure(t *testing.T) {
 
 	PrintHelp("myapp")
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = origStdout
 
 	buf := make([]byte, 8192)
@@ -484,7 +484,7 @@ func TestOk_AllVariations(t *testing.T) {
 			if tc.noColor != "" {
 				t.Setenv("NO_COLOR", tc.noColor)
 			} else {
-				os.Unsetenv("NO_COLOR")
+				_ = os.Unsetenv("NO_COLOR")
 			}
 
 			got := ok()

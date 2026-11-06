@@ -119,7 +119,7 @@ func TestInstallSysV_CreatesInitScript(t *testing.T) {
 
 	initPath := "/etc/init.d/" + appName
 	t.Cleanup(func() {
-		os.Remove(initPath)
+		_ = os.Remove(initPath)
 	})
 
 	err := installSysV()
@@ -177,7 +177,7 @@ func TestInstallOpenRC_CreatesInitScript(t *testing.T) {
 
 	initPath := "/etc/init.d/" + appName
 	t.Cleanup(func() {
-		os.Remove(initPath)
+		_ = os.Remove(initPath)
 	})
 
 	err := installOpenRC()
@@ -246,17 +246,19 @@ func TestDisable_Runit_RemovesSymlink(t *testing.T) {
 	if err := os.MkdirAll("/var/service", 0o755); err != nil {
 		t.Skip("cannot create /var/service/")
 	}
-	os.Symlink(svDir, enabledDir)
+	if err := os.Symlink(svDir, enabledDir); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Cleanup(func() {
-		os.RemoveAll(svDir)
-		os.Remove(enabledDir)
+		_ = os.RemoveAll(svDir)
+		_ = os.Remove(enabledDir)
 	})
 
 	// Manually execute the Runit disable logic (Disable() would detect
 	// the wrong service manager on most test hosts)
 	exec := func() {
-		os.Remove(enabledDir)
+		_ = os.Remove(enabledDir)
 	}
 	exec()
 
@@ -375,7 +377,7 @@ func TestPrintHelp_IncludesAllCommands(t *testing.T) {
 
 	PrintHelp("mybin")
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = origStdout
 
 	buf := make([]byte, 8192)
@@ -402,7 +404,7 @@ func TestPrintHelp_IncludesAllCommands(t *testing.T) {
 // ─── ok() variations ─────────────────────────────────────────────────────────
 
 func TestOk_ReturnsNonEmptyString(t *testing.T) {
-	os.Unsetenv("NO_COLOR")
+	_ = os.Unsetenv("NO_COLOR")
 	got := ok()
 	if got == "" {
 		t.Error("ok() returned empty string")

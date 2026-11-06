@@ -108,7 +108,7 @@ func TestCmdGet_404ReturnsNotFoundExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d; want 404", resp.StatusCode)
 	}
@@ -125,7 +125,7 @@ func TestCmdGet_401ReturnsAuthExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status = %d; want 401", resp.StatusCode)
 	}
@@ -142,7 +142,7 @@ func TestCmdGet_403ReturnsForbiddenExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status = %d; want 403", resp.StatusCode)
 	}
@@ -159,7 +159,7 @@ func TestCmdGet_500ReturnsGeneralExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("status = %d; want 500", resp.StatusCode)
 	}
@@ -180,7 +180,7 @@ func TestCmdDelete_404ReturnsNotFoundExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d; want 404", resp.StatusCode)
 	}
@@ -197,7 +197,7 @@ func TestCmdDelete_401ReturnsAuthExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status = %d; want 401", resp.StatusCode)
 	}
@@ -208,7 +208,7 @@ func TestCmdDelete_AcceptLanguageHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotLang = r.Header.Get("Accept-Language")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
 	}))
 	defer srv.Close()
 
@@ -233,7 +233,7 @@ func TestCmdList_401ReturnsAuthExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status = %d; want 401", resp.StatusCode)
 	}
@@ -250,7 +250,7 @@ func TestCmdList_403ReturnsForbiddenExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status = %d; want 403", resp.StatusCode)
 	}
@@ -260,7 +260,7 @@ func TestCmdList_AcceptLanguageHeader(t *testing.T) {
 	var gotLang string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotLang = r.Header.Get("Accept-Language")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data":       []interface{}{},
 			"pagination": map[string]int{"total": 0, "pages": 0},
 		})
@@ -280,7 +280,7 @@ func TestCmdList_AcceptLanguageHeader(t *testing.T) {
 func TestCmdCreate_401ReturnsAuthExit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "AUTH_REQUIRED"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "AUTH_REQUIRED"})
 	}))
 	defer srv.Close()
 
@@ -289,7 +289,7 @@ func TestCmdCreate_401ReturnsAuthExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("postJSON: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status = %d; want 401", resp.StatusCode)
 	}
@@ -298,7 +298,7 @@ func TestCmdCreate_401ReturnsAuthExit(t *testing.T) {
 func TestCmdCreate_403ReturnsForbiddenExit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]string{"error": "FORBIDDEN"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "FORBIDDEN"})
 	}))
 	defer srv.Close()
 
@@ -307,7 +307,7 @@ func TestCmdCreate_403ReturnsForbiddenExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("postJSON: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status = %d; want 403", resp.StatusCode)
 	}
@@ -316,7 +316,7 @@ func TestCmdCreate_403ReturnsForbiddenExit(t *testing.T) {
 func TestCmdCreate_500ReturnsGeneralExit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "INTERNAL_ERROR"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "INTERNAL_ERROR"})
 	}))
 	defer srv.Close()
 
@@ -325,7 +325,7 @@ func TestCmdCreate_500ReturnsGeneralExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("postJSON: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("status = %d; want 500", resp.StatusCode)
 	}
@@ -336,7 +336,7 @@ func TestCmdCreate_AcceptLanguageHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotLang = r.Header.Get("Accept-Language")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
 	}))
 	defer srv.Close()
 
@@ -359,7 +359,7 @@ func TestCmdCreate_AcceptLanguageHeader(t *testing.T) {
 func TestCmdUpdate_DecodeError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer srv.Close()
 
@@ -370,7 +370,7 @@ func TestCmdUpdate_DecodeError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d; want 200", resp.StatusCode)
 	}
@@ -384,7 +384,7 @@ func TestCmdUpdate_AcceptLanguageHeader(t *testing.T) {
 	var gotLang string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotLang = r.Header.Get("Accept-Language")
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{},
 		})
 	}))
@@ -408,13 +408,13 @@ func TestCheckCLIUpdate_SendsAcceptLanguage(t *testing.T) {
 	var gotLang string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotLang = r.Header.Get("Accept-Language")
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{},
 		})
 	}))
 	defer srv.Close()
 
-	checkCLIUpdate(srv.URL, "ko")
+	_ = checkCLIUpdate(srv.URL, "ko")
 
 	if gotLang != "ko" {
 		t.Errorf("Accept-Language = %q; want ko", gotLang)
@@ -491,7 +491,7 @@ func TestCmdDelete_NoAcceptLanguageWhenEmpty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotLang = r.Header.Get("Accept-Language")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
 	}))
 	defer srv.Close()
 

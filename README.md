@@ -19,13 +19,14 @@ uses it as the default server; use `--server <url>` to target your own instance.
 ## Features
 
 - Anonymous paste creation via web form, JSON API, raw body, or multipart file upload
+- MIME-detected images, audio, and video render as safe media; active formats such as SVG and HTML are served as downloads
 - Server-side syntax highlighting via Chroma (no client-side JS required)
 - Language auto-detection from file extension on upload
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never`, or custom seconds
 - Burn after N reads — paste deleted once view count reaches threshold
 - Public and unlisted visibility
 - Link pastes — auto-detected when content is exactly one `http://`/`https://` URL and nothing else; visiting the paste 302-redirects to the target (`/{id}/raw` returns the target URL as text instead)
-- Owner token — cryptographically random `tok_...` value returned once at creation (as `owner_token`), stored only as a SHA-256 hash, required to delete a paste
+- Owner token — cryptographically random `tok_...` value returned at creation as `owner_token`, required to delete a paste, and viewable masked by default in `/server/preferences`
 - Raw paste view at `/raw/{id}` and `/{id}/raw`
 - Download at `/dl/{id}`
 - Embedded view at `/emb/{id}` (iframe-embeddable)
@@ -33,6 +34,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - View count tracking
 - Automatic background cleanup of expired and burned pastes
 - Full web frontend (server-side Go templates, dark/light/auto theme, PWA, mobile-first)
+- Cookie-based preferences with inline export/import, consent controls, and local reset at `/server/preferences`
 - Server pages: `/server/about`, `/server/help`, `/server/healthz`, `/server/privacy`, `/server/terms`
 - CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`

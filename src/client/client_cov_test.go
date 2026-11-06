@@ -180,7 +180,7 @@ func TestClientGet_AcceptLanguageHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if gotLang != "fr" {
 		t.Errorf("Accept-Language = %q; want fr", gotLang)
 	}
@@ -199,7 +199,7 @@ func TestClientGet_NoAcceptLanguageWhenLangEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if gotLang != "" {
 		t.Errorf("Accept-Language should be absent for empty lang, got %q", gotLang)
 	}
@@ -212,7 +212,7 @@ func TestClientPostJSON_AcceptLanguageHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotLang = r.Header.Get("Accept-Language")
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{}`))
 	}))
 	defer srv.Close()
 
@@ -221,7 +221,7 @@ func TestClientPostJSON_AcceptLanguageHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("postJSON: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if gotLang != "de" {
 		t.Errorf("Accept-Language = %q; want de", gotLang)
 	}
@@ -243,9 +243,11 @@ func TestCmdCreate_RequestBodyFields(t *testing.T) {
 	var received map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &received)
+		if err := json.Unmarshal(body, &received); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
 	}))
 	defer srv.Close()
 
@@ -284,7 +286,7 @@ func TestCmdCreate_RequestPathAndMethod(t *testing.T) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "y", "link": "http://example.com/y"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "y", "link": "http://example.com/y"})
 	}))
 	defer srv.Close()
 
@@ -309,9 +311,11 @@ func TestCmdCreate_AutoDetectsLangFromExtension(t *testing.T) {
 	var received map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &received)
+		if err := json.Unmarshal(body, &received); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "z", "link": "http://example.com/z"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "z", "link": "http://example.com/z"})
 	}))
 	defer srv.Close()
 
@@ -333,9 +337,11 @@ func TestCmdCreate_AutoSetsTitle(t *testing.T) {
 	var received map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &received)
+		if err := json.Unmarshal(body, &received); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "t", "link": "http://example.com/t"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "t", "link": "http://example.com/t"})
 	}))
 	defer srv.Close()
 
@@ -360,7 +366,7 @@ func TestCmdGet_RequestPath(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("content"))
+		_, _ = w.Write([]byte("content"))
 	}))
 	defer srv.Close()
 
@@ -377,7 +383,7 @@ func TestCmdGet_UserAgentHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("content"))
+		_, _ = w.Write([]byte("content"))
 	}))
 	defer srv.Close()
 
@@ -398,7 +404,7 @@ func TestCmdDelete_RequestDetails(t *testing.T) {
 		gotPath = r.URL.Path
 		gotQuery = r.URL.RawQuery
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
 	}))
 	defer srv.Close()
 
@@ -421,7 +427,7 @@ func TestCmdDelete_TokenWithSpecialChars(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.Query().Get("token")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
 	}))
 	defer srv.Close()
 
@@ -440,7 +446,7 @@ func TestCmdList_QueryStringParameters(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPage = r.URL.Query().Get("page")
 		gotLimit = r.URL.Query().Get("limit")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data":       []interface{}{},
 			"pagination": map[string]int{"total": 0, "pages": 0},
 		})
@@ -463,7 +469,7 @@ func TestCmdList_DefaultQueryParams(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPage = r.URL.Query().Get("page")
 		gotLimit = r.URL.Query().Get("limit")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data":       []interface{}{},
 			"pagination": map[string]int{"total": 0, "pages": 0},
 		})
@@ -492,7 +498,7 @@ func TestCmdUpdate_CheckAction_AvailableUpdate_PrintsRunHint(t *testing.T) {
 
 	osArch := runtime.GOOS + "-" + runtime.GOARCH
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{
 				osArch: {Version: "3.0.0"},
 			},
@@ -570,14 +576,14 @@ func TestCheckCLIUpdate_SendsUserAgentHeader(t *testing.T) {
 	var gotUA string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIMinVersion: "0.1.0",
 			CLIVersions:   map[string]cliVersionInfo{},
 		})
 	}))
 	defer srv.Close()
 
-	checkCLIUpdate(srv.URL, "")
+	_ = checkCLIUpdate(srv.URL, "")
 
 	if gotUA != "cairnbin-cli/2.1.0" {
 		t.Errorf("User-Agent = %q; want cairnbin-cli/2.1.0", gotUA)
@@ -592,13 +598,13 @@ func TestCheckCLIUpdate_HitsAutodiscoverPath(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{},
 		})
 	}))
 	defer srv.Close()
 
-	checkCLIUpdate(srv.URL, "")
+	_ = checkCLIUpdate(srv.URL, "")
 
 	if gotPath != "/api/autodiscover" {
 		t.Errorf("autodiscover path = %q; want /api/autodiscover", gotPath)
@@ -737,7 +743,7 @@ func TestCmdList_AcceptsApplicationJSON(t *testing.T) {
 	var gotAccept string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAccept = r.Header.Get("Accept")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data":       []interface{}{},
 			"pagination": map[string]int{"total": 0, "pages": 0},
 		})
@@ -759,7 +765,7 @@ func TestCmdGet_AcceptsApplicationJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAccept = r.Header.Get("Accept")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("content"))
+		_, _ = w.Write([]byte("content"))
 	}))
 	defer srv.Close()
 
@@ -778,7 +784,7 @@ func TestCmdDelete_UserAgentHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "ok"})
 	}))
 	defer srv.Close()
 
@@ -798,7 +804,7 @@ func TestCmdCreate_ContentTypeAndUserAgent(t *testing.T) {
 		gotCT = r.Header.Get("Content-Type")
 		gotUA = r.Header.Get("User-Agent")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "h", "link": "http://example.com/h"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "h", "link": "http://example.com/h"})
 	}))
 	defer srv.Close()
 
@@ -845,9 +851,11 @@ func TestCmdCreate_BinaryFileBase64Encoded(t *testing.T) {
 	var received map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &received)
+		if err := json.Unmarshal(body, &received); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "b", "link": "http://example.com/b"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "b", "link": "http://example.com/b"})
 	}))
 	defer srv.Close()
 
@@ -883,9 +891,11 @@ func TestCmdCreate_TextFileNotEncoded(t *testing.T) {
 	var received map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &received)
+		if err := json.Unmarshal(body, &received); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "c", "link": "http://example.com/c"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "c", "link": "http://example.com/c"})
 	}))
 	defer srv.Close()
 

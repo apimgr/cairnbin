@@ -4,7 +4,7 @@
     <a href="{{.AssetPrefix}}/recent" class="nav-link{{if eq .CurrentPath (print .AssetPrefix "/recent")}} active{{end}}">{{t .Lang "nav.recent"}}</a>
 {{end}}
 {{define "nav"}}
-    <input type="checkbox" id="nav-toggle" class="nav-checkbox" hidden>
+    <input type="checkbox" id="nav-toggle" class="nav-checkbox" aria-label="{{t .Lang "nav.toggle_menu"}}">
 
     <nav id="navigation" class="nav-links" aria-label="{{t .Lang "nav.main_navigation"}}">
         {{template "navlinklist" .}}

@@ -198,7 +198,9 @@ func userServiceAction(action string) (bool, error) {
 		case "stop", "disable":
 			return true, exec.Command("launchctl", "unload", "-w", unitPath).Run()
 		default:
-			exec.Command("launchctl", "unload", "-w", unitPath).Run()
+			if err := exec.Command("launchctl", "unload", "-w", unitPath).Run(); err != nil {
+				return true, fmt.Errorf("failed to stop user service before restart: %w", err)
+			}
 			return true, exec.Command("launchctl", "load", "-w", unitPath).Run()
 		}
 	}
@@ -371,15 +373,21 @@ func uninstallUserService() error {
 	}
 
 	if runtime.GOOS == "darwin" {
-		exec.Command("launchctl", "unload", "-w", unitPath).Run()
+		if err := exec.Command("launchctl", "unload", "-w", unitPath).Run(); err != nil {
+			return fmt.Errorf("failed to stop user service: %w", err)
+		}
 	} else {
-		exec.Command("systemctl", "--user", "disable", "--now", appName).Run()
+		if err := exec.Command("systemctl", "--user", "disable", "--now", appName).Run(); err != nil {
+			return fmt.Errorf("failed to disable user service: %w", err)
+		}
 	}
 	if err := os.Remove(unitPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove user service: %w", err)
 	}
 	if runtime.GOOS != "darwin" {
-		exec.Command("systemctl", "--user", "daemon-reload").Run()
+		if err := exec.Command("systemctl", "--user", "daemon-reload").Run(); err != nil {
+			return fmt.Errorf("failed to reload user systemd: %w", err)
+		}
 	}
 	fmt.Printf("%sUser service uninstalled\n", ok())
 	return nil
@@ -488,12 +496,20 @@ func purgeData() {
 
 	// Remove the dedicated service user and group created during install.
 	if runtime.GOOS == "darwin" {
-		exec.Command("dscl", ".", "-delete", "/Users/"+serviceUser).Run()
-		exec.Command("dscl", ".", "-delete", "/Groups/"+serviceUser).Run()
+		if err := exec.Command("dscl", ".", "-delete", "/Users/"+serviceUser).Run(); err != nil {
+			fmt.Printf("Warning: could not remove service user: %v\n", err)
+		}
+		if err := exec.Command("dscl", ".", "-delete", "/Groups/"+serviceUser).Run(); err != nil {
+			fmt.Printf("Warning: could not remove service group: %v\n", err)
+		}
 		return
 	}
-	exec.Command("userdel", serviceUser).Run()
-	exec.Command("groupdel", serviceUser).Run()
+	if err := exec.Command("userdel", serviceUser).Run(); err != nil {
+		fmt.Printf("Warning: could not remove service user: %v\n", err)
+	}
+	if err := exec.Command("groupdel", serviceUser).Run(); err != nil {
+		fmt.Printf("Warning: could not remove service group: %v\n", err)
+	}
 }
 
 // GetBinaryPath returns the path where the binary should be installed
@@ -573,10 +589,14 @@ func uninstallSystemd() error {
 	servicePath := fmt.Sprintf("/etc/systemd/system/%s.service", appName)
 
 	// Stop service if running
-	exec.Command("systemctl", "stop", appName).Run()
+	if err := exec.Command("systemctl", "stop", appName).Run(); err != nil {
+		fmt.Printf("Warning: could not stop service before uninstall: %v\n", err)
+	}
 
 	// Disable service
-	exec.Command("systemctl", "disable", appName).Run()
+	if err := exec.Command("systemctl", "disable", appName).Run(); err != nil {
+		fmt.Printf("Warning: could not disable service before uninstall: %v\n", err)
+	}
 
 	// Remove service file
 	if err := os.Remove(servicePath); err != nil && !os.IsNotExist(err) {
@@ -584,7 +604,9 @@ func uninstallSystemd() error {
 	}
 
 	// Reload systemd
-	exec.Command("systemctl", "daemon-reload").Run()
+	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
+		fmt.Printf("Warning: could not reload systemd after uninstall: %v\n", err)
+	}
 
 	fmt.Printf("%sService uninstalled: %s\n", ok(), servicePath)
 	return nil
@@ -621,8 +643,12 @@ func installOpenRC() error {
 func uninstallOpenRC() error {
 	rcPath := fmt.Sprintf("/etc/init.d/%s", appName)
 
-	exec.Command("rc-service", appName, "stop").Run()
-	exec.Command("rc-update", "del", appName).Run()
+	if err := exec.Command("rc-service", appName, "stop").Run(); err != nil {
+		fmt.Printf("Warning: could not stop OpenRC service before uninstall: %v\n", err)
+	}
+	if err := exec.Command("rc-update", "del", appName).Run(); err != nil {
+		fmt.Printf("Warning: could not disable OpenRC service before uninstall: %v\n", err)
+	}
 
 	if err := os.Remove(rcPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove OpenRC init script: %w", err)
@@ -653,10 +679,15 @@ func installSysV() error {
 
 	// Enable on boot
 	if _, err := exec.LookPath("update-rc.d"); err == nil {
-		exec.Command("update-rc.d", appName, "defaults").Run()
+		if err := exec.Command("update-rc.d", appName, "defaults").Run(); err != nil {
+			fmt.Printf("Warning: could not register SysV service: %v\n", err)
+		}
 	} else if _, err := exec.LookPath("chkconfig"); err == nil {
-		exec.Command("chkconfig", "--add", appName).Run()
-		exec.Command("chkconfig", appName, "on").Run()
+		for _, args := range [][]string{{"--add", appName}, {appName, "on"}} {
+			if err := exec.Command("chkconfig", args...).Run(); err != nil {
+				fmt.Printf("Warning: could not configure SysV service with chkconfig: %v\n", err)
+			}
+		}
 	}
 
 	fmt.Printf("%sSysV init script installed at: %s\n", ok(), initPath)
@@ -667,12 +698,18 @@ func installSysV() error {
 func uninstallSysV() error {
 	initPath := fmt.Sprintf("/etc/init.d/%s", appName)
 
-	exec.Command(initPath, "stop").Run()
+	if err := exec.Command(initPath, "stop").Run(); err != nil {
+		fmt.Printf("Warning: could not stop SysV service before uninstall: %v\n", err)
+	}
 
 	if _, err := exec.LookPath("update-rc.d"); err == nil {
-		exec.Command("update-rc.d", "-f", appName, "remove").Run()
+		if err := exec.Command("update-rc.d", "-f", appName, "remove").Run(); err != nil {
+			fmt.Printf("Warning: could not remove SysV service registration: %v\n", err)
+		}
 	} else if _, err := exec.LookPath("chkconfig"); err == nil {
-		exec.Command("chkconfig", "--del", appName).Run()
+		if err := exec.Command("chkconfig", "--del", appName).Run(); err != nil {
+			fmt.Printf("Warning: could not remove chkconfig service registration: %v\n", err)
+		}
 	}
 
 	if err := os.Remove(initPath); err != nil && !os.IsNotExist(err) {
@@ -738,7 +775,13 @@ func installRunit() error {
 	}
 
 	// Link into the active runsvdir so the service starts on boot
-	os.Symlink(svDir, runitLinkPath())
+	linkPath := runitLinkPath()
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
+		return fmt.Errorf("failed to create runit service directory: %w", err)
+	}
+	if err := os.Symlink(svDir, linkPath); err != nil {
+		return fmt.Errorf("failed to enable runit service: %w", err)
+	}
 
 	fmt.Printf("%sRunit service installed at: %s\n", ok(), svDir)
 	return nil
@@ -749,14 +792,26 @@ func uninstallRunit() error {
 	svDir := fmt.Sprintf("/etc/sv/%s", appName)
 	linkPath := runitLinkPath()
 
+	if _, err := os.Lstat(linkPath); os.IsNotExist(err) {
+		return os.RemoveAll(svDir)
+	} else if err != nil {
+		return fmt.Errorf("failed to inspect runit service link: %w", err)
+	}
+
 	// Stop service
-	exec.Command("sv", "stop", appName).Run()
+	if err := exec.Command("sv", "stop", appName).Run(); err != nil {
+		return fmt.Errorf("failed to stop runit service: %w", err)
+	}
 
 	// Remove link
-	os.Remove(linkPath)
+	if err := os.Remove(linkPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove runit service link: %w", err)
+	}
 
 	// Remove service directory
-	os.RemoveAll(svDir)
+	if err := os.RemoveAll(svDir); err != nil {
+		return fmt.Errorf("failed to remove runit service directory: %w", err)
+	}
 
 	fmt.Printf("%sRunit service uninstalled\n", ok())
 	return nil
@@ -850,7 +905,9 @@ func uninstallLaunchd() error {
 	plistPath := fmt.Sprintf("/Library/LaunchDaemons/%s.plist", launchdLabel)
 
 	// Unload if running
-	exec.Command("launchctl", "unload", plistPath).Run()
+	if err := exec.Command("launchctl", "unload", plistPath).Run(); err != nil {
+		fmt.Printf("Warning: could not unload launchd service: %v\n", err)
+	}
 
 	// Remove plist
 	if err := os.Remove(plistPath); err != nil && !os.IsNotExist(err) {
@@ -894,7 +951,9 @@ func uninstallBSDRC() error {
 	rcPath := fmt.Sprintf("/usr/local/etc/rc.d/%s", appName)
 
 	// Stop service
-	exec.Command("service", appName, "stop").Run()
+	if err := exec.Command("service", appName, "stop").Run(); err != nil {
+		fmt.Printf("Warning: could not stop SysV service before uninstall: %v\n", err)
+	}
 
 	// Remove script
 	if err := os.Remove(rcPath); err != nil && !os.IsNotExist(err) {
@@ -999,10 +1058,14 @@ func Restart() error {
 	case ServiceRunit:
 		return exec.Command("sv", "restart", appName).Run()
 	case ServiceLaunchd:
-		Stop()
+		if err := Stop(); err != nil {
+			return err
+		}
 		return Start()
 	case ServiceWindows:
-		exec.Command("sc.exe", "stop", appName).Run()
+		if err := exec.Command("sc.exe", "stop", appName).Run(); err != nil {
+			return fmt.Errorf("failed to stop service: %w", err)
+		}
 		return exec.Command("sc.exe", "start", appName).Run()
 	case ServiceBSDRC:
 		return exec.Command("service", appName, "restart").Run()
@@ -1043,33 +1106,49 @@ func Disable() error {
 
 	switch serviceType {
 	case ServiceSystemd:
-		exec.Command("systemctl", "stop", appName).Run()
+		if err := exec.Command("systemctl", "stop", appName).Run(); err != nil {
+			return fmt.Errorf("failed to stop service: %w", err)
+		}
 		return exec.Command("systemctl", "disable", appName).Run()
 	case ServiceOpenRC:
-		exec.Command("rc-service", appName, "stop").Run()
+		if err := exec.Command("rc-service", appName, "stop").Run(); err != nil {
+			return fmt.Errorf("failed to stop service: %w", err)
+		}
 		return exec.Command("rc-update", "del", appName).Run()
 	case ServiceSysV:
-		exec.Command("/etc/init.d/"+appName, "stop").Run()
+		if err := exec.Command("/etc/init.d/"+appName, "stop").Run(); err != nil {
+			return fmt.Errorf("failed to stop service: %w", err)
+		}
 		if _, err := exec.LookPath("update-rc.d"); err == nil {
 			return exec.Command("update-rc.d", appName, "disable").Run()
 		}
 		return exec.Command("chkconfig", appName, "off").Run()
 	case ServiceRunit:
 		enabledDir := runitLinkPath()
-		exec.Command("sv", "stop", appName).Run()
+		if err := exec.Command("sv", "stop", appName).Run(); err != nil {
+			return fmt.Errorf("failed to stop service: %w", err)
+		}
 		// Disable only removes the symlink from the active service directory;
 		// the service definition under /etc/sv is left in place.
-		os.Remove(enabledDir)
+		if err := os.Remove(enabledDir); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to disable runit service: %w", err)
+		}
 		return nil
 	case ServiceLaunchd:
 		plistPath := fmt.Sprintf("/Library/LaunchDaemons/%s.plist", launchdLabel)
-		exec.Command("launchctl", "unload", plistPath).Run()
+		if err := exec.Command("launchctl", "unload", plistPath).Run(); err != nil {
+			return fmt.Errorf("failed to stop service: %w", err)
+		}
 		return exec.Command("launchctl", "disable", fmt.Sprintf("system/%s", launchdLabel)).Run()
 	case ServiceWindows:
-		exec.Command("sc.exe", "stop", appName).Run()
+		if err := exec.Command("sc.exe", "stop", appName).Run(); err != nil {
+			return fmt.Errorf("failed to stop service: %w", err)
+		}
 		return exec.Command("sc.exe", "config", appName, "start=", "disabled").Run()
 	case ServiceBSDRC:
-		exec.Command("service", appName, "stop").Run()
+		if err := exec.Command("service", appName, "stop").Run(); err != nil {
+			fmt.Printf("Warning: could not stop SysV service before uninstall: %v\n", err)
+		}
 		return exec.Command("sysrc", fmt.Sprintf("%s_enable=NO", appName)).Run()
 	default:
 		return fmt.Errorf("unsupported service manager")
@@ -1207,5 +1286,43 @@ reload                                - Reload configuration without restart
 	fmt.Printf("  Auto-start: %s\n", enabledStr)
 	if st.Running {
 		fmt.Printf("  PID:        %d\n", st.PID)
+	}
+}
+
+// RestartAfterUpdate restarts the installed system service after a self-update
+// replaced the binary on disk (PART 22 "Service-Aware Update"): systemctl
+// restart, launchctl kickstart -k, service restart, or sc stop/start,
+// depending on the detected manager. It reports true when the service
+// manager performed the restart. It reports false with a nil error when no
+// running system service applies (not elevated, not installed, or not
+// running), so the caller falls back to re-exec'ing the new binary in place.
+func RestartAfterUpdate() (bool, error) {
+	if !isElevated() {
+		return false, nil
+	}
+	st := GetStatus()
+	if !st.Installed || !st.Running {
+		return false, nil
+	}
+	switch DetectServiceManager() {
+	case ServiceSystemd:
+		return true, exec.Command("systemctl", "restart", appName).Run()
+	case ServiceOpenRC:
+		return true, exec.Command("rc-service", appName, "restart").Run()
+	case ServiceSysV:
+		return true, exec.Command("/etc/init.d/"+appName, "restart").Run()
+	case ServiceRunit:
+		return true, exec.Command("sv", "restart", appName).Run()
+	case ServiceLaunchd:
+		return true, exec.Command("launchctl", "kickstart", "-k", "system/"+launchdLabel).Run()
+	case ServiceWindows:
+		if err := exec.Command("sc.exe", "stop", appName).Run(); err != nil {
+			fmt.Printf("Warning: could not stop Windows service before uninstall: %v\n", err)
+		}
+		return true, exec.Command("sc.exe", "start", appName).Run()
+	case ServiceBSDRC:
+		return true, exec.Command("service", appName, "restart").Run()
+	default:
+		return false, nil
 	}
 }

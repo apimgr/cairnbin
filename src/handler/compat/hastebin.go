@@ -19,7 +19,15 @@ import (
 // raw retrieval is served by the native GET /raw/{id} route.
 func (c *Handler) HastebinCreate(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, c.ph.EffectiveReadLimit()))
-	if err != nil || strings.TrimSpace(string(body)) == "" {
+	if err != nil {
+		status := http.StatusBadRequest
+		if isMaxBytesErr(err) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeJSON(w, status, map[string]string{"message": "no content"})
+		return
+	}
+	if strings.TrimSpace(string(body)) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "no content"})
 		return
 	}
@@ -40,7 +48,7 @@ func (c *Handler) HastebinGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if paste.ExpiresAt != nil && paste.ExpiresAt.Before(time.Now()) {
-		c.db.DeletePaste(id)
+		_ = c.db.DeletePaste(id)
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "document not found"})
 		return
 	}

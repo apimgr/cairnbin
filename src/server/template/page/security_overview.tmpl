@@ -1,71 +1,65 @@
 {{define "meta"}}
-    <title>Security - {{.SiteTitle}}</title>
-    <meta name="description" content="How to report a security vulnerability in {{.SiteTitle}} — contact channels, disclosure policy, and encryption key">
+    <title>{{t .Lang "security.title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{tf .Lang "security.meta_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
         <section class="search-section">
             <div class="container container-sm">
                 <div class="section-header">
-                    <h1 class="section-title">Security</h1>
-                    <p class="section-subtitle">Report a vulnerability in {{.SiteTitle}}</p>
+                    <h1 class="section-title">{{t .Lang "security.title"}}</h1>
+                    <p class="section-subtitle">{{tf .Lang "security.report_subtitle" "site" .SiteTitle}}</p>
                 </div>
 
                 <div class="paste-view page-view">
-                    <h2>How to report a vulnerability</h2>
-                    <p>
-                        If you believe you have found a security vulnerability, please report it
-                        privately through one of the channels below, in order of preference. Do not
-                        open a public issue or disclose the details until we have had a chance to
-                        investigate and coordinate a fix.
-                    </p>
+                    <h2>{{t .Lang "security.how_to_report"}}</h2>
+                    <p>{{t .Lang "security.how_to_report_text"}}</p>
 
-                    <h2 class="section-mt">Contact channels</h2>
+                    <h2 class="section-mt">{{t .Lang "security.contact_channels"}}</h2>
                     <ol class="feature-list">
                         {{if .ReportURL}}
                         <li>
-                            <strong>Private vulnerability reporting</strong> —
+                            <strong>{{t .Lang "security.channel_private"}}</strong> —
                             <a href="{{.ReportURL}}" class="long-string" rel="noopener">{{.ReportURL}}</a>
                         </li>
                         {{end}}
                         {{if .ReportFormURL}}
                         <li>
-                            <strong>Encrypted report form</strong> —
+                            <strong>{{t .Lang "security.channel_form"}}</strong> —
                             <a href="{{.ReportFormURL}}" class="long-string">{{.ReportFormURL}}</a>.
-                            Following this link opens the security-report form; the report body is
-                            encrypted at rest and never stored in plaintext.
+                            {{t .Lang "security.channel_form_text"}}
                         </li>
                         {{end}}
                         {{if .SecurityEmail}}
                         <li>
-                            <strong>Email</strong> —
+                            <strong>{{t .Lang "security.channel_email"}}</strong> —
                             <a href="mailto:{{.SecurityEmail}}" class="long-string">{{.SecurityEmail}}</a>
                         </li>
                         {{end}}
                     </ol>
 
                     {{if .HasPGPKey}}
-                    <h2 class="section-mt">Encryption</h2>
+                    <h2 class="section-mt">{{t .Lang "security.encryption"}}</h2>
                     <p>
-                        For sensitive details, encrypt your report with our PGP public key, available at
-                        <a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">/.well-known/pgp-key.asc</a>.
+                        {{t .Lang "security.encryption_text"}}
+                        <a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">/.well-known/pgp-key.asc</a>
                     </p>
                     {{end}}
 
-                    <h2 class="section-mt">Details</h2>
+                    <h2 class="section-mt">{{t .Lang "security.details"}}</h2>
                     <ul class="feature-list">
-                        <li><strong>Preferred languages:</strong> {{.PreferredLanguages}}</li>
-                        <li><strong>This information expires:</strong> <span class="long-string">{{.Expires}}</span></li>
+                        <li><strong>{{t .Lang "security.preferred_languages"}}:</strong> {{.PreferredLanguages}}</li>
+                        <li><strong>{{t .Lang "security.expires"}}:</strong> <span class="long-string">{{.Expires}}</span></li>
                     </ul>
 
-                    <h2 class="section-mt">More information</h2>
+                    <h2 class="section-mt">{{t .Lang "security.more_info"}}</h2>
                     <ul class="feature-list">
-                        <li><a href="{{.AssetPrefix}}/server/security/policy">Disclosure policy</a> — scope, safe harbor, and coordinated-disclosure window</li>
-                        <li><a href="{{.AssetPrefix}}/server/security/thanks">Acknowledgments</a> — researchers we have credited</li>
+                        <li><a href="{{.AssetPrefix}}/server/security/policy">{{t .Lang "security.link_policy"}}</a> — {{t .Lang "security.link_policy_desc"}}</li>
+                        <li><a href="{{.AssetPrefix}}/server/security/thanks">{{t .Lang "security.link_thanks"}}</a> — {{t .Lang "security.link_thanks_desc"}}</li>
                         {{if .HasPGPKey}}
-                        <li><a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">PGP public key</a></li>
+                        <li><a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">{{t .Lang "security.link_pgp"}}</a></li>
                         {{end}}
-                        <li><a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a> — the machine-readable version of this page (RFC 9116)</li>
+                        <li><a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a> — {{t .Lang "security.link_txt_desc"}}</li>
                     </ul>
                 </div>
             </div>

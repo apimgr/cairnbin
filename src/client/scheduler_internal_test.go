@@ -20,7 +20,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	}
 	os.Stdout = w
 	fn()
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	out, _ := io.ReadAll(r)
 	return string(out)
@@ -33,20 +33,20 @@ func schedulerTestServer(t *testing.T, calls *[]string) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/history"):
-			json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": []map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": []map[string]any{
 				{"task_id": "backup_daily", "started_at": time.Now(), "status": "failed", "error_msg": "disk full", "duration_ms": 1500},
 			}})
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/schedulers"):
-			json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": []map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": []map[string]any{
 				{"task_id": "backup_daily", "schedule": "0 2 * * *", "last_status": "success", "enabled": true, "last_run": time.Now(), "next_run": time.Now()},
 				{"task_id": "backup_hourly", "schedule": "@hourly", "enabled": false},
 			}})
 		case r.Method == http.MethodGet:
-			json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": map[string]any{
 				"task_id": "backup_daily", "schedule": "0 2 * * *", "last_status": "success", "enabled": true, "run_count": 7,
 			}})
 		default:
-			json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": map[string]string{"status": "ok"}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": map[string]string{"status": "ok"}})
 		}
 	}))
 }

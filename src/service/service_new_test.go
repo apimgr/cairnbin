@@ -78,13 +78,13 @@ func withStdinContent(t *testing.T, data string, fn func()) {
 	if _, err := w.WriteString(data); err != nil {
 		t.Fatalf("write to pipe: %v", err)
 	}
-	w.Close()
+	_ = w.Close()
 
 	orig := os.Stdin
 	os.Stdin = r
 	defer func() {
 		os.Stdin = orig
-		r.Close()
+		_ = r.Close()
 	}()
 	fn()
 }

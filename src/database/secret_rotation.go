@@ -22,7 +22,7 @@ func (s *SQLiteDB) RotateAppSecret(key string, newRaw []byte) error {
 	if err != nil {
 		return fmt.Errorf("app_secrets: begin: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var old string
 	if err := tx.QueryRowContext(ctx, `SELECT value FROM app_secrets WHERE key = ?`, key).Scan(&old); err != nil {
@@ -94,7 +94,7 @@ func (s *SQLiteDB) ReencryptTokens(fn func(old string) (string, error)) (updated
 	if err != nil {
 		return 0, 0, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	rows, err := tx.QueryContext(ctx, `SELECT id, token_enc FROM api_tokens WHERE token_enc != ''`)
 	if err != nil {
@@ -108,16 +108,16 @@ func (s *SQLiteDB) ReencryptTokens(fn func(old string) (string, error)) (updated
 	for rows.Next() {
 		var r row
 		if err := rows.Scan(&r.id, &r.enc); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return 0, 0, err
 		}
 		all = append(all, r)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return 0, 0, err
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	for _, r := range all {
 		next, ferr := fn(r.enc)
@@ -144,7 +144,7 @@ func (s *SQLiteDB) ReencryptSecurityReports(fn func(old []byte) ([]byte, error))
 	if err != nil {
 		return 0, 0, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	rows, err := tx.QueryContext(ctx,
 		`SELECT tracking_id, encrypted_body FROM security_reports WHERE enc_method = 'aes-256-gcm'`)
@@ -159,16 +159,16 @@ func (s *SQLiteDB) ReencryptSecurityReports(fn func(old []byte) ([]byte, error))
 	for rows.Next() {
 		var r row
 		if err := rows.Scan(&r.id, &r.body); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return 0, 0, err
 		}
 		all = append(all, r)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return 0, 0, err
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	for _, r := range all {
 		next, ferr := fn(r.body)

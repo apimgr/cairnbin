@@ -90,3 +90,64 @@ func TestHandleLLMs_WellKnownAndAlias(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleLLMs_DisabledAndCustomSections(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Web.LLMs.Enabled = false
+	s := New(&stubDB{}, cfg, nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
+	r := httptest.NewRequest(http.MethodGet, "/llms.txt", nil)
+	w := httptest.NewRecorder()
+	s.router.ServeHTTP(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("disabled llms.txt status = %d, want 404", w.Code)
+	}
+
+	cfg = config.DefaultConfig()
+	cfg.Web.LLMs.IncludeEndpoints = false
+	cfg.Web.LLMs.CustomSections = []string{"## Extra\nHello"}
+	s = New(&stubDB{}, cfg, nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
+	w = httptest.NewRecorder()
+	s.router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/llms.txt", nil))
+	body := w.Body.String()
+	if strings.Contains(body, "## Endpoints") || !strings.Contains(body, "## Extra\nHello") {
+		t.Errorf("unexpected llms body: %s", body)
+	}
+}
+
+func TestHandleLLMs_IncludeSchemas(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		cfg := config.DefaultConfig()
+		cfg.Web.LLMs.IncludeSchemas = on
+		s := New(&stubDB{}, cfg, nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/llms.txt", nil))
+		if got := strings.Contains(w.Body.String(), "## Schemas"); got != on {
+			t.Errorf("include_schemas=%v: Schemas section present=%v", on, got)
+		}
+	}
+}
+
+func TestWellKnownNamespaceContract(t *testing.T) {
+	s := New(&stubDB{}, config.DefaultConfig(), nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
+	w := httptest.NewRecorder()
+	s.router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/.well-known/unknown-entry", nil))
+	if w.Code != http.StatusNotFound {
+		t.Errorf("unknown entry status = %d, want 404", w.Code)
+	}
+	w = httptest.NewRecorder()
+	s.router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/.well-known/unknown-entry", nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST status = %d, want 405", w.Code)
+	}
+}
+
+func TestHandleRobots_DeniedAIBot(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Web.Robots.AIBots.Bots = map[string]string{"GPTBot": "deny"}
+	s := New(&stubDB{}, cfg, nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
+	w := httptest.NewRecorder()
+	s.router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/robots.txt", nil))
+	if !strings.Contains(w.Body.String(), "User-agent: GPTBot\nDisallow: /\n") {
+		t.Errorf("robots.txt missing GPTBot stanza: %s", w.Body.String())
+	}
+}

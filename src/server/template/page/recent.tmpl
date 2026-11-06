@@ -1,6 +1,6 @@
 {{define "meta"}}
-    <title>Recent Pastes - {{.SiteTitle}}</title>
-    <meta name="description" content="Browse recent public pastes">
+    <title>{{t .Lang "recent.title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{t .Lang "recent.description"}}">
 {{end}}
 
 {{define "content"}}
@@ -77,14 +77,14 @@
                 </nav>
                 {{else if .Search}}
                 <div class="empty-state">
-                    <div class="empty-state-icon">🔍</div>
+                    <div class="empty-state-icon" aria-hidden="true">🔍</div>
                     <h3 class="empty-state-title">{{t .Lang "recent.no_results_title"}}</h3>
                     <p class="empty-state-message">{{t .Lang "recent.no_results_desc"}}</p>
                     <a href="{{.CurrentPath}}" class="btn btn-primary">{{t .Lang "recent.clear_filters"}}</a>
                 </div>
                 {{else}}
                 <div class="empty-state">
-                    <div class="empty-state-icon">📋</div>
+                    <div class="empty-state-icon" aria-hidden="true">📋</div>
                     <h3 class="empty-state-title">{{t .Lang "recent.empty_title"}}</h3>
                     <p class="empty-state-message">{{t .Lang "recent.empty_desc"}}</p>
                     <a href="{{.AssetPrefix}}/create" class="btn btn-primary">{{t .Lang "recent.create_paste"}}</a>

@@ -175,7 +175,7 @@ func TestDetectMode_EmptyArgsNoTTY(t *testing.T) {
 
 func TestCmdList_LongTitleTruncation(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []interface{}{
 				map[string]interface{}{
 					"id":         "p1",
@@ -197,7 +197,7 @@ func TestCmdList_LongTitleTruncation(t *testing.T) {
 
 func TestCmdList_ExactlyFortyCharTitle(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []interface{}{
 				map[string]interface{}{
 					"id": "p2",
@@ -219,7 +219,7 @@ func TestCmdList_ExactlyFortyCharTitle(t *testing.T) {
 
 func TestCmdList_MultiplePastes(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []interface{}{
 				map[string]interface{}{
 					"id": "p1", "title": "First", "language": "go", "views": 1, "created_at": "2025-06-01T00:00:00Z",
@@ -250,7 +250,7 @@ func TestCmdUpdate_HitsCorrectEndpoint(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{},
 		})
 	}))
@@ -272,7 +272,7 @@ func TestCmdUpdate_SendsUserAgent(t *testing.T) {
 	var gotUA string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{},
 		})
 	}))
@@ -292,9 +292,11 @@ func TestCmdCreate_DefaultVisibilityIsUnlisted(t *testing.T) {
 	var received map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &received)
+		if err := json.Unmarshal(body, &received); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
 	}))
 	defer srv.Close()
 
@@ -317,9 +319,11 @@ func TestCmdCreate_DefaultExpiryIsNever(t *testing.T) {
 	var received map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &received)
+		if err := json.Unmarshal(body, &received); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
 	}))
 	defer srv.Close()
 
@@ -341,9 +345,11 @@ func TestCmdCreate_DefaultBurnIsZero(t *testing.T) {
 	var received map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &received)
+		if err := json.Unmarshal(body, &received); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
 	}))
 	defer srv.Close()
 
@@ -366,7 +372,7 @@ func TestCmdCreate_DefaultBurnIsZero(t *testing.T) {
 func TestCmdCreate_NoDeleteToken(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"id":   "xyz",
 			"link": "http://example.com/xyz",
 			// empty token
@@ -395,7 +401,7 @@ func TestCheckCLIUpdate_CurrentVersionMatches(t *testing.T) {
 
 	osArch := runtime.GOOS + "-" + runtime.GOARCH
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIMinVersion: "1.0.0",
 			CLIVersions: map[string]cliVersionInfo{
 				osArch: {Version: "2.0.0", SHA256: "abc"},
@@ -418,7 +424,7 @@ func TestCheckCLIUpdate_CurrentVersionNewer(t *testing.T) {
 
 	osArch := runtime.GOOS + "-" + runtime.GOARCH
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIMinVersion: "1.0.0",
 			CLIVersions: map[string]cliVersionInfo{
 				osArch: {Version: "2.0.0", SHA256: "abc"},
@@ -440,7 +446,7 @@ func TestCheckCLIUpdate_NoPlatformBinary(t *testing.T) {
 	defer func() { Version = orig }()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIMinVersion: "0.5.0",
 			CLIVersions:   map[string]cliVersionInfo{
 				// No entry for current platform
@@ -479,7 +485,7 @@ func TestCmdDelete_IDWithSpecialChars(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
 	}))
 	defer srv.Close()
 
@@ -499,7 +505,7 @@ func TestCmdGet_IDWithSpecialChars(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("content"))
+		_, _ = w.Write([]byte("content"))
 	}))
 	defer srv.Close()
 

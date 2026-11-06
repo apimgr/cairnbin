@@ -25,10 +25,10 @@ func TestInstallSystemd_RootBranches(t *testing.T) {
 
 	servicePath := filepath.Join(systemdDir, appName+".service")
 	t.Cleanup(func() {
-		os.Remove(servicePath)
-		os.RemoveAll("/var/lib/" + orgName)
-		os.RemoveAll("/var/log/" + orgName)
-		os.RemoveAll("/etc/" + orgName)
+		_ = os.Remove(servicePath)
+		_ = os.RemoveAll("/var/lib/" + orgName)
+		_ = os.RemoveAll("/var/log/" + orgName)
+		_ = os.RemoveAll("/etc/" + orgName)
 	})
 
 	// installSystemd will try to run systemctl which doesn't exist in the
@@ -75,7 +75,7 @@ func TestInstallOpenRC_RootBranches(t *testing.T) {
 	}
 
 	initPath := filepath.Join(initDir, appName)
-	t.Cleanup(func() { os.Remove(initPath) })
+	t.Cleanup(func() { _ = os.Remove(initPath) })
 
 	err := installOpenRC()
 
@@ -108,7 +108,7 @@ func TestInstallSysV_RootBranches(t *testing.T) {
 	}
 
 	initPath := filepath.Join(initDir, appName)
-	t.Cleanup(func() { os.Remove(initPath) })
+	t.Cleanup(func() { _ = os.Remove(initPath) })
 
 	err := installSysV()
 
@@ -130,14 +130,15 @@ func TestInstallSysV_RootBranches(t *testing.T) {
 }
 
 func TestInstallRunit_RootBranches(t *testing.T) {
+	setupFakeRunit(t)
 	if os.Geteuid() != 0 {
 		t.Skip("requires root")
 	}
 
 	svDir := "/etc/sv/" + appName
 	t.Cleanup(func() {
-		os.RemoveAll(svDir)
-		os.Remove("/var/service/" + appName)
+		_ = os.RemoveAll(svDir)
+		_ = os.Remove("/var/service/" + appName)
 	})
 
 	err := installRunit()
@@ -183,9 +184,9 @@ func TestInstallLaunchd_RootBranches(t *testing.T) {
 
 	plistPath := filepath.Join(launchDir, launchdLabel+".plist")
 	t.Cleanup(func() {
-		os.Remove(plistPath)
-		os.RemoveAll("/Library/Application Support/" + orgName)
-		os.RemoveAll("/var/log/" + orgName)
+		_ = os.Remove(plistPath)
+		_ = os.RemoveAll("/Library/Application Support/" + orgName)
+		_ = os.RemoveAll("/var/log/" + orgName)
 	})
 
 	err := installLaunchd()
@@ -216,7 +217,7 @@ func TestInstallBSDRC_RootBranches(t *testing.T) {
 	}
 
 	rcPath := filepath.Join(rcDir, appName)
-	t.Cleanup(func() { os.Remove(rcPath) })
+	t.Cleanup(func() { _ = os.Remove(rcPath) })
 
 	err := installBSDRC()
 	if err != nil {
@@ -244,10 +245,10 @@ func TestUninstallSystemd_RootBranches(t *testing.T) {
 
 	// Create a mock service file to uninstall
 	systemdDir := "/etc/systemd/system"
-	os.MkdirAll(systemdDir, 0o755)
+	_ = os.MkdirAll(systemdDir, 0o755)
 
 	servicePath := filepath.Join(systemdDir, appName+".service")
-	os.WriteFile(servicePath, []byte("[Unit]\nDescription=Test\n"), 0o644)
+	_ = os.WriteFile(servicePath, []byte("[Unit]\nDescription=Test\n"), 0o644)
 
 	err := uninstallSystemd()
 	if err != nil {
@@ -266,10 +267,10 @@ func TestUninstallOpenRC_RootBranches(t *testing.T) {
 	}
 
 	initDir := "/etc/init.d"
-	os.MkdirAll(initDir, 0o755)
+	_ = os.MkdirAll(initDir, 0o755)
 
 	initPath := filepath.Join(initDir, appName)
-	os.WriteFile(initPath, []byte("#!/sbin/openrc-run\n"), 0o755)
+	_ = os.WriteFile(initPath, []byte("#!/sbin/openrc-run\n"), 0o755)
 
 	err := uninstallOpenRC()
 	if err != nil {
@@ -288,10 +289,10 @@ func TestUninstallSysV_RootBranches(t *testing.T) {
 	}
 
 	initDir := "/etc/init.d"
-	os.MkdirAll(initDir, 0o755)
+	_ = os.MkdirAll(initDir, 0o755)
 
 	initPath := filepath.Join(initDir, appName)
-	os.WriteFile(initPath, []byte("#!/bin/sh\n"), 0o755)
+	_ = os.WriteFile(initPath, []byte("#!/bin/sh\n"), 0o755)
 
 	err := uninstallSysV()
 	if err != nil {
@@ -305,14 +306,15 @@ func TestUninstallSysV_RootBranches(t *testing.T) {
 }
 
 func TestUninstallRunit_RootBranches(t *testing.T) {
+	setupFakeRunit(t)
 	if os.Geteuid() != 0 {
 		t.Skip("requires root")
 	}
 
 	svDir := "/etc/sv/" + appName
-	os.MkdirAll(filepath.Join(svDir, "log"), 0o755)
+	_ = os.MkdirAll(filepath.Join(svDir, "log"), 0o755)
 
-	os.WriteFile(filepath.Join(svDir, "run"), []byte("#!/bin/sh\n"), 0o755)
+	_ = os.WriteFile(filepath.Join(svDir, "run"), []byte("#!/bin/sh\n"), 0o755)
 
 	err := uninstallRunit()
 	if err != nil {
@@ -331,10 +333,10 @@ func TestUninstallLaunchd_RootBranches(t *testing.T) {
 	}
 
 	launchDir := "/Library/LaunchDaemons"
-	os.MkdirAll(launchDir, 0o755)
+	_ = os.MkdirAll(launchDir, 0o755)
 
 	plistPath := filepath.Join(launchDir, launchdLabel+".plist")
-	os.WriteFile(plistPath, []byte("<?xml version=\"1.0\"?>\n<plist>\n</plist>\n"), 0o644)
+	_ = os.WriteFile(plistPath, []byte("<?xml version=\"1.0\"?>\n<plist>\n</plist>\n"), 0o644)
 
 	err := uninstallLaunchd()
 	if err != nil {
@@ -353,10 +355,10 @@ func TestUninstallBSDRC_RootBranches(t *testing.T) {
 	}
 
 	rcDir := "/usr/local/etc/rc.d"
-	os.MkdirAll(rcDir, 0o755)
+	_ = os.MkdirAll(rcDir, 0o755)
 
 	rcPath := filepath.Join(rcDir, appName)
-	os.WriteFile(rcPath, []byte("#!/bin/sh\n"), 0o755)
+	_ = os.WriteFile(rcPath, []byte("#!/bin/sh\n"), 0o755)
 
 	err := uninstallBSDRC()
 	if err != nil {
@@ -388,7 +390,7 @@ func TestPurgeData_RootBranches(t *testing.T) {
 		}
 		// Write a test file
 		testFile := filepath.Join(dir, "test.txt")
-		os.WriteFile(testFile, []byte("test"), 0o644)
+		_ = os.WriteFile(testFile, []byte("test"), 0o644)
 	}
 
 	// Run purgeData
@@ -418,7 +420,9 @@ func TestInstall_RootWithServiceType(t *testing.T) {
 	if err == nil {
 		t.Log("Install() succeeded (unexpected in container)")
 		// Clean up
-		Uninstall()
+		if err := Uninstall(); err != nil {
+			t.Errorf("Uninstall: %v", err)
+		}
 	} else {
 		t.Logf("Install() returned: %v (expected in container)", err)
 	}

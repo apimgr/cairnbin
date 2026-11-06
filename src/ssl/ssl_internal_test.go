@@ -362,3 +362,28 @@ func generateSelfSignedCert(t *testing.T, cn string, notAfter time.Time) (certPE
 	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: privDer})
 	return certPEM, keyPEM
 }
+
+func TestCertNeedsRenewal(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name     string
+		notAfter time.Time
+		want     bool
+	}{
+		{"expires in 3 days", time.Now().Add(3 * 24 * time.Hour), true},
+		{"expires in 30 days", time.Now().Add(30 * 24 * time.Hour), false},
+	}
+	for _, tc := range cases {
+		certPEM, _ := generateSelfSignedCert(t, "localhost", tc.notAfter)
+		p := filepath.Join(dir, "cert.pem")
+		if err := os.WriteFile(p, certPEM, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := certNeedsRenewal(p); got != tc.want {
+			t.Errorf("%s: certNeedsRenewal = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	if !certNeedsRenewal(filepath.Join(dir, "missing.pem")) {
+		t.Error("missing file must report renewal needed")
+	}
+}

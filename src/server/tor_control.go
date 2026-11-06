@@ -221,7 +221,7 @@ func (s *Server) handleTorControlVanityStart(w http.ResponseWriter, r *http.Requ
 		Workers int    `json:"workers"`
 	}
 	if r.Body != nil {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body)
 	}
 	prefix := strings.ToLower(strings.TrimSpace(body.Prefix))
@@ -288,7 +288,7 @@ func (s *Server) handleTorControlVanityApply(w http.ResponseWriter, r *http.Requ
 		Address string `json:"address"`
 	}
 	if r.Body != nil {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body)
 	}
 	candidates := tor.ListVanityCandidates(s.dataDir)
@@ -337,7 +337,7 @@ func (s *Server) handleTorControlImportKeys(w http.ResponseWriter, r *http.Reque
 		})
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
 	if err != nil || len(raw) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{

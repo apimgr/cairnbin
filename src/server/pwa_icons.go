@@ -165,5 +165,5 @@ func withinCircle(px, py, cx, cy, r float64) bool {
 func servePWAIconPNG(w http.ResponseWriter, size int, maskable bool) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.Write(generatePWAIconPNG(size, maskable))
+	_, _ = w.Write(generatePWAIconPNG(size, maskable))
 }

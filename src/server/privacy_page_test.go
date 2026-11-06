@@ -42,7 +42,7 @@ func TestHandleCCPAOptOut(t *testing.T) {
 	s := newMinimalServer(&config.Config{})
 
 	t.Run("opt out sets persistent cookie", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodPost, "/server/privacy/ccpa", strings.NewReader("action=opt_out"))
+		r := httptest.NewRequest(http.MethodPost, "/server/ccpa", strings.NewReader("choice=opt-out"))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		w := httptest.NewRecorder()
 		s.handleCCPAOptOut(w, r)
@@ -66,7 +66,7 @@ func TestHandleCCPAOptOut(t *testing.T) {
 	})
 
 	t.Run("opt in clears cookie", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodPost, "/server/privacy/ccpa", strings.NewReader("action=opt_in"))
+		r := httptest.NewRequest(http.MethodPost, "/server/ccpa", strings.NewReader("choice=opt-in"))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		w := httptest.NewRecorder()
 		s.handleCCPAOptOut(w, r)

@@ -103,7 +103,7 @@ func convertList(buf *strings.Builder, n *html.Node, width, indent int, ordered 
 		}
 		text := getTextContent(c)
 		if ordered {
-			buf.WriteString(fmt.Sprintf("%s  %d. %s\n", pad, count, text))
+			fmt.Fprintf(buf, "%s  %d. %s\n", pad, count, text)
 			count++
 		} else {
 			buf.WriteString(pad + "  • " + text + "\n")

@@ -195,7 +195,7 @@ func TestDetectMode_AllSupportedConfigFlags(t *testing.T) {
 
 func TestCmdList_TitleTruncatedAt40(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []interface{}{
 				map[string]interface{}{
 					"id": "p1",
@@ -221,9 +221,11 @@ func TestCmdList_TitleTruncatedAt40(t *testing.T) {
 func TestCmdCreate_AllFlagsAtOnce(t *testing.T) {
 	var received map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&received)
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "x", "link": "http://example.com/x"})
 	}))
 	defer srv.Close()
 
@@ -270,7 +272,7 @@ func TestCmdUpdate_YesAction_NoDownloadNeeded(t *testing.T) {
 
 	osArch := runtime.GOOS + "-" + runtime.GOARCH
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(autodiscoverResponse{
+		_ = json.NewEncoder(w).Encode(autodiscoverResponse{
 			CLIVersions: map[string]cliVersionInfo{
 				// same as current
 				osArch: {Version: "2.0.0"},
@@ -366,13 +368,13 @@ func TestClient_LangEmptyDoesNotAddHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		headers = r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}))
 	defer srv.Close()
 
 	c := &client{server: srv.URL, lang: ""}
 	resp, _ := c.get("/test")
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if h := headers.Get("Accept-Language"); h != "" {
 		t.Errorf("Accept-Language should be empty, got %q", h)
@@ -384,13 +386,13 @@ func TestClient_LangSetAddsHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		headers = r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}))
 	defer srv.Close()
 
 	c := &client{server: srv.URL, lang: "pt-BR"}
 	resp, _ := c.get("/test")
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if h := headers.Get("Accept-Language"); h != "pt-BR" {
 		t.Errorf("Accept-Language = %q; want pt-BR", h)
@@ -617,7 +619,7 @@ func TestEnvOrDefault_Table(t *testing.T) {
 		if tc.setEnv {
 			t.Setenv(envKey, tc.envVal)
 		} else {
-			os.Unsetenv(envKey)
+			_ = os.Unsetenv(envKey)
 		}
 		got := envOrDefault(envKey, tc.defVal)
 		if got != tc.want {

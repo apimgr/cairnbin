@@ -423,7 +423,7 @@ func TestServeUI_BodyContainsTitle(t *testing.T) {
 }
 
 // TestServeUI_BodyContainsSpecURL verifies that the rendered UI embeds the
-// spec URL (base + "/api/v1/server/swagger").
+// canonical current-version alias for the spec URL (base + "/api/swagger").
 func TestServeUI_BodyContainsSpecURL(t *testing.T) {
 	const base = "https://paste.example.com"
 	h := swagger.New("API", "1.0.0", base, "")
@@ -432,7 +432,7 @@ func TestServeUI_BodyContainsSpecURL(t *testing.T) {
 	h.ServeUI(rec, req)
 
 	body, _ := io.ReadAll(rec.Body)
-	want := base + "/api/v1/server/swagger"
+	want := base + "/api/swagger"
 	if !strings.Contains(string(body), want) {
 		t.Errorf("HTML body does not contain spec URL %q", want)
 	}

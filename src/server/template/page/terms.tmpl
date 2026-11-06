@@ -1,6 +1,6 @@
 {{define "meta"}}
-    <title>Terms of Service - {{.SiteTitle}}</title>
-    <meta name="description" content="Terms of service for {{.SiteTitle}} — acceptable use, warranty, and content policies">
+    <title>{{t .Lang "terms.title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{tf .Lang "terms.meta_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
@@ -12,50 +12,27 @@
 
                 <div class="paste-view page-view">
                     {{if .PageContent}}<div class="markdown-content">{{.PageContent}}</div>{{else}}
-                    <h2>Acceptance</h2>
-                    <p>
-                        By accessing or using this service you agree to be bound by these Terms of Service.
-                        If you do not agree with any part of these terms, do not use the service.
-                    </p>
+                    <h2>{{t .Lang "terms.acceptance"}}</h2>
+                    <p>{{t .Lang "terms.acceptance_text"}}</p>
 
-                    <h2 class="section-mt">Acceptable use</h2>
-                    <p>By using this service you agree not to upload content that is:</p>
+                    <h2 class="section-mt">{{t .Lang "terms.acceptable_use"}}</h2>
+                    <p>{{t .Lang "terms.use_intro"}}</p>
                     <ul class="feature-list">
-                        <li>Illegal under applicable law</li>
-                        <li>Malware, ransomware, or exploit code intended for harm</li>
-                        <li>Private credentials, keys, or personal data belonging to others</li>
-                        <li>Spam or automated junk at scale</li>
+                        <li>{{t .Lang "terms.use_illegal"}}</li>
+                        <li>{{t .Lang "terms.use_malware"}}</li>
+                        <li>{{t .Lang "terms.use_credentials"}}</li>
+                        <li>{{t .Lang "terms.use_spam"}}</li>
                     </ul>
-                    <p>
-                        You may delete your own paste at any time using your delete token.
-                        We reserve the right to remove any paste that violates these terms.
-                        Public pastes are visible to anyone and unlisted pastes are accessible via their link —
-                        treat all pastes as public and do not paste secrets, passwords, or private keys.
-                    </p>
+                    <p>{{t .Lang "terms.use_note"}}</p>
 
-                    <h2 class="section-mt">Liability</h2>
-                    <p>
-                        This service is provided "as is" and "as available", without warranty of any kind,
-                        express or implied. We make no guarantees about uptime, data durability, or fitness
-                        for any particular purpose, and do not recommend using this service as a backup solution.
-                        To the maximum extent permitted by law, we are not liable for any direct, indirect,
-                        incidental, or consequential damages arising from your use of the service.
-                    </p>
+                    <h2 class="section-mt">{{t .Lang "terms.liability"}}</h2>
+                    <p>{{t .Lang "terms.liability_text"}}</p>
 
-                    <h2 class="section-mt">Changes</h2>
-                    <p>
-                        We may update these terms at any time. Continued use of the service after changes take
-                        effect constitutes acceptance of the revised terms. Material changes will be reflected
-                        on this page.
-                    </p>
+                    <h2 class="section-mt">{{t .Lang "terms.changes"}}</h2>
+                    <p>{{t .Lang "terms.changes_text"}}</p>
 
-                    <h2 class="section-mt">Governing law</h2>
-                    <p>
-                        These terms are governed by the laws of the jurisdiction in which the service operator
-                        is established, without regard to conflict-of-law principles. Any disputes arising from
-                        these terms or your use of the service are subject to the exclusive jurisdiction of the
-                        courts of that jurisdiction.
-                    </p>
+                    <h2 class="section-mt">{{t .Lang "terms.governing_law"}}</h2>
+                    <p>{{t .Lang "terms.governing_law_text"}}</p>
                     {{end}}
                 </div>
             </div>

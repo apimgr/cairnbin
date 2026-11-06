@@ -65,7 +65,9 @@ func TestListPastes_WithPastes(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	// PART 14 canonical list shape: data is the array itself, pagination is a
 	// top-level sibling (never nested under data), with a "pages" field.
 	if _, ok := resp["data"].([]interface{}); !ok {
@@ -135,7 +137,9 @@ func TestListPastes_Search(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	data, ok := resp["data"].([]interface{})
 	if !ok {
 		t.Fatal("data field must be a JSON array")
@@ -170,7 +174,9 @@ func TestListPastes_SortByName(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	data, ok := resp["data"].([]interface{})
 	if !ok {
 		t.Fatal("data field must be a JSON array")
@@ -332,7 +338,9 @@ func TestCreatePaste_BurnAfter(t *testing.T) {
 		t.Fatalf("status: got %d, want 201", rr.Code)
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	data := resp["data"].(map[string]interface{})
 	ba := int(data["burn_after"].(float64))
 	if ba != 3 {
@@ -356,7 +364,9 @@ func TestCreatePaste_Unlisted(t *testing.T) {
 		t.Fatalf("status: got %d, want 201", rr.Code)
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	data := resp["data"].(map[string]interface{})
 	vis := int(data["visibility"].(float64))
 	if vis != model.VisibilityUnlisted {
@@ -380,7 +390,9 @@ func TestCreatePaste_WithExpiry(t *testing.T) {
 		t.Fatalf("status: got %d, want 201", rr.Code)
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	data := resp["data"].(map[string]interface{})
 	if data["expires_at"] == nil {
 		t.Error("expires_at should be set")
@@ -394,7 +406,7 @@ func TestCreatePaste_MultipartForm_Content(t *testing.T) {
 	w := multipart.NewWriter(&buf)
 	_ = w.WriteField("content", "multipart paste content")
 	_ = w.WriteField("title", "Multipart Title")
-	w.Close()
+	_ = w.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/pastes", &buf)
 	req.Header.Set("Content-Type", w.FormDataContentType())
@@ -418,8 +430,8 @@ func TestCreatePaste_MultipartForm_FileUpload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateFormFile: %v", err)
 	}
-	io.WriteString(fw, "package main\n\nfunc main() {}")
-	w.Close()
+	_, _ = io.WriteString(fw, "package main\n\nfunc main() {}")
+	_ = w.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/pastes", &buf)
 	req.Header.Set("Content-Type", w.FormDataContentType())
@@ -433,7 +445,9 @@ func TestCreatePaste_MultipartForm_FileUpload(t *testing.T) {
 		t.Fatalf("status: got %d, want 201\nbody: %s", rr.Code, rr.Body.String())
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	data := resp["data"].(map[string]interface{})
 	if data["language"] != "go" {
 		t.Errorf("language: got %v, want go (detected from main.go)", data["language"])
@@ -460,7 +474,9 @@ func TestCreatePaste_FormWithBurnAfter(t *testing.T) {
 		t.Fatalf("status: got %d, want 201\nbody: %s", rr.Code, rr.Body.String())
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	data := resp["data"].(map[string]interface{})
 	ba := int(data["burn_after"].(float64))
 	if ba != 2 {
@@ -555,7 +571,9 @@ func TestCreatePaste_HTTPSLink(t *testing.T) {
 		t.Fatalf("status: got %d, want 201", rr.Code)
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	data := resp["data"].(map[string]interface{})
 	link := data["link"].(string)
 	if !strings.HasPrefix(link, "https://") {
@@ -647,7 +665,9 @@ func TestCreatePaste_JSONBinaryDetectedAndEncoded(t *testing.T) {
 		t.Fatalf("status: got %d, want 201\nbody: %s", rr.Code, rr.Body.String())
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	id := resp["data"].(map[string]interface{})["id"].(string)
 
 	paste, err := db.GetPasteByID(id)
@@ -698,8 +718,8 @@ func TestCreatePaste_MultipartBinaryFileStoredBase64(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateFormFile: %v", err)
 	}
-	fw.Write(png)
-	w.Close()
+	_, _ = fw.Write(png)
+	_ = w.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/pastes", &buf)
 	req.Header.Set("Content-Type", w.FormDataContentType())
@@ -713,7 +733,9 @@ func TestCreatePaste_MultipartBinaryFileStoredBase64(t *testing.T) {
 		t.Fatalf("status: got %d, want 201\nbody: %s", rr.Code, rr.Body.String())
 	}
 	var resp map[string]interface{}
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
 	id := resp["data"].(map[string]interface{})["id"].(string)
 
 	paste, err := db.GetPasteByID(id)

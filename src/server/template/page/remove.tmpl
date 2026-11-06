@@ -1,6 +1,6 @@
 {{define "meta"}}
-    <title>Delete Paste - {{.SiteTitle}}</title>
-    <meta name="description" content="Permanently delete a paste using its delete token">
+    <title>{{t .Lang "pagemeta.remove_title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{t .Lang "pagemeta.remove_description"}}">
 {{end}}
 
 {{define "content"}}
@@ -13,7 +13,7 @@
 
                 {{if .Success}}
                 <div class="paste-view page-view page-centered">
-                    <div class="delete-success-icon">🗑️</div>
+                    <div class="delete-success-icon" aria-hidden="true">🗑️</div>
                     <h2>{{t .Lang "paste.deleted_title"}}</h2>
                     <p class="delete-hint">
                         {{tf .Lang "paste.deleted_message" "id" .ID}}
@@ -24,12 +24,12 @@
                 {{else}}
                 <div class="paste-view">
                     {{if .Error}}
-                    <div class="alert alert-error">
+                    <div class="alert alert-error" role="alert">
                         {{.Error}}
                     </div>
                     {{end}}
 
-                    <form action="{{.AssetPrefix}}/remove/{{.ID}}" method="POST" class="paste-form">
+                    <form action="{{.AssetPrefix}}/remove/{{.ID}}" method="POST" class="paste-form" data-confirm="{{t .Lang "confirm.delete_message"}}">
                         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                         <div class="form-group">
                             <label for="token" class="form-label">{{t .Lang "paste.delete_token_label"}}</label>

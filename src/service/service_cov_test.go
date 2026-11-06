@@ -158,7 +158,7 @@ func TestPrintHelp_ContainsServiceCommands(t *testing.T) {
 
 	PrintHelp("cairnbin")
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = origStdout
 
 	buf := make([]byte, 4096)
@@ -178,13 +178,14 @@ func TestPrintHelp_ContainsServiceCommands(t *testing.T) {
 // TestInstallRunit_RunScriptContent verifies the runit run script contains
 // the correct binary path and exec invocation.
 func TestInstallRunit_RunScriptContent(t *testing.T) {
+	setupFakeRunit(t)
 	if os.Getuid() != 0 {
 		t.Skip("requires root to create /etc/sv/")
 	}
 	svDir := "/etc/sv/" + appName
 	t.Cleanup(func() {
-		os.RemoveAll(svDir)
-		os.Remove("/var/service/" + appName)
+		_ = os.RemoveAll(svDir)
+		_ = os.Remove("/var/service/" + appName)
 	})
 
 	if err := installRunit(); err != nil {
@@ -210,13 +211,14 @@ func TestInstallRunit_RunScriptContent(t *testing.T) {
 // TestInstallRunit_LogRunScriptContent verifies the runit log run script
 // contains the svlogd invocation.
 func TestInstallRunit_LogRunScriptContent(t *testing.T) {
+	setupFakeRunit(t)
 	if os.Getuid() != 0 {
 		t.Skip("requires root to create /etc/sv/")
 	}
 	svDir := "/etc/sv/" + appName
 	t.Cleanup(func() {
-		os.RemoveAll(svDir)
-		os.Remove("/var/service/" + appName)
+		_ = os.RemoveAll(svDir)
+		_ = os.Remove("/var/service/" + appName)
 	})
 
 	if err := installRunit(); err != nil {
@@ -238,6 +240,7 @@ func TestInstallRunit_LogRunScriptContent(t *testing.T) {
 // TestUninstallRunit_RemovesSvDir verifies that after uninstall the service
 // directory is removed.
 func TestUninstallRunit_RemovesSvDir(t *testing.T) {
+	setupFakeRunit(t)
 	if os.Getuid() != 0 {
 		t.Skip("requires root")
 	}
@@ -267,10 +270,10 @@ func TestInstallSystemd_ServiceFileContent(t *testing.T) {
 	}
 	servicePath := "/etc/systemd/system/" + appName + ".service"
 	t.Cleanup(func() {
-		os.Remove(servicePath)
-		os.RemoveAll("/var/lib/" + orgName)
-		os.RemoveAll("/var/log/" + orgName)
-		os.RemoveAll("/etc/" + orgName)
+		_ = os.Remove(servicePath)
+		_ = os.RemoveAll("/var/lib/" + orgName)
+		_ = os.RemoveAll("/var/log/" + orgName)
+		_ = os.RemoveAll("/etc/" + orgName)
 	})
 
 	err := installSystemd()
@@ -322,7 +325,7 @@ func TestInstallBSDRC_CreatesRcScript(t *testing.T) {
 	if err := os.MkdirAll(rcDir, 0o755); err != nil {
 		t.Fatalf("create rc.d dir: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(rcPath) })
+	t.Cleanup(func() { _ = os.Remove(rcPath) })
 
 	err := installBSDRC()
 	if err != nil {
@@ -387,9 +390,9 @@ func TestInstallLaunchd_CreatesPlist(t *testing.T) {
 		t.Fatalf("create LaunchDaemons dir: %v", err)
 	}
 	t.Cleanup(func() {
-		os.Remove(plistPath)
-		os.RemoveAll("/Library/Application Support/" + orgName)
-		os.RemoveAll("/var/log/" + orgName)
+		_ = os.Remove(plistPath)
+		_ = os.RemoveAll("/Library/Application Support/" + orgName)
+		_ = os.RemoveAll("/var/log/" + orgName)
 	})
 
 	err := installLaunchd()

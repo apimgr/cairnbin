@@ -213,8 +213,8 @@ func TestRootUpload_ZeroXMultipartFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fw.Write([]byte("0x0 file content"))
-	mw.Close()
+	_, _ = fw.Write([]byte("0x0 file content"))
+	_ = mw.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/", &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
@@ -473,7 +473,7 @@ func termbinRoundTrip(t *testing.T, h *Handler, content string, maxSize int64) s
 		_, _ = cliConn.Write([]byte(content))
 	}()
 	resp, _ := io.ReadAll(cliConn)
-	cliConn.Close()
+	_ = cliConn.Close()
 	return string(resp)
 }
 

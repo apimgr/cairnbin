@@ -167,7 +167,7 @@ func TestFetchExpectedChecksum_HTTPError(t *testing.T) {
 			return
 		}
 		conn, _, _ := hj.Hijack()
-		conn.Close()
+		_ = conn.Close()
 	}))
 	defer srv.Close()
 
@@ -217,7 +217,7 @@ func TestFetchExpectedChecksum_MultipleEntriesMatchFirst(t *testing.T) {
 	body := "other000000000000000000000000000000000000000000000000000  other-bin\n" +
 		want + "  cairnbin-linux-amd64\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(body))
+		_, _ = w.Write([]byte(body))
 	}))
 	defer srv.Close()
 
@@ -260,7 +260,7 @@ func TestDoUpdate_CancelledContextDownload(t *testing.T) {
 	assetName := binaryAssetName()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("some content"))
+		_, _ = w.Write([]byte("some content"))
 	}))
 	defer srv.Close()
 

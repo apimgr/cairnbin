@@ -17,7 +17,7 @@ func normalizeBools(n *yaml.Node, t reflect.Type, path string) {
 	if n == nil {
 		return
 	}
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch n.Kind {
@@ -92,7 +92,7 @@ func yamlFieldTypes(t reflect.Type) map[string]reflect.Type {
 		name, opts, _ := strings.Cut(tag, ",")
 		if strings.Contains(opts, "inline") {
 			ft := f.Type
-			for ft.Kind() == reflect.Ptr {
+			for ft.Kind() == reflect.Pointer {
 				ft = ft.Elem()
 			}
 			if ft.Kind() == reflect.Struct {

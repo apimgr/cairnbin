@@ -45,7 +45,7 @@ func TestGetLogsDir_EnvOverride(t *testing.T) {
 
 // TestGetLogsDir_LOG_DIR verifies that the AI.md-canonical LOG_DIR overrides the path.
 func TestGetLogsDir_LOG_DIR(t *testing.T) {
-	os.Unsetenv("LOGS_DIR")
+	_ = os.Unsetenv("LOGS_DIR")
 	t.Setenv("LOG_DIR", "/tmp/canonical-logs")
 	got := path.GetLogsDir("cairnbin")
 	if got != "/tmp/canonical-logs" {
@@ -55,7 +55,7 @@ func TestGetLogsDir_LOG_DIR(t *testing.T) {
 
 // TestGetDBPath_DATABASE_DIR verifies that DATABASE_DIR overrides only the directory.
 func TestGetDBPath_DATABASE_DIR(t *testing.T) {
-	os.Unsetenv("DB_PATH")
+	_ = os.Unsetenv("DB_PATH")
 	t.Setenv("DATABASE_DIR", "/tmp/dbdir")
 	got := path.GetDBPath("cairnbin")
 	if got != filepath.Join("/tmp/dbdir", "server.db") {
@@ -105,7 +105,7 @@ func TestGetDBPath_NativeHost(t *testing.T) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		t.Skip("running inside Docker — container path applies")
 	}
-	os.Unsetenv("DB_PATH")
+	_ = os.Unsetenv("DB_PATH")
 	got := path.GetDBPath("cairnbin")
 	want := filepath.Join(path.GetDataDir("cairnbin"), "db", "server.db")
 	if got != want {
@@ -143,7 +143,7 @@ func TestEnsureDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	target := filepath.Join(dir, "nested", "deep", "dir")
 
@@ -194,7 +194,7 @@ func TestGetConfigDir_IgnoresXDG(t *testing.T) {
 	skipIfRoot(t)
 
 	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-config")
-	os.Unsetenv("CONFIG_DIR")
+	_ = os.Unsetenv("CONFIG_DIR")
 
 	home, _ := os.UserHomeDir()
 	got := path.GetConfigDir("cairnbin")
@@ -210,8 +210,8 @@ func TestGetConfigDir_HomeDefault(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
-	os.Unsetenv("CONFIG_DIR")
-	os.Unsetenv("XDG_CONFIG_HOME")
+	_ = os.Unsetenv("CONFIG_DIR")
+	_ = os.Unsetenv("XDG_CONFIG_HOME")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -232,7 +232,7 @@ func TestGetDataDir_IgnoresXDG(t *testing.T) {
 	skipIfRoot(t)
 
 	t.Setenv("XDG_DATA_HOME", "/tmp/xdg-data")
-	os.Unsetenv("DATA_DIR")
+	_ = os.Unsetenv("DATA_DIR")
 
 	home, _ := os.UserHomeDir()
 	got := path.GetDataDir("cairnbin")
@@ -248,8 +248,8 @@ func TestGetDataDir_HomeDefault(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
-	os.Unsetenv("DATA_DIR")
-	os.Unsetenv("XDG_DATA_HOME")
+	_ = os.Unsetenv("DATA_DIR")
+	_ = os.Unsetenv("XDG_DATA_HOME")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -269,7 +269,7 @@ func TestGetLogsDir_HomeDefault(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
-	os.Unsetenv("LOGS_DIR")
+	_ = os.Unsetenv("LOGS_DIR")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -289,7 +289,7 @@ func TestGetBackupDir_DataBased(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
-	os.Unsetenv("BACKUP_DIR")
+	_ = os.Unsetenv("BACKUP_DIR")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -313,7 +313,7 @@ func TestGetPIDFile_UserPath(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
-	os.Unsetenv("PID_FILE")
+	_ = os.Unsetenv("PID_FILE")
 
 	got := path.GetPIDFile("cairnbin")
 	if filepath.Base(got) != "cairnbin.pid" {
@@ -334,7 +334,7 @@ func TestGetCacheDir_IgnoresXDG(t *testing.T) {
 	skipIfRoot(t)
 
 	t.Setenv("XDG_CACHE_HOME", "/tmp/xdg-cache")
-	os.Unsetenv("CACHE_DIR")
+	_ = os.Unsetenv("CACHE_DIR")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -353,8 +353,8 @@ func TestGetCacheDir_HomeDefault(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
-	os.Unsetenv("CACHE_DIR")
-	os.Unsetenv("XDG_CACHE_HOME")
+	_ = os.Unsetenv("CACHE_DIR")
+	_ = os.Unsetenv("XDG_CACHE_HOME")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -383,7 +383,7 @@ func TestGetDBPath_NativeUser(t *testing.T) {
 	skipIfContainer(t)
 	skipIfRoot(t)
 
-	os.Unsetenv("DB_PATH")
+	_ = os.Unsetenv("DB_PATH")
 
 	got := path.GetDBPath("cairnbin")
 	dataDir := path.GetDataDir("cairnbin")
@@ -405,7 +405,7 @@ func TestAllPathFunctions_ReturnAbsolutePaths(t *testing.T) {
 		"PID_FILE", "CACHE_DIR", "DB_PATH",
 		"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
 	} {
-		os.Unsetenv(env)
+		_ = os.Unsetenv(env)
 	}
 
 	cases := []struct {

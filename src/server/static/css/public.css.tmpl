@@ -66,6 +66,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    min-height: 44px;
     padding: var(--space-2) var(--space-4);
     color: var(--color-text-secondary);
     font-size: var(--font-size-sm);
@@ -82,6 +83,19 @@
 .nav-link.active {
     color: var(--color-accent-primary);
     background: var(--color-accent-tint);
+}
+
+/* The state checkbox stays keyboard-focusable (visually hidden, not display:none)
+   so the hamburger menu is operable with Space; its label shows the focus ring */
+.nav-checkbox {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+}
+
+.nav-checkbox:focus-visible ~ .nav-toggle {
+    box-shadow: var(--focus-ring-offset);
 }
 
 /* Hamburger toggle — mobile only */
@@ -118,7 +132,8 @@
     background: var(--color-bg);
     border-inline-start: 1px solid var(--color-border);
     box-shadow: var(--shadow-lg);
-    transition: right var(--transition-fast);
+    transition: inset-inline-end var(--transition-fast), visibility var(--transition-fast);
+    visibility: hidden;
     z-index: 1001;
 }
 
@@ -155,6 +170,7 @@
 
 .nav-checkbox:checked ~ .nav-panel {
     inset-inline-end: 0;
+    visibility: visible;
 }
 
 .nav-checkbox:checked ~ .nav-overlay {
@@ -247,11 +263,45 @@
         flex: 1;
     }
 
+    .nav-checkbox,
     .nav-toggle,
     .nav-panel,
     .nav-overlay {
         display: none;
     }
+}
+
+/* Smart menu (PART 16): app.js measures the links and picks one state per
+   viewport, overriding the width-based defaults above. No JS = defaults. */
+.header.nav-measure .nav-links {
+    display: flex;
+    position: absolute;
+    visibility: hidden;
+    flex: none;
+    white-space: nowrap;
+}
+
+.header.nav-fit .nav-links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    flex: 1;
+}
+
+.header.nav-fit .nav-toggle,
+.header.nav-fit .nav-panel,
+.header.nav-fit .nav-overlay {
+    display: none;
+}
+
+.header.nav-overflow .nav-links {
+    display: none;
+}
+
+.header.nav-overflow .nav-toggle,
+.header.nav-overflow .nav-panel {
+    display: flex;
 }
 
 /* ============================================
@@ -264,9 +314,17 @@ main {
 
 .container {
     width: 100%;
-    max-width: 1280px;
+    max-width: 1400px;
     margin: 0 auto;
-    padding: 0 var(--space-6);
+    padding-inline: var(--space-4);
+}
+
+/* Tablet+: 90% centered container, capped at 1400px (PART 16 Container) */
+@media (min-width: 768px) {
+    .container {
+        width: 90%;
+        padding-inline: 0;
+    }
 }
 
 .container-sm {
@@ -551,7 +609,7 @@ main {
 
 .results-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
     gap: var(--space-4);
 }
 
@@ -764,8 +822,19 @@ main {
     gap: var(--space-5);
     max-width: 1280px;
     margin: 0 auto;
-    padding: 0 var(--space-6);
+    padding: 0 var(--space-4);
     text-align: center;
+}
+
+/* Footer rows are consecutive <p> elements with tight spacing, never <br> spacers */
+.footer p {
+    margin: var(--space-1) 0;
+}
+
+@media (min-width: 768px) {
+    .footer-content {
+        padding: 0 var(--space-6);
+    }
 }
 
 /* Operator custom branding rendered above the default footer (PART 16) */
@@ -885,6 +954,9 @@ main {
 }
 
 .footer-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     color: var(--color-accent);
     font-size: var(--font-size-sm);
     transition: color var(--transition-fast);
@@ -1113,7 +1185,7 @@ main {
     gap: var(--space-4);
 }
 
-@media (min-width: 641px) {
+@media (min-width: 768px) {
     .form-row {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -1191,7 +1263,7 @@ main {
     margin-bottom: var(--space-8);
 }
 
-@media (min-width: 641px) {
+@media (min-width: 768px) {
     .api-overview {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -1369,7 +1441,7 @@ main {
 
 .api-response-examples {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
     gap: var(--space-6);
 }
 
@@ -1660,7 +1732,7 @@ main {
     margin-bottom: var(--space-5);
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
     .paste-form .form-row {
         grid-template-columns: repeat(3, 1fr);
     }
@@ -1732,7 +1804,7 @@ main {
     color: var(--color-error);
 }
 
-/* Hidden utility — placed after component rules so source order wins (no !important, per PART 16) */
+/* Hidden utility — placed after component rules so source order wins (no important-flag override, per PART 16) */
 .hidden {
     display: none;
 }
@@ -1972,19 +2044,39 @@ main {
     margin-bottom: var(--space-4);
 }
 
+/* Key-value list: stacked on mobile, side-by-side from tablet up */
 .info-list {
     display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: var(--space-2) var(--space-4);
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+    margin: 0;
 }
 
 .info-list dt {
+    margin-top: var(--space-3);
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.info-list dt:first-child {
+    margin-top: 0;
 }
 
 .info-list dd {
     margin: 0;
+    word-break: break-word;
+}
+
+@media (min-width: 768px) {
+    .info-list {
+        grid-template-columns: max-content 1fr;
+        gap: var(--space-2) var(--space-4);
+    }
+
+    .info-list dt {
+        margin-top: 0;
+    }
 }
 
 .badge {
@@ -1993,6 +2085,50 @@ main {
     border-radius: var(--radius-sm);
     font-size: var(--font-size-xs);
     font-weight: 600;
+    white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+    .badge {
+        font-size: var(--font-size-sm);
+    }
+}
+
+.badge-enabled {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.badge-disabled {
+    background: var(--color-bg-secondary);
+    color: var(--color-muted);
+}
+
+.badge-primary {
+    background: var(--color-primary-bg);
+    color: var(--color-primary);
+}
+
+.badge-member {
+    background: var(--color-bg-secondary);
+    color: var(--color-text);
+}
+
+.badge-debug {
+    background: var(--color-error-bg);
+    color: var(--color-error);
+}
+
+/* Inline status indicator (pill); .status-ok/-error/-warning supply colors */
+.status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    white-space: nowrap;
 }
 
 .badge-production {
@@ -2005,9 +2141,26 @@ main {
     color: var(--color-warning);
 }
 
+/* Horizontal scroll on narrow screens */
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: var(--space-4) 0;
+}
+
 .data-table {
     width: 100%;
+    min-width: 400px;
     border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+@media (min-width: 768px) {
+    .data-table {
+        min-width: 0;
+        font-size: var(--font-size-base);
+    }
 }
 
 .data-table th {
@@ -2055,6 +2208,41 @@ main {
 .feature-disabled {
     color: var(--color-text-muted);
     text-decoration: line-through;
+}
+
+/* Tablet+: features flow horizontally; entries with a code-block take a full row */
+@media (min-width: 768px) {
+    .section-card .feature-list {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-6);
+    }
+
+    .section-card .feature-list li:has(.code-block) {
+        flex-basis: 100%;
+    }
+}
+
+/* URL / node list with copyable values */
+.node-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.node-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.node-list .code-block {
+    flex: 1;
+    min-width: 0;
 }
 
 .stat-number {

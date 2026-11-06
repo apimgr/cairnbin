@@ -172,7 +172,7 @@ func (d *Dispatcher) send(ctx context.Context, msg Message, tgt Target, id strin
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode, nil
 }
 

@@ -16,7 +16,7 @@ func TestInstallSystemd_DirectCall(t *testing.T) {
 
 	// Create necessary directories
 	systemdDir := "/etc/systemd/system"
-	os.MkdirAll(systemdDir, 0o755)
+	_ = os.MkdirAll(systemdDir, 0o755)
 
 	// Create data directories that installSystemd creates
 	dirs := []string{
@@ -25,13 +25,13 @@ func TestInstallSystemd_DirectCall(t *testing.T) {
 		"/etc/" + orgName + "/" + appName,
 	}
 	for _, dir := range dirs {
-		os.MkdirAll(dir, 0o755)
+		_ = os.MkdirAll(dir, 0o755)
 	}
 
 	t.Cleanup(func() {
-		os.Remove(filepath.Join(systemdDir, appName+".service"))
+		_ = os.Remove(filepath.Join(systemdDir, appName+".service"))
 		for _, dir := range dirs {
-			os.RemoveAll(filepath.Dir(dir))
+			_ = os.RemoveAll(filepath.Dir(dir))
 		}
 	})
 
@@ -55,10 +55,10 @@ func TestInstallOpenRC_DirectCall(t *testing.T) {
 	}
 
 	initDir := "/etc/init.d"
-	os.MkdirAll(initDir, 0o755)
+	_ = os.MkdirAll(initDir, 0o755)
 
 	t.Cleanup(func() {
-		os.Remove(filepath.Join(initDir, appName))
+		_ = os.Remove(filepath.Join(initDir, appName))
 	})
 
 	err := installOpenRC()
@@ -79,10 +79,10 @@ func TestInstallSysV_DirectCall(t *testing.T) {
 	}
 
 	initDir := "/etc/init.d"
-	os.MkdirAll(initDir, 0o755)
+	_ = os.MkdirAll(initDir, 0o755)
 
 	t.Cleanup(func() {
-		os.Remove(filepath.Join(initDir, appName))
+		_ = os.Remove(filepath.Join(initDir, appName))
 	})
 
 	err := installSysV()
@@ -103,10 +103,10 @@ func TestInstallBSDRC_DirectCall(t *testing.T) {
 	}
 
 	rcDir := "/usr/local/etc/rc.d"
-	os.MkdirAll(rcDir, 0o755)
+	_ = os.MkdirAll(rcDir, 0o755)
 
 	t.Cleanup(func() {
-		os.Remove(filepath.Join(rcDir, appName))
+		_ = os.Remove(filepath.Join(rcDir, appName))
 	})
 
 	err := installBSDRC()
@@ -127,20 +127,20 @@ func TestInstallLaunchd_DirectCall(t *testing.T) {
 	}
 
 	launchDir := "/Library/LaunchDaemons"
-	os.MkdirAll(launchDir, 0o755)
+	_ = os.MkdirAll(launchDir, 0o755)
 
 	// Create log directory
 	logDir := "/var/log/" + orgName + "/" + appName
-	os.MkdirAll(logDir, 0o755)
+	_ = os.MkdirAll(logDir, 0o755)
 
 	// Create Application Support directory
 	appSupportDir := "/Library/Application Support/" + orgName + "/" + appName
-	os.MkdirAll(appSupportDir, 0o755)
+	_ = os.MkdirAll(appSupportDir, 0o755)
 
 	t.Cleanup(func() {
-		os.Remove(filepath.Join(launchDir, launchdLabel+".plist"))
-		os.RemoveAll("/var/log/" + orgName)
-		os.RemoveAll("/Library/Application Support/" + orgName)
+		_ = os.Remove(filepath.Join(launchDir, launchdLabel+".plist"))
+		_ = os.RemoveAll("/var/log/" + orgName)
+		_ = os.RemoveAll("/Library/Application Support/" + orgName)
 	})
 
 	err := installLaunchd()
@@ -156,13 +156,14 @@ func TestInstallLaunchd_DirectCall(t *testing.T) {
 }
 
 func TestInstallRunit_DirectCall(t *testing.T) {
+	setupFakeRunit(t)
 	if os.Geteuid() != 0 {
 		t.Skip("requires root")
 	}
 
 	t.Cleanup(func() {
-		os.RemoveAll("/etc/sv/" + appName)
-		os.Remove("/var/service/" + appName)
+		_ = os.RemoveAll("/etc/sv/" + appName)
+		_ = os.Remove("/var/service/" + appName)
 	})
 
 	err := installRunit()
@@ -198,7 +199,9 @@ func TestCopyBinary_AllBranches(t *testing.T) {
 	t.Run("normal", func(t *testing.T) {
 		src := filepath.Join(tmp, "src1")
 		dst := filepath.Join(tmp, "dst1")
-		os.WriteFile(src, []byte("content1"), 0o755)
+		if err := os.WriteFile(src, []byte("content1"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 
 		if err := copyBinary(src, dst); err != nil {
 			t.Errorf("copyBinary: %v", err)
@@ -209,7 +212,9 @@ func TestCopyBinary_AllBranches(t *testing.T) {
 	t.Run("nested", func(t *testing.T) {
 		src := filepath.Join(tmp, "src2")
 		dst := filepath.Join(tmp, "a", "b", "c", "dst2")
-		os.WriteFile(src, []byte("content2"), 0o755)
+		if err := os.WriteFile(src, []byte("content2"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 
 		if err := copyBinary(src, dst); err != nil {
 			t.Errorf("copyBinary nested: %v", err)
@@ -243,8 +248,8 @@ func TestPurgeData_AllBranches(t *testing.T) {
 	dirs := purgeDirs()
 
 	for _, dir := range dirs {
-		os.MkdirAll(dir, 0o755)
-		os.WriteFile(filepath.Join(dir, "data.txt"), []byte("test"), 0o644)
+		_ = os.MkdirAll(dir, 0o755)
+		_ = os.WriteFile(filepath.Join(dir, "data.txt"), []byte("test"), 0o644)
 	}
 
 	// Call purgeData
@@ -268,8 +273,8 @@ func TestUninstallAll_DirectCalls(t *testing.T) {
 	// Test uninstallSystemd
 	t.Run("systemd", func(t *testing.T) {
 		systemdDir := "/etc/systemd/system"
-		os.MkdirAll(systemdDir, 0o755)
-		os.WriteFile(filepath.Join(systemdDir, appName+".service"), []byte("[Unit]\n"), 0o644)
+		_ = os.MkdirAll(systemdDir, 0o755)
+		_ = os.WriteFile(filepath.Join(systemdDir, appName+".service"), []byte("[Unit]\n"), 0o644)
 
 		err := uninstallSystemd()
 		if err != nil {
@@ -284,8 +289,8 @@ func TestUninstallAll_DirectCalls(t *testing.T) {
 	// Test uninstallOpenRC
 	t.Run("openrc", func(t *testing.T) {
 		initDir := "/etc/init.d"
-		os.MkdirAll(initDir, 0o755)
-		os.WriteFile(filepath.Join(initDir, appName), []byte("#!/sbin/openrc-run\n"), 0o755)
+		_ = os.MkdirAll(initDir, 0o755)
+		_ = os.WriteFile(filepath.Join(initDir, appName), []byte("#!/sbin/openrc-run\n"), 0o755)
 
 		err := uninstallOpenRC()
 		if err != nil {
@@ -300,8 +305,8 @@ func TestUninstallAll_DirectCalls(t *testing.T) {
 	// Test uninstallSysV
 	t.Run("sysv", func(t *testing.T) {
 		initDir := "/etc/init.d"
-		os.MkdirAll(initDir, 0o755)
-		os.WriteFile(filepath.Join(initDir, appName), []byte("#!/bin/sh\n"), 0o755)
+		_ = os.MkdirAll(initDir, 0o755)
+		_ = os.WriteFile(filepath.Join(initDir, appName), []byte("#!/bin/sh\n"), 0o755)
 
 		err := uninstallSysV()
 		if err != nil {
@@ -316,8 +321,8 @@ func TestUninstallAll_DirectCalls(t *testing.T) {
 	// Test uninstallRunit
 	t.Run("runit", func(t *testing.T) {
 		svDir := "/etc/sv/" + appName
-		os.MkdirAll(svDir, 0o755)
-		os.WriteFile(filepath.Join(svDir, "run"), []byte("#!/bin/sh\n"), 0o755)
+		_ = os.MkdirAll(svDir, 0o755)
+		_ = os.WriteFile(filepath.Join(svDir, "run"), []byte("#!/bin/sh\n"), 0o755)
 
 		err := uninstallRunit()
 		if err != nil {
@@ -332,8 +337,8 @@ func TestUninstallAll_DirectCalls(t *testing.T) {
 	// Test uninstallLaunchd
 	t.Run("launchd", func(t *testing.T) {
 		launchDir := "/Library/LaunchDaemons"
-		os.MkdirAll(launchDir, 0o755)
-		os.WriteFile(filepath.Join(launchDir, launchdLabel+".plist"), []byte("<plist>\n</plist>"), 0o644)
+		_ = os.MkdirAll(launchDir, 0o755)
+		_ = os.WriteFile(filepath.Join(launchDir, launchdLabel+".plist"), []byte("<plist>\n</plist>"), 0o644)
 
 		err := uninstallLaunchd()
 		if err != nil {
@@ -348,8 +353,8 @@ func TestUninstallAll_DirectCalls(t *testing.T) {
 	// Test uninstallBSDRC
 	t.Run("bsdrc", func(t *testing.T) {
 		rcDir := "/usr/local/etc/rc.d"
-		os.MkdirAll(rcDir, 0o755)
-		os.WriteFile(filepath.Join(rcDir, appName), []byte("#!/bin/sh\n"), 0o755)
+		_ = os.MkdirAll(rcDir, 0o755)
+		_ = os.WriteFile(filepath.Join(rcDir, appName), []byte("#!/bin/sh\n"), 0o755)
 
 		err := uninstallBSDRC()
 		if err != nil {
@@ -408,13 +413,13 @@ func TestInstall_TopLevel_Root(t *testing.T) {
 
 	// Create necessary directories for Install() to proceed
 	systemdDir := "/etc/systemd/system"
-	os.MkdirAll(systemdDir, 0o755)
+	_ = os.MkdirAll(systemdDir, 0o755)
 
 	t.Cleanup(func() {
-		os.Remove(filepath.Join(systemdDir, appName+".service"))
-		os.RemoveAll("/var/lib/" + orgName)
-		os.RemoveAll("/var/log/" + orgName)
-		os.RemoveAll("/etc/" + orgName)
+		_ = os.Remove(filepath.Join(systemdDir, appName+".service"))
+		_ = os.RemoveAll("/var/lib/" + orgName)
+		_ = os.RemoveAll("/var/log/" + orgName)
+		_ = os.RemoveAll("/etc/" + orgName)
 	})
 
 	err := Install()

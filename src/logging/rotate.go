@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -217,7 +218,9 @@ func (w *fileWriter) open() error {
 // closeLocked closes the handle if open. Callers must hold w.mu.
 func (w *fileWriter) closeLocked() {
 	if w.file != nil {
-		w.file.Close()
+		if err := w.file.Close(); err != nil {
+			log.Printf("log rotation: close failed: %v", err)
+		}
 		w.file = nil
 	}
 }
@@ -404,7 +407,11 @@ func gzipAndRemove(src string, perm os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() {
+		if err := in.Close(); err != nil {
+			log.Printf("log rotation: close source failed: %v", err)
+		}
+	}()
 	dst := src + ".gz"
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
 	if err != nil {
@@ -412,18 +419,18 @@ func gzipAndRemove(src string, perm os.FileMode) error {
 	}
 	gz := gzip.NewWriter(out)
 	if _, err := io.Copy(gz, in); err != nil {
-		gz.Close()
-		out.Close()
-		os.Remove(dst)
+		_ = gz.Close()
+		_ = out.Close()
+		_ = os.Remove(dst)
 		return err
 	}
 	if err := gz.Close(); err != nil {
-		out.Close()
-		os.Remove(dst)
+		_ = out.Close()
+		_ = os.Remove(dst)
 		return err
 	}
 	if err := out.Close(); err != nil {
-		os.Remove(dst)
+		_ = os.Remove(dst)
 		return err
 	}
 	return os.Remove(src)

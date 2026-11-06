@@ -51,7 +51,7 @@ func RunPGP(action string, actionArgs []string, opts PGPOptions) error {
 	if err != nil {
 		return fmt.Errorf("pgp: open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	installSecret, err := db.EnsureAppSecret("installation_secret")
 	if err != nil {
@@ -646,7 +646,7 @@ func outboundIP() string {
 	if err != nil {
 		return ""
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if a, ok := conn.LocalAddr().(*net.UDPAddr); ok {
 		return a.IP.String()
 	}

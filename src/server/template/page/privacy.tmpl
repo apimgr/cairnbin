@@ -1,6 +1,6 @@
 {{define "meta"}}
-    <title>Privacy - {{.SiteTitle}}</title>
-    <meta name="description" content="Privacy policy for {{.SiteTitle}} — what we collect, how it is used, retention, and your rights">
+    <title>{{t .Lang "privacy.title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{tf .Lang "pagemeta.privacy_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
@@ -55,45 +55,49 @@
                     <section id="data-storage">
                     {{if .Privacy.Data.Sharing}}
                     <h2 class="section-mt">{{t .Lang "privacy.when_shared"}}</h2>
-                    <table class="data-table">
-                        <thead>
-                            <tr><th>{{t .Lang "privacy.table_condition"}}</th><th>{{t .Lang "privacy.table_when"}}</th><th>{{t .Lang "privacy.table_data"}}</th></tr>
-                        </thead>
-                        <tbody>
-                            {{range .Privacy.Data.Sharing}}
-                            <tr>
-                                <td>{{.Condition}}</td>
-                                <td>{{.When}}</td>
-                                <td class="long-string">{{.Data}}</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>{{t .Lang "privacy.table_condition"}}</th><th>{{t .Lang "privacy.table_when"}}</th><th>{{t .Lang "privacy.table_data"}}</th></tr>
+                            </thead>
+                            <tbody>
+                                {{range .Privacy.Data.Sharing}}
+                                <tr>
+                                    <td>{{.Condition}}</td>
+                                    <td>{{.When}}</td>
+                                    <td class="long-string">{{.Data}}</td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
                     {{end}}
                     </section>
 
                     <section id="third-parties">
                     {{if .ThirdPartyServices}}
                     <h2 class="section-mt">{{t .Lang "privacy.third_party_services"}}</h2>
-                    <table class="data-table">
-                        <thead>
-                            <tr><th>{{t .Lang "privacy.service"}}</th><th>{{t .Lang "privacy.purpose"}}</th><th>{{t .Lang "privacy.data_sent"}}</th><th>{{t .Lang "privacy.table_policy"}}</th></tr>
-                        </thead>
-                        <tbody>
-                            {{range .ThirdPartyServices}}
-                            <tr>
-                                <td>{{.Name}}</td>
-                                <td>{{.Purpose}}</td>
-                                <td class="long-string">{{.DataSent}}</td>
-                                <td>
-                                    {{if .PolicyURL}}
-                                        <a class="long-string" href="{{.PolicyURL}}" rel="noopener noreferrer nofollow" target="_blank">{{t .Lang "privacy.view_policy"}}</a>
-                                    {{else}}—{{end}}
-                                </td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>{{t .Lang "privacy.service"}}</th><th>{{t .Lang "privacy.purpose"}}</th><th>{{t .Lang "privacy.data_sent"}}</th><th>{{t .Lang "privacy.table_policy"}}</th></tr>
+                            </thead>
+                            <tbody>
+                                {{range .ThirdPartyServices}}
+                                <tr>
+                                    <td>{{.Name}}</td>
+                                    <td>{{.Purpose}}</td>
+                                    <td class="long-string">{{.DataSent}}</td>
+                                    <td>
+                                        {{if .PolicyURL}}
+                                            <a class="long-string" href="{{.PolicyURL}}" rel="noopener noreferrer nofollow" target="_blank">{{t .Lang "privacy.view_policy"}}</a>
+                                        {{else}}—{{end}}
+                                    </td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
                     {{else}}
                     <h2 class="section-mt">{{t .Lang "privacy.third_party_services"}}</h2>
                     <p>{{t .Lang "privacy.no_third_party"}}</p>
@@ -111,7 +115,7 @@
                     </ul>
                     {{if .Privacy.Consent.ShowPreferences}}
                     <p>
-                        <button type="button" class="btn btn-secondary" data-cookie-preferences>{{.Privacy.Consent.PreferencesText}}</button>
+                        <button type="button" class="btn btn-secondary" data-action="cookie-preferences">{{.Privacy.Consent.PreferencesText}}</button>
                     </p>
                     {{end}}
                     </section>
@@ -120,16 +124,16 @@
                     {{if .Privacy.IsCCPAApplicable}}
                         {{if .CCPAOptedOut}}
                         <p>{{t .Lang "privacy.ccpa_opted_out_full"}}</p>
-                        <form method="POST" action="{{.AssetPrefix}}/server/privacy/ccpa">
+                        <form method="POST" action="{{.AssetPrefix}}/server/ccpa">
                             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                            <input type="hidden" name="action" value="opt_in">
+                            <input type="hidden" name="choice" value="opt-in">
                             <button type="submit" class="btn btn-secondary" data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "privacy.ccpa_opt_back_in"}}</button>
                         </form>
                         {{else}}
                         <p>{{t .Lang "privacy.ccpa_intro"}}</p>
-                        <form method="POST" action="{{.AssetPrefix}}/server/privacy/ccpa">
+                        <form method="POST" action="{{.AssetPrefix}}/server/ccpa">
                             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                            <input type="hidden" name="action" value="opt_out">
+                            <input type="hidden" name="choice" value="opt-out">
                             <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "privacy.ccpa_do_not_sell"}}</button>
                         </form>
                         {{end}}

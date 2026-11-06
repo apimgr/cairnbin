@@ -41,7 +41,7 @@ func readMemInfo(st *systemStats) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var total, avail uint64
 	var haveTotal, haveAvail bool
@@ -83,7 +83,7 @@ func readCPUStat(st *systemStats) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {

@@ -361,7 +361,7 @@ func TestInstallSysV_ScriptGeneration(t *testing.T) {
 	}
 
 	initPath := filepath.Join(initDir, appName)
-	t.Cleanup(func() { os.Remove(initPath) })
+	t.Cleanup(func() { _ = os.Remove(initPath) })
 
 	err := installSysV()
 	if err != nil {
@@ -395,7 +395,7 @@ func TestInstallOpenRC_ScriptGeneration(t *testing.T) {
 	}
 
 	initPath := filepath.Join(initDir, appName)
-	t.Cleanup(func() { os.Remove(initPath) })
+	t.Cleanup(func() { _ = os.Remove(initPath) })
 
 	err := installOpenRC()
 	if err != nil {

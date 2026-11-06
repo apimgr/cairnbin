@@ -19,9 +19,9 @@ func TestLifecycle_SystemdPath(t *testing.T) {
 	}
 
 	// Create systemd indicator
-	os.MkdirAll("/run/systemd/system", 0o755)
+	_ = os.MkdirAll("/run/systemd/system", 0o755)
 	t.Cleanup(func() {
-		os.RemoveAll("/run/systemd")
+		_ = os.RemoveAll("/run/systemd")
 	})
 
 	// Verify detection
@@ -47,16 +47,16 @@ func TestLifecycle_RunitPath(t *testing.T) {
 	}
 
 	// Remove systemd indicators
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
-	os.Remove("/sbin/openrc-run")
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.Remove("/sbin/openrc-run")
 
 	// Create runit indicator
-	os.MkdirAll("/run/runit", 0o755)
+	_ = os.MkdirAll("/run/runit", 0o755)
 
 	t.Cleanup(func() {
-		os.RemoveAll("/run/runit")
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.RemoveAll("/run/runit")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
 	})
 
 	st := DetectServiceManager()
@@ -81,16 +81,16 @@ func TestLifecycle_OpenRCPath(t *testing.T) {
 	}
 
 	// Remove systemd indicators
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
 
 	// Create openrc indicator
-	os.MkdirAll("/sbin", 0o755)
-	os.WriteFile("/sbin/openrc-run", []byte("#!/bin/sh\n"), 0o755)
+	_ = os.MkdirAll("/sbin", 0o755)
+	_ = os.WriteFile("/sbin/openrc-run", []byte("#!/bin/sh\n"), 0o755)
 
 	t.Cleanup(func() {
-		os.Remove("/sbin/openrc-run")
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.Remove("/sbin/openrc-run")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
 	})
 
 	st := DetectServiceManager()
@@ -115,20 +115,20 @@ func TestLifecycle_SysVPath(t *testing.T) {
 	}
 
 	// Remove all other indicators
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
-	os.Remove("/sbin/openrc-run")
-	os.RemoveAll("/run/runit")
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.Remove("/sbin/openrc-run")
+	_ = os.RemoveAll("/run/runit")
 
 	// SysV detection: /etc/init.d exists + update-rc.d or chkconfig in PATH
-	os.MkdirAll("/etc/init.d", 0o755)
+	_ = os.MkdirAll("/etc/init.d", 0o755)
 
 	// Create a fake update-rc.d
-	os.WriteFile("/usr/sbin/update-rc.d", []byte("#!/bin/sh\n"), 0o755)
+	_ = os.WriteFile("/usr/sbin/update-rc.d", []byte("#!/bin/sh\n"), 0o755)
 
 	t.Cleanup(func() {
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
-		os.Remove("/usr/sbin/update-rc.d")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.Remove("/usr/sbin/update-rc.d")
 	})
 
 	// Note: This may still not detect SysV if update-rc.d isn't in PATH
@@ -151,17 +151,17 @@ func TestInstall_OpenRCBranch(t *testing.T) {
 	}
 
 	// Remove systemd indicators
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
 
 	// Create openrc indicator
-	os.MkdirAll("/sbin", 0o755)
-	os.WriteFile("/sbin/openrc-run", []byte("#!/bin/sh\n"), 0o755)
+	_ = os.MkdirAll("/sbin", 0o755)
+	_ = os.WriteFile("/sbin/openrc-run", []byte("#!/bin/sh\n"), 0o755)
 
 	t.Cleanup(func() {
-		os.Remove("/sbin/openrc-run")
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
-		os.Remove("/etc/init.d/" + appName)
+		_ = os.Remove("/sbin/openrc-run")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.Remove("/etc/init.d/" + appName)
 	})
 
 	st := DetectServiceManager()
@@ -190,18 +190,18 @@ func TestInstall_RunitBranch(t *testing.T) {
 	}
 
 	// Remove other indicators
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
-	os.Remove("/sbin/openrc-run")
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.Remove("/sbin/openrc-run")
 
 	// Create runit indicator
-	os.MkdirAll("/run/runit", 0o755)
+	_ = os.MkdirAll("/run/runit", 0o755)
 
 	t.Cleanup(func() {
-		os.RemoveAll("/run/runit")
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
-		os.RemoveAll("/etc/sv/" + appName)
-		os.Remove("/var/service/" + appName)
+		_ = os.RemoveAll("/run/runit")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.RemoveAll("/etc/sv/" + appName)
+		_ = os.Remove("/var/service/" + appName)
 	})
 
 	st := DetectServiceManager()
@@ -231,19 +231,19 @@ func TestUninstall_OpenRCBranch(t *testing.T) {
 	}
 
 	// Set up OpenRC detection
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
-	os.MkdirAll("/sbin", 0o755)
-	os.WriteFile("/sbin/openrc-run", []byte("#!/bin/sh\n"), 0o755)
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.MkdirAll("/sbin", 0o755)
+	_ = os.WriteFile("/sbin/openrc-run", []byte("#!/bin/sh\n"), 0o755)
 
 	// Create the init script to uninstall
-	os.MkdirAll("/etc/init.d", 0o755)
-	os.WriteFile("/etc/init.d/"+appName, []byte("#!/sbin/openrc-run\n"), 0o755)
+	_ = os.MkdirAll("/etc/init.d", 0o755)
+	_ = os.WriteFile("/etc/init.d/"+appName, []byte("#!/sbin/openrc-run\n"), 0o755)
 
 	t.Cleanup(func() {
-		os.Remove("/sbin/openrc-run")
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
-		os.Remove("/etc/init.d/" + appName)
+		_ = os.Remove("/sbin/openrc-run")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.Remove("/etc/init.d/" + appName)
 	})
 
 	st := DetectServiceManager()
@@ -267,15 +267,15 @@ func TestLifecycle_UnknownType(t *testing.T) {
 	}
 
 	// Remove ALL indicators
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
-	os.Remove("/sbin/openrc-run")
-	os.RemoveAll("/run/runit")
-	os.Rename("/etc/init.d", "/etc/init.d.bak")
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.Remove("/sbin/openrc-run")
+	_ = os.RemoveAll("/run/runit")
+	_ = os.Rename("/etc/init.d", "/etc/init.d.bak")
 
 	t.Cleanup(func() {
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
-		os.Rename("/etc/init.d.bak", "/etc/init.d")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.Rename("/etc/init.d.bak", "/etc/init.d")
 	})
 
 	st := DetectServiceManager()

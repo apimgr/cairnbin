@@ -62,16 +62,16 @@ func TestInstall_RootPath_WritesFiles(t *testing.T) {
 	}
 
 	// Ensure we have systemd paths so DetectServiceManager returns systemd
-	os.MkdirAll("/etc/systemd/system", 0o755)
-	os.MkdirAll("/var/lib/"+orgName+"/"+appName, 0o755)
-	os.MkdirAll("/var/log/"+orgName+"/"+appName, 0o755)
-	os.MkdirAll("/etc/"+orgName+"/"+appName, 0o755)
+	_ = os.MkdirAll("/etc/systemd/system", 0o755)
+	_ = os.MkdirAll("/var/lib/"+orgName+"/"+appName, 0o755)
+	_ = os.MkdirAll("/var/log/"+orgName+"/"+appName, 0o755)
+	_ = os.MkdirAll("/etc/"+orgName+"/"+appName, 0o755)
 
 	t.Cleanup(func() {
-		os.Remove("/etc/systemd/system/" + appName + ".service")
-		os.RemoveAll("/var/lib/" + orgName)
-		os.RemoveAll("/var/log/" + orgName)
-		os.RemoveAll("/etc/" + orgName)
+		_ = os.Remove("/etc/systemd/system/" + appName + ".service")
+		_ = os.RemoveAll("/var/lib/" + orgName)
+		_ = os.RemoveAll("/var/log/" + orgName)
+		_ = os.RemoveAll("/etc/" + orgName)
 	})
 
 	err := Install()
@@ -97,11 +97,11 @@ func TestUninstall_RootPath_NeedsConfirmation(t *testing.T) {
 	}
 
 	// Create service file
-	os.MkdirAll("/etc/systemd/system", 0o755)
-	os.WriteFile("/etc/systemd/system/"+appName+".service", []byte("[Unit]\n"), 0o644)
+	_ = os.MkdirAll("/etc/systemd/system", 0o755)
+	_ = os.WriteFile("/etc/systemd/system/"+appName+".service", []byte("[Unit]\n"), 0o644)
 
 	t.Cleanup(func() {
-		os.Remove("/etc/systemd/system/" + appName + ".service")
+		_ = os.Remove("/etc/systemd/system/" + appName + ".service")
 	})
 
 	// Uninstall will prompt for confirmation - stdin is not a terminal so
@@ -124,9 +124,9 @@ func TestDisable_Root_SystemdBranch(t *testing.T) {
 	}
 
 	// Ensure systemd detection
-	os.MkdirAll("/run/systemd/system", 0o755)
+	_ = os.MkdirAll("/run/systemd/system", 0o755)
 	t.Cleanup(func() {
-		os.RemoveAll("/run/systemd")
+		_ = os.RemoveAll("/run/systemd")
 	})
 
 	err := Disable()
@@ -137,6 +137,7 @@ func TestDisable_Root_SystemdBranch(t *testing.T) {
 }
 
 func TestDisable_Root_RunitBranch(t *testing.T) {
+	setupFakeRunit(t)
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux only")
 	}
@@ -145,27 +146,29 @@ func TestDisable_Root_RunitBranch(t *testing.T) {
 	}
 
 	// Remove systemd, create runit indicators
-	os.RemoveAll("/run/systemd")
-	os.Rename("/etc/systemd", "/etc/systemd.bak")
-	os.MkdirAll("/run/runit", 0o755)
+	_ = os.RemoveAll("/run/systemd")
+	_ = os.Rename("/etc/systemd", "/etc/systemd.bak")
+	_ = os.MkdirAll("/run/runit", 0o755)
 
 	t.Cleanup(func() {
-		os.RemoveAll("/run/runit")
-		os.Rename("/etc/systemd.bak", "/etc/systemd")
+		_ = os.RemoveAll("/run/runit")
+		_ = os.Rename("/etc/systemd.bak", "/etc/systemd")
 	})
 
 	// Create runit service dir
 	svDir := "/etc/sv/" + appName
-	os.MkdirAll(svDir, 0o755)
-	os.WriteFile(svDir+"/run", []byte("#!/bin/sh\n"), 0o755)
+	_ = os.MkdirAll(svDir, 0o755)
+	_ = os.WriteFile(svDir+"/run", []byte("#!/bin/sh\n"), 0o755)
 
 	// Create enabled symlink
-	os.MkdirAll("/var/service", 0o755)
-	os.Symlink(svDir, "/var/service/"+appName)
+	_ = os.MkdirAll("/var/service", 0o755)
+	if err := os.Symlink(svDir, "/var/service/"+appName); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Cleanup(func() {
-		os.RemoveAll(svDir)
-		os.Remove("/var/service/" + appName)
+		_ = os.RemoveAll(svDir)
+		_ = os.Remove("/var/service/" + appName)
 	})
 
 	err := Disable()

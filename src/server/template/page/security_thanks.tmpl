@@ -1,47 +1,48 @@
 {{define "meta"}}
-    <title>Security Acknowledgments - {{.SiteTitle}}</title>
-    <meta name="description" content="Researchers we thank for responsibly disclosing security issues in {{.SiteTitle}}">
+    <title>{{t .Lang "security.thanks_title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{tf .Lang "security.thanks_meta_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
         <section class="search-section">
             <div class="container container-sm">
                 <div class="section-header">
-                    <h1 class="section-title">Security Acknowledgments</h1>
-                    <p class="section-subtitle">Thank you to the researchers who help keep {{.SiteTitle}} safe</p>
+                    <h1 class="section-title">{{t .Lang "security.thanks_title"}}</h1>
+                    <p class="section-subtitle">{{tf .Lang "security.thanks_subtitle" "site" .SiteTitle}}</p>
                 </div>
 
                 <div class="paste-view page-view">
                     {{if .Entries}}
                     <p>
-                        We are grateful to the following researchers for responsibly disclosing security
-                        issues under our <a href="{{.AssetPrefix}}/server/security/policy">security policy</a>.
+                        {{t .Lang "security.thanks_intro"}}
+                        <a href="{{.AssetPrefix}}/server/security/policy">{{t .Lang "security.policy_title"}}</a>
                     </p>
-                    <table class="ack-table">
-                        <thead>
-                            <tr>
-                                <th scope="col">Researcher</th>
-                                <th scope="col">Component</th>
-                                <th scope="col">Severity</th>
-                                <th scope="col">Year</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {{range .Entries}}
-                            <tr>
-                                <td class="long-string">{{.Display}}</td>
-                                <td>{{if .Component}}{{.Component}}{{else}}—{{end}}</td>
-                                <td>{{if .Severity}}{{.Severity}}{{else}}—{{end}}</td>
-                                <td>{{if .Year}}{{.Year}}{{else}}—{{end}}</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="table-wrapper">
+                        <table class="ack-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">{{t .Lang "security.researcher"}}</th>
+                                    <th scope="col">{{t .Lang "security.component"}}</th>
+                                    <th scope="col">{{t .Lang "security.severity"}}</th>
+                                    <th scope="col">{{t .Lang "security.year"}}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range .Entries}}
+                                <tr>
+                                    <td class="long-string">{{.Display}}</td>
+                                    <td>{{if .Component}}{{.Component}}{{else}}—{{end}}</td>
+                                    <td>{{if .Severity}}{{.Severity}}{{else}}—{{end}}</td>
+                                    <td>{{if .Year}}{{.Year}}{{else}}—{{end}}</td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
                     {{else}}
                     <p class="empty-state">
-                        No disclosures have been published yet. If you have found a security issue,
-                        please review our <a href="{{.AssetPrefix}}/server/security/policy">security policy</a> and
-                        report it responsibly.
+                        {{t .Lang "security.thanks_empty"}}
+                        <a href="{{.AssetPrefix}}/server/security/policy">{{t .Lang "security.policy_title"}}</a>
                     </p>
                     {{end}}
                 </div>

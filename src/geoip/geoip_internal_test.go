@@ -49,7 +49,7 @@ func TestEnsureFile_Downloads(t *testing.T) {
 	payload := []byte("fake mmdb binary content")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write(payload)
+		_, _ = w.Write(payload)
 	}))
 	defer srv.Close()
 

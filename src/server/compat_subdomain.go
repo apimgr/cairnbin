@@ -84,6 +84,8 @@ func (s *Server) compatOwnership() map[string][]compatRouteRule {
 			{http.MethodPost, "/api/v2/", false},
 		},
 		"microbin": {
+			{http.MethodPost, "/upload", false},
+			{http.MethodGet, "/upload/", true},
 			{http.MethodGet, av + "/pasta", false},
 			{http.MethodPost, av + "/pasta", false},
 			{http.MethodGet, av + "/pasta/", true},

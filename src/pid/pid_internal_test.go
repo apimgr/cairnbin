@@ -89,13 +89,13 @@ func TestCheckPIDFile_SelfPID_CairnbinNamedBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open test binary: %v", err)
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 	dst, err := os.OpenFile(copied, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
 	if err != nil {
 		t.Fatalf("create binary copy: %v", err)
 	}
 	if _, err := io.Copy(dst, src); err != nil {
-		dst.Close()
+		_ = dst.Close()
 		t.Fatalf("copy test binary: %v", err)
 	}
 	if err := dst.Close(); err != nil {

@@ -67,7 +67,7 @@ func fetchPastes(server, lang string, page, limit int) ([]PasteListItem, error) 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", t("err_list"), err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(tf("err_server_status", "status", resp.StatusCode))
@@ -87,7 +87,7 @@ func fetchPasteRaw(server, lang, id string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", t("err_get"), err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return "", errors.New(tf("err_paste_not_found_expired", "id", id))
@@ -120,7 +120,7 @@ func deletePaste(server, lang, id, token string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", t("err_delete"), err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return errors.New(tf("err_paste_not_found_invalid_token", "id", id))

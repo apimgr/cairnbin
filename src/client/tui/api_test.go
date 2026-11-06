@@ -41,7 +41,7 @@ func TestAPIClientGetSetsHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 func TestAPIClientGetWithoutLang(t *testing.T) {
@@ -59,7 +59,7 @@ func TestAPIClientGetWithoutLang(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 func TestFetchPastesSuccess(t *testing.T) {
@@ -78,7 +78,7 @@ func TestFetchPastesSuccess(t *testing.T) {
 			t.Errorf("path = %q, want /api/v1/pastes", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -109,7 +109,7 @@ func TestFetchPastesServerError(t *testing.T) {
 func TestFetchPastesInvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("invalid json"))
+		_, _ = w.Write([]byte("invalid json"))
 	}))
 	defer server.Close()
 
@@ -138,7 +138,7 @@ func TestFetchPasteRawSuccess(t *testing.T) {
 		if r.URL.Path != "/raw/abc123" {
 			t.Errorf("path = %q, want /raw/abc123", r.URL.Path)
 		}
-		w.Write([]byte("Hello World"))
+		_, _ = w.Write([]byte("Hello World"))
 	}))
 	defer server.Close()
 
@@ -185,7 +185,7 @@ func TestFetchPasteRawLargeContent(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(largeContent)
+		_, _ = w.Write(largeContent)
 	}))
 	defer server.Close()
 

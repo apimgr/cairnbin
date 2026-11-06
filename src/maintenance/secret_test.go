@@ -88,7 +88,7 @@ func TestRotateEncryptionKey(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rawDB.Close()
+	_ = rawDB.Close()
 
 	sdb, err := sql.Open("sqlite", opts.DBPath)
 	if err != nil {
@@ -97,7 +97,7 @@ func TestRotateEncryptionKey(t *testing.T) {
 	if _, err := sdb.Exec(`INSERT INTO api_tokens(owner_id, kind, token_hash, token_prefix, token_suffix, token_enc, resource_type, resource_id) VALUES ('o1','primary','hash1','tok_secr','alue',?,'owner','o1')`, encTok); err != nil {
 		t.Fatal(err)
 	}
-	sdb.Close()
+	_ = sdb.Close()
 
 	opts.Stdin = strings.NewReader("rotate\n")
 	if err := RunSecret("rotate", "encryption_key", opts); err != nil {
@@ -117,7 +117,7 @@ func TestRotateEncryptionKey(t *testing.T) {
 	}
 
 	sdb, _ = sql.Open("sqlite", opts.DBPath)
-	defer sdb.Close()
+	defer func() { _ = sdb.Close() }()
 	var enc string
 	if err := sdb.QueryRow(`SELECT token_enc FROM api_tokens WHERE owner_id='o1'`).Scan(&enc); err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func TestRotateInstallationSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rawDB.Close()
+	_ = rawDB.Close()
 
 	oldWrap, _ := pgp.WrapKey(oldSecret)
 	sealed, _ := secretbox.Seal(oldWrap, []byte("ARMORED PRIVATE KEY"))
@@ -167,7 +167,7 @@ func TestRotateInstallationSecret(t *testing.T) {
 	}
 
 	rawDB, _ = database.NewDatabase("sqlite", opts.DBPath)
-	defer rawDB.Close()
+	defer func() { _ = rawDB.Close() }()
 	newSecret, _ := rawDB.EnsureAppSecret("installation_secret")
 	if bytes.Equal(oldSecret, newSecret) {
 		t.Fatal("installation_secret unchanged")
@@ -195,7 +195,7 @@ func TestRotateInstallationSecret_BadKeyFileAborts(t *testing.T) {
 		t.Fatal("expected failure for undecryptable key file")
 	}
 	rawDB, _ := database.NewDatabase("sqlite", opts.DBPath)
-	defer rawDB.Close()
+	defer func() { _ = rawDB.Close() }()
 	if _, ok := rawDB.(interface {
 		FreshAppSecret(string, time.Duration) ([]byte, bool)
 	}).FreshAppSecret(InstallationSecretPreviousSecret, time.Hour); ok {

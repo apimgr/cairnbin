@@ -42,7 +42,7 @@ func (s *Server) securityLog(event string, fields ...string) {
 		log.Printf("security.log: open failed: %v", err)
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := f.WriteString(b.String()); err != nil {
 		log.Printf("security.log: write failed: %v", err)
 	}

@@ -824,7 +824,7 @@ func TestSecurityFetchTask_ReaddirFails(t *testing.T) {
 	if err := os.Chmod(blDir, 0o000); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(blDir, 0o750)
+	defer func() { _ = os.Chmod(blDir, 0o750) }()
 	fn := BlocklistUpdate(dir2)
 	err := fn(context.Background())
 	if err == nil {

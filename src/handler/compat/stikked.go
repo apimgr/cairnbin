@@ -33,15 +33,15 @@ func (c *Handler) StikkedCreate(w http.ResponseWriter, r *http.Request) {
 	if err := c.parseFormLimited(w, r); err != nil {
 		if errors.Is(err, errCompatBodyTooLarge) {
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
-			fmt.Fprint(w, "Error: paste exceeds the maximum allowed size.")
+			_, _ = fmt.Fprint(w, "Error: paste exceeds the maximum allowed size.")
 			return
 		}
-		fmt.Fprint(w, "Error: invalid form")
+		_, _ = fmt.Fprint(w, "Error: invalid form")
 		return
 	}
 	content := r.FormValue("text")
 	if strings.TrimSpace(content) == "" {
-		fmt.Fprint(w, "Error: No paste data sent.")
+		_, _ = fmt.Fprint(w, "Error: No paste data sent.")
 		return
 	}
 	title := r.FormValue("title")
@@ -60,10 +60,10 @@ func (c *Handler) StikkedCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	pasteID, _, err := c.ph.CreatePasteInternal(title, content, lang, vis, 0, expiresAt)
 	if err != nil {
-		fmt.Fprint(w, "Error: could not create paste")
+		_, _ = fmt.Fprint(w, "Error: could not create paste")
 		return
 	}
-	fmt.Fprint(w, c.origin(r)+"/view/"+pasteID)
+	_, _ = fmt.Fprint(w, c.origin(r)+"/view/"+pasteID)
 }
 
 // StikkedJSON handles GET /api/paste/{id} — stikked JSON metadata + raw body.
@@ -75,7 +75,7 @@ func (c *Handler) StikkedJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if paste.ExpiresAt != nil && paste.ExpiresAt.Before(time.Now()) {
-		c.db.DeletePaste(id)
+		_ = c.db.DeletePaste(id)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "paste not found"})
 		return
 	}

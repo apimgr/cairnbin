@@ -156,13 +156,16 @@ func smtpHandshake(host string, port int, timeout time.Duration) error {
 	if err != nil {
 		return fmt.Errorf("smtp: connect %s: %w", addr, err)
 	}
-	conn.SetDeadline(time.Now().Add(timeout))
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("smtp: set deadline %s: %w", addr, err)
+	}
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return fmt.Errorf("smtp: handshake %s: %w", addr, err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	if err := c.Hello("localhost"); err != nil {
 		return fmt.Errorf("smtp: EHLO %s: %w", addr, err)
 	}
@@ -305,7 +308,7 @@ func (m *Mailer) loadTemplate(name string) (string, error) {
 // parseTemplate splits a rendered template into subject and body.
 // Expected format: first line "Subject: ...", then "---", then body.
 func parseTemplate(text string) (subject, body string, ok bool) {
-	lines := strings.SplitN(text, "\n", -1)
+	lines := strings.Split(text, "\n")
 	if len(lines) < 3 {
 		return "", "", false
 	}
@@ -396,7 +399,7 @@ func buildMultipartMessage(fromName, fromAddr, to, subject, body, replyTo, filen
 	textPart, _ := w.CreatePart(textproto.MIMEHeader{
 		"Content-Type": {"text/plain; charset=utf-8"},
 	})
-	textPart.Write([]byte(body))
+	_, _ = textPart.Write([]byte(body))
 
 	attachPart, _ := w.CreatePart(textproto.MIMEHeader{
 		"Content-Type":              {"application/octet-stream"},
@@ -409,9 +412,9 @@ func buildMultipartMessage(fromName, fromAddr, to, subject, body, replyTo, filen
 		if end > len(encoded) {
 			end = len(encoded)
 		}
-		attachPart.Write([]byte(encoded[i:end] + "\r\n"))
+		_, _ = attachPart.Write([]byte(encoded[i:end] + "\r\n"))
 	}
-	w.Close()
+	_ = w.Close()
 
 	return append(hdr.Bytes(), partBuf.Bytes()...)
 }
@@ -436,12 +439,12 @@ func (m *Mailer) sendSMTP(from, to string, msg []byte) error {
 		if err != nil {
 			return fmt.Errorf("smtp tls dial: %w", err)
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		c, err := smtp.NewClient(conn, m.cfg.SMTP.Host)
 		if err != nil {
 			return fmt.Errorf("smtp new client: %w", err)
 		}
-		defer c.Close()
+		defer func() { _ = c.Close() }()
 		if auth != nil {
 			if err := c.Auth(auth); err != nil {
 				return fmt.Errorf("smtp auth: %w", err)
@@ -479,7 +482,7 @@ func defaultGatewayIP() string {
 	if err != nil {
 		return ""
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	addr := conn.LocalAddr().(*net.UDPAddr)
 	return addr.IP.String()
 }

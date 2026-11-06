@@ -63,6 +63,7 @@ func TestHandlePreferencesSet_ValidTheme(t *testing.T) {
 			form := url.Values{"theme": {theme}}
 			r := httptest.NewRequest(http.MethodPost, "/server/theme", strings.NewReader(form.Encode()))
 			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			addConsentCookie(r, `{"essential":true,"preferences":true}`)
 			w := httptest.NewRecorder()
 			s.handlePreferencesSet(w, r)
 
@@ -78,20 +79,20 @@ func TestHandlePreferencesSet_ValidTheme(t *testing.T) {
 	}
 }
 
-func TestHandlePreferencesSet_InvalidTheme_DefaultsDark(t *testing.T) {
+func TestHandlePreferencesSet_InvalidThemeDropped(t *testing.T) {
 	s := newMinimalServer(config.DefaultConfig())
 	form := url.Values{"theme": {"invalid"}}
 	r := httptest.NewRequest(http.MethodPost, "/server/theme", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	addConsentCookie(r, `{"essential":true,"preferences":true}`)
 	w := httptest.NewRecorder()
 	s.handlePreferencesSet(w, r)
 
 	if w.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want 303", w.Code)
 	}
-	setCookie := w.Header().Get("Set-Cookie")
-	if !strings.Contains(setCookie, "theme=dark") {
-		t.Errorf("cookie %q should default to dark", setCookie)
+	if setCookie := w.Header().Get("Set-Cookie"); strings.Contains(setCookie, "theme=") {
+		t.Errorf("invalid theme must be dropped, got cookie %q", setCookie)
 	}
 }
 
@@ -144,6 +145,7 @@ func postPrefs(t *testing.T, form url.Values) map[string]string {
 	s := newMinimalServer(config.DefaultConfig())
 	r := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	addConsentCookie(r, `{"essential":true,"preferences":true}`)
 	w := httptest.NewRecorder()
 	s.handlePreferencesSet(w, r)
 	if w.Code != http.StatusSeeOther {

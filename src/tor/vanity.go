@@ -349,7 +349,7 @@ func writeVanityCandidate(dir, address string, pub ed25519.PublicKey, secret []b
 	if err != nil {
 		return fmt.Errorf("create temp candidate dir: %w", err)
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 	if err := os.Chmod(tmp, 0o700); err != nil {
 		return fmt.Errorf("chmod temp candidate dir: %w", err)
 	}

@@ -195,14 +195,14 @@ func TestCSRFMiddleware(t *testing.T) {
 	}{
 		{
 			name:       "GET bypasses and reaches handler",
-			build:      func() *http.Request { return newReq(http.MethodGet, "http://example.com/create") },
+			build:      func() *http.Request { return newReq(http.MethodGet, "http://example.com/pastes") },
 			wantStatus: http.StatusOK,
 			wantNext:   true,
 		},
 		{
 			name: "same-origin POST without token rejected (no Origin bypass)",
 			build: func() *http.Request {
-				r := newReq(http.MethodPost, "http://example.com/create")
+				r := newReq(http.MethodPost, "http://example.com/pastes")
 				r.Header.Set("Origin", "http://example.com")
 				r.AddCookie(&http.Cookie{Name: "csrf_token", Value: validToken})
 				return r
@@ -222,9 +222,19 @@ func TestCSRFMiddleware(t *testing.T) {
 			wantNext:   true,
 		},
 		{
+			name: "non-Bearer Authorization does not bypass",
+			build: func() *http.Request {
+				r := newReq(http.MethodPost, "http://example.com/pastes")
+				r.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
+				return r
+			},
+			wantStatus: http.StatusForbidden,
+			wantNext:   false,
+		},
+		{
 			name: "cross-origin POST without cookie and without bearer rejected (no absent-cookie bypass)",
 			build: func() *http.Request {
-				r := newReq(http.MethodPost, "http://example.com/create")
+				r := newReq(http.MethodPost, "http://example.com/pastes")
 				r.Header.Set("Origin", "http://evil.com")
 				return r
 			},
@@ -234,7 +244,7 @@ func TestCSRFMiddleware(t *testing.T) {
 		{
 			name: "cookieless POST with no origin rejected (token absent)",
 			build: func() *http.Request {
-				return newReq(http.MethodPost, "http://example.com/create")
+				return newReq(http.MethodPost, "http://example.com/pastes")
 			},
 			wantStatus: http.StatusForbidden,
 			wantNext:   false,
@@ -262,7 +272,7 @@ func TestCSRFMiddleware(t *testing.T) {
 		{
 			name: "originless POST with matching cookie and token passes",
 			build: func() *http.Request {
-				r := newReq(http.MethodPost, "http://example.com/create")
+				r := newReq(http.MethodPost, "http://example.com/pastes")
 				r.Header.Set("X-CSRF-Token", validToken)
 				r.AddCookie(&http.Cookie{Name: "csrf_token", Value: validToken})
 				return r
@@ -285,7 +295,7 @@ func TestCSRFMiddleware(t *testing.T) {
 		{
 			name: "cross-origin POST with matching token passes",
 			build: func() *http.Request {
-				r := newReq(http.MethodPost, "http://example.com/create")
+				r := newReq(http.MethodPost, "http://example.com/pastes")
 				r.Header.Set("Origin", "http://evil.com")
 				r.Header.Set("X-CSRF-Token", validToken)
 				r.AddCookie(&http.Cookie{Name: "csrf_token", Value: validToken})
@@ -297,7 +307,7 @@ func TestCSRFMiddleware(t *testing.T) {
 		{
 			name: "cross-origin POST with cookie but no token rejected",
 			build: func() *http.Request {
-				r := newReq(http.MethodPost, "http://example.com/create")
+				r := newReq(http.MethodPost, "http://example.com/pastes")
 				r.Header.Set("Origin", "http://evil.com")
 				r.AddCookie(&http.Cookie{Name: "csrf_token", Value: validToken})
 				return r
@@ -309,7 +319,7 @@ func TestCSRFMiddleware(t *testing.T) {
 			name: "cross-origin POST with mismatched token rejected",
 			build: func() *http.Request {
 				other, _ := s.generateCSRFToken()
-				r := newReq(http.MethodPost, "http://example.com/create")
+				r := newReq(http.MethodPost, "http://example.com/pastes")
 				r.Header.Set("Origin", "http://evil.com")
 				r.Header.Set("X-CSRF-Token", other)
 				r.AddCookie(&http.Cookie{Name: "csrf_token", Value: validToken})
@@ -383,7 +393,7 @@ func TestCSRFMiddlewareMultipartToken(t *testing.T) {
 		if _, err := fw.Write([]byte("hello")); err != nil {
 			t.Fatalf("file write: %v", err)
 		}
-		w.Close()
+		_ = w.Close()
 
 		nextCalled := false
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -408,7 +418,7 @@ func TestCSRFMiddlewareMultipartToken(t *testing.T) {
 		if _, err := fw.Write([]byte("hello")); err != nil {
 			t.Fatalf("file write: %v", err)
 		}
-		w.Close()
+		_ = w.Close()
 
 		rec := httptest.NewRecorder()
 		s.csrfMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rec, build(&buf, w.FormDataContentType()))
@@ -486,6 +496,7 @@ func TestCSRFMiddlewareCookieNotHTTPOnly(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "http://example.com/", nil)
+	r.Header.Set("Accept", "text/html")
 	s.csrfMiddleware(next).ServeHTTP(rec, r)
 
 	cookies := rec.Result().Cookies()
@@ -506,6 +517,46 @@ func TestCSRFMiddlewareCookieNotHTTPOnly(t *testing.T) {
 	}
 }
 
+func TestCSRFMiddlewareCookieSecureResolution(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		secure    string
+		remote    string
+		host      string
+		forwarded string
+		want      bool
+	}{
+		{"TLS proxy", "auto", "192.0.2.10:443", "example.com", "https", true},
+		{"plain HTTP", "auto", "192.0.2.10:80", "example.com", "", false},
+		{"Tor onion secure context", "auto", "127.0.0.1:80", testOnion, "", true},
+		{"explicit false", "false", "192.0.2.10:443", "example.com", "https", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newCSRFServer()
+			s.cfg.Server.CSRF.Secure = tc.secure
+			s.cfg.Server.TrustedProxies.Additional = []string{"192.0.2.10"}
+			s.cfg.Server.Tor.OnionAddress = testOnion
+			r := httptest.NewRequest(http.MethodGet, "http://"+tc.host+"/", nil)
+			r.RemoteAddr = tc.remote
+			r.Header.Set("Accept", "text/html")
+			if tc.forwarded != "" {
+				r.Header.Set("X-Forwarded-Proto", tc.forwarded)
+			}
+			w := httptest.NewRecorder()
+			s.csrfMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(w, r)
+			for _, cookie := range w.Result().Cookies() {
+				if cookie.Name == "csrf_token" {
+					if cookie.Secure != tc.want {
+						t.Errorf("csrf cookie Secure = %t, want %t", cookie.Secure, tc.want)
+					}
+					return
+				}
+			}
+			t.Fatal("csrf cookie was not set")
+		})
+	}
+}
+
 func TestCSRFMiddlewareStableToken(t *testing.T) {
 	s := newCSRFServer()
 	validToken, err := s.generateCSRFToken()
@@ -515,6 +566,7 @@ func TestCSRFMiddlewareStableToken(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "http://example.com/", nil)
+	r.Header.Set("Accept", "text/html")
 	r.AddCookie(&http.Cookie{Name: "csrf_token", Value: validToken})
 	s.csrfMiddleware(next).ServeHTTP(rec, r)
 
@@ -548,6 +600,8 @@ func TestDetectClientType(t *testing.T) {
 		{"accept star-star", "*/*", "", "text"},
 		{"accept json beats ua", "application/json", "Mozilla/5.0", "json"},
 		{"accept html beats ua", "text/html", "curl/7.88.1", "html"},
+		{"accept html beats json", "application/json, text/html", "", "html"},
+		{"accept text beats json", "application/json, text/plain", "", "text"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1024,7 +1078,7 @@ func makeTempDir(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
 
@@ -1141,7 +1195,7 @@ func TestPathSecurityMiddleware(t *testing.T) {
 	s := &Server{}
 	handler := s.pathSecurityMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(r.URL.Path))
+		_, _ = w.Write([]byte(r.URL.Path))
 	}))
 
 	cases := []struct {
@@ -1574,7 +1628,7 @@ func TestNoTrailingSlash(t *testing.T) {
 	s := newMinimalServer(&config.Config{})
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(r.URL.Path))
+		_, _ = w.Write([]byte(r.URL.Path))
 	})
 	h := s.noTrailingSlash(inner)
 
@@ -1616,13 +1670,13 @@ func TestSecFetchMiddleware(t *testing.T) {
 		secFetchMode string
 		wantStatus   int
 	}{
-		{"disabled passes all", false, http.MethodPost, "/api/v1/pastes", "cross-site", "", "", http.StatusOK},
-		{"cross-site POST blocked", true, http.MethodPost, "/api/v1/pastes", "cross-site", "", "", http.StatusForbidden},
-		{"cross-site POST with bearer allowed", true, http.MethodPost, "/api/v1/pastes", "cross-site", "Bearer tok", "", http.StatusOK},
-		{"same-site POST allowed", true, http.MethodPost, "/api/v1/pastes", "same-origin", "", "", http.StatusOK},
-		{"GET not blocked by cross-site", true, http.MethodGet, "/api/v1/pastes", "cross-site", "", "", http.StatusOK},
+		{"disabled passes all", false, http.MethodPost, "/pastes", "cross-site", "", "", http.StatusOK},
+		{"cross-site frontend POST blocked", true, http.MethodPost, "/pastes", "cross-site", "", "", http.StatusForbidden},
+		{"cross-site frontend POST with bearer allowed", true, http.MethodPost, "/pastes", "cross-site", "Bearer tok", "", http.StatusOK},
+		{"same-site frontend POST allowed", true, http.MethodPost, "/pastes", "same-origin", "", "", http.StatusOK},
+		{"GET not blocked by cross-site", true, http.MethodGet, "/pastes", "cross-site", "", "", http.StatusOK},
 		{"GET navigate to API allowed", true, http.MethodGet, "/api/v1/server/healthz", "", "", "navigate", http.StatusOK},
-		{"POST navigate to API blocked", true, http.MethodPost, "/api/v1/pastes", "", "", "navigate", http.StatusForbidden},
+		{"POST navigate to API allowed outside scope", true, http.MethodPost, "/api/v1/pastes", "", "", "navigate", http.StatusOK},
 		{"navigate to non-API allowed", true, http.MethodGet, "/paste/abc", "", "", "navigate", http.StatusOK},
 	}
 	for _, tc := range cases {
@@ -1778,12 +1832,12 @@ func TestBuildReportingHeaders(t *testing.T) {
 	}{
 		{"no fqdn returns empty", "", true, false},
 		{"localhost returns empty", "localhost", true, false},
-		{"no tls returns empty", "example.com", false, false},
+		{"no tls still returns headers", "example.com", false, true},
 		{"fqdn+tls returns headers", "example.com", true, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := &config.Config{}
+			cfg := config.DefaultConfig()
 			cfg.Server.FQDN = tc.fqdn
 			cfg.Server.TLS.Enabled = tc.tlsEnabled
 			s := newMinimalServer(cfg)
@@ -1793,6 +1847,10 @@ func TestBuildReportingHeaders(t *testing.T) {
 
 			if hasContent != tc.wantNonEmpty {
 				t.Errorf("headers non-empty = %v, want %v (endpoints=%q)", hasContent, tc.wantNonEmpty, endpoints)
+			}
+			if tc.wantNonEmpty && (!strings.Contains(endpoints, `nel="https://example.com/api/v1/server/reports/nel"`) ||
+				!strings.Contains(reportTo, `"group":"nel"`) || !strings.Contains(nel, `"report_to":"nel"`)) {
+				t.Errorf("NEL headers do not target the NEL report endpoint: endpoints=%q reportTo=%q nel=%q", endpoints, reportTo, nel)
 			}
 		})
 	}
@@ -2820,6 +2878,34 @@ func TestHandleHealthz(t *testing.T) {
 	})
 }
 
+// TestHandleHealthzAPI verifies the /api/** health negotiation (PART 14):
+// JSON by default, text for Accept: text/plain and non-interactive clients.
+func TestHandleHealthzAPI(t *testing.T) {
+	cases := []struct {
+		name, accept, ua, wantCT string
+	}{
+		{"default browser UA is JSON", "", "Mozilla/5.0", "application/json"},
+		{"accept json", "application/json", "", "application/json"},
+		{"accept text", "text/plain", "Mozilla/5.0", "text/plain; charset=utf-8"},
+		{"curl is text", "", "curl/8.0.0", "text/plain; charset=utf-8"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newServerWithDB(&config.Config{}, &stubDB{})
+			r := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)
+			if tc.accept != "" {
+				r.Header.Set("Accept", tc.accept)
+			}
+			r.Header.Set("User-Agent", tc.ua)
+			w := httptest.NewRecorder()
+			s.handleHealthzAPI(w, r)
+			if ct := w.Header().Get("Content-Type"); ct != tc.wantCT {
+				t.Errorf("content-type = %q, want %q", ct, tc.wantCT)
+			}
+		})
+	}
+}
+
 // ─── Handlers that use renderTemplate with nil templates ─────────────────────
 
 func TestTemplateHandlersNilTemplates(t *testing.T) {
@@ -3083,7 +3169,7 @@ func TestHandleRecentSearchAndSort(t *testing.T) {
 		if idxApple < 0 || idxMango < 0 || idxZebra < 0 {
 			t.Fatalf("body missing expected titles, got: %s", body)
 		}
-		if !(idxApple < idxMango && idxMango < idxZebra) {
+		if idxApple >= idxMango || idxMango >= idxZebra {
 			t.Errorf("titles not in ascending name order, got: %s", body)
 		}
 	})
@@ -3114,6 +3200,7 @@ func TestHandleRecentPreferenceCookies(t *testing.T) {
 		seedRecentPaste(t, s, "id-pref1", "Pref paste", "content")
 
 		r := httptest.NewRequest(http.MethodGet, "/recent?sort=name&order=asc&limit=50", nil)
+		addConsentCookie(r, `{"essential":true,"preferences":true}`)
 		r.Header.Set("User-Agent", "curl/7.88.1")
 		r.Host = "example.com"
 		w := httptest.NewRecorder()
@@ -3160,7 +3247,7 @@ func TestHandleRecentPreferenceCookies(t *testing.T) {
 		if idxApple < 0 || idxZebra < 0 {
 			t.Fatalf("body missing expected titles, got: %s", body)
 		}
-		if !(idxApple < idxZebra) {
+		if idxApple >= idxZebra {
 			t.Errorf("titles not in ascending name order from saved preference, got: %s", body)
 		}
 		// No query params were given, so nothing should be re-written.
@@ -3374,10 +3461,6 @@ func TestBuildCSPScriptSrcOverride(t *testing.T) {
 
 	if !strings.Contains(policy, "https://trusted-scripts.example.com") {
 		t.Errorf("CSP policy should use ScriptSrcOverride; got snippet: %q", policy[:min(len(policy), 100)])
-	}
-	if strings.Contains(policy, "'unsafe-inline'") && strings.Contains(policy, "script-src") {
-		// With override, 'unsafe-inline' should not appear in script-src
-		// (it's only in the default if no override is set)
 	}
 }
 
@@ -4038,6 +4121,9 @@ func TestNewHandlersWithTemplates(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Errorf("image paste HTML status = %d, want 200; body: %q", w.Code, w.Body.String()[:min(len(w.Body.String()), 300)])
 		}
+		if !strings.Contains(w.Body.String(), `<span class="language">image/png</span>`) || strings.Contains(w.Body.String(), `<span class="language">text</span>`) {
+			t.Errorf("image paste metadata should show its MIME type instead of the text language label")
+		}
 	})
 
 	// HTML browser requesting an audio paste — renders audio player.
@@ -4151,6 +4237,21 @@ func TestNewHandlersWithTemplates(t *testing.T) {
 		}
 		if ct := w.Header().Get("Content-Type"); ct != "image/png" {
 			t.Errorf("handleQRImage Content-Type = %q, want image/png", ct)
+		}
+	})
+
+	t.Run("handleQRImage_download_sets_attachment", func(t *testing.T) {
+		r := withChiID(httptest.NewRequest(http.MethodGet, "/qr/te\"st/image?download=1", nil), "te\"st")
+		w := httptest.NewRecorder()
+		s.handleQRImage(w, r)
+		if cd := w.Header().Get("Content-Disposition"); cd != `attachment; filename="paste-test-qr.png"` {
+			t.Errorf("Content-Disposition = %q, want sanitized attachment filename", cd)
+		}
+		r2 := withChiID(httptest.NewRequest(http.MethodGet, "/qr/testid/image", nil), "testid")
+		w2 := httptest.NewRecorder()
+		s.handleQRImage(w2, r2)
+		if cd := w2.Header().Get("Content-Disposition"); cd != "" {
+			t.Errorf("inline QR image must not set Content-Disposition, got %q", cd)
 		}
 	})
 
@@ -4534,7 +4635,7 @@ func TestStartTermbin_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial termbin: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if _, err := conn.Write([]byte("termbin tcp content\n")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -4585,7 +4686,7 @@ func TestStartTermbin_BaseURLFallback(t *testing.T) {
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	resp, _ := io.ReadAll(conn)
-	conn.Close()
+	_ = conn.Close()
 	if !strings.HasPrefix(string(resp), "http://test.example/") {
 		t.Fatalf("response = %q, want configured-FQDN fallback", string(resp))
 	}
@@ -5060,10 +5161,9 @@ func TestOwnerRestoreFailuresAreCountedPerIP(t *testing.T) {
 	}
 }
 
-// TestCSRFMiddleware_BuiltinExemptPaths verifies the compat/API creation
-// endpoints accept tokenless, cookie-less POSTs while the browser form route
-// still requires a token.
-func TestCSRFMiddleware_BuiltinExemptPaths(t *testing.T) {
+// TestCSRFMiddlewareScope verifies backend/compat routes bypass CSRF behavior
+// while frontend form routes remain protected.
+func TestCSRFMiddlewareScope(t *testing.T) {
 	s := newCSRFServer()
 	cases := []struct {
 		path   string
@@ -5078,7 +5178,7 @@ func TestCSRFMiddleware_BuiltinExemptPaths(t *testing.T) {
 		{"/api/v2/", true},
 		{"/documents", true},
 		{"/upload", true},
-		{"/", true},
+		{"/", false},
 		{"/pastes", false},
 		{"/remove/abc", false},
 		{"/server/preferences", false},
@@ -5132,5 +5232,43 @@ func TestBuildI2PInfoDisabledReportsNoneProvider(t *testing.T) {
 	info := (&Server{}).buildI2PInfo()
 	if info.Enabled || info.Status != "disabled" || info.Provider != "none" {
 		t.Errorf("disabled I2P info = %+v, want disabled/none", info)
+	}
+}
+
+// TestSecurityHeadersNonceCSP verifies {request_nonce} in a CSP override is
+// replaced per response and the same nonce reaches the request context.
+func TestSecurityHeadersNonceCSP(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Web.CSP.ScriptSrcOverride = "'self' 'nonce-{request_nonce}' 'strict-dynamic'"
+	cfg.Web.CSP.StyleSrcOverride = "'self' 'nonce-{request_nonce}'"
+	s := newMinimalServer(cfg)
+
+	var firstNonce string
+	h := s.securityHeadersMiddleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		if firstNonce == "" {
+			firstNonce = cspNonce(r)
+		}
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	policy := rec.Header().Get("Content-Security-Policy")
+	if policy == "" {
+		policy = rec.Header().Get("Content-Security-Policy-Report-Only")
+	}
+	if firstNonce == "" {
+		t.Fatal("nonce missing from request context")
+	}
+	if strings.Contains(policy, "{request_nonce}") {
+		t.Errorf("placeholder not substituted: %q", policy)
+	}
+	if got := strings.Count(policy, "'nonce-"+firstNonce+"'"); got != 2 {
+		t.Errorf("nonce used %d times in policy, want 2: %q", got, policy)
+	}
+
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
+	if strings.Contains(rec2.Header().Get("Content-Security-Policy")+rec2.Header().Get("Content-Security-Policy-Report-Only"), "nonce-"+firstNonce) {
+		t.Error("nonce must differ between responses")
 	}
 }

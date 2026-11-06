@@ -114,7 +114,7 @@ func TestBindAndDropNoConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bindAndDrop: %v", err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	if ln.Addr() == nil {
 		t.Error("expected a bound listener address")
 	}

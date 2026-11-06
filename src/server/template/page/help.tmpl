@@ -1,6 +1,6 @@
 {{define "meta"}}
-    <title>Help - {{.SiteTitle}}</title>
-    <meta name="description" content="How to create and manage pastes on {{.SiteTitle}} via the web and the API">
+    <title>{{t .Lang "help.title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{tf .Lang "pagemeta.help_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
@@ -12,26 +12,28 @@
 
                 <div class="paste-view page-view">
 
-                    <h2 id="api">REST API</h2>
-                    <p>The REST API is the primary interface: every feature of the web UI is available through it. All endpoints live under <code>{{.BaseURL}}{{.APIBase}}</code>, answer <code>application/json</code> by default and wrap results as <code>{"ok": true, "data": ...}</code> (errors: <code>{"ok": false, "error": "CODE", "message": "..."}</code>). Add <code>.txt</code> or send <code>Accept: text/plain</code> for plain text.</p>
-                    <table class="help-table">
-                        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>{{.APIBase}}/pastes</code></td><td>Create a paste</td></tr>
-                        <tr><td>GET</td><td><code>{{.APIBase}}/pastes</code></td><td>List public pastes (paginated)</td></tr>
-                        <tr><td>GET</td><td><code>{{.APIBase}}/pastes/{id}</code></td><td>Get a paste</td></tr>
-                        <tr><td>GET</td><td><code>{{.APIBase}}/pastes/{id}/raw</code></td><td>Get raw content</td></tr>
-                        <tr><td>DELETE</td><td><code>{{.APIBase}}/pastes/{id}</code></td><td>Delete a paste (owner token required)</td></tr>
-                        <tr><td>GET</td><td><code>{{.APIBase}}/server/healthz</code></td><td>Health status</td></tr>
-                        <tr><td>GET</td><td><code>{{.APIBase}}/server/version</code></td><td>Server version</td></tr>
-                    </table>
-                    <p>Interactive documentation:</p>
+                    <h2 id="api">{{t .Lang "help.rest_title"}}</h2>
+                    <p>{{tfh .Lang "help.rest_intro" "endpoint" (print .BaseURL .APIBase) "ok_example" `{"ok": true, "data": ...}` "error_example" `{"ok": false, "error": "CODE", "message": "..."}`}}</p>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+                            <tr><td>POST</td><td><code>{{.APIBase}}/pastes</code></td><td>{{t .Lang "help.row_create_paste"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/pastes</code></td><td>{{t .Lang "help.row_list_pastes"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/pastes/{id}</code></td><td>{{t .Lang "help.row_get_paste"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/pastes/{id}/raw</code></td><td>{{t .Lang "help.row_get_raw"}}</td></tr>
+                            <tr><td>DELETE</td><td><code>{{.APIBase}}/pastes/{id}</code></td><td>{{t .Lang "help.row_delete_paste"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/server/healthz</code></td><td>{{t .Lang "help.row_health"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/server/version</code></td><td>{{t .Lang "help.row_version"}}</td></tr>
+                        </table>
+                    </div>
+                    <p>{{t .Lang "help.interactive_docs"}}</p>
                     <ul>
-                        <li><a href="{{.AssetPrefix}}/server/docs/swagger">Swagger UI</a> — interactive REST API explorer (OpenAPI)</li>
-                        <li><a href="{{.AssetPrefix}}/server/docs/graphql">GraphiQL</a> — interactive GraphQL explorer</li>
+                        <li><a href="{{.AssetPrefix}}/server/docs/swagger">Swagger UI</a> — {{t .Lang "help.docs_swagger_desc"}}</li>
+                        <li><a href="{{.AssetPrefix}}/server/docs/graphql">GraphiQL</a> — {{t .Lang "help.docs_graphql_desc"}}</li>
                     </ul>
-                    <p>The GraphQL endpoint is <code>{{.BaseURL}}/api/graphql</code>; the OpenAPI spec is served at <code>{{.BaseURL}}/api/swagger</code>.</p>
+                    <p>{{tfh .Lang "help.graphql_endpoint" "graphql" (print .BaseURL "/api/graphql") "swagger" (print .BaseURL "/api/swagger")}}</p>
 
-                    <h3>Create a paste</h3>
+                    <h3>{{t .Lang "help.h_create_paste"}}</h3>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -45,7 +47,7 @@
      {{.BaseURL}}{{.APIBase}}/pastes</code></pre>
                     </div>
 
-                    <h3 class="section-mt">Get raw content</h3>
+                    <h3 class="section-mt">{{t .Lang "help.h_get_raw"}}</h3>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -56,7 +58,7 @@
                         <pre><code id="help-get-raw">curl {{.BaseURL}}/raw/{id}</code></pre>
                     </div>
 
-                    <h3 class="section-mt">Delete a paste</h3>
+                    <h3 class="section-mt">{{t .Lang "help.h_delete_paste"}}</h3>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -69,10 +71,10 @@
                     </div>
 
 
-                    <h2 class="section-mt">Create a paste via the web</h2>
-                    <p>Go to <a href="{{.AssetPrefix}}/create">/create</a>, fill in your content, choose a language and expiry, then click <strong>Create Paste</strong>. Save the delete token — it is shown only once.</p>
+                    <h2 class="section-mt">{{t .Lang "help.web_create_title"}}</h2>
+                    <p>{{tfh .Lang "help.web_create_body" "url" (print .AssetPrefix "/create")}}</p>
 
-                    <h2 class="section-mt">Create via curl — raw body</h2>
+                    <h2 class="section-mt">{{t .Lang "help.curl_raw_title"}}</h2>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -83,7 +85,7 @@
                         <pre><code id="help-curl-raw">curl --data-binary @file.txt {{.BaseURL}}/pastes</code></pre>
                     </div>
 
-                    <h2 class="section-mt">Pipe to paste</h2>
+                    <h2 class="section-mt">{{t .Lang "help.pipe_title"}}</h2>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -94,35 +96,37 @@
                         <pre><code id="help-pipe">cat myfile.py | curl --data-binary @- {{.BaseURL}}/pastes</code></pre>
                     </div>
 
-                    <h2 class="section-mt">Expiry values</h2>
-                    <table class="help-table">
-                        <tr><th>Value</th><th>Duration</th></tr>
-                        <tr><td><code>1h</code></td><td>1 hour</td></tr>
-                        <tr><td><code>1d</code></td><td>1 day</td></tr>
-                        <tr><td><code>1w</code></td><td>1 week</td></tr>
-                        <tr><td><code>1m</code></td><td>1 month (30 days)</td></tr>
-                        <tr><td><code>3m</code></td><td>3 months</td></tr>
-                        <tr><td><code>6m</code></td><td>6 months</td></tr>
-                        <tr><td><code>1y</code></td><td>1 year</td></tr>
-                        <tr><td><code>2y</code></td><td>2 years</td></tr>
-                        <tr><td><code>never</code></td><td>No expiry</td></tr>
-                        <tr><td><em>N</em></td><td>N seconds</td></tr>
-                    </table>
+                    <h2 class="section-mt">{{t .Lang "help.expiry_title"}}</h2>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_value"}}</th><th>{{t .Lang "help.col_duration"}}</th></tr>
+                            <tr><td><code>1h</code></td><td>{{t .Lang "help.exp_1h"}}</td></tr>
+                            <tr><td><code>1d</code></td><td>{{t .Lang "help.exp_1d"}}</td></tr>
+                            <tr><td><code>1w</code></td><td>{{t .Lang "help.exp_1w"}}</td></tr>
+                            <tr><td><code>1m</code></td><td>{{t .Lang "help.exp_1m"}}</td></tr>
+                            <tr><td><code>3m</code></td><td>{{t .Lang "help.exp_3m"}}</td></tr>
+                            <tr><td><code>6m</code></td><td>{{t .Lang "help.exp_6m"}}</td></tr>
+                            <tr><td><code>1y</code></td><td>{{t .Lang "help.exp_1y"}}</td></tr>
+                            <tr><td><code>2y</code></td><td>{{t .Lang "help.exp_2y"}}</td></tr>
+                            <tr><td><code>never</code></td><td>{{t .Lang "help.exp_never"}}</td></tr>
+                            <tr><td><em>N</em></td><td>{{t .Lang "help.exp_seconds"}}</td></tr>
+                        </table>
+                    </div>
 
-                    <h2 class="section-mt">Burn after N views</h2>
-                    <p>Set <code>burn_after</code> to a number 1–9999. The paste is deleted after that many views. Set to <code>0</code> to disable.</p>
+                    <h2 class="section-mt">{{t .Lang "help.burn_title"}}</h2>
+                    <p>{{th .Lang "help.burn_body"}}</p>
 
-                    <h2 class="section-mt" id="compat">Compatibility</h2>
-                    <p>Compatibility endpoints are separate from the native API above. They reproduce the wire protocol of other paste services so existing scripts and CLIs work unmodified. Compat creates are anonymous (any API key is accepted and ignored) and use each service's own delete convention, not the owner token.</p>
+                    <h2 class="section-mt" id="compat">{{t .Lang "help.compat_title"}}</h2>
+                    <p>{{t .Lang "help.compat_intro"}}</p>
                     <ul>
                         <li><a href="#compat-pastebin">pastebin.com</a>, <a href="#compat-microbin">microbin</a>, <a href="#compat-lenpaste">lenpaste</a>, <a href="#compat-stikked">stikked</a>, <a href="#compat-hastebin">hastebin</a>, <a href="#compat-dpaste">dpaste</a></li>
                         <li><a href="#compat-curlupload">0x0.st / sprunge / ix.io</a>, <a href="#termbin">termbin / fiche</a></li>
-                        <li><a href="#compat-subdomains">Subdomain routing</a></li>
+                        <li><a href="#compat-subdomains">{{t .Lang "help.compat_subdomains_link"}}</a></li>
                     </ul>
-                    <p>This server is a drop-in replacement for multiple paste services. Point existing scripts and CLIs here without modification:</p>
+                    <p>{{t .Lang "help.compat_dropin"}}</p>
 
                     <h3 id="compat-pastebin">pastebin.com</h3>
-                    <p>Wire-compatible with the <a href="https://pastebin.com/doc_api" target="_blank" rel="noopener">pastebin.com API</a>:</p>
+                    <p>{{tfh .Lang "help.wire_compat" "url" "https://pastebin.com/doc_api" "name" "pastebin.com"}}</p>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -133,15 +137,17 @@
                         <pre><code id="help-compat-pastebin">curl -d "api_dev_key=x&api_paste_code=Hello&api_option=paste" \
      {{.BaseURL}}/api/api_post.php</code></pre>
                     </div>
-                    <table class="help-table">
-                        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>/api/api_post.php</code></td><td>Create paste (<code>api_option=paste</code>), list, delete, userdetails</td></tr>
-                        <tr><td>GET</td><td><code>/api/api_raw.php</code></td><td>Get raw paste content (<code>?i=ID</code>)</td></tr>
-                        <tr><td>POST</td><td><code>/api/api_login.php</code></td><td>Always returns ANONYMOUS (auth stub)</td></tr>
-                    </table>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+                            <tr><td>POST</td><td><code>/api/api_post.php</code></td><td>{{th .Lang "help.pb_row_create"}}</td></tr>
+                            <tr><td>GET</td><td><code>/api/api_raw.php</code></td><td>{{th .Lang "help.pb_row_raw"}}</td></tr>
+                            <tr><td>POST</td><td><code>/api/api_login.php</code></td><td>{{t .Lang "help.pb_row_login"}}</td></tr>
+                        </table>
+                    </div>
 
                     <h3 class="section-mt" id="compat-microbin">microbin</h3>
-                    <p>Wire-compatible with the <a href="https://github.com/szabodanika/microbin" target="_blank" rel="noopener">microbin</a> API:</p>
+                    <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/szabodanika/microbin" "name" "microbin"}}</p>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -151,16 +157,18 @@
                         </div>
                         <pre><code id="help-compat-microbin">curl -d "content=Hello" {{.BaseURL}}{{.APIBase}}/pasta</code></pre>
                     </div>
-                    <table class="help-table">
-                        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>{{.APIBase}}/pasta</code></td><td>Create paste</td></tr>
-                        <tr><td>GET</td><td><code>{{.APIBase}}/pasta</code></td><td>List pastes</td></tr>
-                        <tr><td>GET</td><td><code>{{.APIBase}}/pasta/{id}</code></td><td>Get paste by ID</td></tr>
-                        <tr><td>DELETE</td><td><code>{{.APIBase}}/pasta/{id}</code></td><td>Delete paste by ID</td></tr>
-                    </table>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+                            <tr><td>POST</td><td><code>{{.APIBase}}/pasta</code></td><td>{{t .Lang "help.row_create_short"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/pasta</code></td><td>{{t .Lang "help.row_list_short"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/pasta/{id}</code></td><td>{{t .Lang "help.row_get_by_id"}}</td></tr>
+                            <tr><td>DELETE</td><td><code>{{.APIBase}}/pasta/{id}</code></td><td>{{t .Lang "help.row_delete_by_id"}}</td></tr>
+                        </table>
+                    </div>
 
                     <h3 class="section-mt" id="compat-lenpaste">lenpaste</h3>
-                    <p>Wire-compatible with the <a href="https://github.com/forksmgr/lcomrade-lenpaste" target="_blank" rel="noopener">lenpaste</a> API:</p>
+                    <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/forksmgr/lcomrade-lenpaste" "name" "lenpaste"}}</p>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -170,17 +178,19 @@
                         </div>
                         <pre><code id="help-compat-lenpaste">curl -d "body=Hello&expiration=86400" {{.BaseURL}}/api/new</code></pre>
                     </div>
-                    <table class="help-table">
-                        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>/api/new</code> or <code>{{.APIBase}}/new</code></td><td>Create paste</td></tr>
-                        <tr><td>GET</td><td><code>/api/get</code> or <code>{{.APIBase}}/get</code></td><td>Get paste (<code>?id=ID</code>)</td></tr>
-                        <tr><td>DELETE</td><td><code>/api/remove</code> or <code>{{.APIBase}}/remove</code></td><td>Delete paste (<code>?id=ID&amp;deleteToken=TOKEN</code>)</td></tr>
-                        <tr><td>GET</td><td><code>/api/list</code> or <code>{{.APIBase}}/list</code></td><td>List pastes</td></tr>
-                        <tr><td>GET</td><td><code>{{.APIBase}}/getServerInfo</code></td><td>Server metadata</td></tr>
-                    </table>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+                            <tr><td>POST</td><td><code>/api/new</code> {{t .Lang "help.or"}} <code>{{.APIBase}}/new</code></td><td>{{t .Lang "help.row_create_short"}}</td></tr>
+                            <tr><td>GET</td><td><code>/api/get</code> {{t .Lang "help.or"}} <code>{{.APIBase}}/get</code></td><td>{{th .Lang "help.lp_row_get"}}</td></tr>
+                            <tr><td>DELETE</td><td><code>/api/remove</code> {{t .Lang "help.or"}} <code>{{.APIBase}}/remove</code></td><td>{{th .Lang "help.lp_row_delete"}}</td></tr>
+                            <tr><td>GET</td><td><code>/api/list</code> {{t .Lang "help.or"}} <code>{{.APIBase}}/list</code></td><td>{{t .Lang "help.row_list_short"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/getServerInfo</code></td><td>{{t .Lang "help.lp_row_info"}}</td></tr>
+                        </table>
+                    </div>
 
                     <h3 class="section-mt" id="compat-stikked">stikked</h3>
-                    <p>Wire-compatible with the <a href="https://github.com/claudehohl/Stikked" target="_blank" rel="noopener">stikked</a> API:</p>
+                    <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/claudehohl/Stikked" "name" "stikked"}}</p>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -190,16 +200,18 @@
                         </div>
                         <pre><code id="help-compat-stikked">curl -d "text=Hello&title=Test&lang=text" {{.BaseURL}}/api/create</code></pre>
                     </div>
-                    <table class="help-table">
-                        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>/api/create</code></td><td>Create paste (form <code>text</code>/<code>title</code>/<code>name</code>/<code>lang</code>/<code>expire</code>/<code>private</code>; <code>apikey</code> accepted and ignored); returns the view URL <code>{{.BaseURL}}/view/{id}</code> as plain text, or <code>Error: &lt;msg&gt;</code></td></tr>
-                        <tr><td>GET</td><td><code>/view/{id}</code></td><td>Redirects to the native paste view</td></tr>
-                        <tr><td>GET</td><td><code>/view/raw/{id}</code></td><td>Raw paste content</td></tr>
-                        <tr><td>GET</td><td><code>/api/paste/{id}</code></td><td>Get paste as JSON (<code>pid</code>, <code>title</code>, <code>name</code>, <code>created</code>, <code>lang</code>, <code>raw</code>, <code>hits</code>)</td></tr>
-                    </table>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+                            <tr><td>POST</td><td><code>/api/create</code></td><td>{{tfh .Lang "help.sk_row_create" "view_url" (print .BaseURL "/view/{id}")}}</td></tr>
+                            <tr><td>GET</td><td><code>/view/{id}</code></td><td>{{t .Lang "help.sk_row_view"}}</td></tr>
+                            <tr><td>GET</td><td><code>/view/raw/{id}</code></td><td>{{t .Lang "help.sk_row_raw"}}</td></tr>
+                            <tr><td>GET</td><td><code>/api/paste/{id}</code></td><td>{{th .Lang "help.sk_row_json"}}</td></tr>
+                        </table>
+                    </div>
 
                     <h3 class="section-mt" id="compat-hastebin">hastebin / haste-server</h3>
-                    <p>Wire-compatible with the <a href="https://github.com/toptal/haste-server" target="_blank" rel="noopener">haste-server</a> API:</p>
+                    <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/toptal/haste-server" "name" "haste-server"}}</p>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -211,15 +223,17 @@
 # returns {"key":"AbCdEfGh"}
 curl {{.BaseURL}}/documents/AbCdEfGh</code></pre>
                     </div>
-                    <table class="help-table">
-                        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>/documents</code></td><td>Create paste from the raw request body; returns <code>{"key":"…"}</code></td></tr>
-                        <tr><td>GET</td><td><code>/documents/{key}</code></td><td>Get paste content as <code>{"data":"...","key":"..."}</code> (<code>404 {"message":"..."}</code> if missing)</td></tr>
-                        <tr><td>GET</td><td><code>/raw/{key}</code></td><td>Raw paste content (native raw route)</td></tr>
-                    </table>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+                            <tr><td>POST</td><td><code>/documents</code></td><td>{{tfh .Lang "help.hb_row_create" "key_example" `{"key":"…"}`}}</td></tr>
+                            <tr><td>GET</td><td><code>/documents/{key}</code></td><td>{{tfh .Lang "help.hb_row_get" "data_example" `{"data":"...","key":"..."}` "missing_example" `404 {"message":"..."}`}}</td></tr>
+                            <tr><td>GET</td><td><code>/raw/{key}</code></td><td>{{t .Lang "help.hb_row_raw"}}</td></tr>
+                        </table>
+                    </div>
 
                     <h3 class="section-mt" id="compat-dpaste">dpaste</h3>
-                    <p>Wire-compatible with the <a href="https://github.com/bartTC/dpaste" target="_blank" rel="noopener">dpaste</a> API:</p>
+                    <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/bartTC/dpaste" "name" "dpaste"}}</p>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -230,13 +244,15 @@ curl {{.BaseURL}}/documents/AbCdEfGh</code></pre>
                         <pre><code id="help-compat-dpaste">curl -d "content=Hello&lexer=text&expires=86400&format=url" \
      {{.BaseURL}}/api/</code></pre>
                     </div>
-                    <table class="help-table">
-                        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>/api/</code> or <code>/api/v2/</code></td><td>Create paste; <code>format=url</code> returns bare URL, <code>format=json</code> returns JSON</td></tr>
-                    </table>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+                            <tr><td>POST</td><td><code>/api/</code> {{t .Lang "help.or"}} <code>/api/v2/</code></td><td>{{th .Lang "help.dp_row_create"}}</td></tr>
+                        </table>
+                    </div>
 
-                    <h3 class="section-mt" id="compat-curlupload">0x0.st / sprunge / ix.io (curl-upload family)</h3>
-                    <p>Wire-compatible with the curl-upload one-liner family:</p>
+                    <h3 class="section-mt" id="compat-curlupload">{{t .Lang "help.curlupload_title"}}</h3>
+                    <p>{{t .Lang "help.curlupload_intro"}}</p>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -253,15 +269,17 @@ cat file.txt | curl -F "sprunge=&lt;-" {{.BaseURL}}/
 # ix.io style
 curl -F "f:1=&lt;-" {{.BaseURL}}/</code></pre>
                     </div>
-                    <table class="help-table">
-                        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
-                        <tr><td>POST</td><td><code>/</code></td><td>Upload via multipart <code>file</code> (0x0.st), form <code>sprunge</code> (sprunge.us), or form <code>f:1</code> (ix.io); returns a bare raw-content URL <code>{{.BaseURL}}/raw/{id}</code>. Requests with none of these fields fall through to the native paste-create handler.</td></tr>
-                    </table>
-                    <p>The 0x0.st style also returns an <code>X-Token</code> response header — the paste's compat delete token, mirroring the 0x0.st management-token convention.</p>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+                            <tr><td>POST</td><td><code>/</code></td><td>{{tfh .Lang "help.curlupload_row" "raw_url" (print .BaseURL "/raw/{id}")}}</td></tr>
+                        </table>
+                    </div>
+                    <p>{{th .Lang "help.curlupload_token"}}</p>
 
                     {{if .TermbinEnabled}}
-                    <h3 class="section-mt" id="termbin">termbin / fiche (raw TCP)</h3>
-                    <p>Wire-compatible with <a href="https://termbin.com" target="_blank" rel="noopener">termbin.com</a> and the fiche server protocol. Connect, stream content, close the write side; the server replies with the paste URL and closes:</p>
+                    <h3 class="section-mt" id="termbin">{{t .Lang "help.termbin_title"}}</h3>
+                    <p>{{th .Lang "help.termbin_intro"}}</p>
                     <div class="code-block-multi">
                         <div class="code-header">
                             <span class="code-lang">Bash</span>
@@ -272,30 +290,32 @@ curl -F "f:1=&lt;-" {{.BaseURL}}/</code></pre>
                         <pre><code id="help-termbin">echo "Hello" | nc {{.TermbinHost}} {{.TermbinPort}}
 cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
                     </div>
-                    <p>Maximum payload: {{.TermbinMaxSize}} bytes. Idle/read timeout: {{.TermbinTimeout}}. TCP port: <code>{{.TermbinPort}}</code>.</p>
+                    <p>{{tfh .Lang "help.termbin_limits" "size" .TermbinMaxSize "timeout" .TermbinTimeout "port" .TermbinPort}}</p>
                     {{end}}
 
 
-                    <h3 class="section-mt" id="compat-subdomains">Subdomain routing</h3>
-                    <p>Any target can also be reached by using its label as the leftmost part of the hostname (for example <code>hb.</code> before this server's hostname). On a matched subdomain, a bare <code>POST /</code> with a raw body creates a paste for that target, and other targets' routes are hidden.</p>
-                    <table class="help-table">
-                        <tr><th>Label</th><th>Target</th></tr>
-                        <tr><td><code>pb</code>, <code>pastebin</code></td><td>pastebin.com</td></tr>
-                        <tr><td><code>lp</code>, <code>lenpaste</code></td><td>lenpaste</td></tr>
-                        <tr><td><code>sk</code>, <code>stikked</code></td><td>stikked</td></tr>
-                        <tr><td><code>hb</code>, <code>hastebin</code></td><td>hastebin / haste-server</td></tr>
-                        <tr><td><code>dp</code>, <code>dpaste</code></td><td>dpaste</td></tr>
-                        <tr><td><code>mb</code>, <code>microbin</code></td><td>microbin</td></tr>
-                        <tr><td><code>tb</code>, <code>termbin</code></td><td>termbin (HTTP alias)</td></tr>
-                        <tr><td><code>ix</code></td><td>ix.io</td></tr>
-                        <tr><td><code>sprunge</code></td><td>sprunge.us</td></tr>
-                        <tr><td><code>0x0</code>, <code>st</code></td><td>0x0.st</td></tr>
-                    </table>
+                    <h3 class="section-mt" id="compat-subdomains">{{t .Lang "help.compat_subdomains_link"}}</h3>
+                    <p>{{th .Lang "help.subdomain_intro"}}</p>
+                    <div class="table-wrapper">
+                        <table class="help-table">
+                            <tr><th>{{t .Lang "help.col_label"}}</th><th>{{t .Lang "help.col_target"}}</th></tr>
+                            <tr><td><code>pb</code>, <code>pastebin</code></td><td>pastebin.com</td></tr>
+                            <tr><td><code>lp</code>, <code>lenpaste</code></td><td>lenpaste</td></tr>
+                            <tr><td><code>sk</code>, <code>stikked</code></td><td>stikked</td></tr>
+                            <tr><td><code>hb</code>, <code>hastebin</code></td><td>hastebin / haste-server</td></tr>
+                            <tr><td><code>dp</code>, <code>dpaste</code></td><td>dpaste</td></tr>
+                            <tr><td><code>mb</code>, <code>microbin</code></td><td>microbin</td></tr>
+                            <tr><td><code>tb</code>, <code>termbin</code></td><td>{{t .Lang "help.target_termbin"}}</td></tr>
+                            <tr><td><code>ix</code></td><td>ix.io</td></tr>
+                            <tr><td><code>sprunge</code></td><td>sprunge.us</td></tr>
+                            <tr><td><code>0x0</code>, <code>st</code></td><td>0x0.st</td></tr>
+                        </table>
+                    </div>
 
                     {{if and .TorEnabled .TorRunning .OnionAddress}}
-                    <h2 class="section-mt" id="tor-access">Tor Access</h2>
-                    <p>This service is available as a Tor hidden service for enhanced privacy.</p>
-                    <h3>Onion Address</h3>
+                    <h2 class="section-mt" id="tor-access">{{t .Lang "help.tor_access"}}</h2>
+                    <p>{{t .Lang "help.tor_intro"}}</p>
+                    <h3>{{t .Lang "help.onion_address"}}</h3>
                     <div class="code-block">
                         <div class="code-header"><span class="code-lang">Onion</span></div>
                         <div class="code-content"><pre class="long-string">{{.OnionAddress}}</pre></div>
@@ -303,19 +323,19 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
                             <span class="copy-text">📋</span>
                         </button>
                     </div>
-                    <h3>How to Connect</h3>
+                    <h3>{{t .Lang "help.how_to_connect"}}</h3>
                     <ol>
-                        <li>Download <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a></li>
-                        <li>Open Tor Browser and wait for it to connect</li>
-                        <li>Paste the onion address above into the Tor Browser address bar</li>
+                        <li>{{th .Lang "help.tor_step_download"}}</li>
+                        <li>{{t .Lang "help.open_tor"}}</li>
+                        <li>{{t .Lang "help.tor_step_paste"}}</li>
                     </ol>
-                    <p>Using Tor hides your IP address and encrypts your connection through the Tor network.</p>
+                    <p>{{t .Lang "help.tor_privacy_note"}}</p>
                     {{end}}
 
                     {{if and .I2PEnabled .I2PRunning .I2PAddress}}
-                    <h2 class="section-mt" id="i2p-access">I2P Access</h2>
-                    <p>This service is available as an I2P eepsite for enhanced privacy.</p>
-                    <h3>I2P Address</h3>
+                    <h2 class="section-mt" id="i2p-access">{{t .Lang "help.i2p_title"}}</h2>
+                    <p>{{t .Lang "help.i2p_intro"}}</p>
+                    <h3>{{t .Lang "help.i2p_address"}}</h3>
                     <div class="code-block">
                         <div class="code-header"><span class="code-lang">I2P</span></div>
                         <div class="code-content"><pre class="long-string">{{.I2PAddress}}</pre></div>
@@ -323,34 +343,34 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
                             <span class="copy-text">📋</span>
                         </button>
                     </div>
-                    <h3>How to Connect</h3>
+                    <h3>{{t .Lang "help.how_to_connect"}}</h3>
                     <ol>
-                        <li>Install <a href="https://geti2p.net/en/download" target="_blank" rel="noopener">I2P</a> or <a href="https://i2pd.website/" target="_blank" rel="noopener">i2pd</a> and wait for it to integrate with the network</li>
-                        <li>Configure your browser to use the I2P HTTP proxy (default <code>127.0.0.1:4444</code>)</li>
-                        <li>Copy the <code>.b32.i2p</code> address above and paste it into your browser address bar</li>
+                        <li>{{th .Lang "help.i2p_step_install"}}</li>
+                        <li>{{th .Lang "help.i2p_step_proxy"}}</li>
+                        <li>{{th .Lang "help.i2p_step_paste"}}</li>
                     </ol>
-                    <p>Using I2P routes your connection through the I2P network. Eepsites are served over <code>http://</code> — the I2P tunnel provides the transport encryption, so no TLS certificate is used.</p>
+                    <p>{{th .Lang "help.i2p_note"}}</p>
                     {{end}}
 
-                    <h2 class="section-mt" id="faq">FAQ</h2>
-                    <h3>Do I need an account or API key?</h3>
-                    <p>No. Creating, reading, and deleting pastes requires no authentication. The delete token returned at creation is all you need to remove a paste.</p>
-                    <h3>How long are pastes kept?</h3>
-                    <p>Until their expiry elapses (see the expiry table above) or their burn-after view count is reached. Pastes set to <code>never</code> are kept until deleted.</p>
-                    <h3>Is there a size limit?</h3>
-                    <p>Yes. The server enforces a maximum paste size of <strong>{{.MaxPasteSize}}</strong>; oversized content is rejected with a <code>413</code> response.</p>
-                    <h3>Can I use it from scripts?</h3>
-                    <p>Yes — pipe to <code>curl --data-binary @-</code>, use the JSON API, or point existing <code>pastebin.com</code> scripts at this server.</p>
+                    <h2 class="section-mt" id="faq">{{t .Lang "help.faq_title"}}</h2>
+                    <h3>{{t .Lang "help.faq_q_account"}}</h3>
+                    <p>{{th .Lang "help.faq_a_account"}}</p>
+                    <h3>{{t .Lang "help.faq_q_retention"}}</h3>
+                    <p>{{th .Lang "help.faq_a_retention"}}</p>
+                    <h3>{{t .Lang "help.faq_q_size"}}</h3>
+                    <p>{{tfh .Lang "help.faq_a_size" "size" .MaxPasteSize}}</p>
+                    <h3>{{t .Lang "help.faq_q_scripts"}}</h3>
+                    <p>{{th .Lang "help.faq_a_scripts"}}</p>
 
-                    <h2 class="section-mt" id="troubleshooting">Troubleshooting</h2>
-                    <h3>404 Not Found</h3>
-                    <p>The paste ID is wrong or the paste has expired or been burned. Check the URL.</p>
-                    <h3>413 Payload Too Large</h3>
-                    <p>Your content exceeds the maximum paste size. Split it or reduce the size.</p>
-                    <h3>429 Too Many Requests</h3>
-                    <p>You have hit the rate limit. Wait and retry; the <code>Retry-After</code> header tells you how long.</p>
-                    <h3>403 Forbidden on delete</h3>
-                    <p>The delete token is missing or incorrect. Only the correct token can delete a paste.</p>
+                    <h2 class="section-mt" id="troubleshooting">{{t .Lang "help.troubleshooting"}}</h2>
+                    <h3>{{t .Lang "help.ts_404_title"}}</h3>
+                    <p>{{th .Lang "help.ts_404_body"}}</p>
+                    <h3>{{t .Lang "help.ts_413_title"}}</h3>
+                    <p>{{th .Lang "help.ts_413_body"}}</p>
+                    <h3>{{t .Lang "help.ts_429_title"}}</h3>
+                    <p>{{th .Lang "help.ts_429_body"}}</p>
+                    <h3>{{t .Lang "help.ts_403_title"}}</h3>
+                    <p>{{th .Lang "help.ts_403_body"}}</p>
                     {{if .PageContent}}<div class="markdown-content">{{.PageContent}}</div>{{end}}
                 </div>
             </div>

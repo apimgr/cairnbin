@@ -24,5 +24,5 @@ func (c *Handler) sprungeRespond(w http.ResponseWriter, r *http.Request, content
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintln(w, c.rawURL(r, pasteID))
+	_, _ = fmt.Fprintln(w, c.rawURL(r, pasteID))
 }

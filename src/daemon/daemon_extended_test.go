@@ -213,11 +213,12 @@ func TestFilterDaemonFlag_LargeInput(t *testing.T) {
 	// Build a large input slice.
 	input := make([]string, 1000)
 	for i := range input {
-		if i%10 == 0 {
+		switch i % 10 {
+		case 0:
 			input[i] = "--daemon"
-		} else if i%10 == 5 {
+		case 5:
 			input[i] = "-d"
-		} else {
+		default:
 			input[i] = "--port"
 		}
 	}

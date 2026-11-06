@@ -65,7 +65,7 @@ func TestNormalizeArgs(t *testing.T) {
 func TestApplyColor(t *testing.T) {
 	t.Run("no sets NO_COLOR", func(t *testing.T) {
 		t.Setenv("NO_COLOR", "")
-		os.Unsetenv("NO_COLOR")
+		_ = os.Unsetenv("NO_COLOR")
 		applyColor("no")
 		if os.Getenv("NO_COLOR") != "1" {
 			t.Fatalf("applyColor(no): NO_COLOR = %q, want 1", os.Getenv("NO_COLOR"))
@@ -74,7 +74,7 @@ func TestApplyColor(t *testing.T) {
 
 	t.Run("never alias sets NO_COLOR", func(t *testing.T) {
 		t.Setenv("NO_COLOR", "")
-		os.Unsetenv("NO_COLOR")
+		_ = os.Unsetenv("NO_COLOR")
 		applyColor("never")
 		if os.Getenv("NO_COLOR") != "1" {
 			t.Fatalf("applyColor(never): NO_COLOR = %q, want 1", os.Getenv("NO_COLOR"))
@@ -107,7 +107,7 @@ func TestApplyColor(t *testing.T) {
 
 	t.Run("empty leaves NO_COLOR unset", func(t *testing.T) {
 		t.Setenv("NO_COLOR", "")
-		os.Unsetenv("NO_COLOR")
+		_ = os.Unsetenv("NO_COLOR")
 		applyColor("")
 		if _, ok := os.LookupEnv("NO_COLOR"); ok {
 			t.Fatalf("applyColor(empty): NO_COLOR should remain unset")
