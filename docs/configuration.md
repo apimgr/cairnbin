@@ -51,20 +51,21 @@ server:
     allowed_origins: ["*"] # list of origins; [""] disables CORS headers
     allow_credentials: true # effective only for explicitly allowed origins
     max_age: 86400
+  rate_limit:
+    enabled: true
+    read: {requests: 120, window: 60}
+    write: {requests: 10, window: 60}
+    health: {requests: 120, window: 60}
+    global_burst: 240
+  termbin:
+    enabled: true # raw-TCP termbin/fiche listener (on by default)
+    port: 9999
+    max_size: 32768
+    timeout: "5s"
 
 database:
-  type: "sqlite"
-  path: ""   # default: {data_dir}/db/server.db
-
-rate_limit:
-  enabled: true
-  create_per_minute: 30
-
-termbin:
-  enabled: false     # raw-TCP termbin/fiche compat listener (off by default)
-  port: 9999
-  max_size: 32768    # max payload in bytes
-  timeout: "5s"      # idle/read timeout
+  driver: "sqlite"
+  url: "" # default: {data_dir}/db/server.db
 
 web:
   csp:
@@ -349,7 +350,7 @@ Custom email templates in `{config_dir}/template/email/{name}.txt` are validated
 
 | Variable | Description |
 |----------|-------------|
-| `TERMBIN_ENABLED` | Enable the raw-TCP termbin/fiche compat listener (default: `false`) |
+| `TERMBIN_ENABLED` | Enable the raw-TCP termbin/fiche compat listener (default: `true`) |
 | `TERMBIN_PORT`    | termbin listener port (default: `9999`) |
 | `TERMBIN_MAX_SIZE`| Max termbin payload in bytes (default: `32768`) |
 | `TERMBIN_TIMEOUT` | termbin idle/read timeout (default: `5s`) |

@@ -60,6 +60,7 @@ TEST_TAGS     ?=
 TEST_PKGS     ?= ./...
 TEST_RUN      ?=
 TEST_COVERAGE ?= 1
+TEST_NETWORK  ?= $(PROJECT_NAME)-test-net
 
 # GO_DOCKER_RUN is the shared docker run prefix with no image, so targets can add mounts before the image.
 GO_DOCKER_RUN := docker run --rm --name $(PROJECT_NAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) --memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) -v $(PWD):/app -v $(GO_CACHE):/usr/local/share/go/pkg/mod -v $(GO_BUILD):/usr/local/share/go/cache -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false $(EXTRA_ENV)
@@ -196,8 +197,16 @@ docker:
 #   TEST_COVERAGE=0        skip the 60% gate (e2e suites measure integration, not unit coverage)
 test:
 	@mkdir -p $(GO_CACHE) $(GO_BUILD)
-	@echo "Running tests$(if $(TEST_TAGS), with $(TEST_TAGS)) for $(TEST_PKGS)..."
-	@$(GO_DOCKER) sh -c " \
+	@CAIRNBIN_TEST_NETWORK="$(TEST_NETWORK)"; \
+	CAIRNBIN_TEST_NETWORK_CREATED=0; \
+	if ! docker network inspect "$$CAIRNBIN_TEST_NETWORK" >/dev/null 2>&1; then \
+		docker network create "$$CAIRNBIN_TEST_NETWORK" >/dev/null || exit 1; \
+		CAIRNBIN_TEST_NETWORK_CREATED=1; \
+	fi; \
+	cleanup() { if [ "$$CAIRNBIN_TEST_NETWORK_CREATED" = 1 ]; then docker network rm "$$CAIRNBIN_TEST_NETWORK" >/dev/null; fi; }; \
+	trap cleanup EXIT; \
+	echo "Running tests$(if $(TEST_TAGS), with $(TEST_TAGS)) for $(TEST_PKGS)..."; \
+	$(GO_DOCKER_RUN) --network "$$CAIRNBIN_TEST_NETWORK" casjaysdev/go:latest sh -c " \
 		mkdir -p \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)\" && \
 		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)/$(INTERNAL_NAME)-XXXXXX\") && \
 		go mod download && \

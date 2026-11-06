@@ -40,7 +40,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only queries)
 - MCP endpoint at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`) so AI clients can use the API as tools with the same Bearer tokens
-- Full route compatibility with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (sprunge/0x0/ix.io), and termbin/fiche (raw TCP, opt-in)
+- Full route compatibility with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (sprunge/0x0/ix.io), and termbin/fiche (raw TCP on port 9999, enabled by default)
 - Built-in scheduler for expiry cleanup, backups, security-database updates, and self-update checks (no external cron)
 - Backup and restore with optional AES-256-GCM encryption (Argon2id key derivation)
 - Self-update with SHA-256 checksum verification (stable/beta/devel channels)
@@ -62,6 +62,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 docker run -d \
   --name cairnbin \
   -p 172.17.0.1:64580:80 \
+  -p 9999:9999 \
   -v ./volumes/config:/config:z \
   -v ./volumes/data:/data:z \
   ghcr.io/apimgr/cairnbin:latest

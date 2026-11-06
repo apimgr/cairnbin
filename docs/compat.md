@@ -4,8 +4,9 @@ Cairnbin is a drop-in replacement for pastebin.com, microbin, lenpaste,
 stikked, hastebin/haste-server, dpaste, the curl-upload family
 (sprunge/0x0/ix.io), and termbin/fiche. Existing scripts, CLIs, and
 integrations targeting any of those services work against this server without
-modification. All API keys, user keys, and auth fields are accepted and
-ignored — every instance behaves as an open, anonymous instance.
+modification. The service has no user accounts; unused API and user-key fields
+are accepted and ignored, while protocol-specific delete tokens remain required
+to delete compat-created pastes.
 
 ## pastebin.com Routes
 
@@ -111,13 +112,13 @@ The `expires` field (hours) is honored for the file-upload form. Bodies are capp
 
 ## termbin / fiche (raw TCP)
 
-A raw-TCP listener speaking the termbin/fiche protocol can run on a dedicated port (default `9999`). It is disabled by default and enabled per operator via `server.termbin.enabled`. Once enabled, pipe content over a socket and receive the paste URL back:
+A raw-TCP listener speaking the termbin/fiche protocol is enabled by default on port `9999`. Disable it with `server.termbin.enabled: false` or `TERMBIN_ENABLED=false`. Pipe content over a socket and receive the paste URL back:
 
 ```bash
 echo "hello" | nc pste.us 9999
 ```
 
-Uploads are capped at `server.termbin.max_size` bytes (default 32768). Configure via `server.termbin.enabled`, `server.termbin.port`, and `server.termbin.max_size`.
+Uploads are capped at `server.termbin.max_size` bytes (default 32768), with an idle/read timeout of `server.termbin.timeout` (default `5s`). Configure via `server.termbin.enabled`, `server.termbin.port`, `server.termbin.max_size`, and `server.termbin.timeout`.
 
 ## Auth Stub Routes
 

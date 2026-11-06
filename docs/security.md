@@ -20,7 +20,7 @@
 - HTML-escaped in all web views
 - Chroma highlighting output is sanitized HTML
 - Never executed or evaluated
-- Size-capped at the HTTP layer before reading into memory (10MB max)
+- Size-capped at the HTTP layer before reading into memory (10 MiB by default; configurable with `paste.max_size`, where `0` disables the native paste limit). Raw compatibility request bodies also have their protocol-specific 10 MiB cap.
 - Never logged
 
 ## Transport

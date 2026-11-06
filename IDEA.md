@@ -265,7 +265,7 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 
 | Boundary | Trust | Notes |
 |----------|-------|-------|
-| Embedded SQLite | Trusted — local disk only | No network-accessible database |
+| SQLite or libSQL/Turso | Trusted — local SQLite or configured remote database | Remote database connectivity is required only when libSQL/Turso is configured |
 | Incoming HTTP requests | **Untrusted** | Paste size capped at HTTP layer before reading |
 | Paste content | **Untrusted** | Plain text is HTML-escaped in all web views; MIME-detected binary content is base64-stored with its detected media type; user content is never executed as markup |
 | Multipart file uploads | **Untrusted** | MIME is detected from file bytes; text remains text, binary is base64-stored with its detected media type; filename supplies the title and syntax-language hint |
@@ -323,7 +323,7 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 - **Self-update uses atomic `os.Rename` after SHA-256 verification:** intentional — prevents a partially-written binary from replacing the running binary; aborts the update on checksum mismatch before `os.Rename` is called.
 - **Paste content not encrypted at rest:** intentional for a public service; operators requiring encryption should use full-disk encryption at the host level.
 - **`Access-Control-Allow-Origin: *` on all responses:** intentional — public API designed for cross-origin browser use.
-- **Single SQLite instance, no cluster:** intentional — single-binary deployment; no external database dependency; see non-goals.
+- **Single server instance, no cluster:** intentional — single-binary deployment with local SQLite by default or configured remote libSQL/Turso; no horizontal scaling or node election.
 - **GeoIP loaded from local database file, not queried per-request to an external API:** intentional — avoids network latency on every request, preserves availability when CDN is unreachable, and prevents data leakage of client IPs to third parties.
 - **Container runs as root:** intentional — the container binds on port 80 (< 1024), which requires root or `CAP_NET_BIND_SERVICE`. Per PART 26, the exception applies; no non-root user is created in the runtime stage. Operators who wish to use an unprivileged port should set `PORT` and map externally, then add a non-root USER in a derived image.
 - **`!important` in the `@media (prefers-reduced-motion: reduce)` block (`common.css.tmpl`):** intentional and spec-sanctioned. The general PART 16 rule restricts `!important` to print styles, but the same PART supplies the reduced-motion override as canonical CSS that itself uses `!important` (AI.md lines 22061-22068). The declarations must win over every per-component animation/transition rule to honor the user's motion preference, which is only guaranteed with `!important`; this is the WCAG 2.1 AA "animation-from-interactions" technique. The exception is limited to `animation-duration`, `animation-iteration-count`, `transition-duration`, and `scroll-behavior` inside that single media query.
@@ -333,7 +333,7 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 ### Data sources
 
 - **User-submitted content** — every paste originates from an anonymous request; there is no seeded, curated, or imported paste corpus
-- **Embedded SQLite database** — the sole store for pastes, owner tokens, and server state; created on first run — see PART 10
+- **SQLite or libSQL/Turso database** — stores pastes, owner tokens, and server state; SQLite is local and created on first run, while libSQL/Turso is an optional remote database — see PART 10
 - **GeoLite2-Country database** — downloaded over HTTPS from a public CDN by the `geoip_update` scheduled task, refreshed weekly, fail-open when unavailable — see PART 19
 - **IP/CIDR/country blocklist** — loaded from an operator-configured URL or local file, refreshed hourly by the `blocklist_update` scheduled task
 - **CVE feed** — refreshed by the `cve_update` scheduled task — see PART 19

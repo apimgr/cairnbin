@@ -476,9 +476,9 @@ type MaintenanceNotifyConfig struct {
 
 // TermbinConfig configures the raw-TCP termbin/fiche-protocol listener.
 // Clients connect, stream content, half-close, and receive a single
-// "{base}/{id}\n" URL line. Disabled by default; opt-in per operator.
+// "{base}/{id}\n" URL line. Enabled by default; operators may disable it.
 type TermbinConfig struct {
-	// Enabled turns the raw-TCP listener on. Default false.
+	// Enabled turns the raw-TCP listener on. Default true.
 	Enabled bool `yaml:"enabled"`
 	// Port is the TCP port to listen on. termbin/fiche default is 9999.
 	Port int `yaml:"port"`
@@ -1497,20 +1497,19 @@ type BrandingLink struct {
 // when an operator leaves a branding field empty.
 const (
 	defaultBrandingTagline     = "A fast, public paste sharing service — no account required."
-	defaultBrandingDescription = "Cairnbin is a fast, public paste sharing service. Share code snippets, configuration files, logs, and any text content instantly — no account required. It is a drop-in replacement for pastebin.com, microbin, and lenpaste, so existing scripts work without changes."
+	defaultBrandingDescription = "Cairnbin is a public paste sharing service for code snippets, configuration files, logs, and other text. Create and share pastes without an account, or use compatible clients for pastebin.com, microbin, lenpaste, stikked, hastebin, dpaste, curl-upload services, and termbin/fiche."
 )
 
 // defaultBrandingFeatures is the real feature list drawn from the IDEA.md in-scope
 // items (PART 16 About page sourcing).
 var defaultBrandingFeatures = []string{
-	"Syntax highlighting for 20+ languages",
-	"Configurable expiry (1 hour to 2 years, or never)",
-	"Burn-after-N-views for ephemeral content",
-	"Public and unlisted paste visibility",
-	"Delete token — pastes are yours to remove",
-	"Full REST API with JSON support",
-	"Compatible with pastebin.com, microbin, and lenpaste CLIs",
-	"No accounts, no tracking, no ads",
+	"Server-side syntax highlighting and safe media previews",
+	"Configurable expiry, unlisted pastes, and burn-after-read deletion",
+	"Owner tokens for paste deletion and token management",
+	"Native REST API, OpenAPI/Swagger, GraphQL, and MCP support",
+	"Compatible with pastebin.com, microbin, lenpaste, stikked, hastebin, dpaste, curl-upload, and termbin/fiche clients",
+	"Optional Tor and I2P access",
+	"No accounts or paid tiers",
 }
 
 // defaultBrandingLinks is the real link list drawn from IDEA.md (PART 16).

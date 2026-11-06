@@ -180,7 +180,8 @@ if (
     TEST_PKGS="./tests/e2e/..." \
     TEST_RUN="-count=1" \
     TEST_COVERAGE=0 \
-    EXTRA_ENV="--network cairnbin --network-alias=cairnbin-e2e-runner -e CAIRNBIN_E2E_UPDATE_API_URL=http://cairnbin-e2e-runner:64980/update -e E2E_BASE_URL=${E2E_BASE_URL} -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
+    TEST_NETWORK=cairnbin \
+    EXTRA_ENV="--network-alias=cairnbin-e2e-runner -e CAIRNBIN_E2E_UPDATE_API_URL=http://cairnbin-e2e-runner:64980/update -e E2E_BASE_URL=${E2E_BASE_URL} -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
 ); then
     __pass "E2E tiers 1–3"
 else

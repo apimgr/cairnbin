@@ -1,6 +1,6 @@
 # Integrations
 
-Cairnbin is a drop-in replacement for [pastebin.com](https://pastebin.com), [microbin](https://microbin.eu), and [lenpaste](https://lenpaste.net). Existing clients and tools that target any of those services work without modification.
+Cairnbin is a drop-in replacement for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche. Existing clients and tools that target those services work without modification.
 
 ## Compatible APIs
 
@@ -9,8 +9,28 @@ Cairnbin is a drop-in replacement for [pastebin.com](https://pastebin.com), [mic
 | Native REST | `https://pste.us/api/v1/pastes` | Full-featured JSON API |
 | pastebin.com | `https://pste.us/api/api_post.php` | Drop-in replacement |
 | lenpaste | `https://pste.us/api/v1/new`, `https://pste.us/api/v1/get` | Compatible paste creation/retrieval |
-| microbin | `https://pste.us/upload`, `https://pste.us/p/{id}` | Compatible upload and retrieval |
+| microbin | `https://pste.us/api/v1/pasta`, `https://pste.us/upload`, `https://pste.us/p/{id}` | Compatible API, upload and retrieval |
+| stikked | `https://pste.us/api/create`, `https://pste.us/view/{id}` | Compatible create and view routes |
+| hastebin / haste-server | `https://pste.us/documents` | Compatible document create and retrieval routes |
+| dpaste | `https://pste.us/api/`, `https://pste.us/api/v2/` | Compatible create routes |
+| curl-upload family | `https://pste.us/` | 0x0.st, sprunge.us, and ix.io field-dispatched upload protocols |
+| termbin / fiche | TCP port `9999` | Raw-TCP upload protocol, enabled by default |
 | GraphQL | `https://pste.us/api/v1/server/graphql` | Read-only query interface (GraphiQL UI at `/server/docs/graphql`) |
+
+Recognized compatibility subdomains are routed automatically when a target label is the leftmost DNS label; no `server.yml` setting is required.
+
+| Label(s) | Compatibility target |
+|----------|----------------------|
+| `pb`, `pastebin` | pastebin.com |
+| `lp`, `lenpaste` | lenpaste |
+| `sk`, `stikked` | stikked |
+| `hb`, `hastebin` | hastebin / haste-server |
+| `dp`, `dpaste` | dpaste |
+| `mb`, `microbin` | microbin |
+| `tb`, `termbin` | termbin / fiche |
+| `ix` | ix.io |
+| `sprunge` | sprunge.us |
+| `0x0`, `st` | 0x0.st |
 
 ## Native REST API
 
@@ -92,7 +112,7 @@ None enabled: no Android App Links, Apple Universal Links, WebFinger, OpenID Pro
 
 ## Operator Notes
 
-- Everything above is on by default except the optional pieces: PGP publishing, the `/healthz` root alias, metrics, MCP (`server.mcp.enabled`) and operator notifications.
+- Everything above is on by default except the optional pieces: PGP publishing, the `/healthz` root alias, I2P, and operator notifications. MCP and metrics are enabled by default; MCP can be disabled with `server.mcp.enabled: false`. The termbin listener is enabled by default on TCP port `9999`.
 - Nothing needs to be configured before use; each optional integration is switched on in `server.yml` and picked up by live reload (listen address and port need a restart).
 
 ## CLI Tool
