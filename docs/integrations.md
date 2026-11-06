@@ -27,7 +27,8 @@ curl https://pste.us/api/v1/pastes/{id}
 curl https://pste.us/api/v1/pastes/{id}/raw
 
 # Delete a paste
-curl -X DELETE https://pste.us/api/v1/pastes/{id}?token={owner_token}
+curl -X DELETE https://pste.us/api/v1/pastes/{id} \
+  -H 'Authorization: Bearer {owner_token}'
 
 # List pastes
 curl https://pste.us/api/v1/pastes
@@ -56,8 +57,9 @@ AI clients (Claude, IDE agents, other MCP clients) can use the paste API as tool
 | `POST https://pste.us/api/v1/server/mcp` | Canonical endpoint |
 | `POST https://pste.us/api/mcp`, `POST https://pste.us/mcp` | Aliases, same handler |
 
-- Authentication is the API's own `Authorization: Bearer tok_...` header. There is no MCP token. Create a linked token on `/server/preferences` for each MCP client so it can be revoked on its own.
-- Tools are generated from the API routes: `postApiV1Pastes`, `getApiV1Pastes`, `getApiV1PastesId`, `deleteApiV1PastesId`, `getApiV1PastesIdRaw`, `getApiV1ServerHealthz`, `getApiV1ServerVersion`. Token management is never a tool.
+- Connection instructions, the live public tool list, and project usage notes are at `https://pste.us/server/help/mcp`; the JSON mirror is `GET /api/v1/server/help/mcp`. Both help routes return `404` when MCP is disabled.
+- Authentication is the API's own `Authorization: Bearer tok_...` header. There is no MCP token. Create a linked token on `/server/preferences/tokens` for each MCP client so it can be revoked on its own.
+- Tools are generated from the API routes: `getApiV1Pastes`, `postApiV1Pastes`, `getApiV1PastesId`, `getApiV1PastesIdRaw`, `deleteApiV1PastesId`, `getApiV1ServerHealthz`, and `getApiV1ServerVersion`. Token management is never a tool.
 - An anonymous `postApiV1Pastes` call returns the `owner_token` in the tool result; store it to keep control of the paste.
 - `GET` and `DELETE` return `405`. Disable with `server.mcp.enabled: false` (every MCP route then returns `404`).
 

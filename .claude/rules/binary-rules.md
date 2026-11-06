@@ -123,7 +123,7 @@ Single SQLite file `server.db` (default) with tables: `config`, `config_meta`, `
 
 - Format: `tok_` + 32 URL-safe base62 chars. Header: `Authorization: Bearer tok_...`
 - `server.token` (in `server.yml`) = global operator token, auto-generated on first run
-- Owner and linked tokens: `SHA-256` hash + AES-256-GCM `token_enc` in `api_tokens` (resolve to an `owner_id`); viewable masked on `/server/preferences`, reveal/rotate/restore/linked-token management require the primary token
+- Owner and linked tokens: `SHA-256` hash + AES-256-GCM `token_enc` in `api_tokens` (resolve to an `owner_id`); viewable masked on `/server/preferences/tokens`; reveal/rotate/restore/linked-token management use that page's owner-cookie web fallback or the primary token's Bearer header on the API mirror
 - Revoke: `{project_name} --maintenance token revoke <prefix>`; list: `{project_name} --maintenance token list`
 - Cookie name (web fallback only, never for `/api/...`): `{project_name}_owner_token_XXXXXX`
 

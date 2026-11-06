@@ -26,7 +26,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Burn after N reads — paste deleted once view count reaches threshold
 - Public and unlisted visibility
 - Link pastes — auto-detected when content is exactly one `http://`/`https://` URL and nothing else; visiting the paste 302-redirects to the target (`/{id}/raw` returns the target URL as text instead)
-- Owner token — cryptographically random `tok_...` value returned at creation as `owner_token`, required to delete a paste, and viewable masked by default in `/server/preferences`
+- Owner token — cryptographically random `tok_...` value returned at creation as `owner_token`, required to delete a paste, and viewable masked by default in `/server/preferences/tokens`
 - Raw paste view at `/raw/{id}` and `/{id}/raw`
 - Download at `/dl/{id}`
 - Embedded view at `/emb/{id}` (iframe-embeddable)
@@ -35,7 +35,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Automatic background cleanup of expired and burned pastes
 - Full web frontend (server-side Go templates, dark/light/auto theme, PWA, mobile-first)
 - Cookie-based preferences with inline export/import, consent controls, and local reset at `/server/preferences`
-- Server pages: `/server/about`, `/server/help`, `/server/healthz`, `/server/privacy`, `/server/terms`
+- Server pages: `/server/about`, `/server/help`, `/server/help/mcp`, `/server/healthz`, `/server/privacy`, `/server/terms`
 - CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only queries)

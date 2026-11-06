@@ -41,7 +41,7 @@ tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and m
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never` (default), or a custom duration in seconds
 - Burn after N reads: paste is permanently deleted once its view count reaches a user-set threshold (1–9999); `0` = disabled
 - Visibility: public (listed in recent pastes) or unlisted (URL-only, not listed)
-- Owner token: a `tok_`-prefixed cryptographically random token returned in every API create response; reusable across pastes created by the same caller; stored as a SHA-256 hash with an encrypted recoverable copy; required to delete the paste before natural expiry and viewable, masked by default, in `/server/preferences`
+- Owner token: a `tok_`-prefixed cryptographically random token returned in every API create response; reusable across pastes created by the same caller; stored as a SHA-256 hash with an encrypted recoverable copy; required to delete the paste before natural expiry and viewable, masked by default, in `/server/preferences/tokens`
 - Token reuse: callers may supply an existing owner token on paste creation to link the new paste to that token; the web UI saves the token to the `cairnbin_owner_token_rU3uW5Ze` cookie (HttpOnly, primary) and, as a JS convenience copy, to `localStorage` under the same key; the create form is pre-filled by JS only, never load-bearing
 - Raw paste view, file download, iframe-embeddable view with copy-ready HTML and Markdown embed snippets offered on the paste view page, and a QR code available as both a page and a PNG image
 - View count tracking; automatic background cleanup of expired and burned pastes
@@ -259,7 +259,7 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 | `resource_id` | Internal |
 | `created_at`, `expires_at`, `last_used_at`, `revoked_at` | Internal |
 
-**Owner token delivery** — returned in `owner_token` field of every native API create response; shown at creation and remains viewable, masked by default, on `/server/preferences`; saved to `localStorage` as a convenience; never logged.
+**Owner token delivery** — returned in `owner_token` field of every native API create response; shown at creation and remains viewable, masked by default, on `/server/preferences/tokens`; saved to `localStorage` as a convenience; never logged.
 
 ### Trust boundaries & external services
 

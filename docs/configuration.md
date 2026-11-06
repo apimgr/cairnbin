@@ -84,7 +84,7 @@ and fall back to the defaults above.
 
 `web.footer.custom_html` may use `{current_year}`, `{project_name}`, `{project_org}`, `{project_version}`, `{build_datetime}`, `{onion_address}` and `{i2p_address}`; the last two are empty unless Tor or I2P is running with a published address.
 
-`server.pages.{about,help,privacy,terms}.content` takes Markdown. For `about` and `help` it is appended to the page; for `privacy` and `terms` a non-empty value replaces the default body. `server.pages.contact` has `enabled`, `captcha` and `success_message`.
+`server.pages.{about,help,privacy,terms}.content` takes Markdown. For `about` and `help` it is appended to the page; for `privacy` and `terms` a non-empty value replaces the default body. `server.pages.help.mcp` adds project-specific Markdown after the base sections on `/server/help/mcp` and in its API mirror; the route is available only when `server.mcp.enabled` is true. `server.pages.contact` has `enabled`, `captcha` and `success_message`.
 
 ### Branding and SEO (`server.branding`, `server.seo`)
 

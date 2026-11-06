@@ -39,7 +39,7 @@
 - ALWAYS keep frontend routes matching backend API routes when a UI exists for a public API resource
 - ALWAYS make frontend fully functional without JavaScript (progressive enhancement); forms submit via standard POST
 - ALWAYS validate authoritatively on the server; client-side validation is UX-only and must mirror server rules
-- ALWAYS accept auth tokens from any header defined in PART 8, plus `?token=`, using PART 8's priority order
+- Native routes accept only `Authorization: Bearer {token}`; ignore alternate credential headers and `?token=`. Compatibility routes accept only their emulated protocol's defined credentials.
 - ALWAYS keep Swagger and GraphQL in sync with each other and with the live API, regenerated at build time
 - ALWAYS use JSON only for OpenAPI spec (no YAML, no `.json` suffix route)
 - ALWAYS 2-space indent for JSON/YAML/HTML/CSS/JS; tabs for Go and Makefiles; every file/response ends with exactly one trailing newline

@@ -104,9 +104,7 @@ DELETE https://pste.us/api/v1/pastes/{id}
 Authorization: Bearer <owner-token>
 ```
 
-Authenticate with the `owner_token` returned once at creation (the global operator `server.token` can delete any paste). The token is also accepted via the `X-Delete-Token` header or a `?token=<owner-token>` query parameter.
-
-Or via query parameter: `DELETE https://pste.us/api/v1/pastes/{id}?token=<owner-token>`
+Authenticate with the `owner_token` returned at creation by sending `Authorization: Bearer <owner-token>`. Owner tokens remain viewable, masked by default, at `/server/preferences/tokens`. The global operator `server.token` can delete any paste. Other headers and query parameters are ignored on native API routes.
 
 **Response** (200 OK):
 
@@ -151,6 +149,7 @@ GET https://pste.us/api/healthz
 GET  https://pste.us/api/v1/server/about
 GET  https://pste.us/api/v1/server/privacy
 GET  https://pste.us/api/v1/server/help
+GET  https://pste.us/api/v1/server/help/mcp
 GET  https://pste.us/api/v1/server/terms
 POST https://pste.us/api/v1/server/contact
 ```
@@ -169,6 +168,11 @@ curl -H 'Accept: application/json' https://pste.us/api/v1/server/preferences
 curl -X POST https://pste.us/api/v1/server/preferences \
   -H 'Content-Type: application/json' \
   -d '{"theme":"light","lang":"es","cairnbin_pref_sort":"name"}'
+
+# A non-empty import code takes precedence over the submitted preference fields
+curl -X POST https://pste.us/api/v1/server/preferences \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"bGFuZz1mciZ0aGVtZT1kYXJr"}'
 
 # Export and import (stateless; the code or URL IS the preference values)
 curl -H 'Accept: application/json' https://pste.us/api/v1/server/preferences/export
