@@ -30,6 +30,7 @@
                     <ul>
                         <li><a href="{{.AssetPrefix}}/server/docs/swagger">Swagger UI</a> — {{t .Lang "help.docs_swagger_desc"}}</li>
                         <li><a href="{{.AssetPrefix}}/server/docs/graphql">GraphiQL</a> — {{t .Lang "help.docs_graphql_desc"}}</li>
+                        {{if .MCPEnabled}}<li><a href="{{.AssetPrefix}}/server/help/mcp">MCP server</a> — connect an AI assistant to this application</li>{{end}}
                     </ul>
                     <p>{{tfh .Lang "help.graphql_endpoint" "graphql" (print .BaseURL "/api/graphql") "swagger" (print .BaseURL "/api/swagger")}}</p>
 
@@ -67,7 +68,8 @@
                             </button>
                         </div>
                         <pre><code id="help-delete">curl -X DELETE \
-     "{{.BaseURL}}{{.APIBase}}/pastes/{id}?token={delete_token}"</code></pre>
+     -H "Authorization: Bearer {delete_token}" \
+     "{{.BaseURL}}{{.APIBase}}/pastes/{id}"</code></pre>
                     </div>
 
 

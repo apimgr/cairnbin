@@ -80,66 +80,7 @@
                         </div>
                     </form>
 
-                    <h2 class="section-mt">{{t .Lang "preferences.token_title"}}</h2>
-                    <p>{{t .Lang "preferences.token_desc"}}</p>
-                    <p><button type="button" class="btn btn-secondary" data-action="forget-token">{{t .Lang "paste.forget_token"}}</button></p>
-                    {{if .HasOwnerPrimary}}
-                    <h3>{{t .Lang "preferences.owner_tokens"}}</h3>
-                    {{range .OwnerTokens}}
-                    <p>{{if eq .kind "primary"}}{{t $.Lang "preferences.owner_primary"}}{{else}}{{t $.Lang "preferences.owner_linked"}}{{end}} {{.name}}: <code>{{.token}}</code> ({{t $.Lang (print "preferences.owner_" .status)}})</p>
-                    {{if eq .kind "linked"}}
-                    <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/reveal" class="pref-option-form">
-                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                        <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_reveal"}}</button>
-                    </form>
-                    <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/rotate" class="pref-option-form" data-confirm="{{t $.Lang "preferences.owner_confirm_rotate"}}">
-                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                        <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_rotate"}}</button>
-                    </form>
-                    <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/update" class="pref-form">
-                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                        <label class="form-label" for="tok-{{.id}}-name">{{t $.Lang "preferences.owner_rename"}}</label><input id="tok-{{.id}}-name" name="name" value="{{.name}}" maxlength="64" required class="form-input">
-                        <label class="form-label" for="tok-{{.id}}-expires">{{t $.Lang "preferences.owner_expiry"}}</label><select id="tok-{{.id}}-expires" name="expires" class="form-select"><option value="" selected>{{t $.Lang "preferences.owner_keep_expiry"}}</option><option value="never">{{t $.Lang "preferences.owner_never"}}</option><option value="7d">{{t $.Lang "preferences.owner_7_days"}}</option><option value="30d">{{t $.Lang "preferences.owner_30_days"}}</option><option value="90d">{{t $.Lang "preferences.owner_90_days"}}</option><option value="1y">{{t $.Lang "preferences.owner_1_year"}}</option></select>
-                        <label class="form-label" for="tok-{{.id}}-date">{{t $.Lang "preferences.owner_expiry"}}</label><input id="tok-{{.id}}-date" type="date" name="expires_date" class="form-input">
-                        <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_save"}}</button>
-                    </form>
-                    <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/revoke" class="pref-option-form" data-confirm="{{t $.Lang "preferences.owner_confirm_revoke"}}">
-                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                        <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_revoke"}}</button>
-                    </form>
-                    {{end}}
-                    {{end}}
-                    <form method="post" action="{{.AssetPrefix}}/server/preferences/tokens" class="pref-form">
-                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                        <label for="linked-token-name" class="form-label">{{t .Lang "preferences.owner_create_linked"}}</label>
-                        <input id="linked-token-name" name="name" maxlength="64" required class="form-input">
-                        <label for="linked-token-expiry" class="form-label">{{t .Lang "preferences.owner_expiry"}}</label>
-                        <select id="linked-token-expiry" name="expires" class="form-select"><option value="never">{{t .Lang "preferences.owner_never"}}</option><option value="7d">{{t .Lang "preferences.owner_7_days"}}</option><option value="30d">{{t .Lang "preferences.owner_30_days"}}</option><option value="90d">{{t .Lang "preferences.owner_90_days"}}</option><option value="1y">{{t .Lang "preferences.owner_1_year"}}</option></select>
-                        <label class="form-label" for="linked-token-date">{{t .Lang "preferences.owner_expiry"}}</label><input id="linked-token-date" type="date" name="expires_date" class="form-input">
-                        <button type="submit" class="btn btn-primary">{{t .Lang "preferences.owner_create"}}</button>
-                    </form>
-                    <form method="post" action="{{.AssetPrefix}}/server/preferences/token/reveal" class="pref-form">
-                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                        <button type="submit" class="btn btn-secondary">{{t .Lang "preferences.owner_reveal"}} {{t .Lang "preferences.owner_primary"}}</button>
-                    </form>
-                    <form method="post" action="{{.AssetPrefix}}/server/preferences/token/rotate" class="pref-form" data-confirm="{{t .Lang "preferences.owner_confirm_rotate_primary"}}">
-                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                        <button type="submit" class="btn btn-secondary">{{t .Lang "preferences.owner_rotate"}} {{t .Lang "preferences.owner_primary"}}</button>
-                    </form>
-                    {{if .RevealedOwnerToken}}
-                    <p>{{t .Lang "preferences.owner_primary"}}: <code class="long-string">{{.RevealedOwnerToken}}</code> <button type="button" class="copy-btn" data-copy="{{.RevealedOwnerToken}}" aria-label="{{t .Lang "preferences.owner_copy"}}">{{t .Lang "preferences.owner_copy"}}</button></p>
-                    {{end}}
-                    {{if .RevealedLinkedToken}}
-                    <p>{{t .Lang "preferences.owner_linked"}}: <code class="long-string">{{.RevealedLinkedToken}}</code> <button type="button" class="copy-btn" data-copy="{{.RevealedLinkedToken}}">{{t .Lang "preferences.owner_copy"}}</button></p>
-                    {{end}}
-                    {{else}}
-                    <form method="post" action="{{.AssetPrefix}}/server/preferences/token/restore" class="pref-form">
-                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                        <label for="restore-owner-token" class="form-label">{{t .Lang "preferences.owner_use_primary"}}</label>
-                        <input id="restore-owner-token" name="owner_token" type="password" class="form-input" required autocomplete="off">
-                        <button type="submit" class="btn btn-secondary">{{t .Lang "preferences.owner_restore"}}</button>
-                    </form>
-                    {{end}}
+                    <p class="section-mt"><a href="/server/preferences/tokens">{{t .Lang "preferences.owner_tokens"}}</a></p>
 
                 </div>
             </div>

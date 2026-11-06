@@ -78,7 +78,7 @@ func (s *Server) requirePrimaryOwner(w http.ResponseWriter, r *http.Request) (*d
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "UNAUTHORIZED"})
 		} else {
-			http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
+			http.Redirect(w, r, "/server/preferences/tokens", http.StatusSeeOther)
 		}
 		return nil, db, false
 	}
@@ -164,7 +164,7 @@ func (s *Server) handleOwnerTokenRevealWeb(w http.ResponseWriter, r *http.Reques
 	}
 	data := s.preferencesPageData(r, s.themeFromRequest(r), i18n.LangFromRequest(r))
 	data["RevealedOwnerToken"] = token
-	s.renderTemplate(w, r, "preferences.html", data)
+	s.renderTemplate(w, r, "preferences_tokens.html", data)
 	s.tokenAudit(r, "token.revealed", "primary", "")
 }
 
@@ -239,7 +239,7 @@ func (s *Server) handleOwnerTokenRotateWeb(w http.ResponseWriter, r *http.Reques
 			data["OwnerTokens"] = items
 		}
 	}
-	s.renderTemplate(w, r, "preferences.html", data)
+	s.renderTemplate(w, r, "preferences_tokens.html", data)
 }
 
 func (s *Server) setOwnerCookie(w http.ResponseWriter, r *http.Request, token string) {
@@ -295,7 +295,7 @@ func (s *Server) handleOwnerTokenRestore(w http.ResponseWriter, r *http.Request)
 	s.setOwnerCookie(w, r, value)
 	w.Header().Set("Cache-Control", "no-store")
 	s.tokenAuditOwner(r, rec.OwnerID, "token.restored", "primary", rec.TokenPrefix)
-	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
+	http.Redirect(w, r, "/server/preferences/tokens", http.StatusSeeOther)
 }
 
 // ownerRestoreFailureLimited counts only failed restore attempts, separately
@@ -636,11 +636,11 @@ func (s *Server) tokenActionSuccess(w http.ResponseWriter, r *http.Request, data
 			w.Header().Set("Cache-Control", "no-store")
 			pageData := s.preferencesPageData(r, s.themeFromRequest(r), i18n.LangFromRequest(r))
 			pageData["RevealedLinkedToken"] = token
-			s.renderTemplate(w, r, "preferences.html", pageData)
+			s.renderTemplate(w, r, "preferences_tokens.html", pageData)
 			return
 		}
 	}
-	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
+	http.Redirect(w, r, "/server/preferences/tokens", http.StatusSeeOther)
 }
 
 // ownerCookieMiddleware slides valid primary cookies and clears invalid or

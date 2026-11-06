@@ -59,7 +59,5 @@ func (s *Server) csrfOutOfScope(w http.ResponseWriter, r *http.Request) bool {
 func hasBearerCredential(r *http.Request) bool {
 	authorization := strings.TrimSpace(r.Header.Get("Authorization"))
 	scheme, credential, found := strings.Cut(authorization, " ")
-	apiToken := strings.TrimSpace(r.Header.Get("X-API-Token"))
-	return (found && strings.EqualFold(scheme, "Bearer") && strings.TrimSpace(credential) != "") ||
-		apiToken != ""
+	return found && strings.EqualFold(scheme, "Bearer") && strings.TrimSpace(credential) != ""
 }

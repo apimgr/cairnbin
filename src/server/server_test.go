@@ -213,7 +213,7 @@ func TestCSRFMiddleware(t *testing.T) {
 		{
 			name: "Bearer POST bypasses",
 			build: func() *http.Request {
-				r := newReq(http.MethodPost, "http://example.com/api/v1/paste")
+				r := newReq(http.MethodPost, "http://example.com/pastes")
 				r.Header.Set("Origin", "http://evil.com")
 				r.Header.Set("Authorization", "Bearer tok_abc")
 				return r
@@ -252,7 +252,7 @@ func TestCSRFMiddleware(t *testing.T) {
 		{
 			name: "cookieless POST with bearer bypasses (API clients authenticate via Authorization, not CSRF)",
 			build: func() *http.Request {
-				r := newReq(http.MethodPost, "http://example.com/api/new")
+				r := newReq(http.MethodPost, "http://example.com/pastes")
 				r.Header.Set("Authorization", "Bearer tok_abc")
 				return r
 			},
@@ -260,14 +260,14 @@ func TestCSRFMiddleware(t *testing.T) {
 			wantNext:   true,
 		},
 		{
-			name: "cookieless POST with X-API-Token bypasses",
+			name: "cookieless POST with X-API-Token does not bypass",
 			build: func() *http.Request {
-				r := newReq(http.MethodPost, "http://example.com/api/new")
+				r := newReq(http.MethodPost, "http://example.com/pastes")
 				r.Header.Set("X-API-Token", "tok_abc")
 				return r
 			},
-			wantStatus: http.StatusOK,
-			wantNext:   true,
+			wantStatus: http.StatusForbidden,
+			wantNext:   false,
 		},
 		{
 			name: "originless POST with matching cookie and token passes",
@@ -807,57 +807,19 @@ func TestRequestIDMiddlewareRejectsMalformed(t *testing.T) {
 // ─── extractRequestToken ─────────────────────────────────────────────────────
 
 func TestExtractRequestTokenPriority(t *testing.T) {
-	// Every supported source, in PART 8 priority order (AI.md:12946-12951).
-	cases := []struct {
-		header string
-		source string
-	}{
-		{"Authorization", "authorization"},
-		{"X-API-Key", "x-api-key"},
-		{"API-Key", "api-key"},
-		{"X-Auth-Token", "x-auth-token"},
-		{"X-Access-Token", "x-access-token"},
-		{"X-Token", "x-token"},
-		{"Token", "token"},
-	}
-	for _, tc := range cases {
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		if tc.header == "Authorization" {
-			r.Header.Set(tc.header, "Bearer tok_value")
-		} else {
-			r.Header.Set(tc.header, "tok_value")
-		}
-		tok, src := extractRequestToken(r)
-		if tok != "tok_value" || src != tc.source {
-			t.Errorf("%s: got (%q, %q), want (tok_value, %s)", tc.header, tok, src, tc.source)
-		}
-	}
-
-	// Authorization outranks every other header.
 	r := httptest.NewRequest(http.MethodGet, "/?token=query_tok", nil)
-	r.Header.Set("Authorization", "Bearer auth_tok")
 	r.Header.Set("X-API-Key", "apikey_tok")
-	if tok, src := extractRequestToken(r); tok != "auth_tok" || src != "authorization" {
-		t.Errorf("priority: got (%q, %q), want (auth_tok, authorization)", tok, src)
-	}
-
-	// Query parameter is the lowest-priority source.
-	r = httptest.NewRequest(http.MethodGet, "/?token=query_tok", nil)
-	if tok, src := extractRequestToken(r); tok != "query_tok" || src != "query" {
-		t.Errorf("query: got (%q, %q), want (query_tok, query)", tok, src)
-	}
-
-	// No credentials at all.
-	r = httptest.NewRequest(http.MethodGet, "/", nil)
 	if tok, src := extractRequestToken(r); tok != "" || src != "" {
-		t.Errorf("empty: got (%q, %q), want empty", tok, src)
+		t.Errorf("non-Bearer credentials must be ignored: got (%q, %q)", tok, src)
 	}
-
-	// Cookies are never a token source on any route.
+	r.Header.Set("Authorization", "Bearer auth_tok")
+	if tok, src := extractRequestToken(r); tok != "auth_tok" || src != "authorization" {
+		t.Errorf("Bearer: got (%q, %q), want (auth_tok, authorization)", tok, src)
+	}
 	r = httptest.NewRequest(http.MethodGet, "/", nil)
 	r.AddCookie(&http.Cookie{Name: ownerTokenCookieName, Value: "cookie_tok"})
-	if tok, _ := extractRequestToken(r); tok != "" {
-		t.Errorf("cookie must not be an auth source, got %q", tok)
+	if tok, src := extractRequestToken(r); tok != "" || src != "" {
+		t.Errorf("cookie must not be an auth source, got (%q, %q)", tok, src)
 	}
 }
 
@@ -871,8 +833,14 @@ func TestAuthMiddlewarePopulatesContext(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("X-Auth-Token", "tok_abc")
 	h.ServeHTTP(httptest.NewRecorder(), r)
-	if gotTok != "tok_abc" || gotSrc != "x-auth-token" {
-		t.Errorf("got (%q, %q), want (tok_abc, x-auth-token)", gotTok, gotSrc)
+	if gotTok != "" || gotSrc != "" {
+		t.Errorf("unsupported token header populated auth context: got (%q, %q)", gotTok, gotSrc)
+	}
+	r = httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Authorization", "Bearer tok_abc")
+	h.ServeHTTP(httptest.NewRecorder(), r)
+	if gotTok != "tok_abc" || gotSrc != "authorization" {
+		t.Errorf("got (%q, %q), want (tok_abc, authorization)", gotTok, gotSrc)
 	}
 
 	gotTok, gotSrc = "", ""
@@ -1549,6 +1517,9 @@ func TestCORSMiddleware(t *testing.T) {
 			got := w.Header().Get("Access-Control-Allow-Origin")
 			if got != tc.wantOrigin {
 				t.Errorf("ACAO = %q, want %q", got, tc.wantOrigin)
+			}
+			if got := w.Header().Get("Access-Control-Allow-Headers"); got != corsAllowedHeaders {
+				t.Errorf("Access-Control-Allow-Headers = %q, want %q", got, corsAllowedHeaders)
 			}
 		})
 	}

@@ -193,6 +193,7 @@ type PagesConfig struct {
 // PageContentConfig is a single static page's optional Markdown content override.
 type PageContentConfig struct {
 	Content string `yaml:"content"`
+	MCP     string `yaml:"mcp"`
 }
 
 // ContactPageConfig configures the /server/contact form (PART 31). When Enabled
@@ -2094,6 +2095,22 @@ func DefaultConfig() *Config {
 				General:  ContactRole{Email: "", Webhooks: map[string]string{}},
 			},
 			Pages: PagesConfig{
+				Help: PageContentConfig{
+					MCP: "## cairnbin tools\n\n" +
+						"- `getApiV1Pastes`: list public pastes; `page` defaults to 1 and `limit` defaults to 20 (maximum 100).\n" +
+						"- `postApiV1Pastes`: create a paste; provide `content`, and optionally `title`, `language`, `is_public`, `expires_in`, and `burn_after`. " +
+						"An anonymous creation returns an `owner_token`; save it to manage that paste later.\n" +
+						"- `getApiV1PastesId`: retrieve a paste by ID; link pastes redirect to their target, so use the raw tool to read the target as text.\n" +
+						"- `getApiV1PastesIdRaw`: retrieve the raw paste content or link target as text.\n" +
+						"- `deleteApiV1PastesId`: delete a paste with its owner token in the Bearer header; use a linked token from `/server/preferences/tokens` " +
+						"for an assistant that needs access to existing pastes.\n" +
+						"- `getApiV1ServerHealthz` and `getApiV1ServerVersion`: check service health and version.\n\n" +
+						"Example prompts:\n\n- Create a paste containing this code and return its link.\n" +
+						"- Find recent public pastes and summarize their titles.\n" +
+						"- Check whether cairnbin is healthy and report its version.\n\n" +
+						"Paste operations follow the REST API's visibility, expiry, ownership, and rate limits. " +
+						"cairnbin exposes no additional MCP resources or prompts.",
+				},
 				Contact: ContactPageConfig{
 					Enabled:        true,
 					Captcha:        "simple",

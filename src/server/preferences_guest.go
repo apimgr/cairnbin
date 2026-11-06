@@ -263,3 +263,18 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		s.renderTemplate(w, r, "preferences.html", s.preferencesPageData(r, theme, lang))
 	}
 }
+
+func (s *Server) handleOwnerTokensPage(w http.ResponseWriter, r *http.Request) {
+	data := s.preferencesPageData(r, s.themeFromRequest(r), i18n.LangFromRequest(r))
+	if detectClientType(r) == "text" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		html, err := s.renderTemplateToString(r, "preferences_tokens.html", data)
+		if err != nil {
+			_, _ = fmt.Fprintf(w, "%s\n/server/preferences/tokens\n", s.liveCfg().Web.SiteTitle)
+			return
+		}
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		return
+	}
+	s.renderTemplate(w, r, "preferences_tokens.html", data)
+}

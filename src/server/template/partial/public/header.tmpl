@@ -1,7 +1,7 @@
 {{define "header"}}
     <a href="#main-content" class="skip-link">{{t .Lang "nav.skip_to_content"}}</a>
     <a href="#navigation" class="skip-link">{{t .Lang "nav.skip_to_navigation"}}</a>
-    {{range .Announcements}}
+    {{if ne .CurrentPath "/server/preferences"}}{{range .Announcements}}
     <div class="site-banner site-banner-{{.Type}}" role="{{.Role}}" data-announcement-id="{{.ID}}">
         <span class="site-banner-icon" aria-hidden="true">{{.Icon}}</span>
         <span class="site-banner-text">{{if .Title}}<strong>{{.Title}}:</strong> {{end}}{{.Message}}</span>
@@ -14,7 +14,7 @@
         </form>
         {{end}}
     </div>
-    {{end}}
+    {{end}}{{end}}
     {{if .Flash}}
     <div class="flash flash-{{.Flash.Kind}}" role="status">{{.Flash.Message}}</div>
     {{end}}

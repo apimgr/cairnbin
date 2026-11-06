@@ -1452,7 +1452,7 @@ func (c *client) cmdDelete(args []string) {
 
 	req, err := http.NewRequest(
 		http.MethodDelete,
-		c.url("/api/"+c.apiVer()+"/pastes/"+url.PathEscape(id)+"?token="+url.QueryEscape(token)),
+		c.url("/api/"+c.apiVer()+"/pastes/"+url.PathEscape(id)),
 		nil,
 	)
 	if err != nil {
@@ -1460,6 +1460,7 @@ func (c *client) cmdDelete(args []string) {
 		os.Exit(exitGeneral)
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf("%s-cli/%s", projectName, Version))
+	req.Header.Set("Authorization", "Bearer "+token)
 	if c.lang != "" {
 		req.Header.Set("Accept-Language", c.lang)
 	}

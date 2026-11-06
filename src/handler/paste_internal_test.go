@@ -62,6 +62,7 @@ func createMinimalPaste(t *testing.T, db database.DB) string {
 // ─── extractToken ─────────────────────────────────────────────────────────────
 
 func TestExtractToken(t *testing.T) {
+	const ownerCookieName = "cairnbin_owner_token_rU3uW5Ze"
 	cases := []struct {
 		name  string
 		setup func(*http.Request)
@@ -75,39 +76,24 @@ func TestExtractToken(t *testing.T) {
 			want: "tok_testtoken",
 		},
 		{
-			name: "bare_auth",
+			name: "bare_auth_ignored",
 			setup: func(r *http.Request) {
 				r.Header.Set("Authorization", "tok_baretoken")
 			},
-			want: "tok_baretoken",
 		},
 		{
-			name: "x_api_token",
+			name: "alternate_headers_ignored",
 			setup: func(r *http.Request) {
 				r.Header.Set("X-Api-Token", "tok_apitoken")
-			},
-			want: "tok_apitoken",
-		},
-		{
-			name: "x_token",
-			setup: func(r *http.Request) {
 				r.Header.Set("X-Token", "tok_xtoken")
-			},
-			want: "tok_xtoken",
-		},
-		{
-			name: "x_delete_token",
-			setup: func(r *http.Request) {
 				r.Header.Set("X-Delete-Token", "tok_deletetoken")
 			},
-			want: "tok_deletetoken",
 		},
 		{
 			name: "query_param",
 			setup: func(r *http.Request) {
 				r.URL.RawQuery = "token=tok_queryparam"
 			},
-			want: "tok_queryparam",
 		},
 		{
 			name: "json_body",
@@ -115,7 +101,13 @@ func TestExtractToken(t *testing.T) {
 				r.Header.Set("Content-Type", "application/json")
 				r.Body = io.NopCloser(strings.NewReader(`{"token":"tok_jsonbody"}`))
 			},
-			want: "tok_jsonbody",
+		},
+		{
+			name: "owner_cookie_fallback_for_web",
+			setup: func(r *http.Request) {
+				r.AddCookie(&http.Cookie{Name: ownerCookieName, Value: "tok_cookie"})
+			},
+			want: "tok_cookie",
 		},
 		{
 			name:  "empty",
@@ -134,6 +126,13 @@ func TestExtractToken(t *testing.T) {
 			}
 		})
 	}
+	t.Run("owner_cookie_ignored_for_api", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/pastes", nil)
+		r.AddCookie(&http.Cookie{Name: ownerCookieName, Value: "tok_cookie"})
+		if got := extractToken(r); got != "" {
+			t.Errorf("extractToken: API cookie returned %q, want empty", got)
+		}
+	})
 }
 
 // ─── httpErrCode ──────────────────────────────────────────────────────────────

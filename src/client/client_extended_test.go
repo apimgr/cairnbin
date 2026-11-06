@@ -174,7 +174,8 @@ func TestCmdDelete_404ReturnsNotFoundExit(t *testing.T) {
 	defer srv.Close()
 
 	// Build the request manually to verify behavior
-	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/v1/pastes/notfound?token=tok", nil)
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/v1/pastes/notfound", nil)
+	req.Header.Set("Authorization", "Bearer tok")
 	req.Header.Set("User-Agent", "cairnbin-cli/test")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -192,7 +193,8 @@ func TestCmdDelete_401ReturnsAuthExit(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/v1/pastes/id?token=badtok", nil)
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/v1/pastes/id", nil)
+	req.Header.Set("Authorization", "Bearer badtok")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("delete request: %v", err)

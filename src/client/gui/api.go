@@ -108,12 +108,13 @@ func fetchPasteRaw(server, lang, id string) (string, error) {
 // deletePaste sends a DELETE request to remove a paste using its delete token.
 func deletePaste(server, lang, id, token string) error {
 	hc := &http.Client{Timeout: 15 * time.Second}
-	path := server + "/api/" + apiVersion + "/pastes/" + url.PathEscape(id) + "?token=" + url.QueryEscape(token)
+	path := server + "/api/" + apiVersion + "/pastes/" + url.PathEscape(id)
 	req, err := http.NewRequest(http.MethodDelete, path, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("User-Agent", "cairnbin-cli/"+clientVersion)
+	req.Header.Set("Authorization", "Bearer "+token)
 	if lang != "" {
 		req.Header.Set("Accept-Language", lang)
 	}

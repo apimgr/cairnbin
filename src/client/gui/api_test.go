@@ -208,8 +208,11 @@ func TestDeletePasteSuccess(t *testing.T) {
 		if !contains(r.URL.Path, "/api/v1/pastes/abc123") {
 			t.Errorf("path = %q, want /api/v1/pastes/abc123", r.URL.Path)
 		}
-		if token := r.URL.Query().Get("token"); token != "tok_delete123" {
-			t.Errorf("token = %q, want tok_delete123", token)
+		if token := r.Header.Get("Authorization"); token != "Bearer tok_delete123" {
+			t.Errorf("Authorization = %q, want Bearer tok_delete123", token)
+		}
+		if token := r.URL.Query().Get("token"); token != "" {
+			t.Errorf("query token = %q, want none", token)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))

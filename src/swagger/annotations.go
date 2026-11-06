@@ -148,10 +148,9 @@ func Routes(apiVersion string) []Route {
 			Path:        apiBase + "/pastes/{id}",
 			Tag:         "pastes",
 			Summary:     "Delete paste",
-			Description: "Deletes a paste. Requires `Authorization: Bearer <token>` header or `?token=` query param (the delete token returned at creation time).",
+			Description: "Deletes a paste. Requires `Authorization: Bearer <token>` header (the delete token returned at creation time).",
 			Params: []Param{
 				{Name: "id", In: "path", Required: true, Description: "Paste identifier", Schema: map[string]interface{}{"type": "string"}},
-				{Name: "token", In: "query", Required: false, Description: "Delete token (alternative to Authorization header)", Schema: map[string]interface{}{"type": "string"}},
 			},
 			Responses: map[int]ResponseSpec{
 				204: {Description: "Deleted"},

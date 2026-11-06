@@ -35,12 +35,12 @@
             <span class="icon-preferences" aria-hidden="true">⚙️</span>
         </a>
         {{end}}
-        <form class="theme-toggle theme-toggle-form" method="post" action="{{.AssetPrefix}}/server/preferences">
+        {{if ne .CurrentPath "/server/preferences"}}<form class="theme-toggle theme-toggle-form" method="post" action="{{.AssetPrefix}}/server/preferences">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="theme" value="{{.NextTheme}}">
             <button type="submit" class="theme-button" data-theme-toggle aria-label="{{t .Lang "theme.toggle"}} ({{t .Lang "common.currently"}} {{.Theme}})" title="{{t .Lang "theme.toggle"}}">
                 {{if eq .Theme "dark"}}<span class="icon-dark" aria-hidden="true">🌙</span>{{else if eq .Theme "light"}}<span class="icon-light" aria-hidden="true">☀️</span>{{else}}<span class="icon-auto" aria-hidden="true">🌗</span>{{end}}
             </button>
-        </form>
+        </form>{{end}}
     </div>
 {{end}}

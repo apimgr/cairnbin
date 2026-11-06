@@ -92,7 +92,7 @@ func New(cfg Config) *Handler {
 
 // excluded reports routes that are never exposed as tools: documentation
 // endpoints, compatibility shims, and token management (which lives only on
-// /server/preferences, PART 11).
+// /server/preferences/tokens, PART 11).
 func excluded(r swagger.Route, apiBase string) bool {
 	if r.Tag == "compatibility" || !strings.HasPrefix(r.Path, apiBase+"/") {
 		return true
@@ -351,6 +351,18 @@ func (h *Handler) listTools(r *http.Request) []map[string]interface{} {
 			"description": t.description,
 			"inputSchema": t.inputSchema(),
 		})
+	}
+	return out
+}
+
+// PublicTools returns the live, anonymous tool catalogue for documentation.
+func (h *Handler) PublicTools() []map[string]string {
+	out := make([]map[string]string, 0, len(h.tools))
+	for _, t := range h.tools {
+		if t.operatorOnly {
+			continue
+		}
+		out = append(out, map[string]string{"name": t.name, "description": t.description})
 	}
 	return out
 }

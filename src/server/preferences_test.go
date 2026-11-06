@@ -218,6 +218,12 @@ func TestPreferencesPageRenders(t *testing.T) {
 	// AI.md 23485: a control for every app-specific cairnbin_pref_* setting.
 	// Each must post to the endpoint and render its current value as selected.
 	body := w.Body.String()
+	if got := strings.Count(body, `method="POST"`) + strings.Count(body, `method="post"`); got != 1 {
+		t.Errorf("preferences page has %d POST forms, want exactly one", got)
+	}
+	if !strings.Contains(body, `action="/server/preferences"`) || strings.Contains(body, `/server/consent`) || strings.Contains(body, `/announcements/dismiss`) {
+		t.Error("preferences page must keep all changes in its single preferences form")
+	}
 	for _, want := range []string{
 		`name="cairnbin_pref_sort"`,
 		`name="cairnbin_pref_order"`,

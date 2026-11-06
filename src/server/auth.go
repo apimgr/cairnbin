@@ -9,54 +9,22 @@ import (
 // ctxKeyAuthToken carries the bearer/API token presented with the request.
 const ctxKeyAuthToken ctxKeyType = 101
 
-// ctxKeyAuthSource records which header (or the query string) the token in
-// ctxKeyAuthToken came from, for audit logging and metric labelling.
+// ctxKeyAuthSource records where the token came from, for audit logging and
+// metric labelling.
 const ctxKeyAuthSource ctxKeyType = 102
 
-// authTokenHeaders lists every header the server accepts a token from, in the
-// exact priority order PART 8 defines (AI.md:12946-12951). Case variants of the
-// same logical header sit next to each other because Go canonicalises header
-// names on lookup; they are listed for documentation value.
-var authTokenHeaders = []string{
-	"Authorization",
-	"X-API-Key",
-	"API-Key",
-	"ApiKey",
-	"X-Auth-Token",
-	"X-Access-Token",
-	"X-Token",
-	"Token",
-	"X-Service-Token",
-	"X-Internal-Token",
-}
-
 // extractRequestToken returns the token presented with the request and the
-// name of the source it was taken from ("authorization", the header name, or
-// "query"). It returns empty strings when no token is present. Cookies are
-// deliberately never consulted: API routes must not honour ambient authority
+// name of its source. It returns empty strings when no valid bearer token is
+// present. Cookies are deliberately never consulted: API routes must not honour ambient authority
 // (PART 8), and the web routes that do accept the owner-token cookie read it
 // explicitly in their own handlers.
 func extractRequestToken(r *http.Request) (string, string) {
-	for _, name := range authTokenHeaders {
-		v := strings.TrimSpace(r.Header.Get(name))
-		if v == "" {
-			continue
+	v := strings.TrimSpace(r.Header.Get("Authorization"))
+	const prefix = "bearer "
+	if len(v) > len(prefix) && strings.EqualFold(v[:len(prefix)], prefix) {
+		if tok := strings.TrimSpace(v[len(prefix):]); tok != "" {
+			return tok, "authorization"
 		}
-		if name == "Authorization" {
-			// Only the Bearer scheme carries a token this server can validate;
-			// Basic/Digest credentials are not a supported auth method here.
-			const prefix = "bearer "
-			if len(v) > len(prefix) && strings.EqualFold(v[:len(prefix)], prefix) {
-				if tok := strings.TrimSpace(v[len(prefix):]); tok != "" {
-					return tok, "authorization"
-				}
-			}
-			continue
-		}
-		return v, strings.ToLower(name)
-	}
-	if tok := strings.TrimSpace(r.URL.Query().Get("token")); tok != "" {
-		return tok, "query"
 	}
 	return "", ""
 }

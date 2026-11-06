@@ -395,14 +395,15 @@ func TestCmdGet_UserAgentHeader(t *testing.T) {
 	}
 }
 
-// ─── cmdDelete — request method, path, query, and User-Agent ─────────────────
+// ─── cmdDelete — request method, path, auth header, and User-Agent ───────────
 
 func TestCmdDelete_RequestDetails(t *testing.T) {
-	var gotMethod, gotPath, gotQuery string
+	var gotMethod, gotPath, gotQuery, gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotQuery = r.URL.RawQuery
+		gotAuth = r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
 	}))
@@ -417,15 +418,18 @@ func TestCmdDelete_RequestDetails(t *testing.T) {
 	if gotPath != "/api/v1/pastes/paste123" {
 		t.Errorf("path = %q; want /api/v1/pastes/paste123", gotPath)
 	}
-	if !strings.Contains(gotQuery, "token=del-token-abc") {
-		t.Errorf("query = %q; want to contain token=del-token-abc", gotQuery)
+	if gotQuery != "" {
+		t.Errorf("query = %q; want no query credentials", gotQuery)
+	}
+	if gotAuth != "Bearer del-token-abc" {
+		t.Errorf("Authorization = %q; want Bearer del-token-abc", gotAuth)
 	}
 }
 
 func TestCmdDelete_TokenWithSpecialChars(t *testing.T) {
-	var gotQuery string
+	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.Query().Get("token")
+		gotAuth = r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]string{"message": "deleted"})
 	}))
@@ -434,8 +438,8 @@ func TestCmdDelete_TokenWithSpecialChars(t *testing.T) {
 	c := &client{server: srv.URL}
 	c.cmdDelete([]string{"abc", "tok/with+special=chars"})
 
-	if gotQuery != "tok/with+special=chars" {
-		t.Errorf("decoded token = %q; want tok/with+special=chars", gotQuery)
+	if gotAuth != "Bearer tok/with+special=chars" {
+		t.Errorf("Authorization = %q; want Bearer tok/with+special=chars", gotAuth)
 	}
 }
 

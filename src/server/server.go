@@ -1443,6 +1443,7 @@ func (s *Server) setupRoutes() {
 	})
 	r.Get("/server/about", s.handleAbout)
 	r.Get("/server/help", s.handleHelp)
+	r.Get("/server/help/mcp", s.handleHelpMCP)
 	r.Get("/server/privacy", s.handlePrivacy)
 	// CCPA "Do Not Sell" opt-out toggle — sets/clears the ccpa_opt_out cookie
 	// (PART 31). Only meaningful when server.privacy.data.sold is true.
@@ -1474,6 +1475,7 @@ func (s *Server) setupRoutes() {
 	// handlers are mounted again under /api/{api_version}/server/preferences*
 	// below; each already content-negotiates its own response.
 	r.Get("/server/preferences", s.handlePreferences)
+	r.Get("/server/preferences/tokens", s.handleOwnerTokensPage)
 	r.Get("/server/preferences/export", s.handlePreferencesExport)
 	r.Get("/server/preferences/import", s.handlePreferencesImport)
 	r.Get("/server/contact", s.handleContact)
@@ -1593,6 +1595,7 @@ func (s *Server) setupRoutes() {
 		r.Get("/server/about", s.handleAboutAPI)
 		r.Get("/server/privacy", s.handlePrivacyAPI)
 		r.Get("/server/help", s.handleHelpAPI)
+		r.Get("/server/help/mcp", s.handleHelpMCP)
 		r.Get("/server/terms", s.handleTermsAPI)
 		r.Post("/server/contact", s.maybeStrictRateLimit(s.handleContactAPI))
 		// Cross-device preference sync API mirror (AI.md 23509-23512) — same
@@ -1808,11 +1811,9 @@ func (s *Server) txtExtensionMiddleware(next http.Handler) http.Handler {
 }
 
 // corsAllowedHeaders is the full set of headers PART 16 requires the
-// Access-Control-Allow-Headers response to name explicitly.  A wildcard is
-// never used here: it does not cover Authorization and is invalid whenever
-// credentials are allowed, so every supported auth header must be listed by
-// name (PART 8 "Auth Token Headers (All Headers Supported)").
-const corsAllowedHeaders = "Content-Type, Accept, X-Requested-With, Authorization, X-API-Key, X-Api-Key, API-Key, ApiKey, X-Auth-Token, X-Access-Token, X-Token, Token, X-CSRF-Token, X-XSRF-Token, X-Session-ID, X-Service-Token, X-Internal-Token"
+// Access-Control-Allow-Headers response to name explicitly, including
+// Authorization and CSRF headers.
+const corsAllowedHeaders = "Content-Type, Accept, X-Requested-With, Authorization, X-CSRF-Token, X-XSRF-Token"
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -4252,9 +4253,10 @@ func (s *Server) aboutPageData() map[string]interface{} {
 
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
-		"SiteTitle": s.liveCfg().Web.SiteTitle,
-		"Theme":     s.liveCfg().Web.Theme,
-		"BaseURL":   s.baseURL(r),
+		"SiteTitle":  s.liveCfg().Web.SiteTitle,
+		"Theme":      s.liveCfg().Web.Theme,
+		"BaseURL":    s.baseURL(r),
+		"MCPEnabled": s.liveCfg().Server.MCP.Enabled,
 	}
 	data["PageContent"] = pageContentHTML(s.liveCfg().Server.Pages.Help.Content)
 	s.injectTermbinData(r, data)

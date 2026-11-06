@@ -233,36 +233,13 @@ func HashToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// extractToken pulls a bearer/owner token from the request using all accepted
-// delivery mechanisms (in priority order):
-//  1. Authorization: Bearer tok_...
-//  2. Authorization: tok_...   (bare, no scheme prefix)
-//  3. X-Api-Token: tok_...
-//  4. X-Token: tok_...
-//  5. X-Delete-Token: tok_...  (legacy compat header)
-//  6. ?token= query param
-//  7. JSON body {"token":"tok_..."}
+// extractToken reads the native Bearer credential or the owner cookie used by
+// browser management forms. Compatibility handlers resolve their own protocol
+// credentials and never call this helper.
 func extractToken(r *http.Request) string {
-	if auth := r.Header.Get("Authorization"); auth != "" {
-		if strings.HasPrefix(auth, "Bearer ") {
-			return auth[len("Bearer "):]
-		}
-		// Bare token — no scheme prefix.
-		return auth
-	}
-	for _, h := range []string{"X-Api-Token", "X-Token", "X-Delete-Token"} {
-		if v := r.Header.Get(h); v != "" {
-			return v
-		}
-	}
-	if v := r.URL.Query().Get("token"); v != "" {
-		return v
-	}
-	// Web form (no-JS create) supplies the token as a urlencoded field.
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
-		if v := r.PostFormValue("owner_token"); v != "" {
-			return v
-		}
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if len(auth) > len("Bearer ") && strings.EqualFold(auth[:len("Bearer ")], "Bearer ") {
+		return strings.TrimSpace(auth[len("Bearer "):])
 	}
 	// Browser cookie fallback is restricted to web forms; API routes never
 	// receive ambient authority from cookies.
@@ -270,16 +247,6 @@ func extractToken(r *http.Request) string {
 		if cookie, err := r.Cookie("cairnbin_owner_token_rU3uW5Ze"); err == nil && cookie.Value != "" {
 			return cookie.Value
 		}
-	}
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		var body struct {
-			Token string `json:"token"`
-		}
-		// Peek without consuming — clone the body via a bytes buffer.
-		raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<10))
-		r.Body = io.NopCloser(bytes.NewReader(raw))
-		_ = json.Unmarshal(raw, &body)
-		return body.Token
 	}
 	return ""
 }
@@ -895,10 +862,8 @@ func (h *PasteHandler) ListPastes(w http.ResponseWriter, r *http.Request) {
 //  2. If the token matches server.token (operator) → delete unconditionally
 //  3. Otherwise → verify token against api_tokens for this paste
 //
-// Legacy fallbacks accepted for compatibility:
-//   - ?token=tok_... query param
-//   - X-Delete-Token: tok_... header
-//   - JSON body {"token":"tok_..."}
+// Compatibility handlers use their own credential contracts; native routes
+// accept only Authorization: Bearer credentials.
 func (h *PasteHandler) DeletePaste(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 

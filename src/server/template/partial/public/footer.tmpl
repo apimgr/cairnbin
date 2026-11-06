@@ -80,7 +80,7 @@
 <template id="pb-tracking-snippet">{{trackingScript}}</template>
 {{end}}
 <script type="application/json" id="pb-consent-data">{{consentConfig}}</script>
-{{if not .HasConsented}}
+{{if and (not .HasConsented) (ne .CurrentPath "/server/preferences")}}
 {{$c := consentInfo}}
 <div id="cookie-consent" class="cookie-banner cookie-banner-bottom" data-sold="{{if $c.DataSold}}true{{else}}false{{end}}">
   <div class="cookie-banner-content">
