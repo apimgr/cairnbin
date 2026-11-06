@@ -3,7 +3,9 @@
 Base URL: `https://pste.us` (official site) or your self-hosted instance  
 API version prefix: `/api/v1`
 
-All responses include `Access-Control-Allow-Origin: *`.
+Protected native API routes accept credentials only through `Authorization: Bearer {token}`. Alternate token headers and `?token=` are ignored. Compatibility routes keep the credential formats required by their emulated protocols.
+
+CORS defaults to `Access-Control-Allow-Origin: *`; configured allowlists echo only an allowed origin, and credentials are enabled only for explicit origins. See the CORS section in `docs/configuration.md`.
 
 ## Create Paste
 
@@ -38,7 +40,7 @@ POST https://pste.us/api/v1/pastes
     "views": 0,
     "created_at": "2025-01-01T00:00:00Z",
     "link": "https://pste.us/abc12345",
-    "owner_token": "tok_raw-plaintext-token-shown-once-only"
+    "owner_token": "tok_AbCdEfGh12345678ijklMNOP87654321"
   }
 }
 ```
@@ -46,7 +48,7 @@ POST https://pste.us/api/v1/pastes
 `visibility` is `0` for public and `1` for unlisted.
 
 !!! warning
-    The `owner_token` is shown **once only** at creation. Store it securely. Loss of the token means the paste cannot be deleted before natural expiry.
+    A new owner receives an `owner_token` in the creation response. It remains viewable, masked by default, at `/server/preferences/tokens`; use a linked token for long-lived clients.
 
 ## Get Paste
 
@@ -149,7 +151,7 @@ GET https://pste.us/api/healthz
 GET  https://pste.us/api/v1/server/about
 GET  https://pste.us/api/v1/server/privacy
 GET  https://pste.us/api/v1/server/help
-GET  https://pste.us/api/v1/server/help/mcp
+GET  https://pste.us/api/v1/server/help/mcp   # 404 when MCP is disabled
 GET  https://pste.us/api/v1/server/terms
 POST https://pste.us/api/v1/server/contact
 ```
@@ -179,7 +181,24 @@ curl -H 'Accept: application/json' https://pste.us/api/v1/server/preferences/exp
 curl 'https://pste.us/api/v1/server/preferences/import?code=bGFuZz1mciZ0aGVtZT1kYXJr'
 ```
 
-Every response carries `{"ok":true,"data":{"theme","lang","prefs"}}`; `prefs` is keyed by the bare preference key and is `{}` when none are set. Export adds `url` and `code`. Import and save add `applied` and `ignored` arrays of parameter names. Invalid values are listed in `ignored` instead of failing the request; save returns `400 VALIDATION_FAILED` only when no supplied value was valid. Only `theme`, `lang` and `cairnbin_pref_*` are ever read or written; consent and credential cookies are never part of the exchange. The web `GET /server/preferences/import` and `POST /server/preferences` answer `303 See Other`.
+Every response carries `{"ok":true,"data":{"theme","lang","prefs"}}`; `prefs` is keyed by the bare preference key and is `{}` when none are set. Export adds `url` and `code`. Import and save add `applied` and `ignored` arrays of parameter names. Invalid values are listed in `ignored` instead of failing the request; save returns `400 VALIDATION_FAILED` only when no supplied value was valid. Only `theme`, `lang` and `cairnbin_pref_*` are ever read or written; consent and credential cookies are never part of the exchange. A non-empty import `code` overrides preference fields in the same request. The web `GET /server/preferences/import` and `POST /server/preferences` answer `303 See Other`.
+
+### Owner Token Management
+
+The HTML page is `GET /server/preferences/tokens`. Its web action forms use the primary owner cookie and CSRF protection. The API mirror requires the primary owner's Bearer token; linked tokens cannot manage tokens.
+
+| Method | API route | Purpose |
+|--------|-----------|---------|
+| `GET` | `/api/v1/server/preferences/tokens` | List masked owner tokens |
+| `POST` | `/api/v1/server/preferences/tokens/primary/reveal` | Reveal the primary token |
+| `POST` | `/api/v1/server/preferences/tokens/primary/rotate` | Rotate the primary token |
+| `POST` | `/api/v1/server/preferences/tokens` | Create a linked token |
+| `POST` | `/api/v1/server/preferences/tokens/{id}/reveal` | Reveal a linked token |
+| `POST` | `/api/v1/server/preferences/tokens/{id}/rotate` | Rotate a linked token |
+| `PATCH` | `/api/v1/server/preferences/tokens/{id}` | Rename or change expiry |
+| `DELETE` | `/api/v1/server/preferences/tokens/{id}` | Revoke a linked token |
+
+Restore by pasting the primary token is web-only (`POST /server/preferences/token/restore`).
 
 ## OpenAPI / Swagger
 

@@ -11,17 +11,21 @@ uses it as the default server; use `--server <url>` to target your own instance.
 ## Features
 
 - Anonymous paste creation via web form, JSON API, raw body, or multipart file upload
+- MIME-detected images, audio, and video render as safe media; active formats such as SVG and HTML are served as downloads
 - Server-side syntax highlighting via Chroma — no client-side JS required
 - Language auto-detection from file extension on upload
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never`, or custom seconds
 - Burn after N reads — paste deleted once view count reaches threshold
 - Public and unlisted visibility
-- Owner token — cryptographically random, returned once at creation, stored as SHA-256 hash
+- Owner token — cryptographically random `tok_` value returned when a new owner is created, stored as a SHA-256 hash plus an encrypted recoverable copy, and viewable masked by default at `/server/preferences/tokens`
 - QR code generation at `/qr/{id}`
 - View count tracking with automatic background cleanup
 - Full web frontend (dark/light/auto theme, PWA, mobile-first)
 - CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
+- Server information at `/server/about`, `/server/contact`, `/server/help`, `/server/privacy`, and `/server/terms`; the MCP guide is at `/server/help/mcp` when enabled
+- Guest preferences at `/server/preferences`; owner-token management at `/server/preferences/tokens`
+- Security overview, policy, acknowledgment, and report status at `/server/security` and its subroutes
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only)
 - Full route compatibility with pastebin.com, microbin, and lenpaste
 - Single self-contained static binary with embedded SQLite

@@ -47,6 +47,10 @@ server:
   port: "64123"
   mode: "production"
   base_url: ""
+  cors:
+    allowed_origins: ["*"] # list of origins; [""] disables CORS headers
+    allow_credentials: true # effective only for explicitly allowed origins
+    max_age: 86400
 
 database:
   type: "sqlite"
@@ -81,6 +85,8 @@ web:
 `web.reports.*` tunes the browser-report intake at
 `/api/v1/server/reports/{name}`. Non-positive or invalid values warn at load
 and fall back to the defaults above.
+
+`server.cors.allowed_origins` defaults to `*`; configured origins are checked against the list. An explicit origin may receive `Access-Control-Allow-Credentials: true`; wildcard origins never do. Preflight responses list the exact supported content, authorization, CSRF, and fetch headers.
 
 `web.footer.custom_html` may use `{current_year}`, `{project_name}`, `{project_org}`, `{project_version}`, `{build_datetime}`, `{onion_address}` and `{i2p_address}`; the last two are empty unless Tor or I2P is running with a published address.
 

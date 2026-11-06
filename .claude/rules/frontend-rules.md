@@ -60,7 +60,7 @@
 - ALWAYS serve a dynamically generated `/sitemap.xml`.
 - ALWAYS sanitize `web.footer.custom_html` with an allow-list policy (bluemonday) before rendering — strip scripts, event handlers, `javascript:` URLs, `style` attribute.
 - ALWAYS show the cookie consent banner (fixed bottom, full width) until a valid `cookie_consent` cookie exists — this project always uses cookies, so it's always enabled.
-- ALWAYS gate CSRF validation on: mutating method (POST/PUT/PATCH/DELETE) AND no Bearer/API-token header present; use the double-submit cookie pattern (`csrf_token` cookie, `SameSite=Strict`, not HttpOnly).
+- ALWAYS gate CSRF validation on: mutating method (POST/PUT/PATCH/DELETE) AND no syntactically valid `Authorization: Bearer` header present; use the double-submit cookie pattern (`csrf_token` cookie, `SameSite=Strict`, not HttpOnly).
 - ALWAYS populate `/server/about` and `/server/help` content from `IDEA.md` — real examples, real features, real FAQ, never generic placeholders.
 - ALWAYS validate remote branding/logo/favicon URLs for scheme (https only), private/loopback/internal IP (SSRF), size limit, content-type, and redirect chain before fetching.
 - ALWAYS end JSON and text (non-HTML) responses with exactly one trailing `\n`.
@@ -221,7 +221,7 @@ Cache strategy: static assets cache-first, HTML network-first w/ cache fallback,
 
 ## CSRF
 
-Double-submit cookie (`csrf_token` cookie + `X-CSRF-Token` header or `csrf_token` form field). Validated only for mutating methods without a bearer/API-token header. Bypassed for GET/HEAD/OPTIONS, WebSocket upgrades, and `server.csrf.exempt_paths`. Failure → `403 CSRF_FAILED`.
+Double-submit cookie (`csrf_token` cookie + `X-CSRF-Token` header or `csrf_token` form field). Validated only for mutating methods without an `Authorization: Bearer` header. Other token headers do not bypass CSRF. Bypassed for GET/HEAD/OPTIONS, WebSocket upgrades, and `server.csrf.exempt_paths`. Failure → `403 CSRF_FAILED`.
 
 ## Standard Error Codes
 

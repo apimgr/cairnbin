@@ -74,6 +74,9 @@ curl -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
 |----------|---------|
 | `/api/autodiscover` | Unversioned client bootstrap: server name, version, API version, base URL, feature flags and `cli_min_version` |
 | `/server/docs/swagger`, `/server/docs/graphql` | Swagger UI and GraphiQL |
+| `/server/help`, `/server/help/mcp` | General API help and the MCP connection guide (MCP guide is hidden when disabled) |
+| `/server/preferences`, `/server/preferences/tokens` | Guest preferences and owner-token management |
+| `/server/security`, `/server/security/policy`, `/server/security/thanks`, `/server/security/report/{tracking_id}` | Security overview, disclosure policy, report acknowledgment, and researcher status |
 | `/api/swagger`, `/api/graphql`, `/api/healthz` | Unversioned aliases of the versioned `/api/v1/server/*` routes (served directly, never redirected) |
 | `/.well-known/llms.txt`, `/llms.txt` | AI-agent discovery document |
 | `/sitemap.xml`, `/robots.txt`, `/manifest.json`, `/sw.js` | Search, crawler and PWA metadata |

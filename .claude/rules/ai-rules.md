@@ -69,7 +69,7 @@
 - Always trim whitespace on text input; reject (don't trim) passwords with leading/trailing whitespace
 - Always make configuration changes apply via live-reload (except listen address/port/DB driver)
 - Always keep all settings configurable via `server.yml` only — no runtime config-mutation API, no admin web UI for config
-- Always show tokens/passwords only once at generation time
+- Show newly generated secrets once; owner and linked API tokens are the exception and remain viewable, masked by default, at `/server/preferences/tokens`
 - Always assume self-hosted/SMB users are NOT tech-savvy
 
 ## Key Rules Summary

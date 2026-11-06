@@ -3,17 +3,17 @@
 ## Design Principles
 
 - **No user accounts**: eliminates credential stuffing and privilege escalation entirely
-- **Public anonymous service**: all endpoints are public; no authentication required
+- **Anonymous creation**: paste creation is public; owner and operator actions require the appropriate Bearer credential
 - **Fail closed**: invalid or missing tokens deny access; no silent allows
 - **Crypto/rand everywhere**: paste IDs and delete tokens use `crypto/rand`, never `math/rand`
 
-## Delete Tokens
+## Owner Tokens
 
-- Generated using `crypto/rand` (32 bytes → 64-char hex string)
-- Stored as SHA-256 hash only — plaintext never persisted
-- Returned **once only** at paste creation
-- Verified using constant-time comparison to prevent timing attacks
-- Loss of token means paste cannot be deleted before natural expiry
+- Generated from cryptographically secure randomness as `tok_` plus 32 base62 characters
+- Stored as a SHA-256 hash and an AES-256-GCM encrypted copy; plaintext is never logged or stored unencrypted
+- Returned in the response when a new owner is created and viewable, masked by default, at `/server/preferences/tokens`
+- Native API credentials use `Authorization: Bearer {token}` only; alternate headers and query tokens are ignored
+- Comparisons use constant-time checks; web management forms can use the HttpOnly owner cookie with CSRF protection
 
 ## Paste Content
 
@@ -25,7 +25,8 @@
 
 ## Transport
 
-- `Access-Control-Allow-Origin: *` on all responses (public API by design)
+- CORS defaults to `*`; configured origins are checked against the allowlist, and credentialed CORS is only enabled for explicit origins
+- Native API credentials use the `Authorization` header; query tokens are not accepted for API authentication. Security-report status links have a separate one-time token.
 - HTTPS strongly recommended in production (use a reverse proxy or `--tls`)
 
 ## Framing & Embeds
@@ -62,6 +63,8 @@
 | `/.well-known/llms.txt` (alias `/llms.txt`) | Generated description of the service for AI agents |
 | `/server/security` | Human-readable overview of `security.txt` and how to report |
 | `/server/security/policy` | Disclosure policy |
+| `/server/security/thanks` | Acknowledgment after a report is received |
+| `/server/security/report/{tracking_id}` | Researcher status page; the acknowledgment email's token can be used once per day and expires 30 days after the report closes |
 | `/server/healthz` | Health page (HTML, text or JSON by content negotiation) |
 | `/api/v1/server/healthz`, `/api/healthz` | Health as JSON by default; text via `.txt`, `Accept: text/plain` or curl-style clients (same handler, no redirect) |
 

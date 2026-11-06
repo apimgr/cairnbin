@@ -72,8 +72,10 @@ cairnbin-cli --server https://your-server.example.com create myfile.txt
 
 ```
 URL:          https://pste.us/abc12345
-Delete Token: 64-char-hex-token (save this — shown once only)
+Delete Token: tok_AbCdEfGh12345678ijklMNOP87654321
 ```
+
+The owner token remains viewable, masked by default, at `/server/preferences/tokens`. CLI delete requests send it as `Authorization: Bearer {token}`.
 
 ### get
 
@@ -92,7 +94,7 @@ cairnbin-cli get abc12345 --output json
 
 ### delete
 
-Delete a paste using its delete token.
+Delete a paste using its owner token. The CLI sends the token in the native Bearer authorization header.
 
 ```bash
 cairnbin-cli delete <id> <delete-token>
@@ -101,7 +103,7 @@ cairnbin-cli delete <id> <delete-token>
 **Example:**
 
 ```bash
-cairnbin-cli delete abc12345 64-char-hex-token
+cairnbin-cli delete abc12345 tok_AbCdEfGh12345678ijklMNOP87654321
 ```
 
 ### list

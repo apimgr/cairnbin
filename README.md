@@ -34,8 +34,8 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - View count tracking
 - Automatic background cleanup of expired and burned pastes
 - Full web frontend (server-side Go templates, dark/light/auto theme, PWA, mobile-first)
-- Cookie-based preferences with inline export/import, consent controls, and local reset at `/server/preferences`
-- Server pages: `/server/about`, `/server/help`, `/server/help/mcp`, `/server/healthz`, `/server/privacy`, `/server/terms`
+- Cookie-based preferences with inline export/import, consent controls, and local reset at `/server/preferences`; owner-token management at `/server/preferences/tokens`
+- Server pages: `/server/about`, `/server/contact`, `/server/help`, `/server/help/mcp` (when MCP is enabled), `/server/healthz`, `/server/privacy`, `/server/security`, `/server/security/policy`, `/server/security/thanks`, `/server/security/report/{tracking_id}`, `/server/terms`
 - CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only queries)
