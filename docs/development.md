@@ -13,15 +13,23 @@
 # Build all binaries (uses Docker toolchain image)
 make build
 
-# Build for current platform only
+# Build for the current platform with version metadata
+make local
+
+# Quick development build; prints the temporary output directory
 make dev
 
 # Run tests
 make test
 
-# Build Docker image
+# Build and publish the multi-architecture Docker image
 make docker
 ```
+
+`make dev` writes unversioned binaries to the temporary directory it prints.
+Run the server or client from that directory. `make local` writes binaries to
+`binaries/`. The `docker` target pushes its image to the configured registry;
+it is not a local-only image build.
 
 ## Project Structure
 
@@ -35,13 +43,12 @@ src/
   model/           — data models
   path/            — platform-aware path resolution
   pid/             — PID file management
-  scheduler/       — built-in cron scheduler
+  task/            — built-in scheduled tasks
   server/          — HTTP server and routing
   shell/           — shell completion generation
 docker/
   Dockerfile       — production container (:latest)
   Dockerfile.dev   — development container (:devel)
-  Dockerfile.build — CI toolchain image (:build)
 docs/              — MkDocs documentation
 tests/             — integration test scripts
 ```
@@ -49,8 +56,10 @@ tests/             — integration test scripts
 ## Running Locally
 
 ```bash
-# Start in development mode
-./cairnbin --mode development --port 8080
+# Build and start in development mode
+make dev
+# Run the printed temporary binary path with the documented options:
+<temporary-directory>/cairnbin --mode development --port 8080
 
 # Or via Docker Compose
 docker compose -f docker/docker-compose.dev.yml up
@@ -60,7 +69,7 @@ docker compose -f docker/docker-compose.dev.yml up
 
 ```bash
 # Unit tests
-go test ./src/...
+make test
 
 # Container integration tests
 bash tests/docker.sh
@@ -68,6 +77,9 @@ bash tests/docker.sh
 # Incus VM tests
 bash tests/incus.sh
 ```
+
+Go build and test commands run inside the project Docker toolchain image;
+use the Makefile targets instead of running `go` directly on the host.
 
 ## Scheduler Tasks
 
