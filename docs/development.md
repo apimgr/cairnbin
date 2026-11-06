@@ -89,12 +89,17 @@ The built-in scheduler runs the following tasks automatically:
 |------|----------|-------------|
 | `expire-pastes` | Every 10 min | Remove expired and burned pastes |
 | `ssl_renewal` | Daily 03:00 | Renew SSL certificates |
-| `geoip_update` | Sunday 03:00 | Update GeoIP databases |
 | `blocklist_update` | Daily 04:00 | Update IP/domain blocklists |
 | `cve_update` | Daily 05:00 | Update CVE database |
-| `token_cleanup` | Every 15 min | Remove expired tokens |
-| `log_rotation` | Daily 00:00 | Rotate and compress logs |
+| `update_check` | Daily 06:00 | Check for updates and optionally install them |
 | `backup_daily` | Daily 02:00 | Full daily backup |
+| `geoip_update` | Sunday 03:00 | Update GeoIP databases (only when GeoIP is enabled) |
+| `log_rotation` | Daily 00:00 | Rotate and compress logs |
+| `public_ip_refresh` | Every 12 hours | Refresh the cached public IP (also runs at startup) |
+| `ip_block_release` | Every minute | Release expired temporary IP blocks |
+| `token_cleanup` | Every 15 min | Remove expired tokens |
 | `backup_hourly` | Hourly (disabled) | Hourly incremental backup |
+| `branding_refresh` | Every 24 hours by default | Refresh cached branding image variants; configurable with `server.branding.image_refresh_interval` |
 | `healthcheck_self` | Every 5 min | Self-health check |
 | `tor_health` | Every 10 min | Tor connectivity check |
+| `i2p_health` | Every 10 min when I2P is enabled | I2P connectivity check |
