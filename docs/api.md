@@ -168,10 +168,14 @@ curl -H 'Accept: application/json' https://pste.us/api/v1/server/preferences
 # Partial update: only the fields you send are changed
 curl -X POST https://pste.us/api/v1/server/preferences \
   -H 'Content-Type: application/json' \
-  -d '{"theme":"light","lang":"es","prefs":{"sort":"name"}}'
+  -d '{"theme":"light","lang":"es","cairnbin_pref_sort":"name"}'
+
+# Export and import (stateless; the code or URL IS the preference values)
+curl -H 'Accept: application/json' https://pste.us/api/v1/server/preferences/export
+curl 'https://pste.us/api/v1/server/preferences/import?code=bGFuZz1mciZ0aGVtZT1kYXJr'
 ```
 
-The response is `{"ok":true,"data":{"applied":{...},"ignored":[...]}}`. Invalid values are listed in `ignored` instead of failing the request, and the same cookies as the web form are set.
+Every response carries `{"ok":true,"data":{"theme","lang","prefs"}}`; `prefs` is keyed by the bare preference key and is `{}` when none are set. Export adds `url` and `code`. Import and save add `applied` and `ignored` arrays of parameter names. Invalid values are listed in `ignored` instead of failing the request; save returns `400 VALIDATION_FAILED` only when no supplied value was valid. Only `theme`, `lang` and `cairnbin_pref_*` are ever read or written; consent and credential cookies are never part of the exchange. The web `GET /server/preferences/import` and `POST /server/preferences` answer `303 See Other`.
 
 ## OpenAPI / Swagger
 

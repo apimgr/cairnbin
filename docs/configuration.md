@@ -245,6 +245,32 @@ The `--maintenance setup`, `restore`, and `mode` subcommands require
 authorization: allowed on first run (empty database), as root (with
 confirmation), or as the service user with the operator password.
 
+## Languages and Accessibility
+
+The server, web UI, API messages, and CLI are translated into English (`en`),
+Spanish (`es`), Chinese (`zh`), French (`fr`), Arabic (`ar`, right-to-left),
+German (`de`), and Japanese (`ja`). Unsupported values silently fall back to
+English.
+
+Web language order: `?lang=` (sets a one-year `lang` cookie) -> `lang`
+cookie -> `Accept-Language` -> `en`. CLI and server order: `--lang` flag ->
+config file -> `LANG` / `LC_ALL` -> `en`.
+
+Settings live under `server.i18n`:
+
+| Key | Meaning |
+|-----|---------|
+| `enabled` | Turn language negotiation on or off |
+| `default_language` | Language used when nothing else matches |
+| `available_languages` | Subset of the seven languages offered in the selector |
+| `fallback_language` | Language used when a key is missing |
+| `cookie_name` | Name of the language cookie (default `lang`) |
+| `cookie_max_age` | Lifetime of the language cookie (default one year) |
+
+The web UI targets WCAG 2.1 AA: skip links, keyboard navigation, visible focus
+indicators, ARIA live regions for notifications, and 4.5:1 text contrast in
+both the dark and light themes.
+
 ## Environment Variables
 
 Environment variables override the matching `server.yml` values at startup;

@@ -1,6 +1,6 @@
 ## Project description
 
-Cairnbin is a full-stack Go web application for creating and sharing text snippets anonymously. It is a drop-in replacement for pastebin.com, microbin, lenpaste (fork: forksmgr/lcomrade-lenpaste), stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP, enabled by default) — existing scripts, CLIs, and integrations targeting any of those services work against this server without modification. Users submit text or upload a file and receive a short shareable URL. No user accounts. Fully public. Deployed as a single self-contained static binary. The companion CLI (`pastebin-cli`) provides full API access from the terminal.
+Cairnbin is a full-stack Go web application for creating and sharing text snippets anonymously. It is a drop-in replacement for pastebin.com, microbin, lenpaste (fork: forksmgr/lcomrade-lenpaste), stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP, enabled by default) — existing scripts, CLIs, and integrations targeting any of those services work against this server without modification. Users submit text or upload a file and receive a short shareable URL. No user accounts. Fully public. Deployed as a single self-contained static binary. The companion CLI (`cairnbin-cli`) provides full API access from the terminal.
 
 ## Project variables
 
@@ -168,7 +168,7 @@ Every subdomain-forced compat create path continues to honor the operator-config
 - Deletion before natural expiry requires the paste's owner token; the operator token deletes any paste unconditionally; compat-created pastes use their protocol's own delete token and the two systems are never mixed
 - An owner token may be reused across multiple pastes by the same caller; the server verifies the token is active before linking a new paste to it
 - The termbin/fiche raw-TCP listener is enabled by default on port 9999, capped at `server.termbin.max_size` (default 32768 bytes) with a `server.termbin.timeout` idle timeout (default `5s`)
-- Compat create paths are always anonymous and tokenless; any API key a compat protocol supplies is accepted and ignored — they carry no CSRF token or cookie either, so every compat create route and the whole `/api/*` tree is exempt from CSRF validation (browser form routes such as `POST /pastes` keep it)
+- Compat create paths are always anonymous and tokenless; any API key a compat protocol supplies is accepted and ignored — they carry no CSRF token or cookie either, so every compat create route and the whole `/api/*` tree is exempt from CSRF validation, declared as built-in `server.csrf.exempt_paths` entries (AI.md PART 16: CSRF protects cookie-authenticated browser forms only; API routes never accept cookie auth, and Bearer requests are always exempt). Exempt: `/api/*`, `/documents`, `/upload`, `/pasta`, `/new`, `/create`, `/mcp`, and `/`. Browser form routes such as `POST /pastes` and `POST /remove/{id}` keep CSRF validation
 - All token, hash, and signature comparisons are constant-time; plain equality comparison is never used for a security-sensitive value
 
 ### Endpoints (WHAT, not paths — see PART 14)

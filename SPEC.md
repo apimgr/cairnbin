@@ -84,7 +84,7 @@ builds are unaffected, since GUI code is not linked in at all there and
 Two constraints hold regardless of which mode is selected, and are not part
 of the tie-break:
 
-- a command argument always beats both display modes — `pastebin-cli list`
+- a command argument always beats both display modes — `cairnbin-cli list`
   prints a list even with `display.mode: gui` set
 - `display.mode: gui` is an explicit request, so when no display exists it
   reports `gui_unavailable` and exits rather than silently degrading to the

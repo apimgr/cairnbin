@@ -36,6 +36,16 @@
 - Defense in depth: when a browser sends `Sec-Fetch-Dest: iframe|frame|embed|object` cross-site for any endpoint other than `/emb/{id}`, the request is rejected with 403 (requires `web.headers.sec_fetch_validation`)
 - The paste view page offers copy-ready HTML (`<iframe>` of `/emb/{id}`) and Markdown embed snippets
 
+## Security Header Configuration
+
+- `web.headers`: `coop`, `coep`, `corp`, `origin_agent_cluster`, `cross_domain_policies`, `dns_prefetch_control`, `honor_sec_gpc`, `honor_dnt`, `clear_site_data.*`, and `nel.*` tune the cross-origin, privacy, and reporting headers; defaults are the broad-compatibility values
+- `web.permissions_policy` maps each Permissions-Policy feature to its allowlist (`"()"`, `"(self)"`, `"*"`); an empty value omits the feature
+- `web.csp` supports `*_src_extra` (append), `*_src_override` (replace), `reports_enabled`, and `reports_sample_rate` (0.0-1.0 fraction of CSP reports logged, default 1.0); `{request_nonce}` inside any `*_src_override` is replaced per response with a fresh nonce that is also rendered on server-side `<script>` tags
+- `Sec-GPC: 1` is honored as a privacy opt-out, suppresses non-essential cookies and tracking, and is recorded as `compliance.gpc_honored` in the audit log. `DNT: 1` is ignored unless `web.headers.honor_dnt` is enabled; honored DNT suppresses non-essential behavior without being reported as GPC.
+- Browser Network Error Logging reports are sent to `/api/v1/server/reports/nel`, sampled by `web.headers.nel.sample_rate`, and logged with sanitized fields; CSP and default reports use their own report endpoints.
+- Requests arriving over Tor or I2P never receive HSTS, `upgrade-insecure-requests`, or clearnet reporting URLs; clearnet HTML responses advertise the onion service with `Onion-Location`
+- `web.robots.ai_bots` (`default` and per-bot `allow`/`deny`) controls AI-crawler stanzas in `robots.txt`; `web.llms` (`enabled`, `include_endpoints`, `include_schemas`, `custom_sections`) controls `llms.txt`
+
 ## Rate Limiting
 
 - Defaults, per IP per minute: 120 reads, 10 writes (create/delete), 120 health checks, 240 total (global burst)
@@ -53,7 +63,7 @@
 | `/server/security` | Human-readable overview of `security.txt` and how to report |
 | `/server/security/policy` | Disclosure policy |
 | `/server/healthz` | Health page (HTML, text or JSON by content negotiation) |
-| `/api/v1/server/healthz`, `/api/healthz` | Health as JSON (same handler, no redirect) |
+| `/api/v1/server/healthz`, `/api/healthz` | Health as JSON by default; text via `.txt`, `Accept: text/plain` or curl-style clients (same handler, no redirect) |
 
 Health responses report only `ok`/`error` per check and never include connection strings, paths or configuration. `/healthz` is an optional root alias for `/server/healthz`, mounted only when `server.healthz.root.enabled: true`. `/server/metrics` and `/metrics` are internal only; restrict them at the firewall or reverse proxy and protect them with the per-service bearer tokens under `server.metrics`.
 
