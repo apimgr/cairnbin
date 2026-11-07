@@ -6,13 +6,22 @@ Download the latest binary for your platform from [GitHub Releases](https://gith
 
 ```bash
 # Linux amd64
-curl -Lo cairnbin https://github.com/apimgr/cairnbin/releases/latest/download/cairnbin-linux-amd64
+curl -q -LSsf -Lo cairnbin https://github.com/apimgr/cairnbin/releases/latest/download/cairnbin-linux-amd64
 chmod +x cairnbin
 ./cairnbin
 ```
 
 Available platforms: `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`,
 `windows-amd64.exe`, `windows-arm64.exe`, `freebsd-amd64`, `freebsd-arm64`.
+
+For an automated Linux/macOS install, run the project installer:
+
+```bash
+curl -q -LSsf https://github.com/apimgr/cairnbin/raw/main/scripts/install.sh | bash
+```
+
+Set `INSTALL_DIR` to choose the destination directory (default: `/usr/local/bin`).
+Set `VERSION` to install a specific release tag; otherwise the latest release is used.
 
 ## Docker
 

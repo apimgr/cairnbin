@@ -36,35 +36,35 @@ Recognized compatibility subdomains are routed automatically when a target label
 
 ```bash
 # Create a paste
-curl -X POST https://pste.us/api/v1/pastes \
+curl -q -LSsf -X POST https://pste.us/api/v1/pastes \
   -H "Content-Type: application/json" \
   -d '{"content":"hello world","language":"text"}'
 
 # Get a paste
-curl https://pste.us/api/v1/pastes/{id}
+curl -q -LSsf https://pste.us/api/v1/pastes/{id}
 
 # Get raw text
-curl https://pste.us/api/v1/pastes/{id}/raw
+curl -q -LSsf https://pste.us/api/v1/pastes/{id}/raw
 
 # Delete a paste
-curl -X DELETE https://pste.us/api/v1/pastes/{id} \
+curl -q -LSsf -X DELETE https://pste.us/api/v1/pastes/{id} \
   -H 'Authorization: Bearer {owner_token}'
 
 # List pastes
-curl https://pste.us/api/v1/pastes
+curl -q -LSsf https://pste.us/api/v1/pastes
 ```
 
 ## pastebin.com Compatibility
 
 ```bash
-curl -X POST https://pste.us/api/api_post.php \
+curl -q -LSsf -X POST https://pste.us/api/api_post.php \
   -d "api_option=paste&api_paste_code=hello+world&api_paste_format=text"
 ```
 
 ## lenpaste Compatibility
 
 ```bash
-curl -X POST https://pste.us/api/v1/new \
+curl -q -LSsf -X POST https://pste.us/api/v1/new \
   -d "text=hello+world"
 ```
 
@@ -84,7 +84,7 @@ AI clients (Claude, IDE agents, other MCP clients) can use the paste API as tool
 - `GET` and `DELETE` return `405`. Disable with `server.mcp.enabled: false` (every MCP route then returns `404`).
 
 ```bash
-curl -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
+curl -q -LSsf -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 

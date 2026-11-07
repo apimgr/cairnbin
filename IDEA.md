@@ -1,6 +1,6 @@
 ## Project description
 
-Cairnbin is a full-stack Go web application for creating and sharing text snippets anonymously. It is a drop-in replacement for pastebin.com, microbin, lenpaste (fork: forksmgr/lcomrade-lenpaste), stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP, enabled by default) — existing scripts, CLIs, and integrations targeting any of those services work against this server without modification. Users submit text or upload a file and receive a short shareable URL. No user accounts. Fully public. Deployed as a single self-contained static binary. The companion CLI (`cairnbin-cli`) provides full API access from the terminal.
+Cairnbin is a full-stack Go web application for creating and sharing text snippets anonymously. It is a drop-in replacement for pastebin.com, microbin, lenpaste (fork: forksmgr/lcomrade-lenpaste), stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP, enabled by default) — existing scripts, CLIs, and integrations targeting any of those services work against this server without modification. Users submit text or upload a file and receive a short shareable URL. No user accounts. Fully public. Deployed as a single self-contained static binary with local SQLite by default and optional remote libSQL/Turso. The companion CLI (`cairnbin-cli`) provides full API access from the terminal.
 
 ## Project variables
 
@@ -20,7 +20,7 @@ binary: cairnbin
 client_binary: cairnbin-cli
 api_version: v1
 owner_token: cairnbin_owner_token_rU3uW5Ze
-tagline: Drop-in replacement for pastebin.com, hastebin, dpaste, microbin, and more
+tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, 0x0.st, sprunge.us, ix.io, and termbin/fiche.
 
 ## Business logic
 

@@ -21,7 +21,7 @@ The `cairnbin-cli` binary is a fully spec-compliant command-line client.
 | `-h, --help` | Show help |
 | `-v, --version` | Show version |
 
-Environment variables: `CAIRNBIN_SERVER_PRIMARY`, `CAIRNBIN_TOKEN`, `CAIRNBIN_OUTPUT_FORMAT`, `CAIRNBIN_OUTPUT_PAGER`, `CAIRNBIN_OUTPUT_VERBOSE`, `CAIRNBIN_OUTPUT_QUIET`, `CAIRNBIN_PUBLIC`, `CAIRNBIN_EXPIRE`, `CAIRNBIN_SYNTAX`, `CAIRNBIN_LIMIT`, `CLI_CONFIG`, and `NO_COLOR`. Response caching and rotating logs use the configured `cache.*` and `logging.*` settings in `cli.yml`.
+Environment variables: `CAIRNBIN_SERVER_PRIMARY`, `CAIRNBIN_TOKEN`, `CAIRNBIN_OUTPUT_FORMAT`, `CAIRNBIN_OUTPUT_PAGER`, `CAIRNBIN_OUTPUT_VERBOSE`, `CAIRNBIN_OUTPUT_QUIET`, `CAIRNBIN_PUBLIC`, `CAIRNBIN_EXPIRE`, `CAIRNBIN_SYNTAX`, `CAIRNBIN_LIMIT`, `CAIRNBIN_SERVER_RETRY`, `CAIRNBIN_SERVER_RETRY_DELAY`, `CAIRNBIN_LOGGING_MAX_FILES`, `CLI_CONFIG`, and `NO_COLOR`. `CAIRNBIN_SERVER_RETRY` enables or disables retries for server calls; `CAIRNBIN_SERVER_RETRY_DELAY` sets the retry delay; `CAIRNBIN_LOGGING_MAX_FILES` limits retained CLI log files. Response caching and rotating logs use the configured `cache.*` and `logging.*` settings in `cli.yml`.
 
 ## Commands
 

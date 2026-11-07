@@ -40,7 +40,7 @@
 - ALWAYS download GeoIP MMDB databases on first run and update them via the scheduler — never embed them in the binary
 - ALWAYS treat GeoIP blocking decisions as advisory (bypassable via VPN/proxy/Tor)
 - ALWAYS require login/API keys/session cookies/tokens regardless of source country
-- ALWAYS expose Prometheus-compatible metrics at a configurable endpoint (default `/metrics`) using `github.com/prometheus/client_golang`
+- ALWAYS expose metrics at `/server/metrics`; mount `/metrics[/{service}]` only when `server.metrics.root.enabled` is true (default true)
 - ALWAYS prefix every metric with `{project_name}_`, use snake_case, use base units (seconds, bytes), and suffix counters with `_total`
 - ALWAYS verify a backup immediately after creation (file exists, size>0, checksum, decrypt test, manifest parse, content extraction, DB integrity) — all checks must pass
 - ALWAYS check free disk space before creating a scheduled backup; skip and log an error if insufficient
@@ -158,12 +158,12 @@ Country blocking: allowlisted IPs and private/RFC1918 IPs are never blocked; mis
 | Item | Detail |
 |---|---|
 | Format | Prometheus text exposition format |
-| Endpoint | `/metrics` (configurable via `server.metrics.endpoint`) |
+| Endpoint | `/server/metrics` with `/metrics[/{service}]` root aliases gated by `server.metrics.root.enabled` |
 | Library | `github.com/prometheus/client_golang` |
 | Access | INTERNAL ONLY — firewall/proxy/NetworkPolicy/security-group restricted |
-| Auth | Optional bearer token (`server.metrics.token`); header `Authorization: Bearer <token>` |
+| Auth | Separate required bearer tokens for Prometheus, Grafana, and Loki; empty token disables that service (403). Only `server.metrics.auth.allow_unauthenticated: true` skips checks for firewalled networks. |
 
-Config keys: `server.metrics.enabled`, `.endpoint`, `.include_system`, `.include_runtime`, `.token`, `.duration_buckets`, `.size_buckets`.
+Config keys: `server.metrics.enabled`, `.root.enabled`, `.auth.allow_unauthenticated`, `.auth.tokens.{prometheus,grafana,loki}`, `.include_system`, `.include_runtime`, `.loki.{max_entries,max_age}`, `.duration_buckets`, `.size_buckets`.
 
 Naming: prefix `{project_name}_`, snake_case, unit suffixes (`_seconds`, `_bytes`), counters end `_total`.
 

@@ -1,8 +1,8 @@
 # Compatibility
 
 Cairnbin is a drop-in replacement for pastebin.com, microbin, lenpaste,
-stikked, hastebin/haste-server, dpaste, the curl-upload family
-(sprunge/0x0/ix.io), and termbin/fiche. Existing scripts, CLIs, and
+stikked, hastebin/haste-server, dpaste, 0x0.st, sprunge.us, ix.io, and
+termbin/fiche. Existing scripts, CLIs, and
 integrations targeting any of those services work against this server without
 modification. The service has no user accounts; unused API and user-key fields
 are accepted and ignored, while protocol-specific delete tokens remain required
@@ -41,7 +41,7 @@ All `api_dev_key` and `api_user_key` fields are accepted but ignored.
 
 | Route | Behavior |
 |-------|----------|
-| `POST https://pste.us/api/v1/pasta` | Create paste (form, multipart, or JSON: `content`, `title`, `visibility`, `expiry`, `burn_after`); `curl -d "content=Hello" https://pste.us/api/v1/pasta` |
+| `POST https://pste.us/api/v1/pasta` | Create paste (form, multipart, or JSON: `content`, `title`, `visibility`, `expiry`, `burn_after`); `curl -q -LSsf -d "content=Hello" https://pste.us/api/v1/pasta` |
 | `GET https://pste.us/api/v1/pasta` | List pastes |
 | `GET https://pste.us/api/v1/pasta/{id}` | Retrieve a paste |
 | `DELETE https://pste.us/api/v1/pasta/{id}` | Delete a paste |
@@ -66,7 +66,7 @@ All `api_dev_key` and `api_user_key` fields are accepted but ignored.
 | `GET https://pste.us/raw/{id}` | Raw text |
 | `GET https://pste.us/dl/{id}` | Download |
 | `GET https://pste.us/emb/{id}` | Embedded view |
-| `POST https://pste.us/api/new`, `POST https://pste.us/api/v1/new` | Create paste (form: `title`, `body`, `syntax`, `expiration` seconds, `oneUse`); returns `{"id","url","deleteToken"}` — `curl -d "body=Hello&expiration=86400" https://pste.us/api/new` |
+| `POST https://pste.us/api/new`, `POST https://pste.us/api/v1/new` | Create paste (form: `title`, `body`, `syntax`, `expiration` seconds, `oneUse`); returns `{"id","url","deleteToken"}` — `curl -q -LSsf -d "body=Hello&expiration=86400" https://pste.us/api/new` |
 | `GET https://pste.us/api/get?id=`, `GET https://pste.us/api/v1/get?id=` | Get paste JSON |
 | `DELETE https://pste.us/api/remove?id=&deleteToken=` | Delete with the compat delete token |
 | `GET https://pste.us/api/list` | List pastes |

@@ -38,7 +38,7 @@ src/
   main.go          — server binary entry point
   client/          — cairnbin-cli client binary
   config/          — configuration loading
-  database/        — SQLite database layer
+  database/        — SQLite and libSQL database layer
   handler/         — HTTP request handlers
   model/           — data models
   path/            — platform-aware path resolution

@@ -7,9 +7,11 @@
 
 ## About
 
-A fast, full-stack Go web application for creating and sharing text snippets anonymously.
-Drop-in replacement for pastebin.com, microbin, and lenpaste — existing scripts, CLIs,
-and integrations work without modification.
+A full-stack Go application for creating and sharing text snippets anonymously. It is a
+drop-in replacement for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server,
+dpaste, 0x0.st, sprunge.us, ix.io, and termbin/fiche. Existing clients and scripts work
+without modification. It runs as a self-contained static binary with local SQLite by
+default or optional remote libSQL/Turso.
 
 ## Official Site
 
@@ -44,15 +46,15 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Built-in scheduler for expiry cleanup, backups, security-database updates, and self-update checks (no external cron)
 - Backup and restore with optional AES-256-GCM encryption (Argon2id key derivation)
 - Self-update with SHA-256 checksum verification (stable/beta/devel channels)
-- Prometheus metrics endpoint (`/metrics`, internal-only)
+- Internal metrics services at `/server/metrics`; the `/metrics[/{service}]` root aliases are gated by `server.metrics.root.enabled` (enabled by default)
 - GeoIP country allow/deny (advisory) with auto-downloaded, scheduler-updated databases
 - Rate limiting per read/write/health class
-- Tor hidden-service support (auto-enabled when the `tor` binary is present)
+- Tor hidden-service support (auto-enabled when the `tor` binary is present) and optional I2P eepsite access
 - Internationalization: English, Spanish, Chinese, French, Arabic (RTL), German, Japanese
 - Operator email notifications with SMTP auto-detection (no email attempted without working SMTP)
 - Cookie-consent banner and privacy/terms pages
 - Cross-platform service management (systemd, OpenRC, SysVinit, runit, launchd, rc.d, Windows Service)
-- Single self-contained static binary with embedded SQLite
+- Self-contained static binary with local SQLite by default or optional remote libSQL/Turso
 
 ## Production
 
@@ -143,6 +145,8 @@ first run). All settings can be overridden via CLI flags.
 | `PORT` | Random 64xxx | Listen port (80 in container) |
 | `ADDRESS` | `0.0.0.0` | Listen address |
 | `BASE_URL` | Auto-detected | Public base URL for link generation |
+| `DATABASE_DRIVER` | `sqlite` | Database driver: local `sqlite` or remote `libsql`/Turso |
+| `DATABASE_URL` | Unset (local SQLite path is used) | Database URL/path; set a `libsql://` URL for remote libSQL/Turso |
 | `DB_PATH` | `{data_dir}/db/server.db` | SQLite database path |
 | `SITE_TITLE` | `Cairnbin` | Site title shown in the web UI |
 | `THEME` | `dark` | UI theme: `dark`, `light`, or `auto` |

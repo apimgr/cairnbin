@@ -84,7 +84,7 @@
 | Required API types | REST (primary) + Swagger + GraphQL — all three, always |
 | Swagger files | `src/swagger/swagger.go`, `theme.go`, `annotations.go` |
 | GraphQL files | `src/graphql/graphql.go`, `schema.go`, `resolvers.go`, `theme.go` |
-| Root endpoints | `/`, `/server/healthz`, `/healthz` (opt), `/server/docs/swagger`, `/server/docs/graphql`, `/metrics`, `/api/autodiscover`, `/api/swagger`, `/api/graphql`, `/api/healthz`, `/api/{api_version}/server/swagger`, `/api/{api_version}/server/graphql`, `/api/{api_version}/server/healthz`, `/api/{api_version}/server/*` |
+| Root endpoints | `/`, `/server/healthz`, `/healthz` (opt), `/server/docs/swagger`, `/server/docs/graphql`, `/metrics` (optional alias, enabled by default), `/api/autodiscover`, `/api/swagger`, `/api/graphql`, `/api/healthz`, `/api/{api_version}/server/swagger`, `/api/{api_version}/server/graphql`, `/api/{api_version}/server/healthz`, `/api/{api_version}/server/*` |
 | Removed old paths | `/openapi`, `/openapi.json`, `/graphql` (root GET/POST) — do not redirect from these |
 | Standard error codes | `BAD_REQUEST`, `VALIDATION_FAILED`, `UNAUTHORIZED`, `NOT_FOUND`, etc. (UPPER_SNAKE_CASE, see PART 9) |
 | Route params | Path params for resource identity (`/items/{id}`); query params for filter/sort/paginate (`?page=2&limit=10&sort=date`) |
