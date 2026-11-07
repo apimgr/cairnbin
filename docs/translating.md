@@ -1,8 +1,8 @@
 # Translating Cairnbin
 
-Cairnbin ships seven complete locales: English (`en`), Spanish (`es`), French
-(`fr`), German (`de`), Chinese (`zh`), Arabic (`ar`), and Japanese (`ja`).
-English is the source locale. All locales are embedded in both the server and
+Cairnbin ships eight complete locales: English (`en`), Spanish (`es`), French
+(`fr`), German (`de`), Italian (`it`), Chinese (`zh`), Arabic (`ar`), and
+Japanese (`ja`). English is the source locale. All locales are embedded in both the server and
 CLI binaries.
 
 ## Translate a locale
@@ -29,9 +29,10 @@ Arabic pages must remain right-to-left (`meta.direction` is `rtl`).
 1. Add `src/common/i18n/locales/{code}.json` with all keys from `en.json`.
 2. Set `meta.language`, `meta.name`, `meta.native_name`, `meta.direction`, and
    `meta.version`. Add `meta.translators` if contributors want credit.
-3. Register the language in `src/common/i18n/i18n.go` and update the supported
-   language configuration in `src/config/config.go` as required by the
-   language registry.
+3. Add the language to the canonical registry in `src/common/i18n/i18n.go`,
+   including native name, text direction, CLDR plural categories, and whether
+   it is part of the required language minimum. Configuration defaults derive
+   from this registry.
 4. Update this page and the README language list in the same change.
 5. Run `make test`; locale tests check key and placeholder consistency.
 6. Review the translated interface at 320, 768, and 1280 pixels. Check right-
@@ -42,12 +43,17 @@ README count, and this page must describe the same supported languages.
 
 ## Review and contribution
 
-Anyone may contribute a locale update through a pull request. A new language
-should include its locale file and the registry/config changes. A fluent
-speaker must review machine-generated draft translations before they merge.
-Reviewers should check placeholders, plural categories, terminology, and the
-layout sizes above. Updates to an existing locale should preserve its complete
-key set.
+Anyone may contribute a locale update through a pull request or send the
+locale file to the maintainer. A new language includes its locale file and the
+registry entry. Updating an existing language changes that locale file while
+preserving its complete key set. A fluent speaker must review machine-
+generated draft translations before they merge. Reviewers check placeholders,
+plural categories, terminology, and the layout sizes above.
+
+When a language's script is not covered by the system font stack, add an
+appropriate font fallback and verify long text wraps without spaces. Keep every
+locale synchronized with changes to the English source keys; translate added
+and changed values and remove deleted keys in the same change.
 
 If an English string is incomplete or ambiguous, report the source key for
 clarification instead of working around it in the translation.

@@ -50,7 +50,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - GeoIP country allow/deny (advisory) with auto-downloaded, scheduler-updated databases
 - Rate limiting per read/write/health class
 - Tor hidden-service support (auto-enabled when the `tor` binary is present) and optional I2P eepsite access
-- Internationalization: English, Spanish, Chinese, French, Arabic (RTL), German, and Japanese (7 locales; see the [translation guide](docs/translating.md))
+- Internationalization: English, Spanish, French, German, Italian, Chinese, Arabic (RTL), and Japanese (8 locales; see the [translation guide](docs/translating.md))
 - Operator email notifications with SMTP auto-detection (no email attempted without working SMTP)
 - Cookie-consent banner and privacy/terms pages
 - Cross-platform service management (systemd, OpenRC, SysVinit, runit, launchd, rc.d, Windows Service)

@@ -300,8 +300,8 @@ confirmation), or as the service user with the operator password.
 ## Languages and Accessibility
 
 The server, web UI, API messages, and CLI are translated into English (`en`),
-Spanish (`es`), Chinese (`zh`), French (`fr`), Arabic (`ar`, right-to-left),
-German (`de`), and Japanese (`ja`). Unsupported values silently fall back to
+Spanish (`es`), French (`fr`), German (`de`), Italian (`it`), Chinese
+(`zh`), Arabic (`ar`, right-to-left), and Japanese (`ja`). Unsupported values silently fall back to
 English.
 
 Web language order: `?lang=` (sets a one-year `lang` cookie) -> `lang`
@@ -314,7 +314,7 @@ Settings live under `server.i18n`:
 |-----|---------|
 | `enabled` | Turn language negotiation on or off |
 | `default_language` | Language used when nothing else matches |
-| `available_languages` | Subset of the seven languages offered in the selector |
+| `available_languages` | Supported languages from the registry; the required six cannot be disabled |
 | `fallback_language` | Language used when a key is missing |
 | `cookie_name` | Name of the language cookie (default `lang`) |
 | `cookie_max_age` | Lifetime of the language cookie (default one year) |

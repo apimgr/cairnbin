@@ -53,7 +53,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - MCP (Model Context Protocol) endpoint so AI clients can use the paste API as tools: Streamable HTTP JSON-RPC at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`), on by default (`server.mcp.enabled`), same Bearer tokens as the API (no MCP-specific token), tools generated from the API routes (create/get/list/delete paste, health, version); an anonymous create tool call returns the `owner_token` exactly like the REST API; token management is never exposed as a tool
 - Drop-in compat layer for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP listener, enabled by default; disable via `server.termbin.enabled: false` or `TERMBIN_ENABLED=false`) — compat routes use their own delete-token mechanism (stored in paste row) separate from the owner token system
 - Two-tier operator token: server operator may set a `server.token` in `server.yml`; this operator token allows deleting any paste unconditionally
-- i18n: 7 supported locales (en, es, fr, de, zh, ar, ja); automatic language selection via `Accept-Language` header; RTL layout for Arabic (`dir="rtl"` on `<html>`); fallback to English when locale unknown
+- i18n: 8 supported locales (en, es, fr, de, it, zh, ar, ja); automatic language selection via `Accept-Language` header; RTL layout for Arabic (`dir="rtl"` on `<html>`); fallback to English when locale unknown
 - Tor hidden service: auto-enabled when the `tor` binary is present; the site is reachable at a persistent v3 `.onion` address; non-fatal when Tor is absent — see PART 31.1 for HOW
 - I2P eepsite: optional, disabled by default (`server.i2p.enabled` / `I2P_ENABLED` / `--i2p`); when enabled the site is reachable at a persistent `.b32.i2p` address; non-fatal when no provider is available — see PART 31.2 for HOW
 - GeoIP: country-based access control (allowlist or denylist) applied per request, with a fail-open when the country database is unavailable — see PART 19 for HOW
@@ -93,7 +93,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - **CLI client** (`cairnbin-cli`) — full API access from the terminal
 - **OpenAPI/Swagger docs** and a **read-only GraphQL query interface** (create/delete remain REST-only)
 - **Drop-in compatibility layer** for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP, enabled by default) — see Compat targets below
-- **i18n** — 7 locales (en, es, fr, de, zh, ar, ja), automatic selection via `Accept-Language`, RTL layout for Arabic, fallback to English
+- **i18n** — 8 locales (en, es, fr, de, it, zh, ar, ja), automatic selection via `Accept-Language`, RTL layout for Arabic, fallback to English
 - **Tor hidden service** — auto-enabled when the `tor` binary is present; persistent v3 `.onion` address via torrc `HiddenServiceDir`
 - **I2P eepsite** — optional, opt-in; persistent `.b32.i2p` address via dedicated i2pd process or SAM bridge
 - **GeoIP country blocking** — allowlist or denylist, fail-open when the database is unavailable
@@ -338,4 +338,4 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 - **IP/CIDR/country blocklist** — loaded from an operator-configured URL or local file, refreshed hourly by the `blocklist_update` scheduled task
 - **CVE feed** — refreshed by the `cve_update` scheduled task — see PART 19
 - **GitHub Releases** — polled for self-update version checks — see PART 22
-- **Embedded assets** — templates, CSS, JS, images, fonts, and the seven locale files are compiled into the binary at build time; no security database is ever embedded
+- **Embedded assets** — templates, CSS, JS, images, fonts, and the eight locale files are compiled into the binary at build time; no security database is ever embedded
