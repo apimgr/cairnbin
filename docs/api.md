@@ -130,10 +130,12 @@ Returns plain text.
 ## List Recent Pastes
 
 ```
-GET https://pste.us/api/v1/pastes?page=1&limit=20
+GET https://pste.us/api/v1/pastes?page=1&limit=20&type=image
 ```
 
-Returns paginated list of public (non-unlisted) pastes.
+Returns paginated list of public (non-unlisted) pastes. The optional `search`
+parameter matches paste ID, title, or content. The optional `type` parameter
+filters by `text`, `image`, `audio`, `video`, or `file`.
 
 ## Health Check
 

@@ -211,6 +211,9 @@ curl -q -LSsf -X DELETE https://pste.us/api/v1/pastes/{id} \
 # List recent pastes
 curl -q -LSsf https://pste.us/api/v1/pastes
 
+# List recent image pastes
+curl -q -LSsf 'https://pste.us/api/v1/pastes?type=image'
+
 # Pipe to paste (raw body)
 curl -q -LSsf -X POST https://pste.us/api/v1/pastes \
   --data-binary @file.txt -H 'Content-Type: text/plain'

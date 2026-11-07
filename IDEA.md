@@ -161,7 +161,7 @@ Every subdomain-forced compat create path continues to honor the operator-config
 - Link targets are validated for scheme and format only and are never fetched server-side
 - A paste with no supplied title falls back to `Untitled`, except a link paste, which falls back to its target URL
 - Recent-paste listings are paginated with a maximum page size of 250 items; requested page sizes above 250 are silently capped, never rejected
-- Recent-paste listings support `search` (matches paste ID, title, and content, case-insensitive substring), `sort` (`date` (default), `name`, `views`, or `id`), and `order` (`desc` (default) or `asc`) query parameters, on both the frontend `/recent` page and the JSON API; unrecognized `sort` values fall back to `date` rather than erroring; unlisted pastes are never returned regardless of search/sort
+- Recent-paste listings support `search` (matches paste ID, title, and content, case-insensitive substring), `type` (`text`, `image`, `audio`, `video`, or `file`), `sort` (`date` (default), `name`, `views`, or `id`), and `order` (`desc` (default) or `asc`) query parameters, on both the frontend `/recent` page and the JSON API; unrecognized `sort` values fall back to `date` rather than erroring; unlisted pastes are never returned regardless of search/sort/type
 - Guests may save their recents-list settings as client-side cookies: `cairnbin_pref_sort` (`date` \| `name` \| `views`), `cairnbin_pref_order` (`desc` \| `asc`), and `cairnbin_pref_per_page` (`20` \| `50` \| `100` \| `250`), each editable from `/server/preferences` and never persisted server-side
 - Saved preferences are a deliberate subset of what a `/pastes` query accepts: that query also permits `title` (an alias of `name`) and `id` as sort columns and any page size up to 250, but none of those are offered as a control on the preferences page, so none may be saved — a cookie must never hold a value the page has no control to render back, or the page would display one ordering while the list used another
 - An explicit `?sort=`/`?order=`/`?limit=` on a recents request is persisted to its cookie only when the value passes the same allowlist the read path applies; a wider value applies to that one request and is not remembered. Ordering is a one-way door: preferences may narrow what a query accepts, never widen it
@@ -180,7 +180,7 @@ Native capabilities, exposed on both the API surface and the browser frontend:
 - View a paste embedded — iframe-embeddable rendering of a paste
 - Get a paste's QR code — as a page and as a PNG image
 - Delete a paste — requires the paste's owner token, or the operator token which may delete any paste
-- List recent public pastes — paginated (max 250/page), searchable by ID/title/content, sortable by date/name/views/id in either order; unlisted pastes are never included
+- List recent public pastes — paginated (max 250/page), searchable by ID/title/content, filterable by content type, sortable by date/name/views/id in either order; unlisted pastes are never included
 - Scheduler management — operator-token gated; the sole runtime-configuration exception (see Non-goals)
 - API documentation UIs — Swagger and GraphQL browsers
 
