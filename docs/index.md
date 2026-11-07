@@ -56,6 +56,7 @@ On first run the server binds all interfaces on a random port in the 64000-64999
 - [Compatibility](compat.md) - supported paste-service routes and protocols
 - [Security](security.md) - Auth, public endpoints, reporting, and hardening behavior
 - [Integrations](integrations.md) - Discovery, protocol endpoints, and platform integrations
+- [Translating](translating.md) - Locale files, review requirements, and translator credits
 - [Development](development.md) - Contributing guide
 
 ## Links
