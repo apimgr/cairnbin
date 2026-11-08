@@ -19,7 +19,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never`, or custom seconds
 - Burn after N reads — paste deleted once view count reaches threshold
 - Public and unlisted visibility
-- Owner token — cryptographically random `tok_` value returned when a new owner is created, stored as a SHA-256 hash plus an encrypted recoverable copy, and viewable masked by default at `/server/preferences/tokens`
+- Owner token — cryptographically random `tok_` value returned when a new owner is created, stored as a SHA-256 hash plus an encrypted recoverable copy, viewable masked by default at `/server/preferences/tokens`, and usable to list owned public and unlisted pastes with `scope=owned`
 - QR code generation at `/qr/{id}`
 - View count tracking with automatic background cleanup
 - Full web frontend (dark/light/auto theme, PWA, mobile-first)

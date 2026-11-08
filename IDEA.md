@@ -50,7 +50,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - CLI client (`cairnbin-cli`) — full API access from the terminal
 - OpenAPI/Swagger docs
 - GraphQL read-only query interface (create and delete are REST-only)
-- MCP (Model Context Protocol) endpoint so AI clients can use the paste API as tools: Streamable HTTP JSON-RPC at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`), on by default (`server.mcp.enabled`), same Bearer tokens as the API (no MCP-specific token), tools generated from the API routes (create/get/list/delete paste, health, version); an anonymous create tool call returns the `owner_token` exactly like the REST API; token management is never exposed as a tool
+- MCP (Model Context Protocol) endpoint so AI clients can use the paste API as tools: Streamable HTTP JSON-RPC at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`), on by default (`server.mcp.enabled`), same Bearer tokens as the API (no MCP-specific token), tools generated from the API routes (create/get/list/delete paste, health, version); list pastes defaults to public and supports `scope=owned` with a valid owner or linked Bearer token to retrieve that owner's non-expired public and unlisted pastes; an anonymous create tool call returns the `owner_token` exactly like the REST API; token management is never exposed as a tool
 - Drop-in compat layer for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP listener, enabled by default; disable via `server.termbin.enabled: false` or `TERMBIN_ENABLED=false`) — compat routes use their own delete-token mechanism (stored in paste row) separate from the owner token system
 - Two-tier operator token: server operator may set a `server.token` in `server.yml`; this operator token allows deleting any paste unconditionally
 - i18n: 8 supported locales (en, es, fr, de, it, zh, ar, ja); automatic language selection via `Accept-Language` header; RTL layout for Arabic (`dir="rtl"` on `<html>`); fallback to English when locale unknown
@@ -180,7 +180,7 @@ Native capabilities, exposed on both the API surface and the browser frontend:
 - View a paste embedded — iframe-embeddable rendering of a paste
 - Get a paste's QR code — as a page and as a PNG image
 - Delete a paste — requires the paste's owner token, or the operator token which may delete any paste
-- List recent public pastes — paginated (max 250/page), searchable by ID/title/content, filterable by content type, sortable by date/name/views/id in either order; unlisted pastes are never included
+- List recent public pastes anonymously, or list the authenticated owner's non-expired pastes (including unlisted) with `scope=owned` — paginated (max 250/page), searchable by ID/title/content, filterable by content type, sortable by date/name/views/id in either order
 - Scheduler management — operator-token gated; the sole runtime-configuration exception (see Non-goals)
 - API documentation UIs — Swagger and GraphQL browsers
 
@@ -228,7 +228,8 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 | Actor | Access |
 |-------|--------|
 | **Anonymous visitor (browser)** | Create pastes; view any public or unlisted paste by URL; browse recent public pastes; delete own paste with owner token |
-| **Anonymous API client (curl / CLI)** | Create pastes; retrieve paste content; delete paste with owner token; list recent public pastes; token list and revoke |
+| **Anonymous API client (curl / CLI)** | Create pastes; retrieve public paste content; delete paste with owner token; list recent public pastes |
+| **Owner or linked token holder (API / MCP)** | Read and delete that owner's pastes, including unlisted pastes; create additional pastes under the same owner; list only owned pastes when `scope=owned` is selected; linked tokens cannot manage tokens |
 | **Server operator** | Configures server via `server.yml`; holds operator token that can delete any paste unconditionally |
 
 ### Data model & sensitivity

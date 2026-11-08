@@ -50,6 +50,9 @@ preserving its complete key set. A fluent speaker must review machine-
 generated draft translations before they merge. Reviewers check placeholders,
 plural categories, terminology, and the layout sizes above.
 
+**Review status:** Italian (`it`) is a best-effort machine-translated draft;
+fluent-speaker review is pending.
+
 When a language's script is not covered by the system font stack, add an
 appropriate font fallback and verify long text wraps without spaces. Keep every
 locale synchronized with changes to the English source keys; translate added

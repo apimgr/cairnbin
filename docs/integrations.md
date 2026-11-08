@@ -80,6 +80,7 @@ AI clients (Claude, IDE agents, other MCP clients) can use the paste API as tool
 - Connection instructions, the live public tool list, and project usage notes are at `https://pste.us/server/help/mcp`; the JSON mirror is `GET /api/v1/server/help/mcp`. Both help routes return `404` when MCP is disabled.
 - Authentication is the API's own `Authorization: Bearer tok_...` header. There is no MCP token. Create a linked token on `/server/preferences/tokens` for each MCP client so it can be revoked on its own.
 - Tools are generated from the API routes: `getApiV1Pastes`, `postApiV1Pastes`, `getApiV1PastesId`, `getApiV1PastesIdRaw`, `deleteApiV1PastesId`, `getApiV1ServerHealthz`, and `getApiV1ServerVersion`. Token management is never a tool.
+- `getApiV1Pastes` lists public pastes by default; pass `scope: "owned"` with an owner or linked Bearer token to list that owner's public and unlisted pastes.
 - An anonymous `postApiV1Pastes` call returns the `owner_token` in the tool result; store it to keep control of the paste.
 - `GET` and `DELETE` return `405`. Disable with `server.mcp.enabled: false` (every MCP route then returns `404`).
 

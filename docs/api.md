@@ -133,9 +133,22 @@ Returns plain text.
 GET https://pste.us/api/v1/pastes?page=1&limit=20&type=image
 ```
 
-Returns paginated list of public (non-unlisted) pastes. The optional `search`
-parameter matches paste ID, title, or content. The optional `type` parameter
-filters by `text`, `image`, `audio`, `video`, or `file`.
+Returns paginated list of public (non-unlisted) pastes. `page` defaults to 1;
+`limit` defaults to 250 and is capped at 250. The optional `search` parameter
+matches paste ID, title, or content. The optional `type` parameter filters by
+`text`, `image`, `audio`, `video`, or `file`.
+
+Set `scope=owned` and send a valid owner or linked token to list that owner's
+non-expired pastes, including unlisted ones:
+
+```bash
+curl -q -LSsf 'https://pste.us/api/v1/pastes?scope=owned' \
+  -H 'Authorization: Bearer {owner_token}'
+```
+
+Without a valid owner token, `scope=owned` returns `401`. This option is also
+available to MCP clients through the generated `getApiV1Pastes` tool's `scope`
+argument.
 
 ## Health Check
 
