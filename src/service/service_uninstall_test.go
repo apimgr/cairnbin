@@ -195,6 +195,52 @@ func TestUninstallBSDRC_DirectWithScript(t *testing.T) {
 	}
 }
 
+func TestUninstallUserServiceAt_ConfirmsBeforePurging(t *testing.T) {
+	unit := filepath.Join(t.TempDir(), "cairnbin.service")
+	if err := os.WriteFile(unit, []byte("[Service]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stopCalls, reloadCalls, purgeCalls := 0, 0, 0
+	err := uninstallUserServiceAt(unit,
+		func() error { stopCalls++; return nil },
+		func() error { reloadCalls++; return nil },
+		func() bool { return true },
+		func() { purgeCalls++ },
+	)
+	if err != nil {
+		t.Fatalf("uninstallUserServiceAt: %v", err)
+	}
+	if stopCalls != 1 || reloadCalls != 1 || purgeCalls != 1 {
+		t.Errorf("calls stop/reload/purge = %d/%d/%d, want 1/1/1", stopCalls, reloadCalls, purgeCalls)
+	}
+	if _, err := os.Stat(unit); !os.IsNotExist(err) {
+		t.Errorf("user service file remains after confirmed uninstall: %v", err)
+	}
+}
+
+func TestUninstallUserServiceAt_CancelKeepsUnitAndData(t *testing.T) {
+	unit := filepath.Join(t.TempDir(), "cairnbin.service")
+	if err := os.WriteFile(unit, []byte("[Service]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stopCalls, purgeCalls := 0, 0
+	err := uninstallUserServiceAt(unit,
+		func() error { stopCalls++; return nil },
+		func() error { return nil },
+		func() bool { return false },
+		func() { purgeCalls++ },
+	)
+	if err != nil {
+		t.Fatalf("uninstallUserServiceAt cancellation: %v", err)
+	}
+	if stopCalls != 0 || purgeCalls != 0 {
+		t.Errorf("cancelled uninstall called stop/purge %d/%d times", stopCalls, purgeCalls)
+	}
+	if _, err := os.Stat(unit); err != nil {
+		t.Errorf("cancelled uninstall removed user service file: %v", err)
+	}
+}
+
 // ─── purgeData test ──────────────────────────────────────────────────────────
 
 func TestPurgeData_RemovesDirectories(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -82,6 +83,7 @@ type Scheduler struct {
 	tasks    map[string]*taskEntry
 	stop     chan struct{}
 	running  bool
+	stopping bool
 	notifier NotifyFunc
 
 	// ctx is cancelled when Stop is called, so in-flight TaskFunc invocations
@@ -179,7 +181,9 @@ func (s *Scheduler) Start() {
 		return
 	}
 	s.running = true
+	s.stopping = false
 	s.stop = make(chan struct{})
+	stop := s.stop
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
 	s.mu.Unlock()
 
@@ -191,7 +195,7 @@ func (s *Scheduler) Start() {
 
 	log.Printf("scheduler: started with %d tasks", len(s.tasks))
 
-	go s.loop()
+	go s.loop(stop)
 }
 
 // Running reports whether the scheduler loop is currently active.
@@ -212,6 +216,7 @@ func (s *Scheduler) Stop() {
 		return
 	}
 	s.running = false
+	s.stopping = true
 	close(s.stop)
 	cancel := s.ctxCancel
 	s.mu.Unlock()
@@ -259,10 +264,18 @@ func (s *Scheduler) markInterrupted() {
 // persistent state).
 func (s *Scheduler) RunNow(id string) error {
 	s.mu.Lock()
+	if s.stopping {
+		s.mu.Unlock()
+		return fmt.Errorf("scheduler is stopping")
+	}
 	e, ok := s.tasks[id]
 	if !ok {
 		s.mu.Unlock()
 		return fmt.Errorf("task %q not found", id)
+	}
+	if !e.enabled {
+		s.mu.Unlock()
+		return fmt.Errorf("task %q is disabled", id)
 	}
 	if e.running {
 		s.mu.Unlock()
@@ -279,6 +292,28 @@ func (s *Scheduler) RunNow(id string) error {
 	e.running = false
 	s.mu.Unlock()
 	return err
+}
+
+// SetSchedule updates a registered task's schedule and persists its next run.
+func (s *Scheduler) SetSchedule(id, expression string) error {
+	schedule, err := ParseSchedule(expression)
+	if err != nil {
+		return fmt.Errorf("scheduler.SetSchedule %q: %w", id, err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.tasks[id]
+	if !ok {
+		return fmt.Errorf("task %q not found", id)
+	}
+	e.schedule = schedule
+	if e.lastRun.IsZero() {
+		e.nextRun = schedule.Next(time.Now())
+	} else {
+		e.nextRun = schedule.Next(e.lastRun)
+	}
+	s.persistState(e)
+	return nil
 }
 
 // EnableTask enables a registered task.
@@ -327,13 +362,13 @@ func (s *Scheduler) GetTasks() []database.TaskState {
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
-func (s *Scheduler) loop() {
+func (s *Scheduler) loop(stop <-chan struct{}) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-s.stop:
+		case <-stop:
 			return
 		case <-ticker.C:
 			s.tick()
@@ -345,17 +380,21 @@ func (s *Scheduler) tick() {
 	now := time.Now()
 
 	s.mu.Lock()
+	if !s.running {
+		s.mu.Unlock()
+		return
+	}
 	var due []*taskEntry
 	for _, e := range s.tasks {
 		if e.enabled && !e.running && !e.nextRun.IsZero() && now.After(e.nextRun) {
 			due = append(due, e)
 			e.running = true
+			s.wg.Add(1)
 		}
 	}
 	s.mu.Unlock()
 
 	for _, e := range due {
-		s.wg.Add(1)
 		go func(entry *taskEntry) {
 			defer s.wg.Done()
 			s.execute(entry) //nolint:errcheck
@@ -419,7 +458,7 @@ func (s *Scheduler) execute(e *taskEntry) error {
 	metric.SchedulerLastRunTimestamp.WithLabelValues(e.id).Set(float64(finished.Unix()))
 
 	s.mu.Lock()
-	e.lastRun = start
+	e.lastRun = finished
 	e.lastStatus = status
 	e.lastError = errMsg
 	attempt := e.retryAttempt
@@ -446,16 +485,20 @@ func (s *Scheduler) execute(e *taskEntry) error {
 	e.nextRun = next
 
 	if s.db != nil {
-		s.db.UpdateTaskRun(e.id, e.lastRun, e.lastStatus, e.lastError, //nolint:errcheck
-			e.runCount, e.failCount, e.nextRun)
-		s.db.RecordTaskHistory(&database.TaskHistory{ //nolint:errcheck
+		if err := s.db.UpdateTaskRun(e.id, e.lastRun, e.lastStatus, e.lastError,
+			e.runCount, e.failCount, e.nextRun); err != nil {
+			log.Printf("scheduler: persist run state for %s: %v", e.id, err)
+		}
+		if err := s.db.RecordTaskHistory(&database.TaskHistory{
 			TaskID:     e.id,
 			StartedAt:  start,
 			FinishedAt: finished,
 			Status:     status,
 			ErrorMsg:   errMsg,
 			DurationMS: durationMS,
-		})
+		}); err != nil {
+			log.Printf("scheduler: persist history for %s: %v", e.id, err)
+		}
 	}
 	notifier := s.notifier
 	s.mu.Unlock()
@@ -494,6 +537,14 @@ func (s *Scheduler) loadState() {
 	stored, err := s.db.ListSchedulerTasks()
 	if err != nil {
 		log.Printf("scheduler: could not load state from DB: %v", err)
+		// Keep the scheduler available, but do not overwrite persistent rows
+		// from a failed read with incomplete in-memory defaults.
+		s.mu.Lock()
+		for _, e := range s.tasks {
+			e.nextRun = e.schedule.Next(time.Now())
+		}
+		s.mu.Unlock()
+		return
 	}
 
 	// Index stored tasks by ID for quick lookup.
@@ -525,7 +576,9 @@ func (s *Scheduler) loadState() {
 			e.nextRun = e.schedule.Next(now)
 		}
 		// Always upsert to register new tasks and reflect schedule changes.
-		s.db.UpsertSchedulerTask(toTaskState(e)) //nolint:errcheck
+		if err := s.db.UpsertSchedulerTask(toTaskState(e)); err != nil {
+			log.Printf("scheduler: register task state for %s: %v", e.id, err)
+		}
 	}
 	s.mu.Unlock()
 }
@@ -537,12 +590,13 @@ func (s *Scheduler) runMissed() {
 	cutoff := now.Add(-s.catchUpWindow)
 
 	s.mu.Lock()
+	if !s.running {
+		s.mu.Unlock()
+		return
+	}
 	var missed []*taskEntry
 	for _, e := range s.tasks {
-		if !e.enabled {
-			continue
-		}
-		if e.nextRun.IsZero() {
+		if !e.enabled || e.nextRun.IsZero() {
 			continue
 		}
 		// Task was due after cutoff but before now.
@@ -551,20 +605,28 @@ func (s *Scheduler) runMissed() {
 			e.running = true
 		}
 	}
+	if len(missed) > 0 {
+		s.wg.Add(1)
+	}
 	s.mu.Unlock()
 
-	for _, e := range missed {
-		log.Printf("scheduler: catch-up run for %s (was due %s)", e.id, e.nextRun.Format(time.RFC3339))
-		s.wg.Add(1)
-		go func(entry *taskEntry) {
-			defer s.wg.Done()
-			s.execute(entry) //nolint:errcheck
-
+	if len(missed) == 0 {
+		return
+	}
+	sort.Slice(missed, func(i, j int) bool {
+		return missed[i].nextRun.Before(missed[j].nextRun)
+	})
+	go func() {
+		defer s.wg.Done()
+		for _, entry := range missed {
+			log.Printf("scheduler: catch-up run for %s (was due %s)", entry.id, entry.nextRun.Format(time.RFC3339))
+			// execute logs and persists task failures internally; later missed tasks must still run.
+			_ = s.execute(entry)
 			s.mu.Lock()
 			entry.running = false
 			s.mu.Unlock()
-		}(e)
-	}
+		}
+	}()
 }
 
 // persistState writes the current in-memory state for a task to the DB.
@@ -573,7 +635,9 @@ func (s *Scheduler) persistState(e *taskEntry) {
 	if s.db == nil {
 		return
 	}
-	s.db.UpsertSchedulerTask(toTaskState(e)) //nolint:errcheck
+	if err := s.db.UpsertSchedulerTask(toTaskState(e)); err != nil {
+		log.Printf("scheduler: persist task state for %s: %v", e.id, err)
+	}
 }
 
 // taskEntry.TaskID returns the task ID (helper to satisfy interface method).

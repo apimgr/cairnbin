@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/cairnbin/src/tor"
 )
 
 // writeTorTestServerYML writes a minimal server.yml with the given port so
@@ -80,6 +82,32 @@ func TestTorServerBaseURL_ServerRunning(t *testing.T) {
 	want := "http://127.0.0.1:" + port
 	if baseURL != want {
 		t.Errorf("torServerBaseURL(%q) baseURL = %q, want %q", dir, baseURL, want)
+	}
+}
+
+func TestRunTorVanityUnknownActionUsesRequestedLanguage(t *testing.T) {
+	var stdout, stderr strings.Builder
+	code := runTorVanity("cairnbin", "bogus", nil, "", true, &stdout, &stderr, "es")
+	if code != 2 {
+		t.Fatalf("runTorVanity unknown action exit = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "desconocido") || !strings.Contains(stderr.String(), "Uso:") {
+		t.Fatalf("Spanish unknown vanity action output = %q", stderr.String())
+	}
+}
+
+func TestValidateTorConfigUsesRequestedLanguage(t *testing.T) {
+	root := t.TempDir()
+	cfg := tor.Config{ConfigDir: filepath.Join(root, "config"), DataDir: filepath.Join(root, "data"), VirtualPort: 70000, Binary: filepath.Join(root, "missing-tor")}
+	var stdout, stderr strings.Builder
+	code := validateTorConfig("cairnbin", cfg, &stdout, &stderr, "es")
+	if code != 1 {
+		t.Fatalf("validateTorConfig exit = %d, want 1", code)
+	}
+	for _, want := range []string{"AVISO", "ERROR", "No se encontró el binario Tor", "fuera del intervalo"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("Spanish validation output %q missing %q", stdout.String(), want)
+		}
 	}
 }
 
@@ -229,6 +257,15 @@ func TestPrintTorInfo(t *testing.T) {
 	}
 }
 
+func TestPrintTorInfoUsesRequestedLanguage(t *testing.T) {
+	var out strings.Builder
+	printTorInfo(&out, torControlTorInfo{Enabled: true, Running: true, Hostname: "example.onion"}, "es")
+	got := out.String()
+	if !strings.Contains(got, "conectado") || !strings.Contains(got, "Dirección") || !strings.Contains(got, "example.onion") {
+		t.Fatalf("Spanish Tor status = %q", got)
+	}
+}
+
 // TestRunTorVanity_NoServer covers every "tor vanity" subcommand's hard
 // failure when no running server is detected — these mutate server-owned
 // state and have no on-disk fallback (AI.md PART 31.1).
@@ -239,7 +276,7 @@ func TestRunTorVanity_NoServer(t *testing.T) {
 		if code != 1 {
 			t.Errorf("runTorVanity(%q, serverUp=false) = %d, want 1", action, code)
 		}
-		if !strings.Contains(errOut.String(), "no running server detected") {
+		if !strings.Contains(strings.ToLower(errOut.String()), "no running server detected") {
 			t.Errorf("runTorVanity(%q, serverUp=false) stderr = %q, want 'no running server detected'", action, errOut.String())
 		}
 	}
@@ -264,8 +301,8 @@ func TestRunTorVanity_UnknownAction(t *testing.T) {
 	if code != 2 {
 		t.Errorf("runTorVanity(bogus) = %d, want 2", code)
 	}
-	if !strings.Contains(errOut.String(), "unknown subcommand") {
-		t.Errorf("runTorVanity(bogus) stderr = %q, want 'unknown subcommand'", errOut.String())
+	if !strings.Contains(strings.ToLower(errOut.String()), "unknown tor vanity subcommand") {
+		t.Errorf("runTorVanity(bogus) stderr = %q, want 'unknown tor vanity subcommand'", errOut.String())
 	}
 }
 
@@ -472,7 +509,7 @@ func TestPrintVanityInfo(t *testing.T) {
 		ElapsedSeconds: 8,
 	})
 	for _, want := range []string{"running", "abc", "Workers: 3", "4096"} {
-		if !strings.Contains(running.String(), want) {
+		if !strings.Contains(strings.ToLower(running.String()), strings.ToLower(want)) {
 			t.Errorf("running output = %q, want to contain %q", running.String(), want)
 		}
 	}
@@ -503,7 +540,7 @@ func TestRunTorCommand_RestartNoServer(t *testing.T) {
 	if code != 1 {
 		t.Errorf("runTorCommand(restart, no server) = %d, want 1; stderr=%q", code, errOut.String())
 	}
-	if !strings.Contains(errOut.String(), "no running server detected") {
+	if !strings.Contains(strings.ToLower(errOut.String()), "no running server detected") {
 		t.Errorf("runTorCommand(restart, no server) stderr = %q, want 'no running server detected'", errOut.String())
 	}
 }
@@ -516,8 +553,8 @@ func TestRunTorCommand_NoSubcommand(t *testing.T) {
 	if code != 2 {
 		t.Errorf("runTorCommand(no args) = %d, want 2", code)
 	}
-	if !strings.Contains(errOut.String(), "requires a subcommand") {
-		t.Errorf("runTorCommand(no args) stderr = %q, want 'requires a subcommand'", errOut.String())
+	if !strings.Contains(strings.ToLower(errOut.String()), "tor requires an action") {
+		t.Errorf("runTorCommand(no args) stderr = %q, want 'tor requires an action'", errOut.String())
 	}
 }
 

@@ -38,13 +38,14 @@ type Paste struct {
 
 // PasteListItem is a minimal paste for list and recent views.
 type PasteListItem struct {
-	ID        string     `json:"id"`
-	Title     string     `json:"title"`
-	Language  string     `json:"language"`
-	Views     int        `json:"views"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
-	BurnAfter int        `json:"burn_after"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Language    string     `json:"language"`
+	ContentType string     `json:"content_type,omitempty"`
+	Views       int        `json:"views"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	BurnAfter   int        `json:"burn_after"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 // CreateResponse includes a plaintext owner token only when creation issued a new owner identity.
@@ -66,12 +67,13 @@ type CreateResponse struct {
 // ToListItem converts a Paste to its minimal list representation.
 func (p *Paste) ToListItem() PasteListItem {
 	return PasteListItem{
-		ID:        p.ID,
-		Title:     p.Title,
-		Language:  p.Language,
-		Views:     p.Views,
-		ExpiresAt: p.ExpiresAt,
-		BurnAfter: p.BurnAfter,
-		CreatedAt: p.CreatedAt,
+		ID:          p.ID,
+		Title:       p.Title,
+		Language:    p.Language,
+		ContentType: p.ContentType,
+		Views:       p.Views,
+		ExpiresAt:   p.ExpiresAt,
+		BurnAfter:   p.BurnAfter,
+		CreatedAt:   p.CreatedAt,
 	}
 }

@@ -198,7 +198,6 @@ func TestOpenRCScriptContent_RequiredElements(t *testing.T) {
 		"name=",
 		"description=",
 		"command=",
-		"command_user=",
 		"command_background=true",
 		"pidfile=",
 		"output_log=",
@@ -237,13 +236,12 @@ func TestOpenRCScriptContent_HasPidfile(t *testing.T) {
 	}
 }
 
-func TestOpenRCScriptContent_HasCommandUser(t *testing.T) {
+func TestOpenRCScriptContent_RunsElevatedForBindThenDrop(t *testing.T) {
 	binaryPath := GetBinaryPath()
 	rcContent := buildOpenRCScript(binaryPath)
 
-	expectedUser := fmt.Sprintf(`command_user="%s:%s"`, serviceUser, serviceUser)
-	if !strings.Contains(rcContent, expectedUser) {
-		t.Errorf("OpenRC script missing command_user directive")
+	if strings.Contains(rcContent, "command_user=") {
+		t.Error("OpenRC script must keep its elevated start so the binary can bind before dropping privileges")
 	}
 }
 

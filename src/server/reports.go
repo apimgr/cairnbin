@@ -180,25 +180,19 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 	if !reportLimiter.allow(ip) || (reportBurstLimiter != nil && !reportBurstLimiter.allow(ip)) {
 		w.Header().Set("Retry-After", "60")
-		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{
-			"ok": false, "error": "RATE_LIMITED", "message": "Too many requests",
-		})
+		writeAPIError(w, r, http.StatusTooManyRequests, "RATE_LIMITED", "errors.rate_limited")
 		return
 	}
 	mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	switch mt {
 	case "application/csp-report", "application/reports+json", "application/json":
 	default:
-		writeJSON(w, http.StatusUnsupportedMediaType, map[string]interface{}{
-			"ok": false, "error": "BAD_REQUEST", "message": "Unsupported content type",
-		})
+		writeAPIError(w, r, http.StatusUnsupportedMediaType, "BAD_REQUEST", "errors.invalid_format")
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reportsMaxBody))
 	if err != nil {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]interface{}{
-			"ok": false, "error": "BAD_REQUEST", "message": "Report too large",
-		})
+		writeAPIError(w, r, http.StatusRequestEntityTooLarge, "BAD_REQUEST", "errors.invalid_format")
 		return
 	}
 

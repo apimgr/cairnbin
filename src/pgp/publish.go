@@ -18,7 +18,16 @@ import (
 // background publisher and the `--maintenance pgp publish` CLI so the submission
 // protocol can never drift between them.
 func PostKey(keyserver, pubArmored string) error {
-	client := &http.Client{Timeout: 30 * time.Second}
+	return PostKeyWithClient(keyserver, pubArmored, &http.Client{Timeout: 30 * time.Second})
+}
+
+// PostKeyWithClient submits a key using the caller's shared HTTP client. The
+// server injects its configured outbound client so app-owned keyserver
+// destinations follow the operator's Tor network setting.
+func PostKeyWithClient(keyserver, pubArmored string, client *http.Client) error {
+	if client == nil {
+		return fmt.Errorf("pgp: HTTP client is nil")
+	}
 	if strings.Contains(keyserver, "vks/v1/upload") {
 		payload, err := json.Marshal(map[string]string{"keytext": pubArmored})
 		if err != nil {

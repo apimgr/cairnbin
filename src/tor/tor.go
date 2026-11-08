@@ -239,13 +239,14 @@ var startTorRuntime = func(ctx context.Context, conf *binettor.StartConf) (manag
 
 // Manager owns the Tor process lifecycle.
 type Manager struct {
-	mu         sync.Mutex
-	svc        *service
-	cfg        Config
-	serverPort int
-	handler    http.Handler
-	ctx        context.Context
-	cancel     context.CancelFunc
+	mu                  sync.Mutex
+	svc                 *service
+	outboundDialContext func(context.Context, string, string) (net.Conn, error)
+	cfg                 Config
+	serverPort          int
+	handler             http.Handler
+	ctx                 context.Context
+	cancel              context.CancelFunc
 	// vanity holds the state of the single allowed in-process vanity
 	// onion-address search (AI.md PART 31.1).
 	vanity vanitySearcher
@@ -387,6 +388,7 @@ func (m *Manager) startLocked() error {
 			log.Printf("Tor: warning: outbound dialer failed: %v", err)
 		} else {
 			svc.dialer = d
+			m.outboundDialContext = d.DialContext
 		}
 	}
 
@@ -463,6 +465,7 @@ func (m *Manager) Close() {
 
 func (m *Manager) closeSvcLocked() {
 	if m.svc == nil {
+		m.outboundDialContext = nil
 		return
 	}
 	if m.svc.backendServer != nil {
@@ -473,6 +476,7 @@ func (m *Manager) closeSvcLocked() {
 	_ = m.svc.t.Close()
 	removeTorPIDFile(m.cfg.DataDir)
 	m.svc = nil
+	m.outboundDialContext = nil
 }
 
 // Running returns true when Tor is active.
@@ -503,14 +507,18 @@ func (m *Manager) OnionAddress() string {
 
 // GetHTTPClient returns a direct or Tor-routed HTTP client.
 func (m *Manager) GetHTTPClient(useTor bool) *http.Client {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if useTor && m.svc != nil && m.svc.dialer != nil {
+	if useTor {
 		return &http.Client{
 			Timeout: 60 * time.Second,
-			Transport: &http.Transport{
-				DialContext: m.svc.dialer.DialContext,
-			},
+			Transport: &http.Transport{DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				m.mu.Lock()
+				dialContext := m.outboundDialContext
+				m.mu.Unlock()
+				if dialContext == nil {
+					return nil, fmt.Errorf("outbound Tor network is enabled but Tor is not ready")
+				}
+				return dialContext(ctx, network, address)
+			}},
 		}
 	}
 	return &http.Client{Timeout: 30 * time.Second}

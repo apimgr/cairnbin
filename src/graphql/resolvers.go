@@ -26,13 +26,18 @@ func NewResolver(db DB) *Resolver {
 // Resolve dispatches a parsed query to the appropriate resolver method.
 // Returns data and a (possibly empty) slice of error objects.
 func (res *Resolver) Resolve(query string, vars map[string]interface{}) (interface{}, []map[string]interface{}) {
+	return res.ResolveLocalized(query, vars, "en")
+}
+
+// ResolveLocalized uses the request language for human-readable schema descriptions.
+func (res *Resolver) ResolveLocalized(query string, vars map[string]interface{}, lang string) (interface{}, []map[string]interface{}) {
 	q := strings.TrimSpace(query)
 
 	// __schema introspection
 	if strings.Contains(q, "__schema") || strings.Contains(q, "__type") {
 		return map[string]interface{}{
 			"__schema": map[string]interface{}{
-				"types":            introspectionTypes(),
+				"types":            introspectionTypes(lang),
 				"queryType":        map[string]interface{}{"name": "Query"},
 				"mutationType":     nil,
 				"subscriptionType": nil,

@@ -331,6 +331,7 @@ func TestMaintenanceCleanupDefaultLimits(t *testing.T) {
 func TestMaintenanceNotifyEmailEnabledBothBranches(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Server.Notifications.Email.Enabled = true
+	cfg.Server.Notifications.Email.Events.SecurityAlert = true
 	cfg.Server.Notifications.Email.SMTP.Host = "127.0.0.1"
 	cfg.Server.Notifications.Email.SMTP.Port = 1
 	cfg.Server.Contact.Admin.Email = "admin@example.com"

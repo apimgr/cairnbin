@@ -1,7 +1,7 @@
 {{define "navlinklist"}}
-    <a href="{{.AssetPrefix}}/" class="nav-link{{if eq .CurrentPath (print .AssetPrefix "/")}} active{{end}}">{{t .Lang "nav.home"}}</a>
-    <a href="{{.AssetPrefix}}/create" class="nav-link{{if eq .CurrentPath (print .AssetPrefix "/create")}} active{{end}}">{{t .Lang "nav.create"}}</a>
-    <a href="{{.AssetPrefix}}/recent" class="nav-link{{if eq .CurrentPath (print .AssetPrefix "/recent")}} active{{end}}">{{t .Lang "nav.recent"}}</a>
+    <a href="{{.AssetPrefix}}/" class="nav-link{{if eq .CurrentPath (print .AssetPrefix "/")}} active{{end}}"{{if eq .CurrentPath (print .AssetPrefix "/")}} aria-current="page"{{end}}>{{t .Lang "nav.home"}}</a>
+    <a href="{{.AssetPrefix}}/create" class="nav-link{{if eq .CurrentPath (print .AssetPrefix "/create")}} active{{end}}"{{if eq .CurrentPath (print .AssetPrefix "/create")}} aria-current="page"{{end}}>{{t .Lang "nav.create"}}</a>
+    <a href="{{.AssetPrefix}}/recent" class="nav-link{{if eq .CurrentPath (print .AssetPrefix "/recent")}} active{{end}}"{{if eq .CurrentPath (print .AssetPrefix "/recent")}} aria-current="page"{{end}}>{{t .Lang "nav.recent"}}</a>
 {{end}}
 {{define "nav"}}
     <input type="checkbox" id="nav-toggle" class="nav-checkbox" aria-label="{{t .Lang "nav.toggle_menu"}}">
@@ -11,12 +11,6 @@
     </nav>
 
     <label for="nav-toggle" class="nav-toggle" aria-label="{{t .Lang "nav.toggle_menu"}}">☰</label>
-
-    <div class="nav-panel">
-        <label for="nav-toggle" class="nav-close" aria-label="{{t .Lang "nav.close_menu"}}">✕</label>
-        {{template "navlinklist" .}}
-    </div>
-    <label for="nav-toggle" class="nav-overlay"></label>
 
     <div class="header-actions">
         {{if .HasOwnerToken}}
@@ -43,4 +37,11 @@
             </button>
         </form>{{end}}
     </div>
+{{end}}
+{{define "navdrawer"}}
+    <nav class="nav-panel" id="mobile-navigation" aria-label="{{t .Lang "nav.main_navigation"}}">
+        <label for="nav-toggle" class="nav-close" aria-label="{{t .Lang "nav.close_menu"}}">✕</label>
+        {{template "navlinklist" .}}
+    </nav>
+    <label for="nav-toggle" class="nav-overlay" aria-label="{{t .Lang "nav.close_menu"}}"></label>
 {{end}}

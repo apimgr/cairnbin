@@ -81,12 +81,12 @@ func (s *Server) registerDebugRoutes(r chi.Router) {
 func (s *Server) handleDebugConfig(w http.ResponseWriter, r *http.Request) {
 	raw, err := yaml.Marshal(s.liveCfg())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "SERVER_ERROR", "message": "failed to marshal config"})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	var generic map[string]any
 	if err := yaml.Unmarshal(raw, &generic); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "SERVER_ERROR", "message": "failed to decode config"})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": redactMap(generic)})
@@ -100,7 +100,7 @@ func (s *Server) handleDebugRoutes(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 	if err := chi.Walk(s.router, walkFunc); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "SERVER_ERROR", "message": "failed to walk routes"})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": map[string]any{"count": len(routes), "routes": routes}})
@@ -154,7 +154,7 @@ func (s *Server) handleDebugDB(w http.ResponseWriter, r *http.Request) {
 // handleDebugScheduler returns the status of every scheduled task (PART 6).
 func (s *Server) handleDebugScheduler(w http.ResponseWriter, r *http.Request) {
 	if s.schedulerAPI == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "MAINTENANCE", "message": "scheduler not available"})
+		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
 		return
 	}
 	tasks := s.schedulerAPI.GetTasks()

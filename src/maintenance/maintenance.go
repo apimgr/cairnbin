@@ -22,7 +22,9 @@ import (
 	"golang.org/x/crypto/argon2"
 
 	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/path"
 	"github.com/apimgr/cairnbin/src/pgp"
 )
 
@@ -37,6 +39,20 @@ const (
 	orgName     = "apimgr"
 	projectName = "cairnbin"
 )
+
+var outputLanguage = "en"
+
+// SetOutputLanguage selects the locale for maintenance command output.
+func SetOutputLanguage(lang string) {
+	outputLanguage = i18n.GetLanguage(lang, "")
+}
+
+func maintenanceText(key string, args ...interface{}) string {
+	if len(args) == 0 {
+		return i18n.Translate(outputLanguage, "cli."+key)
+	}
+	return i18n.TranslateFormat(outputLanguage, "cli."+key, i18n.Args(args...))
+}
 
 // Manifest is embedded in every backup archive as manifest.json.
 type Manifest struct {
@@ -178,9 +194,10 @@ func Backup(opts BackupOptions) error {
 	contentHash := sha256.New()
 	for _, e := range entries {
 		b, readErr := os.ReadFile(e.src)
-		if readErr == nil {
-			contentHash.Write(b)
+		if readErr != nil {
+			return fmt.Errorf("reading %s for backup checksum: %w", e.name, readErr)
 		}
+		_, _ = contentHash.Write(b)
 	}
 
 	// Build and add manifest (with checksum already set — single archive pass).
@@ -247,9 +264,37 @@ func Backup(opts BackupOptions) error {
 		finalBytes = archiveBytes
 	}
 
-	if err := os.WriteFile(destPath, finalBytes, 0o600); err != nil {
-		return fmt.Errorf("writing backup file: %w", err)
+	// Stage beside the destination so the old backup remains intact until the
+	// replacement is fully written and verified.
+	tmpPath := destPath + ".tmp"
+	tmp, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("creating staged backup: %w", err)
 	}
+	stageOwned := true
+	defer func() {
+		if stageOwned {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := tmp.Write(finalBytes); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("writing staged backup: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("syncing staged backup: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing staged backup: %w", err)
+	}
+	if err := VerifyBackup(tmpPath, opts.Password); err != nil {
+		return fmt.Errorf("verifying staged backup: %w", err)
+	}
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return fmt.Errorf("installing verified backup: %w", err)
+	}
+	stageOwned = false
 
 	fmt.Printf("Backup written: %s\n", destPath)
 	return nil
@@ -466,73 +511,15 @@ func Setup(configDir string) error {
 }
 
 // PrintHelp prints the --maintenance subcommand help.
-func PrintHelp(binaryName string) {
-	fmt.Printf(`Maintenance commands:
-
-backup [file]                         - Create backup of all data
-                                        Default: {backup_dir}/%s_backup_YYYY-MM-DD_HHMMSS.tar.gz
-                                        --include-ssl adds ssl/, --include-data adds the data dir
-backup test                           - Dry-run verify the security keypair decrypts
-
-restore <file>                        - Restore from backup file
-                                        Stops server, restores data, restarts server
-
-update [cmd]                          - Manage updates
-  check                               - Check for available updates
-  yes                                 - Download and install update
-  branch <name>                       - Switch update branch (stable|beta|devel)
-
-mode <mode>                           - Set application mode
-  production                          - Normal operation (default)
-  development                         - Verbose logging (debug endpoints require the debug flag)
-
-setup                                 - Reset server configuration (first-run or root only)
-
-pgp <action>                          - Manage the project security keypair (see below)
-token <action>                        - Manage API tokens (see below)
-data <action> <prefix>                - Data-subject export/delete (see below)
-secret rotate <name>                  - Rotate installation_secret or encryption_key
-compliance report                     - Print the compliance status summary
-
-`, projectName)
-	fmt.Printf(`PGP keypair actions (--maintenance pgp <action>):
-  generate            Create the keypair and publish to keyservers
-  rotate              Roll to a new keypair, cross-signed by the old key
-  publish             Re-publish the public key to configured keyservers
-  export public [path]   Write the public key to path (or stdout)
-  export private <path>  Export the private key (operator auth, 1/hour)
-  import <file>       Import a private key (operator auth, identity checked)
-  delete              Delete the keypair and disable PGP publishing
-
-Token actions (--maintenance token <action> [prefix]):
-  list                List all API tokens (prefix, resource, expiry)
-  revoke <prefix>     Revoke the token matching prefix
-
-Data actions (--maintenance data <action> <prefix>) — requires root or the
-operator token; prefix identifies the owner token (see token list):
-  export <prefix>     Print the token and paste record as JSON (GDPR/CCPA export)
-  delete <prefix>     Delete the paste and revoke the token (right to erasure)
-
-Secret actions (--maintenance secret rotate <name>) — requires root or the
-operator token plus a typed confirmation; restart the server afterwards:
-  installation_secret Re-wrap the PGP private key; previous secret valid 7 days
-  encryption_key      Re-encrypt tokens, reports and DNS credentials; previous key valid 30 days
-
-Examples:
-  %s --maintenance backup
-  %s --maintenance backup mybackup.tar.gz
-  %s --maintenance backup test
-  %s --maintenance restore cairnbin_backup_2025-01-01_120000.tar.gz
-  %s --maintenance mode development
-  %s --maintenance update
-  %s --maintenance pgp generate
-  %s --maintenance pgp export public /tmp/pgp.pub.asc
-  %s --maintenance token list
-  %s --maintenance token revoke tok_abc123
-  %s --maintenance data export tok_abc123
-  %s --maintenance data delete tok_abc123
-  %s --maintenance compliance report
-`, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName)
+func PrintHelp(binaryName string, languages ...string) {
+	lang := "en"
+	if len(languages) > 0 {
+		lang = i18n.GetLanguage(languages[0], "")
+	}
+	fmt.Println(i18n.TranslateFormat(lang, "cli.maintenance_help", i18n.Args(
+		"project_name", binaryName,
+		"backup_dir", path.GetBackupDir(projectName),
+	)))
 }
 
 // VerifyBackup performs the post-creation checks required by PART 21:
@@ -562,7 +549,10 @@ func VerifyBackup(path, password string) error {
 	}
 
 	// Check 3: decrypt if encrypted (.enc or .enc.tmp for in-flight temp files).
-	checkPath := strings.TrimSuffix(path, ".tmp")
+	checkPath := path
+	for strings.HasSuffix(checkPath, ".tmp") {
+		checkPath = strings.TrimSuffix(checkPath, ".tmp")
+	}
 	if strings.HasSuffix(checkPath, ".enc") {
 		if password == "" {
 			return fmt.Errorf("verify: encrypted backup requires password")

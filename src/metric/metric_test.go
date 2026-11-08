@@ -328,16 +328,15 @@ func TestMiddleware_TorOnionCounts(t *testing.T) {
 	}
 }
 
-// TestReadSystemStats exercises the platform system-stats reader. On Linux it
-// should return ok=true and a positive memory total; elsewhere ok=false.
+// TestReadSystemStats exercises the portable system-stats reader.
 func TestReadSystemStats(t *testing.T) {
 	st, ok := readSystemStats(t.TempDir())
 	if systemStatsSupported() {
 		if !ok {
 			t.Fatal("readSystemStats returned ok=false on supported platform")
 		}
-		if st.memTotal == 0 {
-			t.Error("memTotal should be > 0 on Linux")
+		if !st.cpuValid && st.memTotal == 0 {
+			t.Error("system stats should include CPU or memory data")
 		}
 	} else if ok {
 		t.Error("readSystemStats returned ok=true on unsupported platform")

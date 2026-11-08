@@ -38,11 +38,7 @@ type sitemapURLSet struct {
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	sm := s.liveCfg().Server.SEO.Sitemap
 	if !sm.Enabled {
-		writeJSON(w, http.StatusNotFound, map[string]any{
-			"ok":      false,
-			"error":   "NOT_FOUND",
-			"message": "Resource not found",
-		})
+		writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
 		return
 	}
 	base := strings.TrimRight(s.baseURL(r), "/")
@@ -90,11 +86,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Sitemaps are fetched by crawlers, not browsers: send the canonical
 		// JSON error envelope instead of an HTML page (PART 14).
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"ok":      false,
-			"error":   "SERVER_ERROR",
-			"message": "Sitemap generation failed",
-		})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -135,7 +127,7 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&b, "## Endpoints\n")
 		fmt.Fprintf(&b, "- GET /server/healthz - Health check (no auth)\n")
 		fmt.Fprintf(&b, "- GET /server/about - Server information (no auth)\n")
-		fmt.Fprintf(&b, "- GET /api/%s/pastes - List public pastes (no auth)\n", apiVersion)
+		fmt.Fprintf(&b, "- GET /api/%s/pastes - List public pastes, or owned pastes with scope=owned and an owner token\n", apiVersion)
 		fmt.Fprintf(&b, "- POST /api/%s/pastes - Create a paste (returns id + owner token)\n", apiVersion)
 		fmt.Fprintf(&b, "- GET /api/%s/pastes/{id} - Fetch a paste (no auth)\n", apiVersion)
 		fmt.Fprintf(&b, "- DELETE /api/%s/pastes/{id} - Delete a paste (owner token or operator auth)\n", apiVersion)
@@ -159,7 +151,7 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&b, "## Capabilities\n")
 	fmt.Fprintf(&b, "- Create, fetch, list, and delete public pastes\n")
 	fmt.Fprintf(&b, "- Syntax language selection per paste\n")
-	fmt.Fprintf(&b, "- Drop-in compatible with pastebin.com, microbin, and lenpaste clients\n\n")
+	fmt.Fprintf(&b, "- Drop-in compatible with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, 0x0.st, sprunge.us, ix.io, and termbin/fiche clients\n\n")
 
 	fmt.Fprintf(&b, "## Contact\n")
 	fmt.Fprintf(&b, "API issues: %s\n", cfg.SecurityReportURL())

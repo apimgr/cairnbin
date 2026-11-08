@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/apimgr/cairnbin/src/common/email"
+	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/health"
 )
 
@@ -49,9 +50,9 @@ func (s *Server) maintenanceMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Maintenance-Mode", "true")
 		w.Header().Set("X-Maintenance-Reason", snap.Reason)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"ok":      false,
-			"error":   "MAINTENANCE",
-			"message": "Server is in maintenance mode due to: " + snap.Message,
+			"ok": false,
+			"error": "MAINTENANCE",
+			"message": i18n.Translate(i18n.LangFromRequest(r), "errors.maintenance_mode"),
 			"details": map[string]any{
 				"reason":       snap.Reason,
 				"self_healing": snap.SelfHealingEnabled,
@@ -150,11 +151,14 @@ func (s *Server) trimOldLogs(dir string, maxAge time.Duration) {
 // operator contact address is set.
 func (s *Server) maintenanceNotify(event string, snap health.Snapshot) {
 	cfg := s.liveCfg()
+	if !cfg.Server.Notifications.Email.Events.SecurityAlert {
+		return
+	}
 	baseURL := cfg.Server.BaseURL
 	if baseURL == "" {
 		baseURL = "http://" + cfg.Server.FQDN
 	}
-	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, baseURL, cfg.Server.FQDN)
+	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, baseURL, cfg.Server.FQDN, cfg.Server.Lang)
 	if !m.Enabled() {
 		return
 	}

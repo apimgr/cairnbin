@@ -99,6 +99,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache-standard
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache-standard,mode=max
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
             VERSION=${{ env.VERSION }}
@@ -177,6 +179,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache-devel
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache-devel,mode=max
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel
           build-args: |
             BUILD_DATE=${{ env.BUILD_DATE }}

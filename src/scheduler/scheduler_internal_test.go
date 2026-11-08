@@ -58,6 +58,7 @@ func TestTick_SkipsNotYetDueTasks(t *testing.T) {
 func TestTick_ExecutesDueTask(t *testing.T) {
 	done := make(chan struct{})
 	s := New(nil)
+	s.running = true
 	sched, err := ParseSchedule("@every 1m")
 	if err != nil {
 		t.Fatalf("ParseSchedule: %v", err)
@@ -123,6 +124,7 @@ func TestRunMissed_NoTasksDue(t *testing.T) {
 func TestRunMissed_ExecutesMissedTask(t *testing.T) {
 	done := make(chan struct{})
 	s := New(nil)
+	s.running = true
 	s.catchUpWindow = 2 * time.Hour
 	sched, err := ParseSchedule("@every 1h")
 	if err != nil {

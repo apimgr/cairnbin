@@ -33,7 +33,7 @@ __check_status() {
     local desc="$1" method="$2" url="$3" expected="$4"
     shift 4
     local code
-    code=$(__vm "curl -s -o /dev/null -w '%{http_code}' -X ${method} $* '${url}'")
+    code=$(__vm "curl -q -LSs -o /dev/null -w '%{http_code}' -X ${method} $* '${url}'")
     if [[ "${code}" == "${expected}" ]]; then
         __pass "${desc} -> ${code}"
     else
@@ -45,7 +45,7 @@ __check_body() {
     local desc="$1" url="$2" pattern="$3"
     shift 3
     local body
-    body=$(__vm "curl -sf $* '${url}'" 2>/dev/null || true)
+    body=$(__vm "curl -q -LSsf $* '${url}'" 2>/dev/null || true)
     if printf '%s' "${body}" | grep -qi -- "${pattern}"; then
         __pass "${desc}"
     else
@@ -174,7 +174,7 @@ else
 fi
 
 # Mutating requests use the same double-submit token as browser forms.
-INCUS_CSRF_TOKEN=$(__vm "curl -sS -D - -o /dev/null '${INCUS_BASE}/create' | sed -n 's/^Set-Cookie: csrf_token=\\([^;]*\\).*/\\1/ip' | head -1")
+INCUS_CSRF_TOKEN=$(__vm "curl -q -LSsf -D - -o /dev/null '${INCUS_BASE}/create' | sed -n 's/^Set-Cookie: csrf_token=\\([^;]*\\).*/\\1/ip' | head -1")
 [[ -n "${INCUS_CSRF_TOKEN}" ]] || __fail "Could not obtain CSRF token from /create"
 INCUS_CSRF_ARGS="--cookie csrf_token=${INCUS_CSRF_TOKEN} --header 'X-CSRF-Token: ${INCUS_CSRF_TOKEN}'"
 
@@ -197,7 +197,7 @@ __check_status "GET /api/v1/pastes.txt -> 200" GET "${INCUS_BASE}/api/v1/pastes.
 # ── Create / retrieve / delete paste ──────────────────────────────────────────
 __info "--- Paste creation ---"
 INCUS_CREATE_DATA='{"content":"hello from incus test","language":"text"}'
-INCUS_RESPONSE=$(__vm "curl -sf --header 'Content-Type: application/json' \
+INCUS_RESPONSE=$(__vm "curl -q -LSsf --header 'Content-Type: application/json' \
     --header 'Accept: application/json' ${INCUS_CSRF_ARGS} --data '${INCUS_CREATE_DATA}' \
     ${INCUS_BASE}/api/v1/pastes")
 INCUS_PASTE_ID=$(printf '%s' "${INCUS_RESPONSE}" | grep -o -- '"id": *"[^"]*"' | head -1 | cut -d'"' -f4)
@@ -206,18 +206,18 @@ INCUS_OWNER_TOKEN=$(printf '%s' "${INCUS_RESPONSE}" | grep -o -- '"owner_token":
 __pass "Create paste: id=${INCUS_PASTE_ID}"
 
 __info "--- Paste retrieval ---"
-INCUS_GET=$(__vm "curl -sf --header 'Accept: application/json' ${INCUS_BASE}/api/v1/pastes/${INCUS_PASTE_ID}")
+INCUS_GET=$(__vm "curl -q -LSsf --header 'Accept: application/json' ${INCUS_BASE}/api/v1/pastes/${INCUS_PASTE_ID}")
 printf '%s' "${INCUS_GET}" | grep -q -- "hello from incus test" || __fail "Get paste (JSON): content mismatch"
 __pass "Get paste (JSON)"
 
-INCUS_RAW=$(__vm "curl -sf ${INCUS_BASE}/api/v1/pastes/${INCUS_PASTE_ID}/raw")
+INCUS_RAW=$(__vm "curl -q -LSsf ${INCUS_BASE}/api/v1/pastes/${INCUS_PASTE_ID}/raw")
 [[ "${INCUS_RAW}" == "hello from incus test" ]] || __fail "Raw paste: unexpected content: ${INCUS_RAW}"
 __pass "Get raw paste"
 
 __info "--- Link paste (is_link) ---"
 INCUS_LINK_TARGET="https://example.com/incus-test-target"
 printf -v INCUS_LINK_DATA '{"content":"%s","is_link":true}' "${INCUS_LINK_TARGET}"
-INCUS_LINK_RESPONSE=$(__vm "curl -sf --header 'Content-Type: application/json' \
+INCUS_LINK_RESPONSE=$(__vm "curl -q -LSsf --header 'Content-Type: application/json' \
     --header 'Accept: application/json' ${INCUS_CSRF_ARGS} --data '${INCUS_LINK_DATA}' \
     ${INCUS_BASE}/api/v1/pastes")
 INCUS_LINK_ID=$(printf '%s' "${INCUS_LINK_RESPONSE}" | grep -o -- '"id": *"[^"]*"' | head -1 | cut -d'"' -f4)
@@ -226,13 +226,13 @@ printf '%s' "${INCUS_LINK_RESPONSE}" | grep -q -- '"is_link": *true' || \
     __fail "Create paste (link): is_link field missing/false in: ${INCUS_LINK_RESPONSE}"
 __pass "Create paste (link): id=${INCUS_LINK_ID}"
 
-INCUS_LINK_LOCATION=$(__vm "curl -s -D - -o /dev/null ${INCUS_BASE}/${INCUS_LINK_ID}" | tr -d '\r' | awk '/^[Ll]ocation:/ {print $2}')
+INCUS_LINK_LOCATION=$(__vm "curl -q -LSsf -D - -o /dev/null ${INCUS_BASE}/${INCUS_LINK_ID}" | tr -d '\r' | awk '/^[Ll]ocation:/ {print $2}')
 [[ "${INCUS_LINK_LOCATION}" == "${INCUS_LINK_TARGET}" ]] || \
     __fail "Link paste view: expected Location ${INCUS_LINK_TARGET}, got ${INCUS_LINK_LOCATION}"
 __check_status "Link paste view -> 302" GET "${INCUS_BASE}/${INCUS_LINK_ID}" 302
 __pass "Link paste view redirects to target"
 
-INCUS_LINK_RAW=$(__vm "curl -sf ${INCUS_BASE}/api/v1/pastes/${INCUS_LINK_ID}/raw")
+INCUS_LINK_RAW=$(__vm "curl -q -LSsf ${INCUS_BASE}/api/v1/pastes/${INCUS_LINK_ID}/raw")
 [[ "${INCUS_LINK_RAW}" == "${INCUS_LINK_TARGET}" ]] || \
     __fail "Link paste raw: expected ${INCUS_LINK_TARGET}, got ${INCUS_LINK_RAW}"
 __pass "Link paste raw returns target URL without redirecting"
@@ -241,7 +241,7 @@ __info "--- Paste deletion ---"
 __check_status "Delete with invalid token -> 404" DELETE "${INCUS_BASE}/api/v1/pastes/${INCUS_PASTE_ID}" 404 \
     "--header 'Authorization: Bearer invalid'"
 if [[ -n "${INCUS_OWNER_TOKEN}" ]]; then
-    INCUS_DEL=$(__vm "curl -sf --request DELETE --header 'Authorization: Bearer ${INCUS_OWNER_TOKEN}' ${INCUS_BASE}/api/v1/pastes/${INCUS_PASTE_ID}")
+    INCUS_DEL=$(__vm "curl -q -LSsf --request DELETE --header 'Authorization: Bearer ${INCUS_OWNER_TOKEN}' ${INCUS_BASE}/api/v1/pastes/${INCUS_PASTE_ID}")
     printf '%s' "${INCUS_DEL}" | grep -qi -- '"ok".*true\|deleted' || __fail "Delete paste: unexpected response: ${INCUS_DEL}"
     __pass "Delete paste with owner token"
     __check_status "Deleted paste returns 404" GET "${INCUS_BASE}/api/v1/pastes/${INCUS_PASTE_ID}" 404
@@ -250,7 +250,7 @@ fi
 # ── Compat APIs ────────────────────────────────────────────────────────────────
 __info "--- Compat API endpoints ---"
 # Compat clients are tokenless and cookie-less: no CSRF token or auth header.
-INCUS_COMPAT_RESPONSE=$(__vm "curl -sf --data 'api_paste_code=compat+test&api_paste_private=0' ${INCUS_BASE}/api/api_post.php")
+INCUS_COMPAT_RESPONSE=$(__vm "curl -q -LSsf --data 'api_paste_code=compat+test&api_paste_private=0' ${INCUS_BASE}/api/api_post.php")
 printf '%s' "${INCUS_COMPAT_RESPONSE}" | grep -qi -- "http\|paste\|error" || \
     __fail "pastebin.com compat POST: unexpected response: ${INCUS_COMPAT_RESPONSE}"
 __pass "pastebin.com compat POST /api/api_post.php"

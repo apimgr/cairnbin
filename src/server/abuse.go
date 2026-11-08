@@ -168,13 +168,13 @@ func (s *Server) abuseMiddleware(next http.Handler) http.Handler {
 		ip := net.ParseIP(ipStr)
 
 		if ip != nil && len(cfg.Server.Security.BlockedIPs) > 0 && newAllowlistSet(cfg.Server.Security.BlockedIPs).contains(ip) {
-			writeJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "error": "FORBIDDEN", "message": "forbidden"})
+			writeAPIError(w, r, http.StatusForbidden, "FORBIDDEN", "errors.forbidden")
 			return
 		}
 
 		now := time.Now()
 		if s.ipBlocks.blocked(ipStr, now) {
-			writeJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "error": "FORBIDDEN", "message": "forbidden"})
+			writeAPIError(w, r, http.StatusForbidden, "FORBIDDEN", "errors.forbidden")
 			return
 		}
 
@@ -194,7 +194,7 @@ func (s *Server) abuseMiddleware(next http.Handler) http.Handler {
 			if ad.AutoAlert {
 				go s.alertIPBlocked(ipStr, dur, threshold)
 			}
-			writeJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "error": "FORBIDDEN", "message": "forbidden"})
+			writeAPIError(w, r, http.StatusForbidden, "FORBIDDEN", "errors.forbidden")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -225,7 +225,10 @@ func (s *Server) auditIPBlocked(r *http.Request, ip, reason string, dur time.Dur
 // when SMTP is not configured or no admin address is set ("No SMTP = No emails").
 func (s *Server) alertIPBlocked(ip string, dur time.Duration, threshold int) {
 	cfg := s.liveCfg()
-	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, cfg.StartupBaseURL(), cfg.Server.FQDN)
+	if !cfg.Server.Notifications.Email.Events.SecurityAlert {
+		return
+	}
+	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, cfg.StartupBaseURL(), cfg.Server.FQDN, cfg.Server.Lang)
 	if !m.Enabled() {
 		return
 	}

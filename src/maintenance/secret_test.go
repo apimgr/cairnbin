@@ -44,10 +44,10 @@ func secretFixture(t *testing.T) (SecretOptions, *config.Config, string) {
 func TestRunSecret_Validation(t *testing.T) {
 	opts := SecretOptions{Stdout: &bytes.Buffer{}, Stdin: strings.NewReader("")}
 	for _, c := range []struct{ action, name, want string }{
-		{"nope", "encryption_key", "unknown action"},
-		{"rotate", "", "requires a name"},
-		{"rotate", "csrf_token_secret", "rotated automatically"},
-		{"rotate", "cookie_signing_key", "rotated automatically"},
+		{"nope", "encryption_key", "Unknown secret-rotation action: nope."},
+		{"rotate", "", "secret name is required"},
+		{"rotate", "csrf_token_secret", "cannot be manually rotated"},
+		{"rotate", "cookie_signing_key", "cannot be manually rotated"},
 		{"rotate", "bogus", "unknown secret"},
 	} {
 		err := RunSecret(c.action, c.name, opts)

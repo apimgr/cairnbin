@@ -2,14 +2,41 @@ package task_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/apimgr/cairnbin/src/task"
 )
+
+type downloadRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f downloadRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestBlocklistUpdateWithClientUsesInjectedClient(t *testing.T) {
+	var requested string
+	client := &http.Client{Transport: downloadRoundTripper(func(r *http.Request) (*http.Response, error) {
+		requested = r.URL.String()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("127.0.0.1\n")),
+			Request:    r,
+		}, nil
+	})}
+	fn := task.BlocklistUpdateWithClient(t.TempDir(), client,
+		task.Source{Name: "blocklist.txt", URL: "https://app-owned.invalid/blocklist"})
+	if err := fn(context.Background()); err != nil {
+		t.Fatalf("BlocklistUpdateWithClient: %v", err)
+	}
+	if requested != "https://app-owned.invalid/blocklist" {
+		t.Fatalf("injected client request URL = %q", requested)
+	}
+}
 
 // TestBlocklistUpdate_DownloadsSource verifies that a configured source is
 // downloaded into the blocklists directory and a .last_updated stamp is written.

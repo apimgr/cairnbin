@@ -62,26 +62,26 @@ func RunSecret(action, name string, opts SecretOptions) error {
 		opts.Stdout = os.Stdout
 	}
 	if action != "rotate" {
-		return fmt.Errorf("secret: unknown action %q (want rotate)", action)
+		return fmt.Errorf("%s", maintenanceText("secret_unknown_action", "action", action))
 	}
 	switch name {
 	case "installation_secret", "encryption_key":
 	case "cookie_signing_key", "csrf_token_secret":
-		return fmt.Errorf("secret: %s is rotated automatically and cannot be rotated manually", name)
+		return fmt.Errorf("%s", maintenanceText("secret_invalid_name", "name", name))
 	case "":
-		return errors.New("secret rotate requires a name: installation_secret or encryption_key")
+		return errors.New(maintenanceText("secret_name_required"))
 	default:
 		return fmt.Errorf("secret: unknown secret %q (want installation_secret or encryption_key)", name)
 	}
 
-	_, _ = fmt.Fprintf(opts.Stdout, "This rotates %s. Existing data is re-encrypted; restart the server afterwards.\n", name)
-	_, _ = fmt.Fprint(opts.Stdout, "type 'rotate' to confirm: ")
+	_, _ = fmt.Fprintln(opts.Stdout, maintenanceText("secret_rotate_confirm", "name", name))
+	_, _ = fmt.Fprint(opts.Stdout, maintenanceText("secret_confirm_prompt"))
 	line, err := bufio.NewReader(opts.Stdin).ReadString('\n')
 	if err != nil && strings.TrimSpace(line) == "" {
-		return errors.New("secret rotate: confirmation not received")
+		return errors.New(maintenanceText("secret_confirmation_missing"))
 	}
 	if strings.TrimSpace(line) != "rotate" {
-		return errors.New("secret rotate: not confirmed, nothing changed")
+		return errors.New(maintenanceText("secret_not_confirmed"))
 	}
 
 	cfgPath := filepath.Join(opts.ConfigDir, "server.yml")
@@ -113,7 +113,7 @@ func RunSecret(action, name string, opts SecretOptions) error {
 			"pgp_keys_rewrapped": n,
 			"grace_days":         7,
 		})
-		_, _ = fmt.Fprintf(opts.Stdout, "installation_secret rotated (%d PGP key file(s) re-wrapped). The previous secret stays valid for 7 days. Restart the server.\n", n)
+		_, _ = fmt.Fprintln(opts.Stdout, maintenanceText("secret_install_rotated", "count", n))
 		return nil
 	}
 
@@ -126,7 +126,7 @@ func RunSecret(action, name string, opts SecretOptions) error {
 		"reports_reencrypted": reports,
 		"grace_days":          30,
 	})
-	_, _ = fmt.Fprintf(opts.Stdout, "encryption_key rotated (%d token(s), %d report(s) re-encrypted). The previous key stays valid for 30 days. Restart the server.\n", tokens, reports)
+	_, _ = fmt.Fprintln(opts.Stdout, maintenanceText("secret_encryption_rotated", "tokens", tokens, "reports", reports))
 	return nil
 }
 
@@ -282,7 +282,7 @@ func rotateEncryptionKey(db secretStore, cfg *config.Config, cfgPath string) (in
 		return 0, 0, fmt.Errorf("secret rotate: re-encrypt reports (values still under the previous key stay readable for 30 days): %w", err)
 	}
 	if tSkip+rSkip > 0 {
-		fmt.Fprintf(os.Stderr, "warning: %d value(s) did not decrypt with the old key and were left unchanged\n", tSkip+rSkip)
+		fmt.Fprintln(os.Stderr, maintenanceText("secret_partial_warning", "count", tSkip+rSkip))
 	}
 	return tokens, reports, nil
 }

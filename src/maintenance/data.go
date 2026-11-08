@@ -42,7 +42,7 @@ type dataExportRecord struct {
 func RunData(action, prefix string, opts DataOptions) error {
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
-		return fmt.Errorf("data: %s requires a token prefix (see --maintenance token list)", action)
+		return fmt.Errorf("%s", maintenanceText("data_prefix_required", "action", action))
 	}
 
 	cfgPath := filepath.Join(opts.ConfigDir, "server.yml")
@@ -81,7 +81,7 @@ func RunData(action, prefix string, opts DataOptions) error {
 	case "delete":
 		return runDataDelete(db, auditW, prefix)
 	default:
-		return fmt.Errorf("data: unknown action %q (want export|delete)", action)
+		return fmt.Errorf("%s", maintenanceText("data_unknown_action", "action", action))
 	}
 }
 
@@ -158,6 +158,6 @@ func runDataDelete(db database.DB, auditW *audit.Writer, prefix string) error {
 		Result:   audit.ResultSuccess,
 		Details:  map[string]any{"token_prefix": prefix},
 	})
-	fmt.Printf("data: deleted resource for token prefix %s\n", prefix)
+	fmt.Println(maintenanceText("data_deleted", "prefix", prefix))
 	return nil
 }

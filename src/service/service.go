@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/path"
 	"github.com/apimgr/cairnbin/src/pid"
 )
@@ -23,6 +24,17 @@ const (
 	// PART 3 derives {plist_name} as io.github.{project_org}.{internal_name}.
 	launchdLabel = "io.github." + orgName + "." + appName
 )
+
+var outputLanguage = "en"
+
+// SetOutputLanguage selects the locale used by service-management output.
+func SetOutputLanguage(lang string) {
+	outputLanguage = i18n.GetLanguage(lang, "")
+}
+
+func outputText(key string, args ...interface{}) string {
+	return i18n.TranslateFormat(outputLanguage, "cli."+key, i18n.Args(args...))
+}
 
 // reservedIDs is the set of system UID/GID values that must not be used for the
 // service account. These cover well-known daemon UIDs on common Linux distros.
@@ -262,10 +274,10 @@ func Install() error {
 
 	// PART 23: --install also starts the service after installing and enabling.
 	if startErr := Start(); startErr != nil {
-		fmt.Printf("Service installed but failed to start automatically: %v\n", startErr)
+		fmt.Printf("%s\n", outputText("service_install_failed_start", "error", startErr.Error()))
 		return nil
 	}
-	fmt.Printf("%sService started.\n", ok())
+	fmt.Printf("%s%s\n", ok(), outputText("service_started"))
 	return nil
 }
 
@@ -330,7 +342,7 @@ func installUserService() error {
 		if err := exec.Command("launchctl", "load", "-w", unitPath).Run(); err != nil {
 			return fmt.Errorf("failed to load user agent: %w", err)
 		}
-		fmt.Printf("%sUser agent installed at: %s\n", ok(), unitPath)
+		fmt.Printf("%s%s\n", ok(), outputText("user_agent_installed", "path", unitPath))
 		return nil
 	}
 
@@ -357,7 +369,7 @@ WantedBy=default.target
 	if err := exec.Command("systemctl", "--user", "enable", "--now", appName).Run(); err != nil {
 		return fmt.Errorf("failed to enable user service: %w", err)
 	}
-	fmt.Printf("%sUser service installed at: %s\n", ok(), unitPath)
+	fmt.Printf("%s%s\n", ok(), outputText("user_service_installed", "path", unitPath))
 	return nil
 }
 
@@ -371,25 +383,38 @@ func uninstallUserService() error {
 	if _, err := os.Stat(unitPath); err != nil {
 		return fmt.Errorf("uninstalling a system service requires root; re-run with sudo: sudo %s --service --uninstall", appName)
 	}
+	return uninstallUserServiceAt(unitPath, func() error {
+		if runtime.GOOS == "darwin" {
+			return exec.Command("launchctl", "unload", "-w", unitPath).Run()
+		}
+		return exec.Command("systemctl", "--user", "disable", "--now", appName).Run()
+	}, func() error {
+		if runtime.GOOS != "darwin" {
+			return exec.Command("systemctl", "--user", "daemon-reload").Run()
+		}
+		return nil
+	}, confirmDestructive, purgeData)
+}
 
-	if runtime.GOOS == "darwin" {
-		if err := exec.Command("launchctl", "unload", "-w", unitPath).Run(); err != nil {
-			return fmt.Errorf("failed to stop user service: %w", err)
-		}
-	} else {
-		if err := exec.Command("systemctl", "--user", "disable", "--now", appName).Run(); err != nil {
-			return fmt.Errorf("failed to disable user service: %w", err)
-		}
+func uninstallUserServiceAt(unitPath string, stopAndDisable, reload func() error, confirm func() bool, purge func()) error {
+	if _, err := os.Stat(unitPath); err != nil {
+		return fmt.Errorf("user service not found: %w", err)
+	}
+	if !confirm() {
+		fmt.Println(outputText("uninstall_cancelled"))
+		return nil
+	}
+	if err := stopAndDisable(); err != nil {
+		return fmt.Errorf("failed to stop user service: %w", err)
 	}
 	if err := os.Remove(unitPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove user service: %w", err)
 	}
-	if runtime.GOOS != "darwin" {
-		if err := exec.Command("systemctl", "--user", "daemon-reload").Run(); err != nil {
-			return fmt.Errorf("failed to reload user systemd: %w", err)
-		}
+	if err := reload(); err != nil {
+		return fmt.Errorf("failed to reload user service manager: %w", err)
 	}
-	fmt.Printf("%sUser service uninstalled\n", ok())
+	purge()
+	fmt.Printf("%s%s\n", ok(), outputText("user_service_uninstalled"))
 	return nil
 }
 
@@ -406,7 +431,7 @@ func Uninstall() error {
 	}
 
 	if !confirmDestructive() {
-		fmt.Println("Uninstall cancelled.")
+		fmt.Println(outputText("uninstall_cancelled"))
 		return nil
 	}
 
@@ -438,14 +463,14 @@ func Uninstall() error {
 	// PART 23: remove all data, configs, cache, logs, and the service user.
 	purgeData()
 
-	fmt.Printf("Service uninstalled. Delete binary manually: rm %s\n", GetBinaryPath())
+	fmt.Println(outputText("service_uninstalled_manual", "path", GetBinaryPath()))
 	return nil
 }
 
 // confirmDestructive prompts the operator before deleting all data and the
 // service user. Returns true only on an explicit "y"/"yes" answer.
 func confirmDestructive() bool {
-	fmt.Print("This will delete ALL data, configs, and the system user. Continue? [y/N]: ")
+	fmt.Print(outputText("confirm_uninstall_all"))
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadString('\n')
 	if err != nil {
@@ -477,38 +502,38 @@ func purgeData() {
 	if runtime.GOOS == "windows" {
 		base := fmt.Sprintf(`C:\ProgramData\%s\%s`, orgName, appName)
 		if rmErr := os.RemoveAll(base); rmErr != nil && !os.IsNotExist(rmErr) {
-			fmt.Printf("Warning: could not remove %s: %v\n", base, rmErr)
+			fmt.Printf("%s\n", outputText("service_warning", "error", rmErr.Error()))
 		}
 		return
 	}
 
 	for _, dir := range purgeDirs() {
 		if rmErr := os.RemoveAll(dir); rmErr != nil && !os.IsNotExist(rmErr) {
-			fmt.Printf("Warning: could not remove %s: %v\n", dir, rmErr)
+			fmt.Printf("%s\n", outputText("service_warning", "error", rmErr.Error()))
 		}
 	}
 
 	// PART 23: remove the PID file left behind by a previous run.
 	pidFile := path.GetPIDFile(appName)
 	if rmErr := os.Remove(pidFile); rmErr != nil && !os.IsNotExist(rmErr) {
-		fmt.Printf("Warning: could not remove %s: %v\n", pidFile, rmErr)
+		fmt.Printf("%s\n", outputText("service_warning", "error", rmErr.Error()))
 	}
 
 	// Remove the dedicated service user and group created during install.
 	if runtime.GOOS == "darwin" {
 		if err := exec.Command("dscl", ".", "-delete", "/Users/"+serviceUser).Run(); err != nil {
-			fmt.Printf("Warning: could not remove service user: %v\n", err)
+			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 		}
 		if err := exec.Command("dscl", ".", "-delete", "/Groups/"+serviceUser).Run(); err != nil {
-			fmt.Printf("Warning: could not remove service group: %v\n", err)
+			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 		}
 		return
 	}
 	if err := exec.Command("userdel", serviceUser).Run(); err != nil {
-		fmt.Printf("Warning: could not remove service user: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 	if err := exec.Command("groupdel", serviceUser).Run(); err != nil {
-		fmt.Printf("Warning: could not remove service group: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 }
 
@@ -572,13 +597,13 @@ func installSystemd() error {
 		return fmt.Errorf("failed to enable service: %w", err)
 	}
 
-	fmt.Printf("%sService installed at: %s\n", ok(), servicePath)
-	fmt.Printf("%sBinary installed at: %s\n", ok(), binaryPath)
+	fmt.Printf("%s%s\n", ok(), outputText("service_installed_at", "path", servicePath))
+	fmt.Printf("%s%s\n", ok(), outputText("binary_installed_at", "path", binaryPath))
 	fmt.Println()
-	fmt.Println("To start the service:")
+	fmt.Println(outputText("to_start_service"))
 	fmt.Printf("  sudo systemctl start %s\n", appName)
 	fmt.Println()
-	fmt.Println("To check status:")
+	fmt.Println(outputText("to_check_status"))
 	fmt.Printf("  sudo systemctl status %s\n", appName)
 
 	return nil
@@ -590,12 +615,12 @@ func uninstallSystemd() error {
 
 	// Stop service if running
 	if err := exec.Command("systemctl", "stop", appName).Run(); err != nil {
-		fmt.Printf("Warning: could not stop service before uninstall: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 
 	// Disable service
 	if err := exec.Command("systemctl", "disable", appName).Run(); err != nil {
-		fmt.Printf("Warning: could not disable service before uninstall: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 
 	// Remove service file
@@ -605,7 +630,7 @@ func uninstallSystemd() error {
 
 	// Reload systemd
 	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
-		fmt.Printf("Warning: could not reload systemd after uninstall: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 
 	fmt.Printf("%sService uninstalled: %s\n", ok(), servicePath)
@@ -635,7 +660,7 @@ func installOpenRC() error {
 		return fmt.Errorf("failed to enable OpenRC service: %w", err)
 	}
 
-	fmt.Printf("%sOpenRC service installed at: %s\n", ok(), rcPath)
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_installed", "platform", "OpenRC", "path", rcPath))
 	return nil
 }
 
@@ -644,17 +669,17 @@ func uninstallOpenRC() error {
 	rcPath := fmt.Sprintf("/etc/init.d/%s", appName)
 
 	if err := exec.Command("rc-service", appName, "stop").Run(); err != nil {
-		fmt.Printf("Warning: could not stop OpenRC service before uninstall: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 	if err := exec.Command("rc-update", "del", appName).Run(); err != nil {
-		fmt.Printf("Warning: could not disable OpenRC service before uninstall: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 
 	if err := os.Remove(rcPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove OpenRC init script: %w", err)
 	}
 
-	fmt.Printf("%sOpenRC service uninstalled\n", ok())
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_uninstalled", "platform", "OpenRC"))
 	return nil
 }
 
@@ -680,17 +705,17 @@ func installSysV() error {
 	// Enable on boot
 	if _, err := exec.LookPath("update-rc.d"); err == nil {
 		if err := exec.Command("update-rc.d", appName, "defaults").Run(); err != nil {
-			fmt.Printf("Warning: could not register SysV service: %v\n", err)
+			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 		}
 	} else if _, err := exec.LookPath("chkconfig"); err == nil {
 		for _, args := range [][]string{{"--add", appName}, {appName, "on"}} {
 			if err := exec.Command("chkconfig", args...).Run(); err != nil {
-				fmt.Printf("Warning: could not configure SysV service with chkconfig: %v\n", err)
+				fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 			}
 		}
 	}
 
-	fmt.Printf("%sSysV init script installed at: %s\n", ok(), initPath)
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_installed", "platform", "SysV init", "path", initPath))
 	return nil
 }
 
@@ -699,16 +724,16 @@ func uninstallSysV() error {
 	initPath := fmt.Sprintf("/etc/init.d/%s", appName)
 
 	if err := exec.Command(initPath, "stop").Run(); err != nil {
-		fmt.Printf("Warning: could not stop SysV service before uninstall: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 
 	if _, err := exec.LookPath("update-rc.d"); err == nil {
 		if err := exec.Command("update-rc.d", "-f", appName, "remove").Run(); err != nil {
-			fmt.Printf("Warning: could not remove SysV service registration: %v\n", err)
+			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 		}
 	} else if _, err := exec.LookPath("chkconfig"); err == nil {
 		if err := exec.Command("chkconfig", "--del", appName).Run(); err != nil {
-			fmt.Printf("Warning: could not remove chkconfig service registration: %v\n", err)
+			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 		}
 	}
 
@@ -716,7 +741,7 @@ func uninstallSysV() error {
 		return fmt.Errorf("failed to remove SysV init script: %w", err)
 	}
 
-	fmt.Printf("%sSysV init script uninstalled\n", ok())
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_uninstalled", "platform", "SysV init"))
 	return nil
 }
 
@@ -783,7 +808,7 @@ func installRunit() error {
 		return fmt.Errorf("failed to enable runit service: %w", err)
 	}
 
-	fmt.Printf("%sRunit service installed at: %s\n", ok(), svDir)
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_installed", "platform", "Runit", "path", svDir))
 	return nil
 }
 
@@ -813,7 +838,7 @@ func uninstallRunit() error {
 		return fmt.Errorf("failed to remove runit service directory: %w", err)
 	}
 
-	fmt.Printf("%sRunit service uninstalled\n", ok())
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_uninstalled", "platform", "Runit"))
 	return nil
 }
 
@@ -892,7 +917,7 @@ func installLaunchd() error {
 		}
 	}
 
-	fmt.Printf("%sLaunchDaemon installed at: %s\n", ok(), plistPath)
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_installed", "platform", "LaunchDaemon", "path", plistPath))
 	fmt.Println()
 	fmt.Println("To load the service:")
 	fmt.Printf("  sudo launchctl load %s\n", plistPath)
@@ -906,7 +931,7 @@ func uninstallLaunchd() error {
 
 	// Unload if running
 	if err := exec.Command("launchctl", "unload", plistPath).Run(); err != nil {
-		fmt.Printf("Warning: could not unload launchd service: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 
 	// Remove plist
@@ -914,7 +939,7 @@ func uninstallLaunchd() error {
 		return fmt.Errorf("failed to remove plist file: %w", err)
 	}
 
-	fmt.Printf("%sLaunchDaemon uninstalled\n", ok())
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_uninstalled", "platform", "LaunchDaemon"))
 	return nil
 }
 
@@ -936,11 +961,11 @@ func installBSDRC() error {
 		}
 	}
 
-	fmt.Printf("%sBSD rc.d script installed at: %s\n", ok(), rcPath)
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_installed", "platform", "BSD rc.d", "path", rcPath))
 	fmt.Println()
 	fmt.Printf("Add '%s_enable=\"YES\"' to /etc/rc.conf\n", appName)
 	fmt.Println()
-	fmt.Println("To start the service:")
+	fmt.Println(outputText("to_start_service"))
 	fmt.Printf("  service %s start\n", appName)
 
 	return nil
@@ -952,7 +977,7 @@ func uninstallBSDRC() error {
 
 	// Stop service
 	if err := exec.Command("service", appName, "stop").Run(); err != nil {
-		fmt.Printf("Warning: could not stop SysV service before uninstall: %v\n", err)
+		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
 
 	// Remove script
@@ -960,7 +985,7 @@ func uninstallBSDRC() error {
 		return fmt.Errorf("failed to remove rc.d script: %w", err)
 	}
 
-	fmt.Printf("%sBSD rc.d script uninstalled\n", ok())
+	fmt.Printf("%s%s\n", ok(), outputText("platform_service_uninstalled", "platform", "BSD rc.d"))
 	return nil
 }
 
@@ -1147,7 +1172,7 @@ func Disable() error {
 		return exec.Command("sc.exe", "config", appName, "start=", "disabled").Run()
 	case ServiceBSDRC:
 		if err := exec.Command("service", appName, "stop").Run(); err != nil {
-			fmt.Printf("Warning: could not stop SysV service before uninstall: %v\n", err)
+			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 		}
 		return exec.Command("sysrc", fmt.Sprintf("%s_enable=NO", appName)).Run()
 	default:
@@ -1246,44 +1271,47 @@ func GetStatus() Status {
 }
 
 // PrintHelp prints service subcommand help to stdout.
-func PrintHelp(_ string) {
-	fmt.Print(`Service management commands:
+func PrintHelp(_ string, lang ...string) {
+	if len(lang) > 0 {
+		SetOutputLanguage(lang[0])
+	}
+	fmt.Printf(`%s
 
-start                                 - Start the service
-stop                                  - Stop the service
-restart                               - Restart the service
-reload                                - Reload configuration without restart
+start                                 - %s
+stop                                  - %s
+restart                               - %s
+reload                                - %s
 
---install                              - Install, enable, and start service
---disable                              - Stop and disable service (keeps data)
---uninstall                            - Stop, disable, and remove everything (keeps binary)
-`)
+--install                              - %s
+--disable                              - %s
+--uninstall                            - %s
+`, outputText("service_help_title"), outputText("start_service"), outputText("stop_service"), outputText("restart_service"), outputText("reload_service"), outputText("install_service"), outputText("disable_service"), outputText("uninstall_service"))
 
 	st := GetStatus()
 
-	installedStr := "not installed"
+	installedStr := outputText("not_installed")
 	if st.Installed {
-		installedStr = "installed"
+		installedStr = outputText("installed")
 	}
 
-	stateStr := "stopped"
+	stateStr := outputText("stopped")
 	switch {
 	case st.Running:
-		stateStr = "running"
+		stateStr = outputText("running")
 	case st.Installed && !st.Enabled:
-		stateStr = "disabled"
+		stateStr = outputText("disabled")
 	}
 
-	enabledStr := "disabled"
+	enabledStr := outputText("disabled")
 	if st.Enabled {
-		enabledStr = "enabled"
+		enabledStr = outputText("enabled")
 	}
 
 	fmt.Println()
-	fmt.Println("Current status:")
-	fmt.Printf("  Service:    %s\n", installedStr)
-	fmt.Printf("  State:      %s\n", stateStr)
-	fmt.Printf("  Auto-start: %s\n", enabledStr)
+	fmt.Println(outputText("current_status"))
+	fmt.Printf("  %-12s %s\n", outputText("service_label"), installedStr)
+	fmt.Printf("  %-12s %s\n", outputText("state_label"), stateStr)
+	fmt.Printf("  %-12s %s\n", outputText("auto_start_label"), enabledStr)
 	if st.Running {
 		fmt.Printf("  PID:        %d\n", st.PID)
 	}
@@ -1317,7 +1345,7 @@ func RestartAfterUpdate() (bool, error) {
 		return true, exec.Command("launchctl", "kickstart", "-k", "system/"+launchdLabel).Run()
 	case ServiceWindows:
 		if err := exec.Command("sc.exe", "stop", appName).Run(); err != nil {
-			fmt.Printf("Warning: could not stop Windows service before uninstall: %v\n", err)
+			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 		}
 		return true, exec.Command("sc.exe", "start", appName).Run()
 	case ServiceBSDRC:

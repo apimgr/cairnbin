@@ -96,7 +96,7 @@ func RunPGP(action string, actionArgs []string, opts PGPOptions) error {
 	case "delete":
 		return m.delete()
 	default:
-		return fmt.Errorf("pgp: unknown action %q (want generate|rotate|publish|export|import|delete)", action)
+		return fmt.Errorf("%s", maintenanceText("pgp_unknown_action", "action", action))
 	}
 }
 
@@ -206,8 +206,11 @@ func (m *pgpManager) generate() error {
 	if err := m.installKeypair(kp, false); err != nil {
 		return err
 	}
-	fmt.Printf("Generated project security keypair\n  fingerprint: %s\n  identity:    %s\n  expires:     %s\n",
-		kp.Fingerprint, pgp.Identity(m.cfg.Web.SiteTitle, m.cfg.SecurityEmail()), kp.ExpiresAt.Format(time.RFC3339))
+	fmt.Printf("%s\n  %s\n  %s\n  %s\n",
+		maintenanceText("pgp_generated"),
+		maintenanceText("pgp_fingerprint", "fingerprint", kp.Fingerprint),
+		maintenanceText("pgp_identity", "identity", pgp.Identity(m.cfg.Web.SiteTitle, m.cfg.SecurityEmail())),
+		maintenanceText("pgp_expires", "expires", kp.ExpiresAt.Format(time.RFC3339)))
 	m.audit(audit.Entry{
 		Event:    "security.keypair_generated",
 		Severity: audit.SeverityInfo,
@@ -252,8 +255,10 @@ func (m *pgpManager) rotate() error {
 	if err := m.installKeypair(kp, true); err != nil {
 		return err
 	}
-	fmt.Printf("Rotated project security keypair\n  new fingerprint: %s\n  old fingerprint: %s (valid 30 more days for in-flight reports)\n",
-		kp.Fingerprint, prev.Fingerprint)
+	fmt.Printf("%s\n  %s\n  %s\n",
+		maintenanceText("pgp_rotated"),
+		maintenanceText("pgp_new_fingerprint", "fingerprint", kp.Fingerprint),
+		maintenanceText("pgp_old_fingerprint", "fingerprint", prev.Fingerprint))
 	m.audit(audit.Entry{
 		Event:    "security.keypair_rotated",
 		Severity: audit.SeverityWarn,
@@ -304,7 +309,7 @@ func (m *pgpManager) exportPublic(args []string) error {
 		if err := os.WriteFile(path, pub, 0o644); err != nil {
 			return fmt.Errorf("pgp export public: write %s: %w", path, err)
 		}
-		fmt.Printf("Public key written to %s\n", path)
+		fmt.Println(maintenanceText("pgp_public_written", "path", path))
 		return nil
 	}
 	_, err = os.Stdout.Write(pub)
@@ -349,7 +354,7 @@ func (m *pgpManager) exportPrivate(args []string) error {
 		Details:  map[string]any{"path": path},
 		Reason:   reason,
 	})
-	fmt.Printf("Private key exported to %s (mode 0600)\n", path)
+	fmt.Println(maintenanceText("pgp_private_exported", "path", path))
 	return nil
 }
 
@@ -415,7 +420,7 @@ func (m *pgpManager) importKey(args []string) error {
 		Target:   &audit.Target{Type: "pgp_keypair", ID: fp},
 		Details:  map[string]any{"identity": identity, "source": file},
 	})
-	fmt.Printf("Imported private key %s (identity: %s)\n", fp, identity)
+	fmt.Println(maintenanceText("pgp_imported", "fingerprint", fp, "identity", identity))
 	return nil
 }
 
@@ -430,13 +435,13 @@ func (m *pgpManager) delete() error {
 	if err := m.authorize("delete the keypair"); err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "WARNING: deleting the keypair makes all in-flight encrypted security reports permanently un-decryptable.")
-	if !m.confirm("type 'delete' to confirm: ", "delete") {
+	fmt.Fprintln(os.Stderr, maintenanceText("pgp_delete_warning"))
+	if !m.confirm(maintenanceText("pgp_confirm_delete"), "delete") {
 		return fmt.Errorf("pgp delete: aborted")
 	}
 	for _, p := range []string{m.pubPath(), m.privPath(), m.rotatedPath(), m.keyserversStatePath()} {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "warning: remove %s: %v\n", p, err)
+			fmt.Fprintf(os.Stderr, "%s: %v\n", maintenanceText("service_warning", "error", err.Error()), p)
 		}
 	}
 	m.cfg.Web.Security.PublishPGPKey = "false"
@@ -448,7 +453,7 @@ func (m *pgpManager) delete() error {
 		fp = meta.Fingerprint
 		meta.Revoked = true
 		if err := m.db.UpsertSecurityKeypair(meta); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: mark keypair revoked: %v\n", err)
+			fmt.Fprintf(os.Stderr, "%s\n", maintenanceText("service_warning", "error", err.Error()))
 		}
 	}
 	m.audit(audit.Entry{
@@ -457,7 +462,7 @@ func (m *pgpManager) delete() error {
 		Actor:    audit.Actor{IP: outboundIP()},
 		Target:   &audit.Target{Type: "pgp_keypair", ID: fp},
 	})
-	fmt.Println("Keypair deleted; PGP publishing disabled. The Encryption: line no longer appears in security.txt.")
+	fmt.Println(maintenanceText("pgp_deleted"))
 	return nil
 }
 
@@ -468,7 +473,7 @@ func (m *pgpManager) delete() error {
 func (m *pgpManager) publishAll(pubArmored string) {
 	keyservers := m.cfg.Web.Security.Keyservers
 	if len(keyservers) == 0 {
-		fmt.Println("No keyservers configured (web.security.keyservers); skipping publish.")
+		fmt.Println(maintenanceText("pgp_no_keyservers"))
 		return
 	}
 	var published []database.KeyserverPublish
@@ -478,10 +483,10 @@ func (m *pgpManager) publishAll(pubArmored string) {
 			continue
 		}
 		if submitKeyserver(ks, pubArmored) {
-			fmt.Printf("Published public key to %s\n", ks)
+			fmt.Println(maintenanceText("pgp_publish_success", "server", ks))
 			published = append(published, database.KeyserverPublish{URL: ks, PublishedAt: time.Now()})
 		} else {
-			fmt.Fprintf(os.Stderr, "Failed to publish to %s after retries\n", ks)
+			fmt.Fprintln(os.Stderr, maintenanceText("pgp_publish_failed", "server", ks))
 		}
 	}
 	if len(published) == 0 {
@@ -491,7 +496,7 @@ func (m *pgpManager) publishAll(pubArmored string) {
 	if meta, err := m.db.GetSecurityKeypair(); err == nil && meta != nil {
 		meta.KeyserversPublished = mergeKeyservers(meta.KeyserversPublished, published)
 		if err := m.db.UpsertSecurityKeypair(meta); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: record keyserver publish: %v\n", err)
+			fmt.Fprintln(os.Stderr, maintenanceText("service_warning", "error", err.Error()))
 		}
 	}
 }
@@ -506,7 +511,7 @@ func submitKeyserver(keyserver, pubArmored string) bool {
 			delay *= 2
 		}
 		if err := pgp.PostKey(keyserver, pubArmored); err != nil {
-			fmt.Fprintf(os.Stderr, "pgp: keyserver %s attempt %d failed: %v\n", keyserver, attempt+1, err)
+			fmt.Fprintf(os.Stderr, "%s: %s (attempt %d)\n", maintenanceText("pgp_publish_failed", "server", keyserver), err.Error(), attempt+1)
 			continue
 		}
 		return true
@@ -552,12 +557,13 @@ func (m *pgpManager) authorize(reason string) error {
 	token := strings.TrimSpace(m.cfg.Server.Token)
 	if token == "" {
 		if isRoot() {
-			fmt.Fprintln(os.Stderr, "warning: no operator token configured; authorizing via root privileges")
+			fmt.Fprintln(os.Stderr, maintenanceText("pgp_root_authorize_warning"))
 			return nil
 		}
 		return fmt.Errorf("pgp: cannot authorize %s — operator token not configured and not running as root", reason)
 	}
-	fmt.Fprintf(os.Stderr, "Operator token required to %s.\nOperator token: ", reason)
+	fmt.Fprintln(os.Stderr, maintenanceText("pgp_operator_required"))
+	fmt.Fprint(os.Stderr, maintenanceText("pgp_operator_prompt"))
 	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Fprintln(os.Stderr)
 	if err != nil {
@@ -572,7 +578,7 @@ func (m *pgpManager) authorize(reason string) error {
 // promptReason reads a required, non-empty reason string the operator must type
 // (AI.md 14185: "reason text the operator must type").
 func (m *pgpManager) promptReason() (string, error) {
-	fmt.Fprint(os.Stderr, "Reason for this export (required): ")
+	fmt.Fprint(os.Stderr, maintenanceText("pgp_export_reason_prompt"))
 	reason, err := bufio.NewReader(os.Stdin).ReadString('\n')
 	if err != nil {
 		return "", fmt.Errorf("pgp: read reason: %w", err)

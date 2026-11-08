@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/config"
 )
 
@@ -57,12 +58,51 @@ func TestLoadTemplateInvalidCustomFallsBack(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("Subject: x\n---\n{bogus_var}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	m := &Mailer{cfg: &config.EmailConfig{TemplateDir: dir}}
+	m := New(&config.EmailConfig{TemplateDir: dir}, "App", "https://example.com", "example.com")
 	got, err := m.loadTemplate("test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(got, "bogus_var") {
 		t.Error("invalid custom template must be ignored in favor of the default")
+	}
+}
+
+func TestEmbeddedEmailTemplatesHaveEveryLocale(t *testing.T) {
+	entries, err := defaultTemplatesFS.ReadDir("templates")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := strings.TrimSuffix(entry.Name(), ".txt")
+		for _, lang := range []string{"en", "es", "zh", "fr", "ar", "de", "it", "ja"} {
+			for _, field := range []string{"subject", "body"} {
+				key := "email.templates." + name + "." + field
+				if got := i18n.Translate(lang, key); got == key {
+					t.Errorf("%s is missing for locale %s", key, lang)
+				}
+			}
+		}
+	}
+}
+
+func TestRenderTemplateUsesConfiguredLocale(t *testing.T) {
+	m := New(&config.EmailConfig{}, "Cairnbin", "https://example.com", "example.com", "es")
+	rendered, err := m.renderTemplate("backup_complete", map[string]string{
+		"filename": "backup.tar.gz",
+		"size":     "12 MB",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject, body, ok := parseTemplate(rendered)
+	if !ok {
+		t.Fatal("translated embedded template did not parse")
+	}
+	if !strings.Contains(subject, "Copia de seguridad completada") {
+		t.Errorf("subject did not use configured Spanish locale: %q", subject)
+	}
+	if !strings.Contains(body, "La copia de seguridad se completó correctamente") || !strings.Contains(body, "backup.tar.gz") {
+		t.Errorf("body did not translate or interpolate variables: %q", body)
 	}
 }

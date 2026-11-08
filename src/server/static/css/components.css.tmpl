@@ -275,9 +275,14 @@ textarea:user-invalid {
 }
 
 .field-error {
+    display: block;
     color: var(--color-error);
     font-size: 0.875rem;
     margin-top: var(--space-2);
+}
+
+.field-error[hidden] {
+    display: none;
 }
 
 input:user-invalid ~ .field-error,

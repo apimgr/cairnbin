@@ -2,13 +2,17 @@ package email
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/smtp"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/apimgr/cairnbin/src/config"
 )
@@ -229,8 +233,8 @@ func TestSend_MissingSubjectLineError(t *testing.T) {
 
 // ─── sendSMTP — "auto" / default TLS mode ────────────────────────────────────
 
-// TestSendSMTP_AutoMode exercises the default "auto" path (smtp.SendMail) in
-// sendSMTP against the in-process fake SMTP server.
+// TestSendSMTP_AutoMode exercises the optional-STARTTLS auto path against the
+// in-process fake SMTP server.
 func TestSendSMTP_AutoMode(t *testing.T) {
 	addr, cap, stop := fakeSMTPServer(t)
 	defer stop()
@@ -265,9 +269,9 @@ func TestSendSMTP_AutoMode(t *testing.T) {
 	}
 }
 
-// TestSendSMTP_StarttlsMode verifies that the explicit "starttls" value routes
-// through smtp.SendMail (same code branch as "auto").
-func TestSendSMTP_StarttlsMode(t *testing.T) {
+// TestSendSMTP_StarttlsModeRequiresExtension verifies that strict STARTTLS
+// refuses a server that does not advertise the extension.
+func TestSendSMTP_StarttlsModeRequiresExtension(t *testing.T) {
 	addr, _, stop := fakeSMTPServer(t)
 	defer stop()
 
@@ -283,8 +287,11 @@ func TestSendSMTP_StarttlsMode(t *testing.T) {
 	m := New(cfg, "App", "https://example.com", "example.com")
 
 	msg := buildMessage("App", "from@example.com", "to@example.com", "Subj", "Body", "")
-	if err := m.sendSMTP("from@example.com", "to@example.com", msg); err != nil {
-		t.Fatalf("sendSMTP starttls: %v", err)
+	if err := m.TestSMTP(); err == nil || !strings.Contains(err.Error(), "does not offer STARTTLS") {
+		t.Fatalf("TestSMTP error = %v; want startup connection test to require STARTTLS", err)
+	}
+	if err := m.sendSMTP("from@example.com", "to@example.com", msg); err == nil || !strings.Contains(err.Error(), "does not offer STARTTLS") {
+		t.Fatalf("sendSMTP starttls error = %v; want server-without-STARTTLS failure", err)
 	}
 }
 
@@ -309,9 +316,8 @@ func TestSendSMTP_TLSModeConnRefused(t *testing.T) {
 	}
 }
 
-// TestSendSMTP_AutoModeWithCredentials exercises the PlainAuth branch of
-// sendSMTP. smtp.SendMail may reject credentials over a non-TLS connection;
-// any result is acceptable here — we verify the code path is exercised without panic.
+// TestSendSMTP_AutoModeWithCredentials verifies credentials are never sent
+// when auto mode connects to a server that does not establish TLS.
 func TestSendSMTP_AutoModeWithCredentials(t *testing.T) {
 	addr, _, stop := fakeSMTPServer(t)
 	defer stop()
@@ -330,8 +336,9 @@ func TestSendSMTP_AutoModeWithCredentials(t *testing.T) {
 	m := New(cfg, "App", "https://example.com", "example.com")
 
 	msg := buildMessage("App", "from@example.com", "to@example.com", "Subj", "Body", "")
-	// smtp.PlainAuth refuses to send credentials without TLS; the error is expected.
-	_ = m.sendSMTP("from@example.com", "to@example.com", msg)
+	if err := m.sendSMTP("from@example.com", "to@example.com", msg); err == nil || !strings.Contains(err.Error(), "refusing AUTH without") {
+		t.Fatalf("sendSMTP error = %v; want credentials refused without TLS", err)
+	}
 }
 
 // ─── sendViaClient — direct smtp.Client ──────────────────────────────────────
@@ -478,5 +485,107 @@ func TestSend_DefaultFromName(t *testing.T) {
 	defer cap.mu.Unlock()
 	if !strings.Contains(cap.body, "DefaultNameApp") {
 		t.Errorf("body should contain default app name; got:\n%s", cap.body)
+	}
+}
+
+func TestSMTPPrivateCertVerificationSkipped(t *testing.T) {
+	cases := []struct {
+		host string
+		mode string
+		want bool
+	}{
+		{"10.1.2.3", "tls", true},
+		{"172.31.1.2", "starttls", true},
+		{"192.168.1.2", "auto", true},
+		{"100.64.0.1", "tls", true},
+		{"127.0.0.1", "tls", true},
+		{"169.254.1.1", "tls", true},
+		{"fc00::1", "tls", true},
+		{"fe80::1", "tls", true},
+		{"8.8.8.8", "tls", false},
+		{"smtp.example.com", "tls", false},
+		{"10.1.2.3", "none", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.host+"/"+tc.mode, func(t *testing.T) {
+			if got := SMTPPrivateCertVerificationSkipped(tc.host, tc.mode); got != tc.want {
+				t.Errorf("SMTPPrivateCertVerificationSkipped(%q, %q) = %t, want %t", tc.host, tc.mode, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSendSMTP_NoneMode(t *testing.T) {
+	addr, cap, stop := fakeSMTPServer(t)
+	defer stop()
+	host, port := splitFakeAddr(t, addr)
+	m := New(&config.EmailConfig{
+		Enabled: true,
+		SMTP:    config.SMTPConfig{Host: host, Port: port, TLS: "none"},
+	}, "App", "https://example.com", "example.com")
+	if err := m.sendSMTP("from@example.com", "to@example.com", buildMessage("App", "from@example.com", "to@example.com", "Subject", "Body", "")); err != nil {
+		t.Fatalf("sendSMTP none: %v", err)
+	}
+	cap.mu.Lock()
+	defer cap.mu.Unlock()
+	if cap.from != "from@example.com" {
+		t.Errorf("MAIL FROM = %q", cap.from)
+	}
+}
+
+func TestSMTPPrivateIPTLSAcceptsUntrustedRelayCertificate(t *testing.T) {
+	tlsSource := httptest.NewTLSServer(http.NotFoundHandler())
+	certificate := tlsSource.TLS.Certificates[0]
+	tlsSource.Close()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}})
+		if err := tlsConn.Handshake(); err != nil {
+			serverErr <- err
+			return
+		}
+		_, _ = fmt.Fprint(tlsConn, "220 localhost ESMTP fake\r\n")
+		reader := bufio.NewReader(tlsConn)
+		if _, err := reader.ReadString('\n'); err != nil {
+			serverErr <- err
+			return
+		}
+		_, _ = fmt.Fprint(tlsConn, "250 localhost\r\n")
+		if _, err := reader.ReadString('\n'); err != nil {
+			serverErr <- err
+			return
+		}
+		_, _ = fmt.Fprint(tlsConn, "221 closing\r\n")
+		serverErr <- nil
+	}()
+	host, port := splitFakeAddr(t, listener.Addr().String())
+	client, conn, established, err := connectSMTP(host, port, "tls", time.Second)
+	if err != nil {
+		t.Fatalf("private SMTP relay with self-signed cert should connect: %v", err)
+	}
+	if !established {
+		t.Fatal("TLS must be established")
+	}
+	if err := client.Quit(); err != nil {
+		t.Errorf("close fake SMTP session: %v", err)
+	}
+	_ = conn.Close()
+	if err := <-serverErr; err != nil {
+		t.Errorf("fake TLS relay: %v", err)
+	}
+	if smtpTLSConfig("8.8.8.8").InsecureSkipVerify {
+		t.Error("public IP certificate verification must remain enabled")
 	}
 }

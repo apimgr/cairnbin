@@ -34,7 +34,7 @@ func (m *mockDB) GetPublicPastes(page, limit int) ([]model.PasteListItem, int, e
 	return m.pastes, m.total, m.pastesErr
 }
 
-func (m *mockDB) SearchPublicPastes(page, limit int, search, sortBy, order string) ([]model.PasteListItem, int, error) {
+func (m *mockDB) SearchPublicPastes(page, limit int, search, sortBy, order string, pasteType ...string) ([]model.PasteListItem, int, error) {
 	m.lastPage = page
 	m.lastLimit = limit
 	return m.pastes, m.total, m.pastesErr

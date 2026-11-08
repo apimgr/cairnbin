@@ -117,3 +117,30 @@ func TestHandleHelpMCPHTMLSectionsAndHelpLink(t *testing.T) {
 		t.Error("/server/help links to MCP help while MCP is disabled")
 	}
 }
+
+func TestHandleHelpMCPUsesRequestedLocale(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.MCP.Enabled = true
+	applyI18nConfig(cfg)
+	defer applyI18nConfig(config.DefaultConfig())
+	s := newMinimalServer(cfg)
+	s.mcpHandler = mcp.New(mcp.Config{APIVersion: "v1"})
+	s.templates, _ = s.buildTemplates()
+	r := httptest.NewRequest(http.MethodGet, "http://example.com/server/help/mcp?lang=es", nil)
+	w := httptest.NewRecorder()
+	s.handleHelpMCP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("MCP page status = %d: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, translated := range []string{"Servidor MCP", "Qué es", "Conectar un cliente", "Solución de problemas"} {
+		if !strings.Contains(body, translated) {
+			t.Errorf("Spanish MCP page is missing translated text %q", translated)
+		}
+	}
+	for _, untranslated := range []string{"What this is", "Connect a client", "Troubleshooting"} {
+		if strings.Contains(body, untranslated) {
+			t.Errorf("Spanish MCP page still contains English text %q", untranslated)
+		}
+	}
+}

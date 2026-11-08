@@ -84,7 +84,7 @@ type BackupConfig struct {
 // sslEmailThresholds are the days-before-expiry at which ssl_expiring emails
 // are actually sent — 30/14-day warnings are log-only per the Operator
 // Notifications matrix (AI.md:26824: "SSL expiring (30/14 days) | WARN | ✗").
-var sslEmailThresholds = []int{7, 3, 1}
+var sslEmailThresholds = []int{1, 3, 7}
 
 // SSLRenewalConfig carries optional email settings for the ssl_renewal task.
 type SSLRenewalConfig struct {
@@ -168,8 +168,12 @@ func SSLRenewalWithEmail(cfg SSLRenewalConfig) func(ctx context.Context) error {
 				}
 
 				stateFile := path + ".ssl_state.json"
-				prevExpiry := sslLoadExpiry(stateFile)
+				state := sslLoadState(stateFile)
+				prevExpiry := state.NotAfter
 				renewed := !prevExpiry.IsZero() && cert.NotAfter.Sub(prevExpiry) >= 24*time.Hour
+				if renewed {
+					state.NotifiedThresholds = nil
+				}
 
 				// Detect renewal: NotAfter advanced by ≥24h vs the stored state.
 				if renewed && cfg.SendRenewed && cfg.Mailer != nil && cfg.Mailer.Enabled() && cfg.OperatorEmail != "" {
@@ -188,10 +192,11 @@ func SSLRenewalWithEmail(cfg SSLRenewalConfig) func(ctx context.Context) error {
 				renewalFailed := !renewed && !prevExpiry.IsZero() && remainingDays <= 7
 				if renewalFailed && cfg.SendRenewalFailed && cfg.Mailer != nil && cfg.Mailer.Enabled() && cfg.OperatorEmail != "" {
 					if mailErr := cfg.Mailer.Send(cfg.OperatorEmail, "ssl_renewal_failed", map[string]string{
-						"fqdn":       cfg.FQDN,
-						"error":      "certificate has not renewed automatically",
-						"expires_in": fmt.Sprintf("%d", remainingDays),
-						"next_retry": "next daily ssl_renewal check",
+						"fqdn":        cfg.FQDN,
+						"error":       "certificate has not renewed automatically",
+						"expires_in":  fmt.Sprintf("%d", remainingDays),
+						"expiry_date": cert.NotAfter.Format("2006-01-02"),
+						"next_retry":  "next daily ssl_renewal check",
 					}); mailErr != nil {
 						log.Printf("ssl_renewal: failed to send ssl_renewal_failed email: %v", mailErr)
 					}
@@ -206,18 +211,22 @@ func SSLRenewalWithEmail(cfg SSLRenewalConfig) func(ctx context.Context) error {
 				// reported a renewal failure for the same certificate.
 				if !renewalFailed && cfg.SendExpiring && cfg.Mailer != nil && cfg.Mailer.Enabled() && cfg.OperatorEmail != "" {
 					for _, threshold := range sslEmailThresholds {
-						if remainingDays <= threshold {
+						if remainingDays <= threshold && !containsInt(state.NotifiedThresholds, threshold) {
 							if mailErr := cfg.Mailer.Send(cfg.OperatorEmail, "ssl_expiring", map[string]string{
 								"fqdn":        cfg.FQDN,
 								"expires_in":  fmt.Sprintf("%d", remainingDays),
 								"expiry_date": cert.NotAfter.Format("2006-01-02"),
 							}); mailErr != nil {
 								log.Printf("ssl_renewal: failed to send ssl_expiring email: %v", mailErr)
+							} else {
+								state.NotifiedThresholds = append(state.NotifiedThresholds, threshold)
 							}
 							break
 						}
 					}
 				}
+				state.NotAfter = cert.NotAfter
+				sslSaveState(stateFile, state)
 			}
 			return nil
 		})
@@ -242,8 +251,13 @@ type Source struct {
 // degrades gracefully (PART 18/19, AI.md:9135). With no sources configured the
 // task only ensures the directory exists.
 func BlocklistUpdate(dataDir string, sources ...Source) func(ctx context.Context) error {
-	return securityFetchTask("blocklist_update",
-		filepath.Join(dataDir, "security", "blocklists"), sources)
+	return BlocklistUpdateWithClient(dataDir, nil, sources...)
+}
+
+// BlocklistUpdateWithClient uses the supplied shared client for configured
+// source URLs; callers leave request-originated destinations direct.
+func BlocklistUpdateWithClient(dataDir string, client *http.Client, sources ...Source) func(ctx context.Context) error {
+	return securityFetchTask("blocklist_update", filepath.Join(dataDir, "security", "blocklists"), sources, client)
 }
 
 // CVEUpdate returns a task that refreshes the CVE/security databases in
@@ -251,13 +265,18 @@ func BlocklistUpdate(dataDir string, sources ...Source) func(ctx context.Context
 // configured source is downloaded atomically with graceful degradation, and
 // with no sources configured the task only ensures the directory exists.
 func CVEUpdate(dataDir string, sources ...Source) func(ctx context.Context) error {
-	return securityFetchTask("cve_update",
-		filepath.Join(dataDir, "security", "cve"), sources)
+	return CVEUpdateWithClient(dataDir, nil, sources...)
+}
+
+// CVEUpdateWithClient uses the supplied shared client for configured source
+// URLs so server-wide Tor routing applies consistently.
+func CVEUpdateWithClient(dataDir string, client *http.Client, sources ...Source) func(ctx context.Context) error {
+	return securityFetchTask("cve_update", filepath.Join(dataDir, "security", "cve"), sources, client)
 }
 
 // securityFetchTask builds the common download-with-graceful-degradation body
 // shared by BlocklistUpdate and CVEUpdate.
-func securityFetchTask(name, dir string, sources []Source) func(ctx context.Context) error {
+func securityFetchTask(name, dir string, sources []Source, client *http.Client) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return fmt.Errorf("%s: mkdir %s: %w", name, dir, err)
@@ -272,7 +291,7 @@ func securityFetchTask(name, dir string, sources []Source) func(ctx context.Cont
 				continue
 			}
 			dst := filepath.Join(dir, filepath.Base(src.Name))
-			if err := downloadFile(ctx, src.URL, dst); err != nil {
+			if err := downloadFileWithClient(ctx, src.URL, dst, client); err != nil {
 				log.Printf("%s: %s: %v (keeping existing copy)", name, src.Name, err)
 				continue
 			}
@@ -296,17 +315,14 @@ func securityFetchTask(name, dir string, sources []Source) func(ctx context.Cont
 	}
 }
 
-// downloadFile fetches url and writes the body to dst atomically (temp file in
-// the same directory, then rename). An empty body or non-2xx status is treated
-// as an error and dst is left untouched. ctx bounds the request so a scheduler
-// shutdown aborts an in-flight download instead of holding the task's slot.
-func downloadFile(ctx context.Context, url, dst string) error {
-	return retry.Do(ctx, func() error { return downloadFileOnce(ctx, url, dst) })
+func downloadFileWithClient(ctx context.Context, url, dst string, client *http.Client) error {
+	return retry.Do(ctx, func() error { return downloadFileOnceWithClient(ctx, url, dst, client) })
 }
 
-// downloadFileOnce is a single download attempt for downloadFile.
-func downloadFileOnce(ctx context.Context, url, dst string) error {
-	client := &http.Client{Timeout: 60 * time.Second}
+func downloadFileOnceWithClient(ctx context.Context, url, dst string, client *http.Client) error {
+	if client == nil {
+		client = &http.Client{Timeout: 60 * time.Second}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("build request %s: %w", url, err)
@@ -465,16 +481,22 @@ func BackupDaily(cfg BackupConfig) func(ctx context.Context) error {
 			Audit:             cfg.Audit,
 		}); err != nil {
 			_ = os.Remove(dailyTmp)
-			log.Printf("backup_daily: daily incremental create warning: %v", err)
+			backupSendFailed(cfg, dailyName, err.Error())
+			auditBackupFailed(cfg, dailyName, err.Error())
+			return fmt.Errorf("backup_daily: create daily incremental: %w", err)
 		} else {
 			// Step 4: verify the daily incremental before replacing the existing one.
 			if err := maintenance.VerifyBackup(dailyTmp, cfg.Password); err != nil {
 				_ = os.Remove(dailyTmp)
-				log.Printf("backup_daily: daily incremental verification warning: %v", err)
+				backupSendFailed(cfg, dailyName, err.Error())
+				auditBackupVerificationFailed(cfg, dailyName, err.Error())
+				return fmt.Errorf("backup_daily: verification failed for %s: %w", dailyName, err)
 			} else {
 				if err := os.Rename(dailyTmp, dailyPath); err != nil {
 					_ = os.Remove(dailyTmp)
-					log.Printf("backup_daily: daily incremental rename warning: %v", err)
+					backupSendFailed(cfg, dailyName, err.Error())
+					auditBackupFailed(cfg, dailyName, err.Error())
+					return fmt.Errorf("backup_daily: install daily incremental: %w", err)
 				} else {
 					log.Printf("backup_daily: daily incremental updated: %s", dailyName)
 					auditBackupDailyUpdated(cfg, dailyName)
@@ -564,30 +586,40 @@ func BackupHourly(cfg BackupConfig) func(ctx context.Context) error {
 	}
 }
 
-// sslStateFile is the JSON structure persisted alongside each cert to track the
-// last-seen NotAfter for renewal detection.
+// sslStateFile persists each certificate's expiry and the alert thresholds
+// already mailed for that specific certificate.
 type sslStateFile struct {
-	NotAfter time.Time `json:"not_after"`
+	NotAfter           time.Time `json:"not_after"`
+	NotifiedThresholds []int     `json:"notified_thresholds,omitempty"`
 }
 
-// sslLoadExpiry reads the stored NotAfter for a cert state file. Returns zero
-// time if the file is missing or unreadable (safe first-run behaviour).
-func sslLoadExpiry(path string) time.Time {
+func sslLoadState(path string) sslStateFile {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return time.Time{}
+		return sslStateFile{}
 	}
-	var s sslStateFile
-	if err := json.Unmarshal(data, &s); err != nil {
-		return time.Time{}
+	var state sslStateFile
+	if err := json.Unmarshal(data, &state); err != nil {
+		return sslStateFile{}
 	}
-	return s.NotAfter
+	return state
 }
 
-// sslSaveExpiry persists the cert's NotAfter to path for next-run renewal
-// detection. Errors are logged and ignored (non-fatal).
+// sslLoadExpiry reads the stored NotAfter for compatibility with existing
+// callers and tests. Returns zero time if the file is missing or unreadable.
+func sslLoadExpiry(path string) time.Time {
+	return sslLoadState(path).NotAfter
+}
+
+// sslSaveExpiry persists the cert's NotAfter while preserving sent thresholds.
 func sslSaveExpiry(path string, notAfter time.Time) {
-	data, err := json.Marshal(sslStateFile{NotAfter: notAfter})
+	state := sslLoadState(path)
+	state.NotAfter = notAfter
+	sslSaveState(path, state)
+}
+
+func sslSaveState(path string, state sslStateFile) {
+	data, err := json.Marshal(state)
 	if err != nil {
 		log.Printf("ssl_renewal: failed to marshal state: %v", err)
 		return
@@ -595,6 +627,15 @@ func sslSaveExpiry(path string, notAfter time.Time) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		log.Printf("ssl_renewal: failed to write state %s: %v", path, err)
 	}
+}
+
+func containsInt(values []int, wanted int) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 // backupSendComplete sends a backup_complete email when the backup succeeded and
@@ -766,7 +807,11 @@ func applyRetention(cfg BackupConfig) error {
 // acts on it. A nil mailer or empty operatorEmail silently skips email. A
 // successful auto-install records the server.updated audit event on auditW
 // (nil disables audit logging), matching the manual --update yes path.
-func UpdateCheck(currentVersion, branch string, buildEpoch int64, operatorEmail string, autoInstall bool, deferDays int, notifyAvailable, notifyInstalled bool, mailer Mailer, auditW *audit.Writer) func(ctx context.Context) error {
+func UpdateCheck(currentVersion, branch string, buildEpoch int64, operatorEmail string, autoInstall bool, deferDays int, notifyAvailable, notifyInstalled bool, mailer Mailer, auditW *audit.Writer, httpClients ...*http.Client) func(ctx context.Context) error {
+	var httpClient *http.Client
+	if len(httpClients) > 0 {
+		httpClient = httpClients[0]
+	}
 	// lastAnnounced remembers the version already announced to operators so the
 	// WARN log and email are emitted once per version, not on every run.
 	var lastAnnounced string
@@ -778,7 +823,7 @@ func UpdateCheck(currentVersion, branch string, buildEpoch int64, operatorEmail 
 		defer cancel()
 		// PART 22: the scheduled task selects the newest release that is both
 		// newer than the running version and at least defer_days old.
-		rel, err := updater.CheckForUpdateDeferred(checkCtx, currentVersion, branch, buildEpoch, deferDays)
+		rel, err := updater.CheckForUpdateDeferredWithClient(checkCtx, currentVersion, branch, buildEpoch, deferDays, httpClient)
 		if err != nil {
 			return fmt.Errorf("update_check: %w", err)
 		}
@@ -806,7 +851,7 @@ func UpdateCheck(currentVersion, branch string, buildEpoch int64, operatorEmail 
 		log.Printf("update_check: auto_install enabled — installing %s", rel.TagName)
 		installCtx, installCancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer installCancel()
-		if err := updater.DoUpdate(installCtx, rel); err != nil {
+		if err := updater.DoUpdateWithClient(installCtx, rel, httpClient); err != nil {
 			return fmt.Errorf("update_check: auto-install failed: %w", err)
 		}
 		log.Printf("update_check: installed %s — restarting", rel.TagName)

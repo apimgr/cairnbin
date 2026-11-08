@@ -70,6 +70,32 @@ func TestJSHasNoBlockingDialogs(t *testing.T) {
 	}
 }
 
+func TestFrontendValidationAndToastContracts(t *testing.T) {
+	data, err := os.ReadFile("static/js/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	script := string(data)
+	for _, required := range []string{
+		"form input:not([type=\"hidden\"]):not([type=\"submit\"]):not([type=\"button\"]):not([type=\"reset\"]), form select, form textarea",
+		"el.value = el.value.trim()",
+		"el.setCustomValidity(hasEdgeWhitespace ? t('password_whitespace') : '')",
+		"form.requestSubmit(event.submitter || undefined)",
+		"function showToast(message, type, requestedDuration)",
+		"requestedDuration === undefined ? TOAST_DURATIONS[toastType] : Number(requestedDuration)",
+		"const TOAST_DURATIONS = { success: 3000, info: 3000, warning: 5000, error: 0 }",
+		"if (duration > 0) armToastTimer(toast, duration)",
+		"if (toast.__toastDuration > 0) armToastTimer(toast, toast.__toastDuration)",
+		"function requestClosePreferences()",
+		"t('unsaved_changes')",
+		"dialog.__requestClose = requestClosePreferences",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("app.js is missing frontend contract %q", required)
+		}
+	}
+}
+
 // TestTemplatesAccessibilityBasics enforces the static half of PART 30
 // "Testing Requirements": skip links that target real anchors, landmark
 // elements, alt text on every image, and a programmatic label for every

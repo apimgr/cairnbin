@@ -367,9 +367,7 @@ func (s *Server) handlePreferencesSetAPI(w http.ResponseWriter, r *http.Request)
 	if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
 		var body map[string]interface{}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-				"ok": false, "error": "BAD_REQUEST", "message": "invalid JSON",
-			})
+			writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.bad_request")
 			return
 		}
 		for name, raw := range body {
@@ -387,9 +385,7 @@ func (s *Server) handlePreferencesSetAPI(w http.ResponseWriter, r *http.Request)
 	} else {
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 		if err := r.ParseForm(); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-				"ok": false, "error": "BAD_REQUEST", "message": "invalid form",
-			})
+			writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.bad_request")
 			return
 		}
 		values = r.PostForm
@@ -397,9 +393,7 @@ func (s *Server) handlePreferencesSetAPI(w http.ResponseWriter, r *http.Request)
 
 	valid, _, ignored := validateGuestPrefs(values)
 	if len(valid) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "error": "VALIDATION_FAILED", "message": "Validation failed: no valid preference supplied",
-		})
+		writeAPIError(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "errors.invalid_format")
 		return
 	}
 	applied, blocked := s.applyGuestPrefs(w, r, valid)

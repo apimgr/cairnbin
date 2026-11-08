@@ -7,6 +7,7 @@
 package logging
 
 import (
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -263,6 +264,33 @@ func (m *Manager) Auth(tokenID, ip, result, reason string) {
 		return
 	}
 	m.write(m.auth, FormatSyslog(now, m.hostname, m.tag, m.pid, AuthMessage(tokenID, ip, result, reason)))
+}
+
+// StandardLogWriter adapts Go's standard logger to the application log file.
+// It lets background packages keep using log.Printf without writing runtime
+// task activity to the server console.
+func (m *Manager) StandardLogWriter() io.Writer {
+	return standardLogWriter{manager: m}
+}
+
+type standardLogWriter struct {
+	manager *Manager
+}
+
+func (w standardLogWriter) Write(p []byte) (int, error) {
+	line := strings.TrimSpace(string(p))
+	if line == "" {
+		return len(p), nil
+	}
+	level := "info"
+	lower := strings.ToLower(line)
+	if strings.Contains(lower, "error") || strings.Contains(lower, "failed") || strings.Contains(lower, "panic") {
+		level = "error"
+	} else if strings.Contains(lower, "warning") || strings.Contains(lower, "warn:") {
+		level = "warn"
+	}
+	w.manager.App(level, line)
+	return len(p), nil
 }
 
 // Debug records a diagnostic line in debug.log. Lines are written only when

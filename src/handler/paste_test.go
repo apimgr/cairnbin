@@ -270,6 +270,61 @@ func TestGetPaste(t *testing.T) {
 	}
 }
 
+func TestListPastesOwnedScopeRequiresTokenAndIncludesUnlisted(t *testing.T) {
+	h, _ := newTestHandler(t)
+	first := createViaAPI(t, h, `{"content":"owner public"}`)["data"].(map[string]interface{})
+	token := first["owner_token"].(string)
+	firstID := first["id"].(string)
+
+	create := func(body string, bearer string) map[string]interface{} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/pastes", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		rr := httptest.NewRecorder()
+		h.CreatePaste(rr, req)
+		var response map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+			t.Fatalf("decode create response: %v", err)
+		}
+		return response["data"].(map[string]interface{})
+	}
+	owned := create(`{"content":"owner unlisted","visibility":"unlisted"}`, token)
+	other := create(`{"content":"other owner"}`, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pastes?scope=owned", nil)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	h.ListPastes(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("owned list status = %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+	var response map[string]interface{}
+	if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	items := response["data"].([]interface{})
+	got := map[string]bool{}
+	for _, item := range items {
+		got[item.(map[string]interface{})["id"].(string)] = true
+	}
+	if !got[firstID] || !got[owned["id"].(string)] {
+		t.Errorf("owned list omitted this owner's resources: %v", got)
+	}
+	if got[other["id"].(string)] {
+		t.Errorf("owned list included another owner's resource %q", other["id"])
+	}
+
+	unauthorized := httptest.NewRecorder()
+	h.ListPastes(unauthorized, httptest.NewRequest(http.MethodGet, "/api/v1/pastes?scope=owned", nil))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Errorf("owned list without token status = %d, want 401", unauthorized.Code)
+	}
+}
+
 // TestGetPaste_NotFound expects 404 for an unknown ID.
 func TestGetPaste_NotFound(t *testing.T) {
 	h, _ := newTestHandler(t)

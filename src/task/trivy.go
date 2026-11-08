@@ -91,6 +91,13 @@ func newOCIClient(ref ociRef) *ociClient {
 	return &ociClient{http: &http.Client{Timeout: 5 * time.Minute}, ref: ref}
 }
 
+func newOCIClientWithHTTPClient(ref ociRef, client *http.Client) *ociClient {
+	if client == nil {
+		return newOCIClient(ref)
+	}
+	return &ociClient{http: client, ref: ref}
+}
+
 // get issues a GET against the registry, transparently acquiring a pull token
 // and retrying once if the registry responds with a 401 challenge. The caller
 // owns closing the returned body.
@@ -301,6 +308,12 @@ func (c *ociClient) blobToFile(ctx context.Context, desc ociDescriptor, dst stri
 // fetch failure degrades gracefully and keeps the existing copy. PART 18 gives
 // Trivy no scheduled task of its own — cve_update owns it.
 func TrivyUpdate(ctx context.Context, dataDir, source string, enabled bool) error {
+	return TrivyUpdateWithClient(ctx, dataDir, source, enabled, nil)
+}
+
+// TrivyUpdateWithClient performs registry and token requests through the
+// shared app-owned outbound client when provided.
+func TrivyUpdateWithClient(ctx context.Context, dataDir, source string, enabled bool, httpClient *http.Client) error {
 	dir := filepath.Join(dataDir, "security", "trivy")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("trivy: mkdir %s: %w", dir, err)
@@ -314,7 +327,7 @@ func TrivyUpdate(ctx context.Context, dataDir, source string, enabled bool) erro
 		log.Printf("cve_update: trivy: %v (keeping existing copy)", err)
 		return nil
 	}
-	client := newOCIClient(ref)
+	client := newOCIClientWithHTTPClient(ref, httpClient)
 	layer, err := client.resolveLayer(ctx, trivyDBLayerMediaType)
 	if err != nil {
 		log.Printf("cve_update: trivy: %v (keeping existing copy)", err)

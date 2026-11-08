@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install.sh — installs cairnbin binary to /usr/local/bin
-# Usage: curl -sSL https://github.com/apimgr/cairnbin/raw/main/scripts/install.sh | bash
+# Usage: curl -q -LSsf https://github.com/apimgr/cairnbin/raw/main/scripts/install.sh | bash
 set -euo pipefail
 
 REPO="apimgr/cairnbin"
@@ -21,7 +21,7 @@ detect_platform() {
 }
 
 PLATFORM="$(detect_platform)"
-VERSION="${VERSION:-$(curl -sSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)}"
+VERSION="${VERSION:-$(curl -q -LSsf "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)}"
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY}-${PLATFORM}"
 
 echo "Installing ${BINARY} ${VERSION} for ${PLATFORM}..."
@@ -35,7 +35,7 @@ echo "Installing ${BINARY} ${VERSION} for ${PLATFORM}..."
 mkdir -p "${TMPDIR:-/tmp}/apimgr"
 TMP_FILE="$(mktemp "${TMPDIR:-/tmp}/apimgr/cairnbin-XXXXXX")"
 
-curl -sSL "${URL}" -o "${TMP_FILE}"
+curl -q -LSsf "${URL}" -o "${TMP_FILE}"
 chmod +x "${TMP_FILE}"
 
 if [ -w "${INSTALL_DIR}" ]; then

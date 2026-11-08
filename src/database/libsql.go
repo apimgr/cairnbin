@@ -61,5 +61,5 @@ func newLibSQLDB(url, token string, pool PoolConfig) (*SQLiteDB, error) {
 		return nil, err
 	}
 
-	return &SQLiteDB{db: db}, nil
+	return &SQLiteDB{db: &instrumentedSQLDB{DB: db}}, nil
 }

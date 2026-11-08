@@ -82,10 +82,12 @@ type Info struct {
 
 // Config is consumed by Open; mirrors config.GeoIPConfig.
 type Config struct {
-	Dir           string
-	EnableASN     bool
-	EnableCountry bool
-	EnableCity    bool
+	Dir            string
+	HTTPClient     *http.Client
+	DeferDownloads bool
+	EnableASN      bool
+	EnableCountry  bool
+	EnableCity     bool
 	// DenyCountries blocks the listed codes; AllowCountries allows ONLY the
 	// listed ones. When both are set, AllowCountries wins; when both are empty
 	// no country blocking happens.
@@ -123,9 +125,9 @@ func Open(cfg Config) (*DB, error) {
 		return d, nil
 	}
 
-	if cfg.EnableASN {
+	if cfg.EnableASN && (!cfg.DeferDownloads || hasMMDBFile(filepath.Join(cfg.Dir, "asn.mmdb"))) {
 		path := filepath.Join(cfg.Dir, "asn.mmdb")
-		if err := ensureFile(path, urlASN); err != nil {
+		if err := ensureFileWithClient(path, urlASN, cfg.HTTPClient); err != nil {
 			log.Printf("geoip: warning: ASN database unavailable: %v", err)
 		} else {
 			r, err := maxminddb.Open(path)
@@ -137,9 +139,9 @@ func Open(cfg Config) (*DB, error) {
 		}
 	}
 
-	if cfg.EnableCountry {
+	if cfg.EnableCountry && (!cfg.DeferDownloads || hasMMDBFile(filepath.Join(cfg.Dir, "country.mmdb"))) {
 		path := filepath.Join(cfg.Dir, "country.mmdb")
-		if err := ensureFile(path, urlCountry); err != nil {
+		if err := ensureFileWithClient(path, urlCountry, cfg.HTTPClient); err != nil {
 			log.Printf("geoip: warning: country database unavailable: %v", err)
 		} else {
 			r, err := maxminddb.Open(path)
@@ -153,7 +155,9 @@ func Open(cfg Config) (*DB, error) {
 
 	if cfg.EnableCity {
 		path := filepath.Join(cfg.Dir, "dbip-city-ipv4.mmdb")
-		if err := ensureFile(path, urlCityV4); err != nil {
+		if cfg.DeferDownloads && !hasMMDBFile(path) {
+			log.Printf("geoip: deferring city (IPv4) database download until Tor is ready")
+		} else if err := ensureFileWithClient(path, urlCityV4, cfg.HTTPClient); err != nil {
 			log.Printf("geoip: warning: city (IPv4) database unavailable: %v", err)
 		} else {
 			r, err := maxminddb.Open(path)
@@ -165,7 +169,9 @@ func Open(cfg Config) (*DB, error) {
 		}
 
 		pathV6 := filepath.Join(cfg.Dir, "dbip-city-ipv6.mmdb")
-		if err := ensureFile(pathV6, urlCityV6); err != nil {
+		if cfg.DeferDownloads && !hasMMDBFile(pathV6) {
+			log.Printf("geoip: deferring city (IPv6) database download until Tor is ready")
+		} else if err := ensureFileWithClient(pathV6, urlCityV6, cfg.HTTPClient); err != nil {
 			log.Printf("geoip: warning: city (IPv6) database unavailable: %v", err)
 		} else {
 			r, err := maxminddb.Open(pathV6)
@@ -180,6 +186,11 @@ func Open(cfg Config) (*DB, error) {
 	return d, nil
 }
 
+func hasMMDBFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir() && info.Size() > 0
+}
+
 // Update downloads fresh copies of all configured databases and reopens the
 // handles atomically. Intended to be called by the weekly scheduler task.
 func (d *DB) Update() error {
@@ -190,60 +201,51 @@ func (d *DB) Update() error {
 
 	if d.cfg.EnableASN {
 		path := filepath.Join(d.cfg.Dir, "asn.mmdb")
-		// Remove so ensureFile always downloads.
-		_ = os.Remove(path)
-		if err := ensureFile(path, urlASN); err != nil {
+		reader, err := refreshMMDBWithClient(path, urlASN, d.cfg.HTTPClient)
+		if err != nil {
 			errs = append(errs, fmt.Sprintf("asn: %v", err))
-		} else if r, err := maxminddb.Open(path); err != nil {
-			errs = append(errs, fmt.Sprintf("open asn: %v", err))
 		} else {
 			if d.asnDB != nil {
 				_ = d.asnDB.Close()
 			}
-			d.asnDB = r
+			d.asnDB = reader
 		}
 	}
 
 	if d.cfg.EnableCountry {
 		path := filepath.Join(d.cfg.Dir, "country.mmdb")
-		_ = os.Remove(path)
-		if err := ensureFile(path, urlCountry); err != nil {
+		reader, err := refreshMMDBWithClient(path, urlCountry, d.cfg.HTTPClient)
+		if err != nil {
 			errs = append(errs, fmt.Sprintf("country: %v", err))
-		} else if r, err := maxminddb.Open(path); err != nil {
-			errs = append(errs, fmt.Sprintf("open country: %v", err))
 		} else {
 			if d.countDB != nil {
 				_ = d.countDB.Close()
 			}
-			d.countDB = r
+			d.countDB = reader
 		}
 	}
 
 	if d.cfg.EnableCity {
 		path := filepath.Join(d.cfg.Dir, "dbip-city-ipv4.mmdb")
-		_ = os.Remove(path)
-		if err := ensureFile(path, urlCityV4); err != nil {
+		reader, err := refreshMMDBWithClient(path, urlCityV4, d.cfg.HTTPClient)
+		if err != nil {
 			errs = append(errs, fmt.Sprintf("city ipv4: %v", err))
-		} else if r, err := maxminddb.Open(path); err != nil {
-			errs = append(errs, fmt.Sprintf("open city ipv4: %v", err))
 		} else {
 			if d.cityDB != nil {
 				_ = d.cityDB.Close()
 			}
-			d.cityDB = r
+			d.cityDB = reader
 		}
 
 		pathV6 := filepath.Join(d.cfg.Dir, "dbip-city-ipv6.mmdb")
-		_ = os.Remove(pathV6)
-		if err := ensureFile(pathV6, urlCityV6); err != nil {
+		reader, err = refreshMMDBWithClient(pathV6, urlCityV6, d.cfg.HTTPClient)
+		if err != nil {
 			errs = append(errs, fmt.Sprintf("city ipv6: %v", err))
-		} else if r, err := maxminddb.Open(pathV6); err != nil {
-			errs = append(errs, fmt.Sprintf("open city ipv6: %v", err))
 		} else {
 			if d.cityDBv6 != nil {
 				_ = d.cityDBv6.Close()
 			}
-			d.cityDBv6 = r
+			d.cityDBv6 = reader
 		}
 	}
 
@@ -251,6 +253,28 @@ func (d *DB) Update() error {
 		return fmt.Errorf("geoip update errors: %s", strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func refreshMMDBWithClient(path, src string, client *http.Client) (*maxminddb.Reader, error) {
+	tmp := path + ".update"
+	_ = os.Remove(tmp)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if err := retry.Do(ctx, func() error { return downloadOnceWithClient(ctx, tmp, src, client) }); err != nil {
+		_ = os.Remove(tmp)
+		return nil, err
+	}
+	reader, err := maxminddb.Open(tmp)
+	if err != nil {
+		_ = os.Remove(tmp)
+		return nil, fmt.Errorf("open replacement: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = reader.Close()
+		_ = os.Remove(tmp)
+		return nil, fmt.Errorf("replace database: %w", err)
+	}
+	return reader, nil
 }
 
 // Close releases all open database handles.
@@ -279,6 +303,9 @@ func (d *DB) Close() {
 // Returns nil if GeoIP is not available or the IP is invalid.
 func (d *DB) Lookup(ip net.IP) *Info {
 	if d == nil || ip == nil {
+		return nil
+	}
+	if isPrivate(ip) {
 		return nil
 	}
 	d.mu.RLock()
@@ -488,6 +515,10 @@ func isPrivate(ip net.IP) bool {
 
 // ensureFile downloads src to dst if dst does not exist or is empty.
 func ensureFile(dst, src string) error {
+	return ensureFileWithClient(dst, src, nil)
+}
+
+func ensureFileWithClient(dst, src string, client *http.Client) error {
 	if info, err := os.Stat(dst); err == nil && info.Size() > 0 {
 		// already present
 		return nil
@@ -498,18 +529,26 @@ func ensureFile(dst, src string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	return retry.Do(ctx, func() error { return downloadOnce(ctx, dst, src) })
+	return retry.Do(ctx, func() error { return downloadOnceWithClient(ctx, dst, src, client) })
 }
 
-// downloadOnce is a single download attempt for ensureFile.
-func downloadOnce(ctx context.Context, dst, src string) error {
+func downloadOnceWithClient(ctx context.Context, dst, src string, client *http.Client) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("User-Agent", "cairnbin-geoip/1.0")
 
-	resp, err := http.DefaultClient.Do(req)
+	if client == nil {
+		client = http.DefaultClient
+	} else {
+		clientCopy := *client
+		if clientCopy.Timeout == 0 || clientCopy.Timeout < 5*time.Minute {
+			clientCopy.Timeout = 5 * time.Minute
+		}
+		client = &clientCopy
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("download: %w", err)
 	}

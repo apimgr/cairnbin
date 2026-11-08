@@ -86,7 +86,7 @@
                             <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                         </button>
                     </div>
-                    <pre><code id="quickstart-upload-file">curl -X POST --data-binary @file.txt {{.BaseURL}}/api/v1/pastes</code></pre>
+                    <pre><code id="quickstart-upload-file">curl -q -LSsf -X POST --data-binary @file.txt {{.BaseURL}}/api/v1/pastes</code></pre>
                 </div>
 
                 <div class="code-block-multi">
@@ -96,7 +96,7 @@
                             <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                         </button>
                     </div>
-                    <pre><code id="quickstart-upload-form">curl -X POST -F "files=@code.py" {{.BaseURL}}/api/v1/pastes</code></pre>
+                    <pre><code id="quickstart-upload-form">curl -q -LSsf -X POST -F "files=@code.py" {{.BaseURL}}/api/v1/pastes</code></pre>
                 </div>
 
                 <div class="code-block-multi">
@@ -106,7 +106,7 @@
                             <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                         </button>
                     </div>
-                    <pre><code id="quickstart-json-api">curl -H "Content-Type: application/json" \
+                    <pre><code id="quickstart-json-api">curl -q -LSsf -H "Content-Type: application/json" \
      -H "Accept: application/json" \
      -d '{"content":"Hello World","language":"text"}' \
      {{.BaseURL}}/api/v1/pastes</code></pre>
@@ -119,7 +119,7 @@
                             <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                         </button>
                     </div>
-                    <pre><code id="quickstart-pipe">echo "Hello World" | curl -X POST --data-binary @- {{.BaseURL}}/api/v1/pastes</code></pre>
+                    <pre><code id="quickstart-pipe">echo "Hello World" | curl -q -LSsf -X POST --data-binary @- {{.BaseURL}}/api/v1/pastes</code></pre>
                 </div>
             </div>
         </section>

@@ -45,6 +45,18 @@ func TestEnabled_FalseWhenNoHost(t *testing.T) {
 	}
 }
 
+func TestSetConfigRefreshesSMTPState(t *testing.T) {
+	m := email.New(&config.EmailConfig{Enabled: false}, "cairnbin", "https://example.com", "example.com")
+	m.SetConfig(&config.EmailConfig{Enabled: true, SMTP: config.SMTPConfig{Host: "smtp.example.com"}})
+	if !m.Enabled() {
+		t.Fatal("mailer should use refreshed enabled SMTP configuration")
+	}
+	m.SetConfig(&config.EmailConfig{Enabled: false, SMTP: config.SMTPConfig{Host: "smtp.example.com"}})
+	if m.Enabled() {
+		t.Fatal("mailer should disable sending after failed refreshed SMTP check")
+	}
+}
+
 // ─── Send when disabled ───────────────────────────────────────────────────────
 
 func TestSend_Disabled_ReturnsNil(t *testing.T) {

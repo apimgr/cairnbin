@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -464,6 +465,35 @@ func TestCheckForUpdateURL_StableGenuineUpgrade(t *testing.T) {
 		t.Errorf("TagName = %q, want v1.1.0", rel.TagName)
 	}
 }
+
+func TestCheckForUpdateURLWithClientUsesInjectedTransport(t *testing.T) {
+	var requested string
+	client := &http.Client{Transport: updaterRoundTripper(func(r *http.Request) (*http.Response, error) {
+		requested = r.URL.String()
+		body := `{"tag_name":"v1.1.0"}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})}
+	rel, err := CheckForUpdateURLWithClient(context.Background(), "1.0.0", "stable", 0,
+		"https://release-api.invalid/latest", client)
+	if err != nil {
+		t.Fatalf("CheckForUpdateURLWithClient: %v", err)
+	}
+	if rel == nil || rel.TagName != "v1.1.0" {
+		t.Fatalf("release = %+v, want v1.1.0", rel)
+	}
+	if requested != "https://release-api.invalid/latest" {
+		t.Fatalf("injected client request URL = %q", requested)
+	}
+}
+
+type updaterRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f updaterRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 // TestCheckForUpdateURL_DailyRollingTagUsesBuildEpoch verifies the rolling
 // "devel" tag is resolved by publish time against the binary's build epoch,

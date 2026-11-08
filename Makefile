@@ -12,6 +12,8 @@ INTERNAL_NAME := $(PROJECT_NAME)
 
 # Version precedence: release.txt (wins if it exists) > VERSION env var > "devel" fallback
 VERSION := $(shell cat release.txt 2>/dev/null || echo "$${VERSION:-devel}")
+RELEASE_VERSION := $(patsubst v%,%,$(VERSION))
+RELEASE_TAG := v$(RELEASE_VERSION)
 
 # Build info - BUILD_EPOCH is the single captured build time (Unix seconds,
 # UTC); BuildDate is derived from it at process start, not embedded directly.
@@ -135,10 +137,14 @@ local: clean
 # RELEASE - Manual local release (stable only)
 # =============================================================================
 release: build
+	@if ! printf '%s\n' "$(VERSION)" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo "ERROR: make release requires a stable SemVer version (X.Y.Z) in release.txt or VERSION"; \
+		exit 1; \
+	fi
 	@mkdir -p $(RELDIR)
-	@echo "Preparing release $(VERSION)..."
+	@echo "Preparing release $(RELEASE_TAG)..."
 
-	@echo "$(VERSION)" > $(RELDIR)/version.txt
+	@echo "$(RELEASE_VERSION)" > $(RELDIR)/version.txt
 
 	@for f in $(BINDIR)/$(PROJECT_NAME)-*; do \
 		[ -f "$$f" ] || continue; \
@@ -152,13 +158,13 @@ release: build
 
 	@cd $(RELDIR) && FILES="$$(ls)" && sha256sum $$FILES > sha256.txt && sha512sum $$FILES > sha512.txt
 
-	@gh release delete $(VERSION) --yes 2>/dev/null || true
-	@git tag -d $(VERSION) 2>/dev/null || true
-	@git push origin :refs/tags/$(VERSION) 2>/dev/null || true
+	@gh release delete $(RELEASE_TAG) --yes 2>/dev/null || true
+	@git tag -d $(RELEASE_TAG) 2>/dev/null || true
+	@git push origin :refs/tags/$(RELEASE_TAG) 2>/dev/null || true
 
-	@gh release create $(VERSION) $(RELDIR)/* \
-		--title "$(PROJECT_NAME) $(VERSION)" \
-		--notes "Release $(VERSION)" \
+	@gh release create $(RELEASE_TAG) $(RELDIR)/* \
+		--title "$(PROJECT_NAME) $(RELEASE_TAG)" \
+		--notes "Release $(RELEASE_TAG)" \
 		--latest
 
 	@echo "✓ Release $(VERSION) created"

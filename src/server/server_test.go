@@ -24,6 +24,7 @@ import (
 	"github.com/apimgr/cairnbin/src/database"
 	"github.com/apimgr/cairnbin/src/handler"
 	"github.com/apimgr/cairnbin/src/handler/compat"
+	"github.com/apimgr/cairnbin/src/i2p"
 	"github.com/apimgr/cairnbin/src/mode"
 	"github.com/apimgr/cairnbin/src/model"
 	"github.com/apimgr/cairnbin/src/tor"
@@ -2146,6 +2147,51 @@ func TestBlocklistMiddleware(t *testing.T) {
 // ─── Server.OnConfigChange ────────────────────────────────────────────────────
 
 func TestOnConfigChange(t *testing.T) {
+	t.Run("I2P settings update the manager", func(t *testing.T) {
+		initial := &config.Config{}
+		s := newMinimalServer(initial)
+		s.i2pManager = i2p.NewManager(context.Background(), i2p.Config{Enabled: false}, s.router)
+		next := &config.Config{}
+		next.Server.I2P.VirtualPort = 8081
+		s.OnConfigChange(next)
+		if s.lastI2PConfig.VirtualPort != 8081 {
+			t.Fatalf("last I2P virtual port = %d, want 8081", s.lastI2PConfig.VirtualPort)
+		}
+		if s.i2pManager.Enabled() {
+			t.Fatal("I2P manager should remain disabled after a disabled-config update")
+		}
+	})
+
+	t.Run("email config refresh callback invoked", func(t *testing.T) {
+		initial := &config.Config{}
+		s := newMinimalServer(initial)
+		called := false
+		s.SetEmailConfigChangeFn(func(next config.EmailConfig, _ string) {
+			called = next.SMTP.Host == "smtp.example.com"
+		})
+		next := &config.Config{}
+		next.Server.Notifications.Email.SMTP.Host = "smtp.example.com"
+		s.OnConfigChange(next)
+		if !called {
+			t.Fatal("email config refresh callback was not given the changed SMTP settings")
+		}
+	})
+
+	t.Run("email template language refresh callback invoked", func(t *testing.T) {
+		initial := &config.Config{}
+		s := newMinimalServer(initial)
+		got := ""
+		s.SetEmailConfigChangeFn(func(_ config.EmailConfig, language string) {
+			got = language
+		})
+		next := &config.Config{}
+		next.Server.Lang = "es"
+		s.OnConfigChange(next)
+		if got != "es" {
+			t.Fatalf("language refresh callback received %q, want es", got)
+		}
+	})
+
 	t.Run("rate limiters updated on change", func(t *testing.T) {
 		cfg := &config.Config{}
 		cfg.Server.RateLimit.Write.Requests = 10
@@ -2483,7 +2529,7 @@ func (d *stubDB) GetPasteByID(id string) (*model.Paste, error) {
 func (d *stubDB) GetPublicPastes(page, limit int) ([]model.PasteListItem, int, error) {
 	return nil, 0, nil
 }
-func (d *stubDB) SearchPublicPastes(page, limit int, search, sortBy, order string) ([]model.PasteListItem, int, error) {
+func (d *stubDB) SearchPublicPastes(page, limit int, search, sortBy, order string, pasteType ...string) ([]model.PasteListItem, int, error) {
 	return nil, 0, nil
 }
 func (d *stubDB) IncrementViewsAndCheckBurn(id string) (int, bool, error) { return 0, false, nil }
@@ -3064,7 +3110,7 @@ func TestHandleRecentNilTemplates(t *testing.T) {
 
 // newRecentTestServer builds a Server backed by a real SQLite database (no
 // templates loaded) for exercising handleRecent's real search/sort/pagination
-// behavior (TODO.md items 1 and 3) via SearchPublicPastes.
+// behavior via SearchPublicPastes.
 func newRecentTestServer(t *testing.T) *Server {
 	t.Helper()
 	dir := t.TempDir()
@@ -3092,7 +3138,7 @@ func seedRecentPaste(t *testing.T, s *Server, id, title, content string) {
 }
 
 // TestHandleRecentSearchAndSort verifies handleRecent's ?search=/?sort=/?order=
-// query params (TODO.md items 1 and 3) against a real SQLite-backed search.
+// query params against a real SQLite-backed search.
 func TestHandleRecentSearchAndSort(t *testing.T) {
 	t.Run("search filters by title", func(t *testing.T) {
 		s := newRecentTestServer(t)
@@ -3919,6 +3965,60 @@ func TestNew(t *testing.T) {
 	}
 }
 
+func TestMetricsRootServiceAliasesWhenCanonicalEndpointIsRoot(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Metrics.Root.Enabled = true
+	cfg.Server.Metrics.Auth.Tokens.Grafana = "grafana-test-token"
+	s := New(&stubDB{}, cfg, nil, "1.2.3", "abc1234", "2025-01-01", t.TempDir(), t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/metrics/grafana", nil)
+	req.Header.Set("Authorization", "Bearer grafana-test-token")
+	rec := httptest.NewRecorder()
+	s.router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /metrics/grafana status = %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+		t.Errorf("GET /metrics/grafana Content-Type = %q, want application/json", got)
+	}
+}
+
+func TestMetricsRootAliasesRequireServiceTokensAndRejectUnknownServices(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Metrics.Root.Enabled = true
+	s := New(&stubDB{}, cfg, nil, "1.2.3", "abc1234", "2025-01-01", t.TempDir(), t.TempDir())
+
+	for _, tc := range []struct {
+		path string
+		code int
+	}{
+		{path: "/metrics/loki", code: http.StatusForbidden},
+		{path: "/metrics/unknown", code: http.StatusNotFound},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		rec := httptest.NewRecorder()
+		s.router.ServeHTTP(rec, req)
+		if rec.Code != tc.code {
+			t.Errorf("GET %s status = %d, want %d", tc.path, rec.Code, tc.code)
+		}
+		if tc.code == http.StatusForbidden && rec.Body.Len() != 0 {
+			t.Errorf("disabled metrics service response body must be empty, got %q", rec.Body.String())
+		}
+	}
+}
+
+func TestMetricsRootAliasCanBeDisabled(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Metrics.Root.Enabled = false
+	cfg.Server.Metrics.Auth.Tokens.Prometheus = "prometheus-test-token"
+	s := New(&stubDB{}, cfg, nil, "1.2.3", "abc1234", "2025-01-01", t.TempDir(), t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	s.router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /metrics with root alias disabled status = %d, want 404", rec.Code)
+	}
+}
+
 func TestNewWithToken(t *testing.T) {
 	db := &stubDB{}
 	cfg := config.DefaultConfig()
@@ -4334,6 +4434,15 @@ func TestOnConfigChangeRestartPrefixMatch(t *testing.T) {
 		t.Errorf("expected a pending-restart key containing %q, got %v", want, keys)
 		return false
 	}
+
+	t.Run("Tor outbound network change marks restart", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		s := newMinimalServer(cfg)
+		next := config.DefaultConfig()
+		next.Server.Tor.UseNetwork = !cfg.Server.Tor.UseNetwork
+		s.OnConfigChange(next)
+		markedContains(t, s, "tor")
+	})
 
 	t.Run("daemonize change marks restart", func(t *testing.T) {
 		cfg := config.DefaultConfig()

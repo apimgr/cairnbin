@@ -1,6 +1,8 @@
 package shell_test
 
 import (
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -107,6 +109,26 @@ func TestDetect_UnknownSHELL_FallsBack(t *testing.T) {
 
 func TestPrintHelp_DoesNotPanic(t *testing.T) {
 	shell.PrintHelp("cairnbin")
+}
+
+func TestPrintHelpUsesRequestedLanguage(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Stdout
+	os.Stdout = writer
+	shell.PrintHelp("cairnbin", "es")
+	_ = writer.Close()
+	os.Stdout = previous
+	output, err := io.ReadAll(reader)
+	_ = reader.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(output), "Comandos de integración del shell") || !strings.Contains(string(output), "Uso:") {
+		t.Fatalf("Spanish shell help not localized: %q", output)
+	}
 }
 
 // ─── PrintInit ────────────────────────────────────────────────────────────────

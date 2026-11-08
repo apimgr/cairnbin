@@ -886,6 +886,16 @@ func main() {
 	// back-compat boolean alias for --output json.
 	outputFormat := resolveOutputFormat(*asJSON, *outputFlag)
 
+	// Check on every invocation, including TUI/GUI launches, and enforce
+	// cli_min_version before any mode can make requests to the server.
+	isUpdateCommand := *doUpdate != "" || (len(args) > 0 && args[0] == "update")
+	if !isUpdateCommand {
+		if err := checkCLIUpdate(*server, locale); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_update_check", "error", err))
+			os.Exit(exitConnection)
+		}
+	}
+
 	if *doUpdate != "" {
 		quietUpdate := quietDefault || silentAutoUpdate(fileCfg, *doUpdate, term.IsTerminal(int(os.Stdin.Fd())))
 		c := &client{server: strings.TrimRight(*server, "/"), asJSON: *asJSON, outputFormat: outputFormat, lang: locale, token: token, apiVersion: resolvedAPIVersion, timeout: timeout, retry: retry, retryDelay: retryDelay, quiet: quietUpdate, verbose: *verboseFlag}
@@ -926,12 +936,6 @@ func main() {
 
 	if *server == "" {
 		printNoServerError()
-		os.Exit(exitConnection)
-	}
-
-	// Check for CLI updates (non-blocking; only blocks on min_version violation).
-	if err := checkCLIUpdate(*server, locale); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_update_check", "error", err))
 		os.Exit(exitConnection)
 	}
 

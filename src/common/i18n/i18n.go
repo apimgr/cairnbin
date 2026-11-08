@@ -15,15 +15,56 @@ import (
 //go:embed locales/*.json
 var localeFS embed.FS
 
-// supported languages (code → true)
-var supportedLangs = map[string]bool{
-	"en": true,
-	"es": true,
-	"fr": true,
-	"de": true,
-	"zh": true,
-	"ar": true,
-	"ja": true,
+// LanguageMetadata is the canonical supported-language registry entry.
+type LanguageMetadata struct {
+	Code             string
+	NativeName       string
+	Direction        string
+	PluralCategories []string
+	Required         bool
+}
+
+var languageRegistry = map[string]LanguageMetadata{
+	"ar": {Code: "ar", NativeName: "العربية", Direction: "rtl", PluralCategories: []string{"zero", "one", "two", "few", "many", "other"}, Required: true},
+	"de": {Code: "de", NativeName: "Deutsch", Direction: "ltr", PluralCategories: []string{"one", "other"}, Required: true},
+	"en": {Code: "en", NativeName: "English", Direction: "ltr", PluralCategories: []string{"one", "other"}, Required: true},
+	"es": {Code: "es", NativeName: "Español", Direction: "ltr", PluralCategories: []string{"one", "other"}, Required: true},
+	"fr": {Code: "fr", NativeName: "Français", Direction: "ltr", PluralCategories: []string{"one", "other"}, Required: true},
+	"it": {Code: "it", NativeName: "Italiano", Direction: "ltr", PluralCategories: []string{"one", "many", "other"}, Required: true},
+	"ja": {Code: "ja", NativeName: "日本語", Direction: "ltr", PluralCategories: []string{"other"}},
+	"zh": {Code: "zh", NativeName: "中文", Direction: "ltr", PluralCategories: []string{"other"}},
+}
+
+// SupportedCodes returns the canonical language registry in stable code order.
+func SupportedCodes() []string {
+	codes := make([]string, 0, len(languageRegistry))
+	for code := range languageRegistry {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+	return codes
+}
+
+// RequiredCodes returns registry languages mandated by the supported-language minimum.
+func RequiredCodes() []string {
+	codes := make([]string, 0, len(languageRegistry))
+	for code, info := range languageRegistry {
+		if info.Required {
+			codes = append(codes, code)
+		}
+	}
+	sort.Strings(codes)
+	return codes
+}
+
+// LanguageInfo returns metadata for a supported language.
+func LanguageInfo(code string) (LanguageMetadata, bool) {
+	info, ok := languageRegistry[strings.ToLower(strings.TrimSpace(code))]
+	if !ok {
+		return LanguageMetadata{}, false
+	}
+	info.PluralCategories = append([]string(nil), info.PluralCategories...)
+	return info, true
 }
 
 // Runtime settings from server.i18n (PART 30 Configuration). The zero state is
@@ -56,16 +97,16 @@ func Configure(st Settings) {
 	defer settingsMu.Unlock()
 	cfgEnabled = st.Enabled
 	cfgDefault, cfgFallback = "en", "en"
-	if d := strings.ToLower(strings.TrimSpace(st.DefaultLanguage)); supportedLangs[d] {
+	if d := strings.ToLower(strings.TrimSpace(st.DefaultLanguage)); IsSupported(d) {
 		cfgDefault = d
 	}
-	if f := strings.ToLower(strings.TrimSpace(st.FallbackLanguage)); supportedLangs[f] {
+	if f := strings.ToLower(strings.TrimSpace(st.FallbackLanguage)); IsSupported(f) {
 		cfgFallback = f
 	}
 	cfgAvail = nil
 	for _, l := range st.AvailableLanguages {
 		l = strings.ToLower(strings.TrimSpace(l))
-		if supportedLangs[l] {
+		if IsSupported(l) {
 			if cfgAvail == nil {
 				cfgAvail = map[string]bool{}
 			}
@@ -106,7 +147,7 @@ func DefaultLanguage() string {
 // IsAvailable reports whether lang is supported AND offered by server.i18n.
 func IsAvailable(lang string) bool {
 	lang = strings.ToLower(strings.TrimSpace(lang))
-	if !supportedLangs[lang] {
+	if !IsSupported(lang) {
 		return false
 	}
 	settingsMu.RLock()
@@ -115,29 +156,17 @@ func IsAvailable(lang string) bool {
 }
 
 // Language describes one selectable language for the UI selector.
-type Language struct {
-	Code       string
-	NativeName string
-	Direction  string
-}
+type Language = LanguageMetadata
 
-// Languages lists the available languages in code order, with the native
-// names read from each locale file's meta block.
+// Languages lists available languages in stable registry order.
 func Languages() []Language {
-	codes := make([]string, 0, len(supportedLangs))
-	for c := range supportedLangs {
-		if IsAvailable(c) {
-			codes = append(codes, c)
-		}
-	}
-	sort.Strings(codes)
+	codes := SupportedCodes()
 	out := make([]Language, 0, len(codes))
-	for _, c := range codes {
-		name := translations[c]["meta.native_name"]
-		if name == "" {
-			name = c
+	for _, code := range codes {
+		if IsAvailable(code) {
+			info, _ := LanguageInfo(code)
+			out = append(out, info)
 		}
-		out = append(out, Language{Code: c, NativeName: name, Direction: Direction(c)})
 	}
 	return out
 }
@@ -146,7 +175,7 @@ func Languages() []Language {
 var translations = map[string]map[string]string{}
 
 func init() {
-	for lang := range supportedLangs {
+	for lang := range languageRegistry {
 		data, err := localeFS.ReadFile("locales/" + lang + ".json")
 		if err != nil {
 			continue
@@ -208,7 +237,8 @@ func JSBundle(lang string) string {
 
 // IsSupported returns true if lang is a supported language code.
 func IsSupported(lang string) bool {
-	return supportedLangs[strings.ToLower(strings.TrimSpace(lang))]
+	_, ok := languageRegistry[strings.ToLower(strings.TrimSpace(lang))]
+	return ok
 }
 
 // Direction returns the text direction ("ltr" or "rtl") for the given language.
@@ -218,8 +248,8 @@ func Direction(lang string) string {
 	if !IsSupported(lang) {
 		lang = "en"
 	}
-	if val, ok := translations[lang]["meta.direction"]; ok && val == "rtl" {
-		return "rtl"
+	if info, ok := LanguageInfo(lang); ok {
+		return info.Direction
 	}
 	return "ltr"
 }
@@ -287,7 +317,16 @@ func TranslatePlural(lang, key string, count int) string {
 
 // pluralForm returns the CLDR plural category for a count in a given language.
 func pluralForm(lang string, count int) string {
+	lang = strings.ToLower(strings.TrimSpace(lang))
 	switch lang {
+	case "it":
+		if count == 1 {
+			return "one"
+		}
+		if count > 0 && count%1_000_000 == 0 {
+			return "many"
+		}
+		return "other"
 	case "ar":
 		// Arabic: six CLDR plural forms
 		if count == 0 {

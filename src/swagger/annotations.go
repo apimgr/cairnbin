@@ -100,13 +100,16 @@ func Routes(apiVersion string) []Route {
 			Path:        apiBase + "/pastes",
 			Tag:         "pastes",
 			Summary:     "List public pastes",
-			Description: "Returns a paginated list of recent public pastes.",
+			Description: "Returns recent public pastes by default. Use scope=owned with a valid owner Bearer token to list all of that owner's non-expired pastes, including unlisted pastes.",
 			Params: []Param{
 				{Name: "page", In: "query", Required: false, Description: "Page number (default 1)", Schema: map[string]interface{}{"type": "integer", "default": 1}},
-				{Name: "limit", In: "query", Required: false, Description: "Items per page (1–100, default 20)", Schema: map[string]interface{}{"type": "integer", "default": 20}},
+				{Name: "limit", In: "query", Required: false, Description: "Items per page (1–250, default 250)", Schema: map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 250, "default": 250}},
+				{Name: "scope", In: "query", Required: false, Description: "public (default) or owned; owned requires an owner Bearer token", Schema: map[string]interface{}{"type": "string", "enum": []string{"public", "owned"}, "default": "public"}},
 			},
 			Responses: map[int]ResponseSpec{
 				200: {Description: "OK", ContentType: "application/json", Schema: pasteListSchema},
+				400: {Description: "Invalid scope", ContentType: "application/json", Schema: errSchema},
+				401: {Description: "Owner token required for scope=owned", ContentType: "application/json", Schema: errSchema},
 				500: {Description: "Internal server error", ContentType: "application/json", Schema: errSchema},
 			},
 		},

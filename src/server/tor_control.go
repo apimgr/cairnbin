@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/path"
 	"github.com/apimgr/cairnbin/src/tor"
 )
@@ -159,15 +160,11 @@ func (s *Server) handleTorControlValidate(w http.ResponseWriter, r *http.Request
 // loopback-only): restarts the server's embedded Tor manager in place.
 func (s *Server) handleTorControlRestart(w http.ResponseWriter, r *http.Request) {
 	if s.torManager == nil {
-		writeJSON(w, http.StatusConflict, map[string]interface{}{
-			"ok": false, "error": "CONFLICT", "message": "tor is not configured on this server",
-		})
+		writeAPIError(w, r, http.StatusConflict, "CONFLICT", "errors.conflict")
 		return
 	}
 	if err := s.TorRestart(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"ok": false, "error": "SERVER_ERROR", "message": "tor restart failed",
-		})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -181,16 +178,12 @@ func (s *Server) handleTorControlRestart(w http.ResponseWriter, r *http.Request)
 // embedded Tor manager generate a fresh native .onion address.
 func (s *Server) handleTorControlRegenerate(w http.ResponseWriter, r *http.Request) {
 	if s.torManager == nil {
-		writeJSON(w, http.StatusConflict, map[string]interface{}{
-			"ok": false, "error": "CONFLICT", "message": "tor is not configured on this server",
-		})
+		writeAPIError(w, r, http.StatusConflict, "CONFLICT", "errors.conflict")
 		return
 	}
 	addr, err := s.TorRegenerateAddress()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"ok": false, "error": "SERVER_ERROR", "message": "tor regenerate failed",
-		})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	s.auditLog(r, audit.Entry{
@@ -211,9 +204,7 @@ func (s *Server) handleTorControlRegenerate(w http.ResponseWriter, r *http.Reque
 // may run at a time — starting a second one returns 409.
 func (s *Server) handleTorControlVanityStart(w http.ResponseWriter, r *http.Request) {
 	if s.torManager == nil {
-		writeJSON(w, http.StatusConflict, map[string]interface{}{
-			"ok": false, "error": "CONFLICT", "message": "tor is not configured on this server",
-		})
+		writeAPIError(w, r, http.StatusConflict, "CONFLICT", "errors.conflict")
 		return
 	}
 	var body struct {
@@ -226,24 +217,20 @@ func (s *Server) handleTorControlVanityStart(w http.ResponseWriter, r *http.Requ
 	}
 	prefix := strings.ToLower(strings.TrimSpace(body.Prefix))
 	if err := tor.ValidateVanityPrefix(prefix); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "error": "BAD_REQUEST", "message": err.Error(),
-		})
+		writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.invalid_format")
 		return
 	}
 	if current := s.TorVanityStatus(); current.State == "running" {
 		writeJSON(w, http.StatusConflict, map[string]interface{}{
 			"ok": false, "error": "CONFLICT",
-			"message": fmt.Sprintf("a vanity search is already running for prefix %q", current.Prefix),
+			"message": i18n.TranslateFormat(i18n.LangFromRequest(r), "cli.vanity_running", i18n.Args("prefix", current.Prefix)),
 			"details": map[string]interface{}{"prefix": current.Prefix},
 		})
 		return
 	}
 	status, err := s.TorVanityStart(prefix, body.Workers)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "error": "BAD_REQUEST", "message": err.Error(),
-		})
+		writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.invalid_format")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -257,9 +244,7 @@ func (s *Server) handleTorControlVanityStart(w http.ResponseWriter, r *http.Requ
 // running is a successful no-op; candidates already written to disk are kept.
 func (s *Server) handleTorControlVanityStop(w http.ResponseWriter, r *http.Request) {
 	if s.torManager == nil {
-		writeJSON(w, http.StatusConflict, map[string]interface{}{
-			"ok": false, "error": "CONFLICT", "message": "tor is not configured on this server",
-		})
+		writeAPIError(w, r, http.StatusConflict, "CONFLICT", "errors.conflict")
 		return
 	}
 	stopped := s.TorVanityStop()
@@ -279,9 +264,7 @@ func (s *Server) handleTorControlVanityStop(w http.ResponseWriter, r *http.Reque
 // unique prefix of a candidate address.
 func (s *Server) handleTorControlVanityApply(w http.ResponseWriter, r *http.Request) {
 	if s.torManager == nil {
-		writeJSON(w, http.StatusConflict, map[string]interface{}{
-			"ok": false, "error": "CONFLICT", "message": "tor is not configured on this server",
-		})
+		writeAPIError(w, r, http.StatusConflict, "CONFLICT", "errors.conflict")
 		return
 	}
 	var body struct {
@@ -293,24 +276,20 @@ func (s *Server) handleTorControlVanityApply(w http.ResponseWriter, r *http.Requ
 	}
 	candidates := tor.ListVanityCandidates(s.dataDir)
 	if len(candidates) == 0 {
-		writeJSON(w, http.StatusNotFound, map[string]interface{}{
-			"ok": false, "error": "NOT_FOUND", "message": "no vanity candidates found",
-		})
+		writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
 		return
 	}
 	address, err := tor.ResolveVanityCandidate(s.dataDir, strings.TrimSpace(body.Address))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "error": "BAD_REQUEST", "message": err.Error(),
+			"ok": false, "error": "BAD_REQUEST", "message": i18n.Translate(i18n.LangFromRequest(r), "errors.invalid_format"),
 			"details": map[string]interface{}{"candidates": candidates},
 		})
 		return
 	}
 	applied, err := s.TorVanityApply(address)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"ok": false, "error": "SERVER_ERROR", "message": err.Error(),
-		})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -326,23 +305,17 @@ func (s *Server) handleTorControlVanityApply(w http.ResponseWriter, r *http.Requ
 // so key material can be piped straight in.
 func (s *Server) handleTorControlImportKeys(w http.ResponseWriter, r *http.Request) {
 	if s.torManager == nil {
-		writeJSON(w, http.StatusConflict, map[string]interface{}{
-			"ok": false, "error": "CONFLICT", "message": "tor is not configured on this server",
-		})
+		writeAPIError(w, r, http.StatusConflict, "CONFLICT", "errors.conflict")
 		return
 	}
 	if r.Body == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "error": "BAD_REQUEST", "message": "key path or key data is required",
-		})
+		writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.required")
 		return
 	}
 	defer func() { _ = r.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
 	if err != nil || len(raw) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "error": "BAD_REQUEST", "message": "key path or key data is required",
-		})
+		writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.required")
 		return
 	}
 	if strings.HasPrefix(strings.TrimSpace(r.Header.Get("Content-Type")), "application/json") {
@@ -350,16 +323,12 @@ func (s *Server) handleTorControlImportKeys(w http.ResponseWriter, r *http.Reque
 			Path string `json:"path"`
 		}
 		if err := json.Unmarshal(raw, &body); err != nil || strings.TrimSpace(body.Path) == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-				"ok": false, "error": "BAD_REQUEST", "message": "key path is required",
-			})
+			writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.required")
 			return
 		}
 		addr, err := s.TorImportKeyPath(strings.TrimSpace(body.Path))
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-				"ok": false, "error": "BAD_REQUEST", "message": err.Error(),
-			})
+			writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.invalid_format")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -370,9 +339,7 @@ func (s *Server) handleTorControlImportKeys(w http.ResponseWriter, r *http.Reque
 	}
 	addr, err := s.TorApplyKeys(raw)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "error": "BAD_REQUEST", "message": "invalid key data",
-		})
+		writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.invalid_format")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{

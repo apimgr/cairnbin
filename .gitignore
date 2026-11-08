@@ -1,6 +1,9 @@
 # gitignore created on 09/23/25 at 07:36
 ignoredirmessage
 
+# MkDocs build output
+site/
+
 # ignore .build_failed files
 **/.build_failed*
 

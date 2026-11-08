@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/config"
 	"github.com/apimgr/cairnbin/src/tor"
 )
@@ -316,11 +317,11 @@ func TestHandleTorControlImportKeys(t *testing.T) {
 		body        string
 		wantMessage string
 	}{
-		{"empty body", "application/json", "", "key path or key data is required"},
-		{"json without path", "application/json", `{}`, "key path is required"},
-		{"json with blank path", "application/json", `{"path":"   "}`, "key path is required"},
+		{"empty body", "application/json", "", i18n.Translate("en", "errors.required")},
+		{"json without path", "application/json", `{}`, i18n.Translate("en", "errors.required")},
+		{"json with blank path", "application/json", `{"path":"   "}`, i18n.Translate("en", "errors.required")},
 		{"json with missing path", "application/json", `{"path":"/nonexistent/vanity/keys"}`, ""},
-		{"raw garbage key data", "application/octet-stream", "not-a-key", "invalid key data"},
+		{"raw garbage key data", "application/octet-stream", "not-a-key", i18n.Translate("en", "errors.invalid_format")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

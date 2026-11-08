@@ -1,5 +1,5 @@
 site_name: Cairnbin
-site_description: A fast, public paste service — drop-in replacement for pastebin.com, microbin, and lenpaste
+site_description: A fast, public paste service with compatibility for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, curl-upload services, and termbin/fiche
 site_url: https://apimgr-cairnbin.readthedocs.io
 site_author: apimgr
 repo_name: apimgr/cairnbin
@@ -107,6 +107,7 @@ nav:
     - Compatibility: compat.md
     - Security: security.md
     - Integrations: integrations.md
+    - Translating: translating.md
   - Development:
     - Contributing: development.md
 

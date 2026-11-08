@@ -184,7 +184,31 @@ func NewManager(ctx context.Context, cfg Config, handler http.Handler) *Manager 
 func (m *Manager) Start() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.svc != nil || !m.cfg.Enabled {
+		return nil
+	}
 	return m.startLocked()
+}
+
+// UpdateConfig stops the current provider and starts it again with the new
+// settings. Disabled configs remain inert and allocate no backend resources.
+func (m *Manager) UpdateConfig(cfg Config) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.closeSvcLocked()
+	m.cfg = cfg
+	if !cfg.Enabled {
+		return nil
+	}
+	return m.startLocked()
+}
+
+// Enabled reports whether the operator opted into I2P, independent of whether
+// a provider is currently available.
+func (m *Manager) Enabled() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cfg.Enabled
 }
 
 func (m *Manager) startLocked() error {
@@ -295,10 +319,19 @@ func (m *Manager) startSAMLocked() error {
 	}()
 
 	log.Printf("Starting I2P eepsite (SAM bridge %s)...", m.cfg.SAMAddress)
-	conn, err := net.DialTimeout("tcp", m.cfg.SAMAddress, m.cfg.BootstrapTimeout)
+	bootstrapTimeout := m.cfg.BootstrapTimeout
+	if bootstrapTimeout <= 0 {
+		bootstrapTimeout = 5 * time.Minute
+	}
+	conn, err := net.DialTimeout("tcp", m.cfg.SAMAddress, bootstrapTimeout)
 	if err != nil {
 		_ = backendServer.Close()
 		return fmt.Errorf("sam dial: %w", err)
+	}
+	if err := conn.SetDeadline(time.Now().Add(bootstrapTimeout)); err != nil {
+		_ = conn.Close()
+		_ = backendServer.Close()
+		return fmt.Errorf("sam bootstrap deadline: %w", err)
 	}
 
 	destPath := filepath.Join(m.cfg.DataDir, "i2p", "site", "site-keys.dat")
@@ -307,6 +340,11 @@ func (m *Manager) startSAMLocked() error {
 		_ = conn.Close()
 		_ = backendServer.Close()
 		return fmt.Errorf("sam session: %w", err)
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		_ = conn.Close()
+		_ = backendServer.Close()
+		return fmt.Errorf("sam clear bootstrap deadline: %w", err)
 	}
 
 	m.svc = &service{

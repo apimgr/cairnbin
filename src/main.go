@@ -165,8 +165,8 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&includeData, "include-data", false, "Include {data_dir}/ in --maintenance backup")
 
 	if err := fs.Parse(args); err != nil {
-		_, _ = fmt.Fprintf(stderr, "%s: %v\n", binaryName, err)
-		_, _ = fmt.Fprintf(stderr, "Run '%s --help' for usage.\n", binaryName)
+		writeCommandFailure(stderr, i18n.GetLanguage(langFlag, ""), binaryName, err)
+		_, _ = fmt.Fprintln(stderr, cliMessage(i18n.GetLanguage(langFlag, ""), "run_help_hint", "project_name", binaryName))
 		return 2
 	}
 
@@ -197,18 +197,26 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	// Apply --color flag before any output.
 	applyColor(colorFlag)
+	earlyConfigDir := configFlag
+	if earlyConfigDir == "" {
+		earlyConfigDir = path.GetConfigDir(appName)
+	}
+	configuredLang, _ := config.ReadLanguage(filepath.Join(earlyConfigDir, "server.yml"))
+	earlyLang := i18n.GetLanguage(langFlag, configuredLang)
+	service.SetOutputLanguage(earlyLang)
+	maintenance.SetOutputLanguage(earlyLang)
 
 	if showHelp {
-		printHelp(stdout, binaryName)
+		printHelp(stdout, binaryName, earlyLang)
 		return 0
 	}
 
 	if showVersion {
 		// Same format as the CLI (PART 32): name version (commit) built date.
 		_, _ = fmt.Fprintf(stdout, "%s %s (%s) built %s\n", binaryName, Version, CommitID, BuildDate)
-		_, _ = fmt.Fprintf(stdout, "\nBuild Info:\n")
-		_, _ = fmt.Fprintf(stdout, "  Go: %s\n", runtime.Version())
-		_, _ = fmt.Fprintf(stdout, "  OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		_, _ = fmt.Fprintf(stdout, "\n%s\n", cliMessage(earlyLang, "build_info"))
+		_, _ = fmt.Fprintf(stdout, "  %s %s\n", cliMessage(earlyLang, "go_label"), runtime.Version())
+		_, _ = fmt.Fprintf(stdout, "  %s %s/%s\n", cliMessage(earlyLang, "os_arch_label"), runtime.GOOS, runtime.GOARCH)
 		return 0
 	}
 
@@ -244,20 +252,20 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	if shellCmd != "" {
 		switch shellCmd {
 		case "--help", "help":
-			shell.PrintHelp(binaryName)
+			shell.PrintHelp(binaryName, earlyLang)
 		case "completions":
 			if err := shell.PrintCompletions(binaryName, shellArg); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: --shell completions: %v\n", binaryName, err)
+				writeCommandFailure(stderr, earlyLang, binaryName, err)
 				return 1
 			}
 		case "init":
 			if err := shell.PrintInit(binaryName, shellArg); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: --shell init: %v\n", binaryName, err)
+				writeCommandFailure(stderr, earlyLang, binaryName, err)
 				return 1
 			}
 		default:
-			_, _ = fmt.Fprintf(stderr, "%s: --shell: unknown subcommand %q\n", binaryName, shellCmd)
-			_, _ = fmt.Fprintf(stderr, "Run '%s --shell --help' for usage.\n", binaryName)
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "unknown_subcommand", "binary", binaryName, "command", "--shell", "value", shellCmd))
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "help_for_command", "binary", binaryName, "command", "--shell"))
 			return 2
 		}
 		return 0
@@ -268,50 +276,50 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	if serviceCmd != "" {
 		switch serviceCmd {
 		case "--help", "help":
-			service.PrintHelp(binaryName)
+			service.PrintHelp(binaryName, earlyLang)
 		case "start":
 			if err := service.Start(); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: service start: %v\n", binaryName, err)
+			writeServiceFailure(stderr, earlyLang, binaryName, "start", err)
 				return 1
 			}
-			_, _ = fmt.Fprintf(stdout, "Service started.\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_started"))
 		case "stop":
 			if err := service.Stop(); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: service stop: %v\n", binaryName, err)
+			writeServiceFailure(stderr, earlyLang, binaryName, "stop", err)
 				return 1
 			}
-			_, _ = fmt.Fprintf(stdout, "Service stopped.\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_stopped"))
 		case "restart":
 			if err := service.Restart(); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: service restart: %v\n", binaryName, err)
+			writeServiceFailure(stderr, earlyLang, binaryName, "restart", err)
 				return 1
 			}
-			_, _ = fmt.Fprintf(stdout, "Service restarted.\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_restarted"))
 		case "reload":
 			if err := service.Reload(); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: service reload: %v\n", binaryName, err)
+			writeServiceFailure(stderr, earlyLang, binaryName, "reload", err)
 				return 1
 			}
-			_, _ = fmt.Fprintf(stdout, "Service reloaded.\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_reloaded"))
 		case "--install":
 			if err := service.Install(); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: service install: %v\n", binaryName, err)
+			writeServiceFailure(stderr, earlyLang, binaryName, "install", err)
 				return 1
 			}
 		case "--disable":
 			if err := service.Disable(); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: service disable: %v\n", binaryName, err)
+			writeServiceFailure(stderr, earlyLang, binaryName, "disable", err)
 				return 1
 			}
-			_, _ = fmt.Fprintf(stdout, "Service disabled.\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_disabled"))
 		case "--uninstall":
 			if err := service.Uninstall(); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: service uninstall: %v\n", binaryName, err)
+			writeServiceFailure(stderr, earlyLang, binaryName, "uninstall", err)
 				return 1
 			}
 		default:
-			_, _ = fmt.Fprintf(stderr, "%s: unknown --service subcommand: %s\n", binaryName, serviceCmd)
-			_, _ = fmt.Fprintf(stderr, "Run '%s --service --help' for usage.\n", binaryName)
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "unknown_subcommand", "binary", binaryName, "command", "--service", "value", serviceCmd))
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "help_for_command", "binary", binaryName, "command", "--service"))
 			return 2
 		}
 		return 0
@@ -337,7 +345,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 		switch maintenanceCmd {
 		case "--help", "help":
-			maintenance.PrintHelp(binaryName)
+			maintenance.PrintHelp(binaryName, earlyLang)
 		case "backup":
 			// "backup test" is a dry-run verification of the security keypair,
 			// not a backup creation (AI.md 14213).
@@ -349,17 +357,17 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				}
 				btDB, dbErr := database.NewDatabase(btCfg.Database.Type, btCfg.Database.Path)
 				if dbErr != nil {
-					_, _ = fmt.Fprintf(stderr, "%s: backup test: database: %v\n", binaryName, dbErr)
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup test database", dbErr)
 					return 1
 				}
 				installSecret, secErr := btDB.EnsureAppSecret("installation_secret")
 				_ = btDB.Close()
 				if secErr != nil {
-					_, _ = fmt.Fprintf(stderr, "%s: backup test: installation_secret: %v\n", binaryName, secErr)
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup test", secErr)
 					return 1
 				}
 				if err := maintenance.TestSecurityKeypair(mcConfigDir, installSecret); err != nil {
-					_, _ = fmt.Fprintf(stderr, "%s: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "update_action_failed", "error", err.Error()))
 					return 1
 				}
 				return 0
@@ -371,11 +379,11 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			btCfgFile := filepath.Join(mcConfigDir, "server.yml")
 			btCfg, btCfgErr := config.Load(btCfgFile)
 			if btCfgErr == nil && btCfg.Server.Backup.Encryption.Enabled {
-				_, _ = fmt.Fprint(stderr, "Backup password: ")
+				_, _ = fmt.Fprint(stderr, cliMessage(earlyLang, "backup_password"))
 				pw, pwErr := term.ReadPassword(int(os.Stdin.Fd()))
 				_, _ = fmt.Fprintln(stderr)
 				if pwErr != nil {
-					_, _ = fmt.Fprintf(stderr, "%s: reading password: %v\n", binaryName, pwErr)
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "reading password", pwErr)
 					return 1
 				}
 				backupPass = string(pw)
@@ -394,17 +402,17 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				ComplianceEnabled: btCfgErr == nil && btCfg.Server.Compliance.Enabled,
 			}
 			if err := maintenance.Backup(opts); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance backup: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup", err)
 				return 1
 			}
 		case "restore":
 			if maintenanceArg == "" {
-				_, _ = fmt.Fprintf(stderr, "%s: --maintenance restore requires a filename argument\n", binaryName)
-				_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance restore <backup-file>\n", binaryName)
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_argument_required", "binary", binaryName, "command", "restore", "argument", "filename"))
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_usage_restore", "binary", binaryName))
 				return 2
 			}
 			if err := maintenance.AuthorizeRestore(mcAuthOpts); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance restore: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "restore", err)
 				return 1
 			}
 			// Passwords are never accepted via CLI flag (shell history / process
@@ -412,11 +420,11 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			// (AI.md 29017).
 			var restorePass string
 			if strings.HasSuffix(maintenanceArg, ".enc") {
-				_, _ = fmt.Fprint(stderr, "Backup password: ")
+				_, _ = fmt.Fprint(stderr, cliMessage(earlyLang, "backup_password"))
 				pw, pwErr := term.ReadPassword(int(os.Stdin.Fd()))
 				_, _ = fmt.Fprintln(stderr)
 				if pwErr != nil {
-					_, _ = fmt.Fprintf(stderr, "%s: reading password: %v\n", binaryName, pwErr)
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "reading password", pwErr)
 					return 1
 				}
 				restorePass = string(pw)
@@ -426,7 +434,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				restoreLimits = maintenance.RestoreLimitsFromConfig(rtCfg.Server.Restore)
 			}
 			if err := maintenance.RestoreWithLimits(maintenanceArg, mcConfigDir, mcDataDir, restorePass, Version, restoreLimits); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance restore: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "restore", err)
 				return 1
 			}
 			maintenance.AuditMaintenanceEvent(mcAuthOpts, "backup.restored", map[string]any{
@@ -438,16 +446,16 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			updateCmd = "yes"
 		case "mode":
 			if maintenanceArg == "" {
-				_, _ = fmt.Fprintf(stderr, "%s: --maintenance mode requires a mode argument\n", binaryName)
-				_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance mode <production|development>\n", binaryName)
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_argument_required", "binary", binaryName, "command", "mode", "argument", "mode"))
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_usage_mode", "binary", binaryName))
 				return 2
 			}
 			if err := maintenance.AuthorizeMode(mcAuthOpts); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance mode: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "mode", err)
 				return 1
 			}
 			if err := maintenance.SetMode(mcConfigDir, maintenanceArg); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance mode: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "mode", err)
 				return 1
 			}
 			maintenance.AuditMaintenanceEvent(mcAuthOpts, "config.updated", map[string]any{
@@ -457,19 +465,19 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			return 0
 		case "setup":
 			if err := maintenance.AuthorizeSetup(mcAuthOpts); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance setup: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "setup", err)
 				return 1
 			}
 			if err := maintenance.Setup(mcConfigDir); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance setup: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "setup", err)
 				return 1
 			}
 			return 0
 		case "pgp":
 			// Project security keypair management (AI.md 14180-14188).
 			if maintenanceArg == "" {
-				_, _ = fmt.Fprintf(stderr, "%s: --maintenance pgp requires an action\n", binaryName)
-				_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance pgp <generate|rotate|publish|export|import|delete>\n", binaryName)
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "required_action", "binary", binaryName, "command", "--maintenance pgp"))
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_usage_pgp", "binary", binaryName))
 				return 2
 			}
 			pgpOpts := maintenance.PGPOptions{
@@ -479,14 +487,14 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				LogDir:    path.GetLogsDir(appName),
 			}
 			if err := maintenance.RunPGP(maintenanceArg, maintenancePGP, pgpOpts); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance pgp: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "pgp", err)
 				return 1
 			}
 			return 0
 		case "token":
 			if maintenanceArg == "" {
-				_, _ = fmt.Fprintf(stderr, "%s: --maintenance token requires a subcommand\n", binaryName)
-				_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance token {list|revoke} [prefix]\n", binaryName)
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "required_action", "binary", binaryName, "command", "--maintenance token"))
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_usage_token", "binary", binaryName))
 				return 2
 			}
 			tkCfgFile := filepath.Join(mcConfigDir, "server.yml")
@@ -496,7 +504,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 			tkDB, err := database.NewDatabase(tkCfg.Database.Type, tkCfg.Database.Path)
 			if err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: token: database: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "token database", err)
 				return 1
 			}
 			defer func() { _ = tkDB.Close() }()
@@ -509,27 +517,27 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			case "list":
 				ownerDB, ok := tkDB.(database.OwnerDB)
 				if !ok {
-					_, _ = fmt.Fprintf(stderr, "%s: token list: owner token storage unavailable\n", binaryName)
+					_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "token_storage_unavailable", "binary", binaryName))
 					return 1
 				}
 				tokens, err := ownerDB.ListAllAPITokens()
 				if err != nil {
-					_, _ = fmt.Fprintf(stderr, "%s: token list: %v\n", binaryName, err)
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "token list", err)
 					return 1
 				}
 				if len(tokens) == 0 {
-					_, _ = fmt.Fprintln(stdout, "No active tokens.")
+					_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "no_active_tokens"))
 				} else {
-					_, _ = fmt.Fprintf(stdout, "%-14s %-8s %-14s %-18s %-24s %-24s %-10s\n", "PREFIX", "KIND", "OWNER", "NAME", "CREATED", "LAST USED", "STATUS")
+					_, _ = fmt.Fprintf(stdout, "%-14s %-8s %-14s %-18s %-24s %-24s %-10s\n", cliMessage(earlyLang, "prefix_header"), cliMessage(earlyLang, "kind_header"), cliMessage(earlyLang, "owner_header"), cliMessage(earlyLang, "name_header"), cliMessage(earlyLang, "created_header"), cliMessage(earlyLang, "last_used_header"), cliMessage(earlyLang, "status_header"))
 					_, _ = fmt.Fprintf(stdout, "%-14s %-8s %-14s %-18s %-24s %-24s %-10s\n", "--------------", "--------", "--------------", "------------------", "------------------------", "------------------------", "----------")
 					for _, t := range tokens {
-						status := "active"
+						status := cliMessage(earlyLang, "token_status_active")
 						if t.RevokedAt != nil {
-							status = "revoked"
+							status = cliMessage(earlyLang, "token_status_revoked")
 						} else if t.ExpiresAt != nil && !t.ExpiresAt.After(time.Now()) {
-							status = "expired"
+							status = cliMessage(earlyLang, "token_status_expired")
 						}
-						lastUsed := "never"
+						lastUsed := cliMessage(earlyLang, "token_never_used")
 						if t.LastUsedAt != nil {
 							lastUsed = t.LastUsedAt.Format("2006-01-02 15:04:05")
 						}
@@ -538,24 +546,24 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				}
 			case "revoke":
 				if tokenPrefix == "" {
-					_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance token revoke <prefix>\n", binaryName)
+					_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_usage_token_revoke", "binary", binaryName))
 					return 2
 				}
 				if err := tkDB.RevokeAPIToken(tokenPrefix, "revoked via CLI"); err != nil {
-					_, _ = fmt.Fprintf(stderr, "%s: token revoke: %v\n", binaryName, err)
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "token revoke", err)
 					return 1
 				}
-				_, _ = fmt.Fprintf(stdout, "Token %s revoked.\n", tokenPrefix)
+				_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "token_revoked", "prefix", tokenPrefix))
 			default:
-				_, _ = fmt.Fprintf(stderr, "%s: unknown token subcommand: %s\n", binaryName, maintenanceArg)
-				_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance token {list|revoke} [prefix]\n", binaryName)
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "unknown_subcommand", "binary", binaryName, "command", "token", "value", maintenanceArg))
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_usage_token", "binary", binaryName))
 				return 2
 			}
 			return 0
 		case "data":
 			if maintenanceArg == "" {
-				_, _ = fmt.Fprintf(stderr, "%s: --maintenance data requires an action\n", binaryName)
-				_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance data {export|delete} <prefix>\n", binaryName)
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "required_action", "binary", binaryName, "command", "--maintenance data"))
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_usage_data", "binary", binaryName))
 				return 2
 			}
 			var dataPrefix string
@@ -568,18 +576,18 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				LogDir:    path.GetLogsDir(appName),
 			}
 			if err := maintenance.AuthorizeDataOp(mcAuthOpts); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance data: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "data", err)
 				return 1
 			}
 			if err := maintenance.RunData(maintenanceArg, dataPrefix, dataOpts); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance data: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "data", err)
 				return 1
 			}
 			return 0
 		case "secret":
 			if maintenanceArg == "" {
-				_, _ = fmt.Fprintf(stderr, "%s: --maintenance secret requires an action\n", binaryName)
-				_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance secret rotate {installation_secret|encryption_key}\n", binaryName)
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "required_action", "binary", binaryName, "command", "--maintenance secret"))
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_usage_secret", "binary", binaryName))
 				return 2
 			}
 			var secretName string
@@ -587,7 +595,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				secretName = maintenancePGP[0]
 			}
 			if err := maintenance.AuthorizeSecretOp(mcAuthOpts); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance secret: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "secret", err)
 				return 1
 			}
 			if err := maintenance.RunSecret(maintenanceArg, secretName, maintenance.SecretOptions{
@@ -595,7 +603,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				DBPath:    path.GetDBPath(appName),
 				LogDir:    path.GetLogsDir(appName),
 			}); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance secret: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "secret", err)
 				return 1
 			}
 			return 0
@@ -608,13 +616,13 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				LogDir:    path.GetLogsDir(appName),
 			}
 			if err := maintenance.RunCompliance(maintenanceArg, complianceOpts); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: maintenance compliance: %v\n", binaryName, err)
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "compliance", err)
 				return 1
 			}
 			return 0
 		default:
-			_, _ = fmt.Fprintf(stderr, "%s: unknown --maintenance subcommand: %s\n", binaryName, maintenanceCmd)
-			_, _ = fmt.Fprintf(stderr, "Run '%s --maintenance --help' for usage.\n", binaryName)
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "unknown_subcommand", "binary", binaryName, "command", "--maintenance", "value", maintenanceCmd))
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "help_for_command", "binary", binaryName, "command", "--maintenance"))
 			return 2
 		}
 		// All maintenance subcommands return here except "update" which falls
@@ -630,7 +638,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// is configured via server.yml and CLI only — there is no REST API for it.
 
 	if len(positional) > 0 && positional[0] == "tor" {
-		return runTorCommand(binaryName, positional[1:], stdout, stderr)
+		return runTorCommand(binaryName, positional[1:], stdout, stderr, earlyLang)
 	}
 
 	// ── Email (AI.md PART 17) ───────────────────────────────────────────────────
@@ -638,7 +646,8 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	if len(positional) > 0 && positional[0] == "email" {
 		if len(positional) < 2 {
-			_, _ = fmt.Fprintf(stderr, "%s: email requires an action\nUsage: %s email test [recipient]\n", binaryName, binaryName)
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_action_required", "binary", binaryName))
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_usage", "binary", binaryName))
 			return 2
 		}
 		emailOpts := maintenance.EmailOptions{
@@ -646,12 +655,19 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			DBPath:    path.GetDBPath(appName),
 			LogDir:    path.GetLogsDir(appName),
 			Stdout:    stdout,
+			Lang:      earlyLang,
 		}
 		if len(positional) > 2 {
 			emailOpts.To = positional[2]
 		}
+		if positional[1] != "test" {
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "unknown_subcommand", "binary", binaryName, "command", "email", "value", positional[1]))
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_usage", "binary", binaryName))
+			return 2
+		}
 		if err := maintenance.RunEmail(positional[1], emailOpts); err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: %v\n", binaryName, err)
+			log.Printf("email test failed: %v", err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_operation_failed", "binary", binaryName))
 			return 1
 		}
 		return 0
@@ -663,6 +679,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		// Load config to resolve configured update branch.
 		updateCfgFile := filepath.Join(path.GetConfigDir(appName), "server.yml")
 		updateCfg, _ := config.Load(updateCfgFile)
+		updateLang := i18n.GetLanguage(langFlag, updateCfg.Server.Lang)
 		configuredBranch := updateCfg.Server.Update.Branch
 		if configuredBranch == "" {
 			configuredBranch = "stable"
@@ -678,25 +695,10 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				latest = rel.TagName
 			}
 			helpCancel()
-			_, _ = fmt.Fprint(stdout, `Update management:
-
-check                                 - Check for available updates
-                                        Compares current version with latest release
-
-yes                                   - Download and install update
-                                        Downloads latest release, replaces binary, restarts
-
-branch <name>                         - Switch update branch
-  stable                              - Stable releases (default)
-  beta                                - Beta/preview releases
-  devel                               - Devel builds (development)
-
-Examples:
-`)
-			_, _ = fmt.Fprintf(stdout, "  %s --update check\n  %s --update yes\n  %s --update branch beta\n\n", binaryName, binaryName, binaryName)
-			_, _ = fmt.Fprintf(stdout, "Current:\n  Version:  %s\n  Branch:   %s\n", Version, configuredBranch)
+			_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_help", "binary", binaryName))
+			_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_current", "version", Version, "branch", configuredBranch))
 			if latest != "" {
-				_, _ = fmt.Fprintf(stdout, "  Latest:   %s\n", latest)
+				_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_latest", "latest", latest))
 			}
 			return 0
 
@@ -705,14 +707,14 @@ Examples:
 			defer cancel()
 			rel, err := updater.CheckForUpdate(ctx, Version, configuredBranch, buildEpoch())
 			if err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: update check: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "update_check_failed", "binary", binaryName, "error", err.Error()))
 				return 1
 			}
 			if rel == nil {
-				_, _ = fmt.Fprintf(stdout, "%s is up to date (%s) on branch %s.\n", binaryName, Version, configuredBranch)
+				_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_up_to_date", "binary", binaryName, "version", Version, "branch", configuredBranch))
 			} else {
-				_, _ = fmt.Fprintf(stdout, "Update available: %s → %s\n", Version, rel.TagName)
-				_, _ = fmt.Fprintf(stdout, "Run '%s --update yes' to install.\n", binaryName)
+				_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_available", "old", Version, "new", rel.TagName))
+				_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_run_install", "binary", binaryName))
 			}
 			return 0
 
@@ -721,19 +723,19 @@ Examples:
 			defer cancel()
 			rel, err := updater.CheckForUpdate(ctx, Version, configuredBranch, buildEpoch())
 			if err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: update check: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "update_check_failed", "binary", binaryName, "error", err.Error()))
 				return 1
 			}
 			if rel == nil {
-				_, _ = fmt.Fprintf(stdout, "%s is already up to date (%s) on branch %s.\n", binaryName, Version, configuredBranch)
+				_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_up_to_date", "binary", binaryName, "version", Version, "branch", configuredBranch))
 				return 0
 			}
-			_, _ = fmt.Fprintf(stdout, "Downloading %s %s…\n", binaryName, rel.TagName)
+			_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_downloading", "binary", binaryName, "version", rel.TagName))
 			if err := updater.DoUpdate(ctx, rel); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: update failed: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "update_install_failed", "binary", binaryName, "error", err.Error()))
 				return 1
 			}
-			_, _ = fmt.Fprintf(stdout, "Update installed. Restarting…\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_installed"))
 			maintenance.AuditMaintenanceEvent(maintenance.AuthOptions{
 				ConfigDir: path.GetConfigDir(appName),
 				LogDir:    path.GetLogsDir(appName),
@@ -745,13 +747,13 @@ Examples:
 			// service is running; otherwise re-exec the new binary in place.
 			if restarted, svcErr := service.RestartAfterUpdate(); restarted {
 				if svcErr != nil {
-					_, _ = fmt.Fprintf(stderr, "%s: service restart failed: %v\n", binaryName, svcErr)
+					_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "service_restart_failed", "binary", binaryName, "error", svcErr.Error()))
 					return 1
 				}
 				return 0
 			}
 			if err := updater.RestartSelf(); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: restart failed: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "restart_failed", "binary", binaryName, "error", err.Error()))
 				return 1
 			}
 			return 0
@@ -759,7 +761,7 @@ Examples:
 		case strings.HasPrefix(updateCmd, "branch"):
 			parts := strings.Fields(updateCmd)
 			if len(parts) < 2 {
-				_, _ = fmt.Fprintf(stderr, "Usage: %s --update branch <stable|beta|devel>\n", binaryName)
+				_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "branch_usage", "binary", binaryName))
 				return 2
 			}
 			branch, branchOK := updater.NormalizeBranch(parts[1])
@@ -770,19 +772,19 @@ Examples:
 			case branchOK:
 				// Persist the branch choice to the config file (server.update.branch).
 				if writeErr := config.SetUpdateBranch(updateCfgFile, branch); writeErr != nil {
-					_, _ = fmt.Fprintf(stderr, "%s: could not persist update branch: %v\n", binaryName, writeErr)
+					_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "branch_persist_failed", "binary", binaryName, "error", writeErr.Error()))
 					return 1
 				}
-				_, _ = fmt.Fprintf(stdout, "Update branch set to: %s\n", branch)
+				_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_branch_set", "branch", branch))
 			default:
-				_, _ = fmt.Fprintf(stderr, "%s: unknown branch: %s (use stable|beta|devel)\n", binaryName, parts[1])
+				_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "branch_unknown", "binary", binaryName, "branch", parts[1]))
 				return 2
 			}
 			return 0
 
 		default:
-			_, _ = fmt.Fprintf(stderr, "%s: unknown --update subcommand: %s\n", binaryName, updateCmd)
-			_, _ = fmt.Fprintf(stderr, "Run '%s --update --help' for usage.\n", binaryName)
+			_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "unknown_update_command", "binary", binaryName, "command", updateCmd))
+			_, _ = fmt.Fprintln(stderr, cliMessage(updateLang, "help_for_command", "binary", binaryName, "command", "--update"))
 			return 2
 		}
 	}
@@ -889,11 +891,15 @@ Examples:
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Get(probeURL)
 		if err != nil || resp.StatusCode >= 500 {
-			_, _ = fmt.Fprintf(stderr, "%s: unhealthy — %v\n", binaryName, err)
+			detail := "server returned an error status"
+			if err != nil {
+				detail = err.Error()
+			}
+			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "status_unhealthy", "project_name", binaryName, "error", detail))
 			return 1
 		}
 		_ = resp.Body.Close()
-		_, _ = fmt.Fprintf(stdout, "%s: healthy (port %s)\n", binaryName, port)
+		_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "status_healthy", "project_name", binaryName, "port", port))
 		return 0
 	}
 
@@ -1016,6 +1022,22 @@ Examples:
 			}
 		}
 	}
+	if smtpCfg := &cfg.Server.Notifications.Email; smtpCfg.SMTP.Host != "" {
+		if email.SMTPPrivateCertVerificationSkipped(smtpCfg.SMTP.Host, smtpCfg.SMTP.TLS) {
+			log.Printf("SMTP host %s is a private address: TLS certificate verification skipped", smtpCfg.SMTP.Host)
+		}
+		mailer := email.New(smtpCfg, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN, cfg.Server.Lang)
+		if smtpErr := mailer.TestSMTP(); smtpErr != nil {
+			smtpCfg.Enabled = false
+			log.Printf("warning: email.configured=false: SMTP connection test failed; email notifications disabled: %v", smtpErr)
+		} else {
+			smtpCfg.Enabled = true
+			log.Printf("email.configured=true")
+		}
+	} else {
+		cfg.Server.Notifications.Email.Enabled = false
+		log.Printf("warning: email.configured=false: SMTP is not configured; email notifications disabled")
+	}
 
 	// ── Config hot-reload watcher ─────────────────────────────────────────────
 
@@ -1073,6 +1095,10 @@ Examples:
 
 	log.Printf("%s %s — database: %s (%s)", appName, Version, db.Type(), cfg.Database.Path)
 
+	// Construct the server before registering background tasks that use its
+	// Tor-aware outbound client and GeoIP controls.
+	srv := server.New(db, cfg, cfgMgr, Version, CommitID, BuildDate, configDir, dataDir)
+
 	// ── Background scheduler ──────────────────────────────────────────────────
 
 	sched := scheduler.New(db)
@@ -1113,7 +1139,7 @@ Examples:
 	// Build the mailer once for task email dispatch (PART 17: backup/ssl events).
 	// The mailer is fail-open — if SMTP is unconfigured, Enabled() returns false
 	// and all email sends are silently skipped.
-	taskMailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN)
+	taskMailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN, cfg.Server.Lang)
 	taskOperatorEmail := strings.TrimSpace(cfg.AdminEmail())
 
 	// JSON Lines audit log (AI.md server.logs.audit): configuration, security,
@@ -1184,6 +1210,13 @@ Examples:
 		Security: logFileOpts(logCfg.Security),
 	})
 	defer logMgr.Close()
+	previousLogWriter, previousLogFlags := log.Writer(), log.Flags()
+	log.SetOutput(logMgr.StandardLogWriter())
+	log.SetFlags(0)
+	defer func() {
+		log.SetOutput(previousLogWriter)
+		log.SetFlags(previousLogFlags)
+	}()
 
 	// Required PART 18 tasks — full implementations in src/task/task.go.
 	logSchedErr(sched.Register("ssl_renewal", "SSL Renewal", "0 3 * * *", true,
@@ -1197,8 +1230,8 @@ Examples:
 			SendRenewalFailed: cfg.Server.Notifications.Email.Events.SSLRenewalFailed,
 		})))
 	logSchedErr(sched.Register("blocklist_update", "Blocklist Update", "0 4 * * *", true,
-		task.BlocklistUpdate(dataDir, blocklistSources(cfg)...)))
-	cveTask := task.CVEUpdate(dataDir, cveSources(cfg)...)
+		task.BlocklistUpdateWithClient(dataDir, srv.OutboundHTTPClient(), blocklistSources(cfg)...)))
+	cveTask := task.CVEUpdateWithClient(dataDir, srv.OutboundHTTPClient(), cveSources(cfg)...)
 	trivyCfg := cfg.Server.Security.Trivy
 	// PART 18: trivy has no scheduled task of its own — cve_update owns both the
 	// NVD CVE feed and the Trivy vulnerability database.
@@ -1206,7 +1239,7 @@ Examples:
 		if err := cveTask(ctx); err != nil {
 			return err
 		}
-		return task.TrivyUpdate(ctx, dataDir, trivyCfg.Source, trivyCfg.Enabled)
+		return task.TrivyUpdateWithClient(ctx, dataDir, trivyCfg.Source, trivyCfg.Enabled, srv.OutboundHTTPClient())
 	}))
 	logSchedErr(sched.Register("token_cleanup", "Token Cleanup", "@every 15m", true, func(ctx context.Context) error {
 		n, err := db.DeleteExpiredAPITokens()
@@ -1289,7 +1322,24 @@ Examples:
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
 
-	srv := server.New(db, cfg, cfgMgr, Version, CommitID, BuildDate, configDir, dataDir)
+	srv.SetEmailConfigChangeFn(func(nextEmail config.EmailConfig, nextLanguage string) {
+		resolvedLanguage := i18n.GetLanguage("", nextLanguage)
+		updated := nextEmail
+		updated.Enabled = false
+		if strings.TrimSpace(updated.SMTP.Host) != "" {
+			probe := email.New(&updated, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN, resolvedLanguage)
+			if smtpErr := probe.TestSMTP(); smtpErr != nil {
+				log.Printf("warning: email.configured=false: SMTP connection test failed after config reload; email notifications disabled: %v", smtpErr)
+			} else {
+				updated.Enabled = true
+				log.Printf("email.configured=true")
+			}
+		} else {
+			log.Printf("warning: email.configured=false: SMTP is not configured; email notifications disabled")
+		}
+		taskMailer.SetConfig(&updated)
+		taskMailer.SetLanguage(resolvedLanguage)
+	})
 	srv.SetLogDir(logsDir)
 	srv.SetAuditWriter(auditW)
 	srv.SetLogManager(logMgr)
@@ -1324,7 +1374,7 @@ Examples:
 		}))
 
 	// Tor health check — registered after srv so it can query srv.TorRunning().
-	logSchedErr(sched.Register("tor_health", "Tor Health", "@every 10m", true,
+	logSchedErr(sched.Register("tor_health", "Tor Health", "@every 10m", srv.TorEnabled(),
 		task.TorHealth(srv.TorRunning, srv.TorRestart)))
 
 	// I2P health check (PART 18): only registered when the eepsite is opt-in
@@ -1338,21 +1388,47 @@ Examples:
 	// auto-installs when server.update.auto_install is true (default false).
 	logSchedErr(sched.Register("update_check", "Update Check", "0 6 * * *", true,
 		task.UpdateCheck(Version, cfg.Server.Update.Branch, buildEpoch(), taskOperatorEmail, cfg.Server.Update.AutoInstall, cfg.Server.Update.DeferDays,
-			cfg.Server.Notifications.Email.Events.UpdateAvailable, cfg.Server.Notifications.Email.Events.UpdateInstalled, taskMailer, auditW)))
+			cfg.Server.Notifications.Email.Events.UpdateAvailable, cfg.Server.Notifications.Email.Events.UpdateInstalled, taskMailer, auditW, srv.OutboundHTTPClient())))
 
 	// Retry policy (PART 18). Network-dependent tasks retry on failure by
 	// default with a 1h base delay; operators override per task in server.yml.
 	sched.SetRetry("blocklist_update", true, time.Hour, 0)
 	sched.SetRetry("cve_update", true, time.Hour, 0)
 	sched.SetRetry("branding_refresh", true, time.Hour, 0)
+	skippableTasks := map[string]bool{
+		"geoip_update": true, "blocklist_update": true, "cve_update": true,
+		"update_check": true, "backup_daily": true, "backup_hourly": true,
+	}
 	for id, tc := range cfg.Server.Scheduler.Tasks {
-		var delay time.Duration
-		if tc.RetryDelay != "" {
-			if d, err := time.ParseDuration(tc.RetryDelay); err == nil {
-				delay = d
+		if tc.Schedule != "" {
+			if err := sched.SetSchedule(id, tc.Schedule); err != nil {
+				log.Printf("scheduler: invalid configured schedule for %s: %v", id, err)
 			}
 		}
-		sched.SetRetry(id, tc.RetryOnFail, delay, 0)
+		if tc.Enabled != nil {
+			if !skippableTasks[id] {
+				if !*tc.Enabled {
+					log.Printf("scheduler: task %s is critical and cannot be disabled", id)
+				}
+			} else if *tc.Enabled {
+				sched.EnableTask(id)
+			} else {
+				sched.DisableTask(id)
+			}
+		}
+		if tc.RetryOnFail != nil || tc.RetryDelay != "" || tc.MaxRetries > 0 {
+			retryEnabled := id == "blocklist_update" || id == "cve_update" || id == "branding_refresh"
+			if tc.RetryOnFail != nil {
+				retryEnabled = *tc.RetryOnFail
+			}
+			var delay time.Duration
+			if tc.RetryDelay != "" {
+				if d, err := time.ParseDuration(tc.RetryDelay); err == nil {
+					delay = d
+				}
+			}
+			sched.SetRetry(id, retryEnabled, delay, tc.MaxRetries)
+		}
 	}
 
 	// Failure notification + audit logging (PART 18 task execution flow): every
@@ -1614,43 +1690,60 @@ type torControlVanityInfo struct {
 // printTorInfo renders a torControlTorInfo the same way the on-disk fallback
 // status output reads, followed by the vanity-search block whenever a search
 // is running or a candidate is waiting.
-func printTorInfo(stdout io.Writer, info torControlTorInfo) {
+func printTorInfo(stdout io.Writer, info torControlTorInfo, languages ...string) {
+	lang := "en"
+	if len(languages) > 0 {
+		lang = i18n.GetLanguage(languages[0], "")
+	}
 	if !info.Enabled {
-		_, _ = fmt.Fprintf(stdout, "Tor Hidden Service: disabled (tor binary not found)\n")
-		printVanityInfo(stdout, info.Vanity)
+		_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_disabled"))
+		printVanityInfo(stdout, info.Vanity, lang)
 		return
 	}
 	if !info.Running {
-		_, _ = fmt.Fprintf(stdout, "Tor Hidden Service: not running\n")
-		printVanityInfo(stdout, info.Vanity)
+		_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_not_running"))
+		printVanityInfo(stdout, info.Vanity, lang)
 		return
 	}
-	_, _ = fmt.Fprintf(stdout, "Tor Hidden Service: Connected\n")
+	_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_connected"))
 	if info.Hostname != "" {
-		_, _ = fmt.Fprintf(stdout, "  Address: %s\n", info.Hostname)
+		_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(lang, "tor_address", "address", info.Hostname))
 	}
-	printVanityInfo(stdout, info.Vanity)
+	printVanityInfo(stdout, info.Vanity, lang)
 }
 
 // printVanityInfo renders the vanity-search progress block. Nothing is printed
 // while the search is idle with no candidates on disk. Attempt counts are
 // approximate (per-worker counters, sampled).
-func printVanityInfo(stdout io.Writer, v torControlVanityInfo) {
+func printVanityInfo(stdout io.Writer, v torControlVanityInfo, languages ...string) {
+	lang := "en"
+	if len(languages) > 0 {
+		lang = i18n.GetLanguage(languages[0], "")
+	}
 	if v.State == "" || (v.State == "idle" && len(v.Candidates) == 0) {
 		return
 	}
-	_, _ = fmt.Fprintf(stdout, "Vanity Search: %s\n", v.State)
+	state := v.State
+	switch state {
+	case "idle":
+		state = cliMessage(lang, "tor_state_idle")
+	case "running":
+		state = cliMessage(lang, "tor_state_running")
+	case "found":
+		state = cliMessage(lang, "tor_state_found")
+	}
+	_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_vanity_title", "state", state))
 	if v.Prefix != "" {
-		_, _ = fmt.Fprintf(stdout, "  Prefix: %s\n", v.Prefix)
+		_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(lang, "tor_prefix", "prefix", v.Prefix))
 	}
 	if v.Workers > 0 {
-		_, _ = fmt.Fprintf(stdout, "  Workers: %d\n", v.Workers)
+		_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(lang, "tor_workers", "count", v.Workers))
 	}
 	if v.State == "running" {
-		_, _ = fmt.Fprintf(stdout, "  Attempts: ~%d (%.0f/sec, %.0fs elapsed)\n", v.Attempts, v.Rate, v.ElapsedSeconds)
+		_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(lang, "tor_attempts", "count", v.Attempts, "rate", v.Rate, "elapsed", v.ElapsedSeconds))
 	}
 	for _, c := range v.Candidates {
-		_, _ = fmt.Fprintf(stdout, "  Candidate: %s\n", c)
+		_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(lang, "tor_candidate", "candidate", c))
 	}
 }
 
@@ -1680,16 +1773,21 @@ func confirmDestructive(stdout io.Writer, prompt string) bool {
 // process, so mutating subcommands reach it over the internal, loopback-only
 // /server/tor/* control channel; "status"/"validate" fall back to reading
 // on-disk state when no server is detected.
-func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer) int {
+func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer, languages ...string) int {
+	requestedLang := "en"
+	if len(languages) > 0 {
+		requestedLang = i18n.GetLanguage(languages[0], "")
+	}
 	if len(args) == 0 {
-		_, _ = fmt.Fprintf(stderr, "%s: tor: requires a subcommand\n", binaryName)
-		_, _ = fmt.Fprintf(stderr, "Usage: %s tor {status|validate|restart|regenerate|vanity {start|stop|apply}|import-keys <path>}\n", binaryName)
+		_, _ = fmt.Fprintln(stderr, cliMessage(requestedLang, "required_action", "binary", binaryName, "command", "tor"))
+		_, _ = fmt.Fprintln(stderr, cliMessage(requestedLang, "tor_usage", "binary", binaryName))
 		return 2
 	}
 
 	tcConfigDir := path.GetConfigDir(appName)
 	tcDataDir := path.GetDataDir(appName)
 	tcCfg, _ := config.Load(filepath.Join(tcConfigDir, "server.yml"))
+	torLang := i18n.GetLanguage(requestedLang, tcCfg.Server.Lang)
 	torCfg := tor.Config{
 		Binary:                    tcCfg.Server.Tor.Binary,
 		UseNetwork:                tcCfg.Server.Tor.UseNetwork,
@@ -1717,41 +1815,41 @@ func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer) i
 		if serverUp {
 			env, err := torControlRequest(http.MethodGet, baseURL, "/server/tor/status", nil, "")
 			if err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: tor status: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "status", "error", err.Error()))
 				return 1
 			}
 			var info torControlTorInfo
 			if err := json.Unmarshal(env.Data, &info); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: tor status: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "status", "error", err.Error()))
 				return 1
 			}
-			printTorInfo(stdout, info)
+			printTorInfo(stdout, info, torLang)
 			return 0
 		}
 		bin := tor.FindBinary(torCfg.Binary)
 		if bin == "" {
-			_, _ = fmt.Fprintf(stdout, "Tor Hidden Service: disabled (tor binary not found)\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(torLang, "tor_disabled"))
 			return 0
 		}
 		mgr := tor.NewManager(context.Background(), 0, torCfg, http.NotFoundHandler())
 		if err := mgr.Start(); err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor status: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "status", "error", err.Error()))
 			return 1
 		}
 		defer mgr.Close()
 		if !mgr.Running() {
-			_, _ = fmt.Fprintf(stdout, "Tor Hidden Service: not running\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(torLang, "tor_not_running"))
 			return 0
 		}
-		_, _ = fmt.Fprintf(stdout, "Tor Hidden Service: Connected\n")
-		_, _ = fmt.Fprintf(stdout, "  Address: %s\n", mgr.OnionAddress())
+		_, _ = fmt.Fprintln(stdout, cliMessage(torLang, "tor_connected"))
+		_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(torLang, "tor_address", "address", mgr.OnionAddress()))
 		return 0
 
 	case "validate":
 		if serverUp {
 			env, err := torControlRequest(http.MethodPost, baseURL, "/server/tor/validate", nil, "")
 			if err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: tor validate: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "validate", "error", err.Error()))
 				return 1
 			}
 			var data struct {
@@ -1763,128 +1861,128 @@ func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer) i
 				} `json:"checks"`
 			}
 			if err := json.Unmarshal(env.Data, &data); err != nil {
-				_, _ = fmt.Fprintf(stderr, "%s: tor validate: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "validate", "error", err.Error()))
 				return 1
 			}
 			for _, c := range data.Checks {
-				label := "OK"
+			label := cliMessage(torLang, "tor_label_ok")
 				switch c.Status {
 				case "warn":
-					label = "WARN"
+					label = cliMessage(torLang, "tor_label_warn")
 				case "fail":
-					label = "FAIL"
+					label = cliMessage(torLang, "tor_label_fail")
 				}
 				_, _ = fmt.Fprintf(stdout, "  [%s]   %s: %s\n", label, c.Name, c.Detail)
 			}
 			if !data.Valid {
-				_, _ = fmt.Fprintf(stderr, "%s: tor validate: configuration invalid\n", binaryName)
+				_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "invalid_configuration", "binary", binaryName, "command", "tor validate"))
 				return 1
 			}
-			_, _ = fmt.Fprintf(stdout, "Tor configuration valid.\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(torLang, "tor_config_valid"))
 			return 0
 		}
-		return validateTorConfig(binaryName, torCfg, stdout, stderr)
+		return validateTorConfig(binaryName, torCfg, stdout, stderr, torLang)
 
 	case "restart":
 		if !serverUp {
-			_, _ = fmt.Fprintf(stderr, "Error: no running server detected — start the server first\n")
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_no_server"))
 			return 1
 		}
 		env, err := torControlRequest(http.MethodPost, baseURL, "/server/tor/restart", nil, "")
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor restart: %v\n", binaryName, err)
+				_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "restart", "error", err.Error()))
 			return 1
 		}
 		var info torControlTorInfo
 		if err := json.Unmarshal(env.Data, &info); err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor restart: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "restart", "error", err.Error()))
 			return 1
 		}
-		_, _ = fmt.Fprintf(stdout, "Tor restarted.\n")
+		_, _ = fmt.Fprintln(stdout, cliMessage(torLang, "tor_restart_done"))
 		if info.Hostname != "" {
-			_, _ = fmt.Fprintf(stdout, "  Address: %s\n", info.Hostname)
+			_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(torLang, "tor_address", "address", info.Hostname))
 		}
 		return 0
 
 	case "regenerate":
 		if !serverUp {
-			_, _ = fmt.Fprintf(stderr, "Error: no running server detected — start the server first\n")
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_no_server"))
 			return 1
 		}
-		if !confirmDestructive(stdout, "This permanently replaces the current .onion address. Continue?") {
-			_, _ = fmt.Fprintf(stdout, "Aborted.\n")
+		if !confirmDestructive(stdout, cliMessage(torLang, "tor_replace_prompt")) {
+			_, _ = fmt.Fprintln(stdout, cliMessage(torLang, "tor_aborted"))
 			return 1
 		}
 		env, err := torControlRequest(http.MethodPost, baseURL, "/server/tor/regenerate", nil, "")
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor regenerate: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "regenerate", "error", err.Error()))
 			return 1
 		}
 		var data struct {
 			Hostname string `json:"hostname"`
 		}
 		if err := json.Unmarshal(env.Data, &data); err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor regenerate: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "regenerate", "error", err.Error()))
 			return 1
 		}
-		_, _ = fmt.Fprintf(stdout, "New .onion address generated.\n")
+		_, _ = fmt.Fprintln(stdout, cliMessage(torLang, "tor_regenerate_done"))
 		if data.Hostname != "" {
-			_, _ = fmt.Fprintf(stdout, "  Address: %s\n", data.Hostname)
+			_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(torLang, "tor_address", "address", data.Hostname))
 		}
 		return 0
 
 	case "vanity":
 		if len(args) < 2 {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity: requires {start|stop|apply}\n", binaryName)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "required_action", "binary", binaryName, "command", "tor vanity"))
 			return 2
 		}
-		return runTorVanity(binaryName, args[1], args[2:], baseURL, serverUp, stdout, stderr)
+		return runTorVanity(binaryName, args[1], args[2:], baseURL, serverUp, stdout, stderr, torLang)
 
 	case "import-keys":
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-			_, _ = fmt.Fprintf(stderr, "%s: tor import-keys requires a path argument\n", binaryName)
-			_, _ = fmt.Fprintf(stderr, "Usage: %s tor import-keys <path>\n", binaryName)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "required_action", "binary", binaryName, "command", "tor import-keys"))
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_import_usage", "binary", binaryName))
 			return 2
 		}
 		if !serverUp {
-			_, _ = fmt.Fprintf(stderr, "Error: no running server detected — start the server first\n")
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_no_server"))
 			return 1
 		}
 		keyPath, err := filepath.Abs(strings.TrimSpace(args[1]))
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor import-keys: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "import-keys", "error", err.Error()))
 			return 1
 		}
 		if _, err := os.Stat(keyPath); err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor import-keys: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "import-keys", "error", err.Error()))
 			return 1
 		}
 		reqBody, err := json.Marshal(map[string]string{"path": keyPath})
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor import-keys: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "import-keys", "error", err.Error()))
 			return 1
 		}
 		env, err := torControlRequest(http.MethodPost, baseURL, "/server/tor/import-keys", reqBody, "application/json")
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor import-keys: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "import-keys", "error", err.Error()))
 			return 1
 		}
 		var data struct {
 			Hostname string `json:"hostname"`
 		}
 		if err := json.Unmarshal(env.Data, &data); err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor import-keys: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "import-keys", "error", err.Error()))
 			return 1
 		}
-		_, _ = fmt.Fprintf(stdout, "Keys imported, Tor restarted.\n")
+		_, _ = fmt.Fprintln(stdout, cliMessage(torLang, "tor_keys_imported"))
 		if data.Hostname != "" {
-			_, _ = fmt.Fprintf(stdout, "  Address: %s\n", data.Hostname)
+			_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(torLang, "tor_address", "address", data.Hostname))
 		}
 		return 0
 
 	default:
-		_, _ = fmt.Fprintf(stderr, "%s: tor: unknown subcommand %q\n", binaryName, sub)
-		_, _ = fmt.Fprintf(stderr, "Usage: %s tor {status|validate|restart|regenerate|vanity {start|stop|apply}|import-keys <path>}\n", binaryName)
+		_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "unknown_subcommand", "binary", binaryName, "command", "tor", "value", sub))
+		_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_usage", "binary", binaryName))
 		return 2
 	}
 }
@@ -1892,33 +1990,37 @@ func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer) i
 // validateTorConfig checks the Tor configuration and directory state without
 // starting a Tor process: binary presence, directory writability, and the
 // virtual port range. Does not touch the network or any running instance.
-func validateTorConfig(binaryName string, cfg tor.Config, stdout, stderr io.Writer) int {
+func validateTorConfig(binaryName string, cfg tor.Config, stdout, stderr io.Writer, languages ...string) int {
+	lang := "en"
+	if len(languages) > 0 {
+		lang = i18n.GetLanguage(languages[0], "")
+	}
 	ok := true
 	bin := tor.FindBinary(cfg.Binary)
 	if bin == "" {
-		_, _ = fmt.Fprintf(stdout, "  [WARN] tor binary not found (hidden service will be disabled, not an error)\n")
+		_, _ = fmt.Fprintf(stdout, "  [%s] %s\n", cliMessage(lang, "tor_label_warn"), cliMessage(lang, "tor_binary_missing"))
 	} else {
-		_, _ = fmt.Fprintf(stdout, "  [OK]   tor binary: %s\n", bin)
+		_, _ = fmt.Fprintf(stdout, "  [%s]   %s\n", cliMessage(lang, "tor_label_ok"), cliMessage(lang, "tor_binary_path", "path", bin))
 	}
 	if cfg.VirtualPort <= 0 || cfg.VirtualPort > 65535 {
-		_, _ = fmt.Fprintf(stdout, "  [FAIL] virtual_port %d out of range 1-65535\n", cfg.VirtualPort)
+		_, _ = fmt.Fprintf(stdout, "  [%s] %s\n", cliMessage(lang, "tor_label_fail"), cliMessage(lang, "tor_virtual_port_invalid", "port", cfg.VirtualPort))
 		ok = false
 	} else {
-		_, _ = fmt.Fprintf(stdout, "  [OK]   virtual_port: %d\n", cfg.VirtualPort)
+		_, _ = fmt.Fprintf(stdout, "  [%s]   %s\n", cliMessage(lang, "tor_label_ok"), cliMessage(lang, "tor_virtual_port", "port", cfg.VirtualPort))
 	}
 	for _, dir := range []string{filepath.Join(cfg.ConfigDir, "tor"), filepath.Join(cfg.DataDir, "tor")} {
 		if err := path.EnsureDir(dir); err != nil {
-			_, _ = fmt.Fprintf(stdout, "  [FAIL] %s: %v\n", dir, err)
+			_, _ = fmt.Fprintf(stdout, "  [%s] %s: %v\n", cliMessage(lang, "tor_label_fail"), dir, err)
 			ok = false
 			continue
 		}
-		_, _ = fmt.Fprintf(stdout, "  [OK]   %s writable\n", dir)
+		_, _ = fmt.Fprintf(stdout, "  [%s]   %s\n", cliMessage(lang, "tor_label_ok"), cliMessage(lang, "tor_directory_writable", "path", dir))
 	}
 	if !ok {
-		_, _ = fmt.Fprintf(stderr, "%s: tor validate: configuration invalid\n", binaryName)
+		_, _ = fmt.Fprintln(stderr, cliMessage(lang, "invalid_configuration", "binary", binaryName, "command", "tor validate"))
 		return 1
 	}
-	_, _ = fmt.Fprintf(stdout, "Tor configuration valid.\n")
+	_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_config_valid"))
 	return 0
 }
 
@@ -1931,22 +2033,26 @@ func validateTorConfig(binaryName string, cfg tor.Config, stdout, stderr io.Writ
 // optional --workers count; "stop" cancels a running search but keeps the
 // candidates already written to disk; "apply" swaps a found candidate into the
 // live hidden-service identity after a destructive-action confirmation.
-func runTorVanity(binaryName, action string, rest []string, baseURL string, serverUp bool, stdout, stderr io.Writer) int {
+func runTorVanity(binaryName, action string, rest []string, baseURL string, serverUp bool, stdout, stderr io.Writer, languages ...string) int {
+	lang := "en"
+	if len(languages) > 0 {
+		lang = i18n.GetLanguage(languages[0], "")
+	}
 	if !serverUp {
-		_, _ = fmt.Fprintf(stderr, "Error: no running server detected — start the server first\n")
+		_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_no_server"))
 		return 1
 	}
 	switch action {
 	case "start":
 		prefix, workers, err := parseVanityStartArgs(rest)
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity start: %v\n", binaryName, err)
-			_, _ = fmt.Fprintf(stderr, "Usage: %s tor vanity start <prefix> [--workers N]\n", binaryName)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_operation_error", "binary", binaryName, "action", "vanity start", "error", err.Error()))
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_vanity_usage", "binary", binaryName))
 			return 2
 		}
 		if prefix == "" {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity start requires a prefix argument\n", binaryName)
-			_, _ = fmt.Fprintf(stderr, "Usage: %s tor vanity start <prefix> [--workers N]\n", binaryName)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "maintenance_argument_required", "binary", binaryName, "command", "tor vanity start", "argument", "prefix"))
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_vanity_usage", "binary", binaryName))
 			return 2
 		}
 		body := map[string]interface{}{"prefix": prefix}
@@ -1955,28 +2061,28 @@ func runTorVanity(binaryName, action string, rest []string, baseURL string, serv
 		}
 		reqBody, err := json.Marshal(body)
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity start: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_operation_error", "binary", binaryName, "action", "vanity start", "error", err.Error()))
 			return 1
 		}
 		env, err := torControlRequest(http.MethodPost, baseURL, "/server/tor/vanity/start", reqBody, "application/json")
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity start: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_operation_error", "binary", binaryName, "action", "vanity start", "error", err.Error()))
 			return 1
 		}
 		var data torControlVanityInfo
 		if err := json.Unmarshal(env.Data, &data); err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity start: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_operation_error", "binary", binaryName, "action", "vanity start", "error", err.Error()))
 			return 1
 		}
-		_, _ = fmt.Fprintf(stdout, "Vanity search started for prefix %q using %d worker(s).\n", data.Prefix, data.Workers)
-		_, _ = fmt.Fprintf(stdout, "Run '%s tor status' to watch progress.\n", binaryName)
-		_, _ = fmt.Fprintf(stdout, "Run '%s tor vanity apply' once a match is found.\n", binaryName)
+		_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_search_started", "prefix", data.Prefix, "count", data.Workers))
+		_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_watch", "binary", binaryName))
+		_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_apply_hint", "binary", binaryName))
 		return 0
 
 	case "stop":
 		env, err := torControlRequest(http.MethodPost, baseURL, "/server/tor/vanity/stop", nil, "")
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity stop: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_operation_error", "binary", binaryName, "action", "vanity stop", "error", err.Error()))
 			return 1
 		}
 		var data struct {
@@ -1984,15 +2090,15 @@ func runTorVanity(binaryName, action string, rest []string, baseURL string, serv
 			Vanity  torControlVanityInfo `json:"vanity"`
 		}
 		if err := json.Unmarshal(env.Data, &data); err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity stop: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_operation_error", "binary", binaryName, "action", "vanity stop", "error", err.Error()))
 			return 1
 		}
 		if !data.Stopped {
-			_, _ = fmt.Fprintf(stdout, "No vanity search is running.\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_no_search"))
 		} else {
-			_, _ = fmt.Fprintf(stdout, "Vanity search stopped; found candidates are kept.\n")
+			_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_search_stopped"))
 		}
-		printVanityInfo(stdout, data.Vanity)
+		printVanityInfo(stdout, data.Vanity, lang)
 		return 0
 
 	case "apply":
@@ -2000,35 +2106,36 @@ func runTorVanity(binaryName, action string, rest []string, baseURL string, serv
 		if len(rest) > 0 {
 			address = strings.TrimSpace(rest[0])
 		}
-		if !confirmDestructive(stdout, "This permanently replaces the current .onion address. Continue?") {
-			_, _ = fmt.Fprintf(stdout, "Aborted.\n")
+		if !confirmDestructive(stdout, cliMessage(lang, "tor_replace_prompt")) {
+			_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_aborted"))
 			return 1
 		}
 		reqBody, err := json.Marshal(map[string]string{"address": address})
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity apply: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_operation_error", "binary", binaryName, "action", "vanity apply", "error", err.Error()))
 			return 1
 		}
 		env, err := torControlRequest(http.MethodPost, baseURL, "/server/tor/vanity/apply", reqBody, "application/json")
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity apply: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_operation_error", "binary", binaryName, "action", "vanity apply", "error", err.Error()))
 			return 1
 		}
 		var data struct {
 			Hostname string `json:"hostname"`
 		}
 		if err := json.Unmarshal(env.Data, &data); err != nil {
-			_, _ = fmt.Fprintf(stderr, "%s: tor vanity apply: %v\n", binaryName, err)
+			_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_operation_error", "binary", binaryName, "action", "vanity apply", "error", err.Error()))
 			return 1
 		}
-		_, _ = fmt.Fprintf(stdout, "Vanity address applied, Tor restarted.\n")
+		_, _ = fmt.Fprintln(stdout, cliMessage(lang, "tor_applied"))
 		if data.Hostname != "" {
-			_, _ = fmt.Fprintf(stdout, "  Address: %s\n", data.Hostname)
+			_, _ = fmt.Fprintf(stdout, "  %s\n", cliMessage(lang, "tor_address", "address", data.Hostname))
 		}
 		return 0
 
 	default:
-		_, _ = fmt.Fprintf(stderr, "%s: tor vanity: unknown subcommand %q\n", binaryName, action)
+		_, _ = fmt.Fprintln(stderr, cliMessage(lang, "unknown_subcommand", "binary", binaryName, "command", "tor vanity", "value", action))
+		_, _ = fmt.Fprintln(stderr, cliMessage(lang, "tor_vanity_usage", "binary", binaryName))
 		return 2
 	}
 }
@@ -2104,46 +2211,72 @@ func applyColor(v string) {
 }
 
 // printHelp writes usage information to w.
-func printHelp(w io.Writer, name string) {
-	_, _ = fmt.Fprintf(w, `%s %s - a fast, public cairnbin service
+func printHelp(w io.Writer, name, lang string) {
+	translate := func(key string) string { return i18n.Translate(lang, "cli."+key) }
+	translateFormat := func(key string, args ...interface{}) string {
+		return i18n.TranslateFormat(lang, "cli."+key, i18n.Args(args...))
+	}
+	_, _ = fmt.Fprintf(w, `%s %s - %s
 
-Usage:
+%s
   %s [flags]
 
-Information:
-  -h, --help                        Show help (--help for any command shows its help)
-  -v, --version                     Show version
-      --status                      Show server status and health
+%s
+  -h, --help                        %s
+  -v, --version                     %s
+      --status                      %s
 
-Shell Integration:
-      --shell completions [SHELL]   Print shell completions
-      --shell init [SHELL]          Print shell init command
-      --shell help                  Show shell help
+%s
+      --shell completions [SHELL]   %s
+      --shell init [SHELL]          %s
+      --shell help                  %s
 
-Server Configuration:
-      --mode {production|development|debug}  Application mode (default: production)
-      --config DIR                  Config directory
-      --data DIR                    Data directory
-      --cache DIR                   Cache directory
-      --log DIR                     Log directory
-      --backup DIR                  Backup directory
-      --pid FILE                    PID file path
-      --address ADDR                Listen address (default: 0.0.0.0)
-      --port PORT                   Listen port (default: random 64xxx, 80 in container)
-      --baseurl PATH                URL path prefix (default: /)
-      --daemon                      Run as daemon (detach from terminal)
-      --debug                       Enable debug mode
-      --i2p                         Enable the optional I2P eepsite (opt-in)
-      --color {auto|yes|no}         Color output (default: auto)
-      --lang CODE                   Language for output (default: auto)
+%s
+      --mode {production|development|debug}  %s (default: production)
+      --config DIR                  %s
+      --data DIR                    %s
+      --cache DIR                   %s
+      --log DIR                     %s
+      --backup DIR                  %s
+      --pid FILE                    %s
+      --address ADDR                %s
+      --port PORT                   %s
+      --baseurl PATH                %s
+      --daemon                      %s
+      --debug                       %s
+      --i2p                         %s
+      --color {auto|yes|no}         %s
+      --lang CODE                   %s
 
-Service Management:
-      --service CMD                 Service management (--service --help for details)
-      --maintenance CMD             Maintenance operations (--maintenance --help for details)
-      --update [CMD]                Check/perform updates (--update --help for details)
+%s
+      --service CMD                 %s (--service --help for details)
+      --maintenance CMD             %s (--maintenance --help for details)
+      --update [CMD]                %s (--update --help for details)
 
-Run '%s <command> --help' for detailed help on any command.
-`, name, Version, name, name)
+%s
+`, name, Version, translate("server_title"), translate("usage"), name, translate("information"), translate("show_help_extended"), translate("show_version"), translate("show_status"), translate("shell_integration"), translate("print_completions"), translate("print_init"), translate("shell_help"), translate("server_configuration"), translate("mode_default"), translate("config_dir"), translate("data_dir"), translate("cache_dir"), translate("log_dir"), translate("backup_dir"), translate("pid_file"), translate("addr_default"), translate("port_default"), translate("url_default"), translate("daemon"), translate("debug"), translate("optional_i2p"), translate("color_default"), translate("lang_default"), translate("service_management"), translate("service_cmd"), translate("maintenance_cmd"), translate("update_cmd"), translateFormat("subcommand_details", "command", name+" <command>"))
+}
+
+func cliMessage(lang, key string, args ...interface{}) string {
+	if len(args) == 0 {
+		return i18n.Translate(lang, "cli."+key)
+	}
+	return i18n.TranslateFormat(lang, "cli."+key, i18n.Args(args...))
+}
+
+func writeServiceFailure(stderr io.Writer, lang, binaryName, action string, err error) {
+	log.Printf("service %s failed: %v", action, err)
+	_, _ = fmt.Fprintln(stderr, cliMessage(lang, "service_operation_failed", "binary", binaryName))
+}
+
+func writeMaintenanceFailure(stderr io.Writer, lang, binaryName, action string, err error) {
+	log.Printf("maintenance operation %s failed: %v", action, err)
+	_, _ = fmt.Fprintln(stderr, cliMessage(lang, "maintenance_failure", "binary", binaryName, "action", action))
+}
+
+func writeCommandFailure(stderr io.Writer, lang, binaryName string, err error) {
+	log.Printf("command failed: %v", err)
+	_, _ = fmt.Fprintln(stderr, cliMessage(lang, "command_failed", "binary", binaryName))
 }
 
 // logFileOpts maps a config log-file block onto logging.FileOptions. The
@@ -2217,7 +2350,7 @@ func schedulerNotifier(cfg *config.Config, auditW *audit.Writer) scheduler.Notif
 		if to == "" {
 			return
 		}
-		m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN)
+		m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN, cfg.Server.Lang)
 		if !m.Enabled() {
 			return
 		}

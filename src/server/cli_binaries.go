@@ -122,9 +122,7 @@ func (s *Server) handleCLIBinary(w http.ResponseWriter, r *http.Request) {
 		sum := sha256.Sum256([]byte(incoming))
 		if incoming == "" || subtle.ConstantTimeCompare(sum[:], s.operatorTokenHash[:]) != 1 {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="cairnbin"`)
-			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
-				"ok": false, "error": "UNAUTHORIZED", "message": "authentication required",
-			})
+			writeAPIError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "errors.unauthorized")
 			return
 		}
 	}

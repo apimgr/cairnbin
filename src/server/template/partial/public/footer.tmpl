@@ -79,9 +79,9 @@
 {{if .TrackingAllowed}}
 <template id="pb-tracking-snippet">{{trackingScript}}</template>
 {{end}}
-<script type="application/json" id="pb-consent-data">{{consentConfig}}</script>
+<script type="application/json" id="pb-consent-data">{{consentConfig .Lang}}</script>
 {{if and (not .HasConsented) (ne .CurrentPath "/server/preferences")}}
-{{$c := consentInfo}}
+{{$c := consentInfo .Lang}}
 <div id="cookie-consent" class="cookie-banner cookie-banner-bottom" data-sold="{{if $c.DataSold}}true{{else}}false{{end}}">
   <div class="cookie-banner-content">
     <span class="cookie-message">{{$c.Message}} - <a href="{{$c.PolicyURL}}" class="policy-link">{{$c.PolicyText}}</a></span>

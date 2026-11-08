@@ -167,11 +167,7 @@ func rateLimitMiddleware(rl *rateLimiter, endpointClass string) func(http.Handle
 				// is conveyed via the Retry-After header only — never as a
 				// top-level body field. writeJSON applies the required 2-space
 				// indent and single trailing newline (PART 14 JSON Formatting).
-				writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{
-					"ok":      false,
-					"error":   "RATE_LIMITED",
-					"message": "Too many requests",
-				})
+				writeAPIError(w, r, http.StatusTooManyRequests, "RATE_LIMITED", "errors.rate_limited")
 				return
 			}
 			metric.RateLimitRequestsTotal.WithLabelValues("per_ip", "allowed").Inc()

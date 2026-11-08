@@ -42,7 +42,7 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-json-create">curl -H "Content-Type: application/json" \
+                        <pre><code id="help-json-create">curl -q -LSsf -H "Content-Type: application/json" \
      -H "Accept: application/json" \
      -d '{"content":"Hello","language":"text","expires_in":"1d"}' \
      {{.BaseURL}}{{.APIBase}}/pastes</code></pre>
@@ -56,7 +56,7 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-get-raw">curl {{.BaseURL}}/raw/{id}</code></pre>
+                        <pre><code id="help-get-raw">curl -q -LSsf {{.BaseURL}}/raw/{id}</code></pre>
                     </div>
 
                     <h3 class="section-mt">{{t .Lang "help.h_delete_paste"}}</h3>
@@ -67,7 +67,7 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-delete">curl -X DELETE \
+                        <pre><code id="help-delete">curl -q -LSsf -X DELETE \
      -H "Authorization: Bearer {delete_token}" \
      "{{.BaseURL}}{{.APIBase}}/pastes/{id}"</code></pre>
                     </div>
@@ -84,7 +84,7 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-curl-raw">curl --data-binary @file.txt {{.BaseURL}}/pastes</code></pre>
+                        <pre><code id="help-curl-raw">curl -q -LSsf --data-binary @file.txt {{.BaseURL}}/pastes</code></pre>
                     </div>
 
                     <h2 class="section-mt">{{t .Lang "help.pipe_title"}}</h2>
@@ -95,7 +95,7 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-pipe">cat myfile.py | curl --data-binary @- {{.BaseURL}}/pastes</code></pre>
+                        <pre><code id="help-pipe">cat myfile.py | curl -q -LSsf --data-binary @- {{.BaseURL}}/pastes</code></pre>
                     </div>
 
                     <h2 class="section-mt">{{t .Lang "help.expiry_title"}}</h2>
@@ -108,6 +108,7 @@
                             <tr><td><code>1m</code></td><td>{{t .Lang "help.exp_1m"}}</td></tr>
                             <tr><td><code>3m</code></td><td>{{t .Lang "help.exp_3m"}}</td></tr>
                             <tr><td><code>6m</code></td><td>{{t .Lang "help.exp_6m"}}</td></tr>
+                            <tr><td><code>18m</code></td><td>{{t .Lang "help.exp_18m"}}</td></tr>
                             <tr><td><code>1y</code></td><td>{{t .Lang "help.exp_1y"}}</td></tr>
                             <tr><td><code>2y</code></td><td>{{t .Lang "help.exp_2y"}}</td></tr>
                             <tr><td><code>never</code></td><td>{{t .Lang "help.exp_never"}}</td></tr>
@@ -136,7 +137,7 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-compat-pastebin">curl -d "api_dev_key=x&api_paste_code=Hello&api_option=paste" \
+                        <pre><code id="help-compat-pastebin">curl -q -LSsf -d "api_dev_key=x&api_paste_code=Hello&api_option=paste" \
      {{.BaseURL}}/api/api_post.php</code></pre>
                     </div>
                     <div class="table-wrapper">
@@ -157,7 +158,7 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-compat-microbin">curl -d "content=Hello" {{.BaseURL}}{{.APIBase}}/pasta</code></pre>
+                        <pre><code id="help-compat-microbin">curl -q -LSsf -d "content=Hello" {{.BaseURL}}{{.APIBase}}/pasta</code></pre>
                     </div>
                     <div class="table-wrapper">
                         <table class="help-table">
@@ -178,7 +179,7 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-compat-lenpaste">curl -d "body=Hello&expiration=86400" {{.BaseURL}}/api/new</code></pre>
+                        <pre><code id="help-compat-lenpaste">curl -q -LSsf -d "body=Hello&expiration=86400" {{.BaseURL}}/api/new</code></pre>
                     </div>
                     <div class="table-wrapper">
                         <table class="help-table">
@@ -200,7 +201,7 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-compat-stikked">curl -d "text=Hello&title=Test&lang=text" {{.BaseURL}}/api/create</code></pre>
+                        <pre><code id="help-compat-stikked">curl -q -LSsf -d "text=Hello&title=Test&lang=text" {{.BaseURL}}/api/create</code></pre>
                     </div>
                     <div class="table-wrapper">
                         <table class="help-table">
@@ -221,9 +222,9 @@
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-compat-hastebin">curl -X POST --data-binary "Hello" {{.BaseURL}}/documents
+                        <pre><code id="help-compat-hastebin">curl -q -LSsf -X POST --data-binary "Hello" {{.BaseURL}}/documents
 # returns {"key":"AbCdEfGh"}
-curl {{.BaseURL}}/documents/AbCdEfGh</code></pre>
+curl -q -LSsf {{.BaseURL}}/documents/AbCdEfGh</code></pre>
                     </div>
                     <div class="table-wrapper">
                         <table class="help-table">
@@ -243,7 +244,7 @@ curl {{.BaseURL}}/documents/AbCdEfGh</code></pre>
                                 <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
                             </button>
                         </div>
-                        <pre><code id="help-compat-dpaste">curl -d "content=Hello&lexer=text&expires=86400&format=url" \
+                        <pre><code id="help-compat-dpaste">curl -q -LSsf -d "content=Hello&lexer=text&expires=86400&format=url" \
      {{.BaseURL}}/api/</code></pre>
                     </div>
                     <div class="table-wrapper">
@@ -263,13 +264,13 @@ curl {{.BaseURL}}/documents/AbCdEfGh</code></pre>
                             </button>
                         </div>
                         <pre><code id="help-compat-curlupload"># 0x0.st style
-curl -F "file=@file.txt" {{.BaseURL}}/
+curl -q -LSsf -F "file=@file.txt" {{.BaseURL}}/
 
 # sprunge style
-cat file.txt | curl -F "sprunge=&lt;-" {{.BaseURL}}/
+cat file.txt | curl -q -LSsf -F "sprunge=&lt;-" {{.BaseURL}}/
 
 # ix.io style
-curl -F "f:1=&lt;-" {{.BaseURL}}/</code></pre>
+curl -q -LSsf -F "f:1=&lt;-" {{.BaseURL}}/</code></pre>
                     </div>
                     <div class="table-wrapper">
                         <table class="help-table">

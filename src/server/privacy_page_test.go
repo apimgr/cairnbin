@@ -125,6 +125,35 @@ func TestPrivacyPageData(t *testing.T) {
 	})
 }
 
+func TestPrivacyPageLocalizesDefaultMarkdownAndPreservesOperatorOverride(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Web.SiteTitle = "Test Paste"
+	applyI18nConfig(cfg)
+	defer applyI18nConfig(config.DefaultConfig())
+	s := newMinimalServer(cfg)
+	s.templates, _ = s.buildTemplates()
+
+	r := httptest.NewRequest(http.MethodGet, "http://example.com/server/privacy?lang=es", nil)
+	w := httptest.NewRecorder()
+	s.handlePrivacy(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("privacy page status = %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Información tratada para prestar el servicio") {
+		t.Error("Spanish privacy page did not render translated default data collection content")
+	}
+
+	cfg.Server.Privacy.Content.DataCollection = "**Operator-authored disclosure**"
+	s = newMinimalServer(cfg)
+	s.templates, _ = s.buildTemplates()
+	r = httptest.NewRequest(http.MethodGet, "http://example.com/server/privacy?lang=es", nil)
+	w = httptest.NewRecorder()
+	s.handlePrivacy(w, r)
+	if !strings.Contains(w.Body.String(), "Operator-authored disclosure") {
+		t.Error("privacy page did not preserve operator-authored disclosure")
+	}
+}
+
 // findCookie returns the named cookie from a slice, or nil.
 func findCookie(cookies []*http.Cookie, name string) *http.Cookie {
 	for _, c := range cookies {

@@ -84,6 +84,7 @@ const TOAST_MAX_VISIBLE = 5;
 // they render as space frees up (PART 16: "Older toasts queue until space
 // available").
 var toastQueue = [];
+var formFieldErrorID = 0;
 
 // visibleToastCount counts transient toasts currently shown (persistent
 // entries like the SW update banner and offline indicator are excluded —
@@ -95,7 +96,9 @@ function visibleToastCount() {
 // processToastQueue renders the next queued toast once a slot frees up.
 function processToastQueue() {
     if (toastQueue.length === 0 || visibleToastCount() >= TOAST_MAX_VISIBLE) return;
-    getToastContainer().prepend(toastQueue.shift());
+    const toast = toastQueue.shift();
+    getToastContainer().prepend(toast);
+    if (toast.__toastDuration > 0) armToastTimer(toast, toast.__toastDuration);
 }
 
 // armToastTimer starts (or resumes) the auto-dismiss countdown for a toast.
@@ -136,7 +139,7 @@ function dismissToast(toast) {
 
 // showToast displays a transient notification in the #toast-container element.
 // type: 'info' | 'success' | 'warning' | 'error'
-function showToast(message, type) {
+function showToast(message, type, requestedDuration) {
     var toastType = type || 'info';
     var toast = document.createElement('div');
     toast.className = 'toast toast-' + toastType;
@@ -166,14 +169,14 @@ function showToast(message, type) {
     toast.append(icon, msg, close);
     toast.addEventListener('click', function () { dismissToast(toast); });
 
-    var duration = TOAST_DURATIONS[toastType];
-    if (duration === undefined) duration = TOAST_DURATIONS.info;
+    var duration = requestedDuration === undefined ? TOAST_DURATIONS[toastType] : Number(requestedDuration);
+    if (duration === undefined || !Number.isFinite(duration) || duration < 0) duration = TOAST_DURATIONS.info;
+    toast.__toastDuration = duration;
     if (duration > 0) {
         var progress = document.createElement('div');
         progress.className = 'toast-progress';
         progress.style.animationDuration = duration + 'ms';
         toast.appendChild(progress);
-        armToastTimer(toast, duration);
         toast.addEventListener('mouseenter', function () { pauseToastTimer(toast); });
         toast.addEventListener('mouseleave', function () { resumeToastTimer(toast); });
     }
@@ -183,6 +186,7 @@ function showToast(message, type) {
         return;
     }
     getToastContainer().prepend(toast);
+    if (duration > 0) armToastTimer(toast, duration);
 }
 
 // Escape dismisses the topmost (newest, first-rendered) toast.
@@ -361,7 +365,11 @@ document.addEventListener('click', function (event) {
     const box = dlg.getBoundingClientRect();
     const outside = event.clientX < box.left || event.clientX > box.right
         || event.clientY < box.top || event.clientY > box.bottom;
-    if (outside) dlg.close();
+    if (outside && typeof dlg.__requestClose === 'function') {
+        dlg.__requestClose();
+    } else if (outside) {
+        dlg.close();
+    }
 });
 
 // Capture the install prompt; never show the browser default automatically.
@@ -771,6 +779,7 @@ async function fetchAPI(endpoint, options) {
 
     var modalEl = null;
     var modalTrigger = null;
+    var modalInitial = null;
 
     // closePreferences closes and removes the native <dialog>, then returns
     // focus to the control that opened it.
@@ -790,6 +799,43 @@ async function fetchAPI(endpoint, options) {
             modalTrigger.focus();
         }
         modalTrigger = null;
+        modalInitial = null;
+    }
+
+    function requestClosePreferences() {
+        if (!modalEl) return;
+        var pref = document.getElementById('pref-preferences');
+        var analytics = document.getElementById('pref-analytics');
+        var changed = !!modalInitial && ((pref && pref.checked) !== modalInitial.preferences
+            || (analytics && analytics.checked) !== modalInitial.analytics);
+        if (!changed) {
+            closePreferences();
+            return;
+        }
+
+        var confirmDialog = el('dialog', {
+            class: 'install-dialog',
+            'aria-labelledby': 'consent-discard-title',
+            'aria-describedby': 'consent-discard-message'
+        });
+        confirmDialog.appendChild(el('h2', { id: 'consent-discard-title', class: 'install-dialog-title' }, t('unsaved_changes_title')));
+        confirmDialog.appendChild(el('p', { id: 'consent-discard-message' }, t('unsaved_changes')));
+        var actions = el('div', { class: 'install-dialog-actions' });
+        var stay = el('button', { type: 'button', class: 'btn btn-secondary' }, t('cancel'));
+        var discard = el('button', { type: 'button', class: 'btn btn-danger' }, t('discard_changes'));
+        stay.addEventListener('click', function () { confirmDialog.close(); });
+        discard.addEventListener('click', function () {
+            confirmDialog.close();
+            closePreferences();
+        });
+        actions.append(stay, discard);
+        confirmDialog.appendChild(actions);
+        confirmDialog.addEventListener('close', function () {
+            confirmDialog.remove();
+        });
+        document.body.appendChild(confirmDialog);
+        confirmDialog.showModal();
+        stay.focus();
     }
 
     // categoryRow builds one cookie-category toggle row.
@@ -824,6 +870,7 @@ async function fetchAPI(endpoint, options) {
             preferences: !!cfg.defaultPreferences,
             analytics: !!cfg.defaultAnalytics
         };
+        modalInitial = { preferences: !!current.preferences, analytics: !!current.analytics };
         var desc = cfg.descriptions || {};
         var title = cfg.preferencesText || t('manage_preferences');
 
@@ -847,20 +894,27 @@ async function fetchAPI(endpoint, options) {
 
         var actions = el('div', { class: 'cookie-modal-actions' });
         var cancelBtn = el('button', { type: 'button', class: 'btn-decline' }, t('cancel'));
-        cancelBtn.addEventListener('click', closePreferences);
+        cancelBtn.addEventListener('click', requestClosePreferences);
         var saveBtn = el('button', { type: 'button', class: 'btn-accept' }, t('save'));
         saveBtn.addEventListener('click', savePreferences);
         actions.appendChild(cancelBtn);
         actions.appendChild(saveBtn);
         dialog.appendChild(actions);
 
-        // Native Escape closes the dialog; keep our state in sync.
+        // Escape asks before discarding changed consent preferences.
+        dialog.addEventListener('cancel', function (event) {
+            event.preventDefault();
+            requestClosePreferences();
+        });
+
+        // Native close events can still occur through platform behavior.
         dialog.addEventListener('close', function () {
             if (modalEl === dialog) {
                 closePreferences();
             }
         });
         modalEl = dialog;
+        dialog.__requestClose = requestClosePreferences;
         document.body.appendChild(dialog);
         dialog.showModal();
         saveBtn.focus();
@@ -1328,24 +1382,51 @@ function initFormValidation() {
         el.setAttribute('aria-invalid', 'true');
         error.textContent = el.validationMessage;
         error.hidden = false;
+        const group = el.closest('.form-group');
+        if (group) group.classList.add('error');
     }
 
     function clearFieldError(el, error) {
         el.setAttribute('aria-invalid', 'false');
         error.textContent = '';
         error.hidden = true;
+        const group = el.closest('.form-group');
+        if (group) group.classList.remove('error');
     }
 
-    var fields = document.querySelectorAll('.form-group input, .form-group select, .form-group textarea');
+    var fields = document.querySelectorAll('form input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]), form select, form textarea');
     fields.forEach(function (el) {
+        if (!el.id) {
+            formFieldErrorID += 1;
+            el.id = 'form-field-' + formFieldErrorID;
+        }
         var error = document.getElementById(el.id + '-error');
         if (!error) {
-            return;
+            error = document.createElement('span');
+            error.id = el.id + '-error';
+            error.className = 'field-error';
+            error.setAttribute('role', 'alert');
+            error.hidden = true;
+            el.insertAdjacentElement('afterend', error);
+        }
+        var describedBy = (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+        if (!describedBy.includes(error.id)) describedBy.push(error.id);
+        el.setAttribute('aria-describedby', describedBy.join(' '));
+        if (!el.hasAttribute('aria-invalid')) el.setAttribute('aria-invalid', 'false');
+
+        function normalizeAndCheck() {
+            if (el instanceof HTMLInputElement && el.type === 'password') {
+                const hasEdgeWhitespace = el.value !== el.value.trim();
+                el.setCustomValidity(hasEdgeWhitespace ? t('password_whitespace') : '');
+            } else if (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && ['text', 'email', 'url', 'search', 'tel'].includes(el.type))) {
+                el.value = el.value.trim();
+            }
+            return el.checkValidity();
         }
 
         // Validate on blur — never while the user is still typing.
         el.addEventListener('blur', function () {
-            if (el.checkValidity()) {
+            if (normalizeAndCheck()) {
                 clearFieldError(el, error);
             } else {
                 showFieldError(el, error);
@@ -1355,6 +1436,9 @@ function initFormValidation() {
         // Clear on fix — only re-check once an error has already been shown;
         // don't validate a field's first pass while the user is typing.
         el.addEventListener('input', function () {
+            if (el instanceof HTMLInputElement && el.type === 'password') {
+                el.setCustomValidity(el.value !== el.value.trim() ? t('password_whitespace') : '');
+            }
             if (el.getAttribute('aria-invalid') === 'true' && el.checkValidity()) {
                 clearFieldError(el, error);
             }
@@ -1362,7 +1446,31 @@ function initFormValidation() {
 
         // Native "invalid" event fires on submit attempt.
         el.addEventListener('invalid', function () {
+            if (el instanceof HTMLInputElement && el.type === 'password' && el.value !== el.value.trim()) {
+                el.setCustomValidity(t('password_whitespace'));
+            }
             showFieldError(el, error);
+        });
+    });
+
+    document.querySelectorAll('form').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            var changed = false;
+            form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]), textarea').forEach(function (el) {
+                if (el instanceof HTMLInputElement && el.type === 'password') {
+                    el.setCustomValidity(el.value !== el.value.trim() ? t('password_whitespace') : '');
+                } else if (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && ['text', 'email', 'url', 'search', 'tel'].includes(el.type))) {
+                    var trimmed = el.value.trim();
+                    if (trimmed !== el.value) {
+                        el.value = trimmed;
+                        changed = true;
+                    }
+                }
+            });
+            if (changed) {
+                event.preventDefault();
+                form.requestSubmit(event.submitter || undefined);
+            }
         });
     });
 
@@ -1404,7 +1512,12 @@ document.addEventListener('DOMContentLoaded', initFormValidation);
         const gap = parseFloat(cs.columnGap) || 0;
         const padding = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
         const available = header.clientWidth - padding - brand.offsetWidth - actions.offsetWidth - gap * 2;
-        header.classList.add(needed <= available ? 'nav-fit' : 'nav-overflow');
+        const fits = needed <= available;
+        header.classList.add(fits ? 'nav-fit' : 'nav-overflow');
+        if (fits) {
+            const menu = header.querySelector('.nav-checkbox');
+            if (menu) menu.checked = false;
+        }
     }
 
     let pending = 0;
@@ -1420,3 +1533,20 @@ document.addEventListener('DOMContentLoaded', initFormValidation);
     window.addEventListener('load', schedule);
     schedule();
 })();
+
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const menu = document.getElementById('nav-toggle');
+    if (menu?.checked) {
+        menu.checked = false;
+        menu.focus();
+    }
+});
+
+document.querySelectorAll('.owner-token-form select[name="expires"], .owner-token-edit select[name="expires"]').forEach((select) => {
+    const customDate = select.form?.querySelector('.owner-token-custom-date');
+    if (!customDate) return;
+    select.addEventListener('change', () => {
+        customDate.open = select.value === 'custom';
+    });
+});

@@ -136,6 +136,10 @@ func TestToolsListGeneratedFromRoutes(t *testing.T) {
 	if _, ok := schema["properties"].(map[string]any)["id"]; !ok {
 		t.Errorf("getApiV1PastesId schema lacks id: %v", schema)
 	}
+	listSchema := names["getApiV1Pastes"]["inputSchema"].(map[string]any)
+	if _, ok := listSchema["properties"].(map[string]any)["scope"]; !ok {
+		t.Errorf("getApiV1Pastes schema lacks public/owned scope: %v", listSchema)
+	}
 }
 
 func TestToolCallDispatchesInProcessWithAuthOnly(t *testing.T) {
@@ -162,6 +166,23 @@ func TestToolCallDispatchesInProcessWithAuthOnly(t *testing.T) {
 	}
 	if echoed["cookie"] != "" {
 		t.Errorf("cookies must never be forwarded, got %q", echoed["cookie"])
+	}
+}
+
+func TestListToolPassesOwnedScopeAndBearerToken(t *testing.T) {
+	rec := rpc(t, newTestHandler(true), `{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"getApiV1Pastes","arguments":{"scope":"owned"}}}`,
+		map[string]string{"Authorization": "Bearer tok_owner"})
+	result := decode(t, rec)["result"].(map[string]any)
+	content := result["content"].([]any)[0].(map[string]any)
+	var echoed map[string]string
+	if err := json.Unmarshal([]byte(content["text"].(string)), &echoed); err != nil {
+		t.Fatalf("tool response is not JSON: %v", err)
+	}
+	if echoed["query"] != "scope=owned" {
+		t.Errorf("query = %q, want scope=owned", echoed["query"])
+	}
+	if echoed["auth"] != "Bearer tok_owner" {
+		t.Errorf("Authorization = %q, want Bearer token", echoed["auth"])
 	}
 }
 

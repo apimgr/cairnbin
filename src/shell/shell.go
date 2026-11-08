@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/apimgr/cairnbin/src/common/i18n"
 )
 
 // Detect returns the name of the running shell by inspecting $SHELL, the
@@ -55,31 +57,12 @@ func isKnown(name string) bool {
 }
 
 // PrintHelp writes the --shell --help output to stdout.
-func PrintHelp(binName string) {
-	fmt.Printf(`Shell integration commands:
-
-  completions [SHELL]   Print shell completion script
-                        Auto-detects shell if SHELL omitted
-                        Supported: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
-
-  init [SHELL]          Print shell init command for eval
-                        Auto-detects shell if SHELL omitted
-
-Usage:
-  # Add to shell profile for persistent completions
-  # bash
-  %s --shell init >> ~/.bashrc
-  # zsh
-  %s --shell init >> ~/.zshrc
-  # fish
-  %s --shell init >> ~/.config/fish/config.fish
-
-  # Or eval directly for current session
-  eval "$(%s --shell init)"
-
-  # Generate completion script only
-  %s --shell completions bash > /etc/bash_completion.d/%s
-`, binName, binName, binName, binName, binName, binName)
+func PrintHelp(binName string, languages ...string) {
+	lang := "en"
+	if len(languages) > 0 {
+		lang = i18n.GetLanguage(languages[0], "")
+	}
+	fmt.Println(i18n.TranslateFormat(lang, "cli.shell_help_full", i18n.Args("binary", binName)))
 }
 
 // PrintInit writes the shell init snippet (meant to be eval'd) for the
@@ -188,7 +171,7 @@ complete -F _%s %s
 }
 
 func printZsh(bin string) {
-	fmt.Printf(`#compdef %s
+	completion := fmt.Sprintf(`#compdef %s
 # zsh completion for %s
 _%s() {
     local -a opts
@@ -213,16 +196,17 @@ _%s() {
         '--baseurl[Base URL]:url:'
         '--mode[Application mode]:mode:(production development)'
         '--color[Color output]:when:(auto yes no)'
-        '--lang[Language]:lang:(en fr de es pt ja zh)'
+        '--lang[Language]:lang:(%s)'
     )
     _arguments -s "${opts[@]}"
 }
 _%s "$@"
-`, bin, bin, bin, bin)
+`, bin, bin, bin, strings.Join(i18n.SupportedCodes(), " "), bin)
+	fmt.Print(completion)
 }
 
 func printFish(bin string) {
-	fmt.Printf(`# fish completion for %s
+	completion := fmt.Sprintf(`# fish completion for %s
 complete -c %s -l help    -d 'Show help'
 complete -c %s -l version -d 'Show version'
 complete -c %s -l status  -d 'Show server status'
@@ -246,12 +230,13 @@ complete -c %s -l address -d 'Listen address'
 complete -c %s -l baseurl -d 'Base URL'
 complete -c %s -l mode    -d 'Application mode'  -xa 'production development'
 complete -c %s -l color   -d 'Color output'      -xa 'auto yes no'
-complete -c %s -l lang    -d 'Language'          -xa 'en fr de es pt ja zh'
+complete -c %s -l lang    -d 'Language'          -xa '%s'
 `, bin,
 		bin, bin, bin, bin, bin,
 		bin, bin, bin, bin,
 		bin, bin, bin, bin, bin, bin,
-		bin, bin, bin, bin, bin, bin)
+		bin, bin, bin, bin, bin, bin, strings.Join(i18n.SupportedCodes(), " "))
+	fmt.Print(completion)
 }
 
 func printPOSIX(bin string) {

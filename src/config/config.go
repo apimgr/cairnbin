@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 
+	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/common/secretbox"
 	"github.com/apimgr/cairnbin/src/logging"
 	"github.com/apimgr/cairnbin/src/updater"
@@ -703,8 +704,7 @@ type MetricsLokiConfig struct {
 
 // MetricsConfig configures the /metrics endpoint.
 type MetricsConfig struct {
-	Enabled  bool   `yaml:"enabled"`
-	Endpoint string `yaml:"endpoint"`
+	Enabled bool `yaml:"enabled"`
 	// IncludeSystem exposes system_* gauges (CPU, memory, disk) when true.
 	IncludeSystem bool `yaml:"include_system"`
 	// IncludeRuntime exposes cairnbin_go_* runtime gauges when true.
@@ -1170,8 +1170,6 @@ type EmailConfig struct {
 // EmailEventsConfig controls which operator events trigger an email (AI.md:26587-26598).
 // All fields default to false except the high-signal events that are true by default.
 type EmailEventsConfig struct {
-	Startup          bool `yaml:"startup"`
-	Shutdown         bool `yaml:"shutdown"`
 	BackupComplete   bool `yaml:"backup_complete"`
 	BackupFailed     bool `yaml:"backup_failed"`
 	SSLExpiring      bool `yaml:"ssl_expiring"`
@@ -1496,8 +1494,8 @@ type BrandingLink struct {
 // (PART 16). They are used both to seed a fresh config and as the runtime fallback
 // when an operator leaves a branding field empty.
 const (
-	defaultBrandingTagline     = "A fast, public paste sharing service — no account required."
-	defaultBrandingDescription = "Cairnbin is a public paste sharing service for code snippets, configuration files, logs, and other text. Create and share pastes without an account, or use compatible clients for pastebin.com, microbin, lenpaste, stikked, hastebin, dpaste, curl-upload services, and termbin/fiche."
+	defaultBrandingTagline     = "Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, 0x0.st, sprunge.us, ix.io, and termbin/fiche."
+	defaultBrandingDescription = "Cairnbin is a public paste sharing service for code snippets, configuration files, logs, and other text. Create and share pastes without an account, or use compatible clients for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, 0x0.st, sprunge.us, ix.io, and termbin/fiche."
 )
 
 // defaultBrandingFeatures is the real feature list drawn from the IDEA.md in-scope
@@ -1507,7 +1505,7 @@ var defaultBrandingFeatures = []string{
 	"Configurable expiry, unlisted pastes, and burn-after-read deletion",
 	"Owner tokens for paste deletion and token management",
 	"Native REST API, OpenAPI/Swagger, GraphQL, and MCP support",
-	"Compatible with pastebin.com, microbin, lenpaste, stikked, hastebin, dpaste, curl-upload, and termbin/fiche clients",
+	"Compatible with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, 0x0.st, sprunge.us, ix.io, and termbin/fiche clients",
 	"Optional Tor and I2P access",
 	"No accounts or paid tiers",
 }
@@ -1687,10 +1685,11 @@ type SchedulerConfig struct {
 
 // SchedulerTask holds the settings for a single scheduled task (PART 12/18).
 type SchedulerTask struct {
-	Enabled     bool   `yaml:"enabled"`
+	Enabled     *bool  `yaml:"enabled"`
 	Schedule    string `yaml:"schedule"`
-	RetryOnFail bool   `yaml:"retry_on_fail"`
+	RetryOnFail *bool  `yaml:"retry_on_fail"`
 	RetryDelay  string `yaml:"retry_delay"`
+	MaxRetries  int    `yaml:"max_retries"`
 	// MaxAge and MaxSize apply to log_rotation.
 	MaxAge  string `yaml:"max_age"`
 	MaxSize string `yaml:"max_size"`
@@ -1827,7 +1826,6 @@ func DefaultConfig() *Config {
 			},
 			Metrics: MetricsConfig{
 				Enabled:        true,
-				Endpoint:       "/metrics",
 				IncludeSystem:  true,
 				IncludeRuntime: true,
 				// Token is the prometheus-service token, kept for compatibility
@@ -2000,8 +1998,6 @@ func DefaultConfig() *Config {
 					},
 					// Per-event defaults from AI.md:26591-26597: high-signal events on, low-noise off.
 					Events: EmailEventsConfig{
-						Startup:          false,
-						Shutdown:         false,
 						BackupComplete:   false,
 						BackupFailed:     true,
 						SSLExpiring:      true,
@@ -2017,7 +2013,7 @@ func DefaultConfig() *Config {
 			I18n: I18nConfig{
 				Enabled:            true,
 				DefaultLanguage:    "en",
-				AvailableLanguages: []string{"en", "es", "zh", "fr", "ar", "de", "ja"},
+				AvailableLanguages: i18n.SupportedCodes(),
 				FallbackLanguage:   "en",
 				CookieName:         "lang",
 				CookieMaxAge:       "365d",
@@ -2133,13 +2129,13 @@ func DefaultConfig() *Config {
 						},
 						{
 							Condition: "user_initiated",
-							When:      "User explicitly shares content (social buttons, exports)",
-							Data:      "Whatever user chooses to share",
+							When:      "User creates a public paste or shares the URL of a public or unlisted paste",
+							Data:      "The paste content and URL are accessible according to the selected visibility; public pastes may be listed, while unlisted pastes are accessible by URL",
 						},
 					},
 				},
 				Retention: RetentionPolicy{
-					Period:            "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days. Anonymized analytics data may be retained for up to 12 months.",
+					Period:            "Pastes remain available until their configured expiry, burn-after-read limit, or deletion. Native pastes can be deleted with their owner token; compatibility pastes use their protocol-specific delete token. Server logs and backups follow the operator's configured retention.",
 					ExportAvailable:   true,
 					DeletionAvailable: true,
 				},
@@ -2182,10 +2178,10 @@ func DefaultConfig() *Config {
 					Services: []ThirdPartyService{},
 				},
 				Content: PrivacyContent{
-					DataCollection:  "**We collect only what is necessary to provide our service:**\n\n**Usage Information (with consent):**\n- Pages visited and features used\n- Browser type and device information\n- Approximate location (country/region from IP, not precise)\n\n**Technical Information:**\n- IP address (for security and abuse prevention)\n- API token identifiers (hashed, never stored in plain text)\n\n**We do NOT collect:**\n- Payment information (unless explicitly required by the service)\n- Precise location data\n- Data from other websites or apps\n",
-					DataUsage:       "**Your data is used solely to:**\n\n- **Provide the service:** Authentication, core functionality\n- **Improve the experience:** Performance optimization, bug fixes, feature improvements\n- **Ensure security:** Prevent abuse, detect fraud, protect your account\n- **Communicate:** Service updates, security alerts, and (with consent) product news\n\n**Your data is NEVER:**\n- Sold to third parties\n- Used for targeted advertising\n- Shared without your explicit consent (except as required by law)\n",
-					DataUsageIfSold: "**Your data may be used to:**\n\n- **Provide the service:** Authentication, core functionality\n- **Improve the experience:** Performance optimization, bug fixes, feature improvements\n- **Ensure security:** Prevent abuse, detect fraud, protect your account\n- **Communicate:** Service updates, security alerts, and (with consent) product news\n- **Third-party sharing:** Your data may be shared with or sold to third parties for analytics, advertising, or other purposes as described below\n\n**Your rights:**\n- You can opt out of data sales via your account privacy settings\n- You can request deletion of your data at any time\n- See \"Your Rights\" section below for details\n",
-					DataSecurity:    "**How we protect your data:**\n\n- All data is stored on our servers (not third-party cloud services unless specified)\n- API tokens are stored as SHA-256 hashes (never in plain text)\n- All connections are encrypted (HTTPS/TLS)\n- Regular security audits and updates\n- Access controls and audit logging for operator actions\n",
+					DataCollection:  "**Information handled to provide the service:**\n\n- Paste content and the optional title, language, expiry, visibility, and burn-after-read settings you submit\n- IP address and request details used for rate limiting, abuse prevention, and security logs\n- Owner tokens, stored as a SHA-256 hash with an encrypted recoverable copy; compatibility protocols may use their own delete tokens\n- Theme, language, and consent preferences stored in browser cookies\n- If an operator enables analytics and a visitor consents, the configured provider receives the analytics data described in the Cookies section\n\nGeoIP country information is derived from the IP address using a downloaded database; the visitor's IP is not sent to a GeoIP lookup service.",
+					DataUsage:       "**Information is used to:**\n\n- Create, display, retrieve, and delete pastes according to their settings and the applicable owner or compatibility delete token\n- Apply expiry and burn-after-read deletion\n- Operate the service, enforce rate limits, prevent abuse, and investigate security events\n- Store visitor preferences and record consent choices\n- Provide analytics only when an operator has configured a provider and the visitor has consented\n- Deliver contact-form messages to the configured recipient when email delivery is enabled\n\nCairnbin has no user accounts, paid tiers, or targeted advertising.",
+					DataUsageIfSold: "**Information is used to:**\n\n- Create, display, retrieve, and delete pastes according to their settings and the applicable owner or compatibility delete token\n- Apply expiry and burn-after-read deletion\n- Operate the service, enforce rate limits, prevent abuse, and investigate security events\n- Store visitor preferences and record consent choices\n- Provide analytics only when an operator has configured a provider and the visitor has consented\n- Deliver contact-form messages to the configured recipient when email delivery is enabled\n\nThe operator has configured this instance to sell or share data. The categories and conditions are listed in the data-sharing section below; use the opt-out control on this page to record a device-level opt-out.",
+					DataSecurity:    "**How information is protected:**\n\n- Owner and compatibility delete tokens are stored as hashes; owner tokens also have an encrypted recoverable copy\n- Paste and token data are stored in the database configured by the operator (local SQLite by default, or remote libSQL/Turso when configured)\n- Public-site connections use HTTPS/TLS; Tor and I2P addresses use their overlay network transport\n- Operator actions are subject to access controls and audit logging\n- Backups can be encrypted by the operator\n",
 				},
 			},
 			Tracking: TrackingConfig{
@@ -2365,6 +2361,24 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, decodeErr
+}
+
+// ReadLanguage reads only server.lang without creating a missing config file or
+// generating runtime secrets. It is used for early CLI output such as --help.
+func ReadLanguage(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var cfg struct {
+		Server struct {
+			Lang string `yaml:"lang"`
+		} `yaml:"server"`
+	}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return "", err
+	}
+	return cfg.Server.Lang, nil
 }
 
 // ensureEncryptionKey generates a 32-byte AES-256-GCM key and stores it
@@ -3978,15 +3992,12 @@ type I18nConfig struct {
 	CookieMaxAge       string   `yaml:"cookie_max_age"`
 }
 
-// i18nSupported lists the languages embedded in every binary (PART 30).
-var i18nSupported = []string{"en", "es", "zh", "fr", "ar", "de", "ja"}
-
 // validateI18n keeps server.i18n usable: unknown codes are dropped, an empty
 // list means all languages, the default and fallback must be available, and
 // the cookie name/age must be sane. Invalid values warn and take the default.
 func validateI18n(c *I18nConfig) {
 	known := map[string]bool{}
-	for _, l := range i18nSupported {
+	for _, l := range i18n.SupportedCodes() {
 		known[l] = true
 	}
 	var avail []string
@@ -4002,8 +4013,18 @@ func validateI18n(c *I18nConfig) {
 			avail = append(avail, l)
 		}
 	}
-	if len(avail) == 0 {
-		avail = append([]string(nil), i18nSupported...)
+	missingRequired := false
+	for _, l := range i18n.RequiredCodes() {
+		if !seen[l] {
+			missingRequired = true
+			break
+		}
+	}
+	if len(avail) == 0 || missingRequired {
+		if len(avail) > 0 && missingRequired {
+			log.Printf("[config] WARNING: server.i18n.available_languages cannot exclude a required language; using all embedded languages")
+		}
+		avail = i18n.SupportedCodes()
 		seen = map[string]bool{}
 		for _, l := range avail {
 			seen[l] = true
@@ -4019,7 +4040,7 @@ func validateI18n(c *I18nConfig) {
 		}
 	}
 	c.FallbackLanguage = strings.ToLower(strings.TrimSpace(c.FallbackLanguage))
-	if !known[c.FallbackLanguage] {
+	if !seen[c.FallbackLanguage] {
 		c.FallbackLanguage = "en"
 	}
 	c.CookieName = strings.TrimSpace(c.CookieName)

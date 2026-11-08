@@ -34,12 +34,11 @@
                         <div class="form-group">
                             <label for="token" class="form-label">{{t .Lang "paste.delete_token_label"}}</label>
                             <input
-                                type="text"
+                                type="password"
                                 id="token"
                                 name="token"
                                 class="form-input form-mono"
                                 placeholder="{{t .Lang "paste.delete_token_placeholder"}}"
-                                required
                                 autocomplete="off"
                                 data-token-error="{{if .Error}}true{{else}}false{{end}}"
                                 aria-describedby="token-error"

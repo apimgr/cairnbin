@@ -145,7 +145,7 @@ func (m *mockDB) GetPasteByID(id string) (*model.Paste, error) { return nil, nil
 func (m *mockDB) GetPublicPastes(page, limit int) ([]model.PasteListItem, int, error) {
 	return nil, 0, nil
 }
-func (m *mockDB) SearchPublicPastes(page, limit int, search, sortBy, order string) ([]model.PasteListItem, int, error) {
+func (m *mockDB) SearchPublicPastes(page, limit int, search, sortBy, order string, pasteType ...string) ([]model.PasteListItem, int, error) {
 	return nil, 0, nil
 }
 func (m *mockDB) IncrementViewsAndCheckBurn(id string) (int, bool, error) { return 0, false, nil }
@@ -409,6 +409,20 @@ func TestScheduler_RunNow_ExecutesTask(t *testing.T) {
 	}
 }
 
+func TestScheduler_RunNowSkipsDisabledTask(t *testing.T) {
+	var count int64
+	s := scheduler.New(nil)
+	if err := s.Register("disabled", "Disabled", "@hourly", false, countTask(&count)); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if err := s.RunNow("disabled"); err == nil {
+		t.Fatal("RunNow on disabled task succeeded")
+	}
+	if atomic.LoadInt64(&count) != 0 {
+		t.Fatalf("disabled task ran %d times", count)
+	}
+}
+
 func TestScheduler_RunNow_UpdatesState(t *testing.T) {
 	s := scheduler.New(nil)
 	if err := s.Register("run2", "Run2", "* * * * *", true, nopTask()); err != nil {
@@ -432,6 +446,27 @@ func TestScheduler_RunNow_UpdatesState(t *testing.T) {
 	}
 	if state.RunCount != 1 {
 		t.Errorf("RunCount = %d, want 1", state.RunCount)
+	}
+}
+
+func TestScheduler_LastRunRecordsCompletionTime(t *testing.T) {
+	s := scheduler.New(nil)
+	var completed time.Time
+	if err := s.Register("finished", "Finished", "* * * * *", true, func(context.Context) error {
+		completed = time.Now()
+		return nil
+	}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if err := s.RunNow("finished"); err != nil {
+		t.Fatalf("RunNow: %v", err)
+	}
+	state, ok := s.GetTask("finished")
+	if !ok {
+		t.Fatal("task not found after RunNow")
+	}
+	if state.LastRun.Before(completed) {
+		t.Errorf("LastRun %v predates task completion %v", state.LastRun, completed)
 	}
 }
 
@@ -602,6 +637,23 @@ func TestScheduler_StartStop(t *testing.T) {
 	s.Stop()
 }
 
+func TestScheduler_RunNowAfterStopRequiresRestart(t *testing.T) {
+	s := scheduler.New(nil)
+	if err := s.Register("manual", "Manual", "@daily", true, nopTask()); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	s.Start()
+	s.Stop()
+	if err := s.RunNow("manual"); err == nil {
+		t.Fatal("RunNow after Stop succeeded; expected stopping error")
+	}
+	s.Start()
+	if err := s.RunNow("manual"); err != nil {
+		t.Fatalf("RunNow after scheduler restart: %v", err)
+	}
+	s.Stop()
+}
+
 func TestScheduler_LoadState_DBError_Continues(t *testing.T) {
 	// If ListSchedulerTasks returns an error, Start should still proceed
 	// (log the error, compute nextRun from scratch, not panic).
@@ -617,6 +669,12 @@ func TestScheduler_LoadState_DBError_Continues(t *testing.T) {
 	s.Start()
 	if !s.Running() {
 		t.Error("scheduler should be running despite DB error on start")
+	}
+	db.mu.Lock()
+	registeredTasks := len(db.tasks)
+	db.mu.Unlock()
+	if registeredTasks != 0 {
+		t.Errorf("failed state read must not overwrite persistent task rows; got %d upserts", registeredTasks)
 	}
 	s.Stop()
 }

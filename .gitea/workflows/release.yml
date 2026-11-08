@@ -23,6 +23,9 @@ jobs:
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
+    env:
+      GOMODCACHE: /go/pkg/mod
+      GOCACHE: /root/.cache/go-build
     strategy:
       matrix:
         include:
@@ -47,6 +50,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Cache Go modules and build data
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: |
+            /go/pkg/mod
+            /root/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}-${{ matrix.goos }}-${{ matrix.goarch }}-release
+          restore-keys: |
+            ${{ runner.os }}-go-${{ hashFiles('go.sum') }}-${{ matrix.goos }}-${{ matrix.goarch }}-
 
       - name: Set build info
         run: |

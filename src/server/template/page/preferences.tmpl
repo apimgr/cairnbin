@@ -42,7 +42,7 @@
                         </select>
                         <h2 class="section-mt">{{t .Lang "preferences.consent_title"}}</h2>
                         <p>{{t .Lang "preferences.consent_desc"}}</p>
-                        {{$c := consentInfo}}
+                        {{$c := consentInfo .Lang}}
                         <p class="cookie-category"><label><input type="checkbox" checked disabled><span>{{$c.Descriptions.Essential}}</span></label></p>
                         <p class="cookie-category"><label><input type="checkbox" name="consent_preferences" value="1"{{if .ConsentPreferences}} checked{{end}}><span>{{$c.Descriptions.Preferences}}</span></label></p>
                         <p class="cookie-category"><label><input type="checkbox" name="consent_analytics" value="1"{{if .ConsentAnalytics}} checked{{end}}{{if not .ConsentAnalyticsConfigured}} disabled{{end}}><span>{{$c.Descriptions.Analytics}}</span></label></p>

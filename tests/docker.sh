@@ -44,7 +44,7 @@ __check_status() {
     local desc="$1" method="$2" url="$3" expected="$4"
     shift 4
     local code
-    code=$(curl -q -s -o /dev/null -w "%{http_code}" -X "${method}" "$@" "${url}")
+    code=$(curl -q -LSs -o /dev/null -w "%{http_code}" -X "${method}" "$@" "${url}")
     if [[ "${code}" == "${expected}" ]]; then
         __pass "${desc} → ${code}"
     else
@@ -56,7 +56,7 @@ __check_body() {
     local desc="$1" url="$2" pattern="$3"
     shift 3
     local body
-    body=$(curl -q -sf "$@" "${url}" 2>/dev/null || true)
+    body=$(curl -q -LSsf "$@" "${url}" 2>/dev/null || true)
     if printf '%s' "${body}" | grep -qi -- "${pattern}"; then
         __pass "${desc}"
     else
@@ -146,7 +146,7 @@ __info "Starting compose project ${DOCKER_COMPOSE_PROJECT} on port ${DOCKER_PORT
 # Wait for server to become ready (up to 30 s)
 __info "Waiting for server to start..."
 for ((i = 1; i <= 30; i++)); do
-    if curl -q --silent --fail "${DOCKER_BASE_URL}/server/healthz" >/dev/null 2>&1; then
+    if curl -q -LSsf "${DOCKER_BASE_URL}/server/healthz" >/dev/null 2>&1; then
         break
     fi
     sleep 1
@@ -195,13 +195,13 @@ __check_status "GET /api/v1/pastes.txt → 200" GET "${DOCKER_BASE_URL}/api/v1/p
 # ── Create paste: multiple request formats ───────────────────────────────────
 __info "--- Paste creation ---"
 
-DOCKER_CSRF_TOKEN=$(curl -q -sS -D - -o /dev/null "${DOCKER_BASE_URL}/create" | \
+DOCKER_CSRF_TOKEN=$(curl -q -LSsf -D - -o /dev/null "${DOCKER_BASE_URL}/create" | \
     sed -n 's/^Set-Cookie: csrf_token=\([^;]*\).*/\1/ip' | head -1)
 [[ -n "${DOCKER_CSRF_TOKEN}" ]] || __fail "Could not obtain CSRF token from /create"
 DOCKER_CSRF_ARGS=(--cookie "csrf_token=${DOCKER_CSRF_TOKEN}" --header "X-CSRF-Token: ${DOCKER_CSRF_TOKEN}")
 
 # JSON body
-DOCKER_RESPONSE=$(curl -q -sf \
+DOCKER_RESPONSE=$(curl -q -LSsf \
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     "${DOCKER_CSRF_ARGS[@]}" \
@@ -213,7 +213,7 @@ DOCKER_OWNER_TOKEN=$(printf '%s' "${DOCKER_RESPONSE}" | grep -o -- '"owner_token
 __pass "Create paste (JSON): id=${DOCKER_PASTE_ID}"
 
 # Raw body (curl pipe style)
-DOCKER_RAW_RESPONSE=$(curl -q -sf \
+DOCKER_RAW_RESPONSE=$(curl -q -LSsf \
     --header "Content-Type: text/plain" \
     --header "Accept: application/json" \
     "${DOCKER_CSRF_ARGS[@]}" \
@@ -227,7 +227,7 @@ __pass "Create paste (raw body)"
 # --no-location: report the initial response code, not a followed redirect's
 # (some environments set "location" in .curlrc, which would otherwise make
 # curl auto-follow the 303 and report the redirected page's 200 instead)
-DOCKER_FORM_CODE=$(curl -q -s -o /dev/null -w "%{http_code}" --no-location \
+DOCKER_FORM_CODE=$(curl -q -LSs -o /dev/null -w "%{http_code}" --no-location \
     --header "Content-Type: application/x-www-form-urlencoded" \
     "${DOCKER_CSRF_ARGS[@]}" \
     --data "content=form+paste+test" \
@@ -237,7 +237,7 @@ DOCKER_FORM_CODE=$(curl -q -s -o /dev/null -w "%{http_code}" --no-location \
 __pass "Create paste (form): code=${DOCKER_FORM_CODE}"
 
 # With expiry
-DOCKER_EXP_RESPONSE=$(curl -q -sf \
+DOCKER_EXP_RESPONSE=$(curl -q -LSsf \
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     "${DOCKER_CSRF_ARGS[@]}" \
@@ -248,7 +248,7 @@ printf '%s' "${DOCKER_EXP_RESPONSE}" | grep -q -- '"expires_at"' || \
 __pass "Create paste (with expiry)"
 
 # With burn_after
-DOCKER_BURN_RESPONSE=$(curl -q -sf \
+DOCKER_BURN_RESPONSE=$(curl -q -LSsf \
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     "${DOCKER_CSRF_ARGS[@]}" \
@@ -259,7 +259,7 @@ printf '%s' "${DOCKER_BURN_RESPONSE}" | grep -q -- '"burn_after"' || \
 __pass "Create paste (burn_after=2)"
 
 # Unlisted
-DOCKER_UNLIST_RESPONSE=$(curl -q -sf \
+DOCKER_UNLIST_RESPONSE=$(curl -q -LSsf \
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     "${DOCKER_CSRF_ARGS[@]}" \
@@ -271,7 +271,7 @@ __pass "Create paste (unlisted)"
 
 # Link paste (is_link)
 DOCKER_LINK_TARGET="https://example.com/docker-test-target"
-DOCKER_LINK_RESPONSE=$(curl -q -sf \
+DOCKER_LINK_RESPONSE=$(curl -q -LSsf \
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     "${DOCKER_CSRF_ARGS[@]}" \
@@ -287,7 +287,7 @@ __pass "Create paste (link): id=${DOCKER_LINK_ID}"
 # IDEA.md); content that isn't a bare http(s) URL simply becomes an ordinary
 # (non-link) paste rather than being rejected — the client-supplied
 # "is_link":true flag here is ignored.
-DOCKER_LINK_NONHTTP_RESPONSE=$(curl -q -sf \
+DOCKER_LINK_NONHTTP_RESPONSE=$(curl -q -LSsf \
     --header "Content-Type: application/json" \
     --header "Accept: application/json" \
     "${DOCKER_CSRF_ARGS[@]}" \
@@ -298,7 +298,7 @@ printf '%s' "${DOCKER_LINK_NONHTTP_RESPONSE}" | grep -q -- '"is_link": *false' |
     __fail "Create paste (link, non-http scheme): expected is_link:false in: ${DOCKER_LINK_NONHTTP_RESPONSE}"
 __pass "Create paste (link, non-http scheme ignored, stored as ordinary paste)"
 
-DOCKER_LINK_LOCATION=$(curl -q -s -D - -o /dev/null --no-location "${DOCKER_BASE_URL}/${DOCKER_LINK_ID}" | \
+DOCKER_LINK_LOCATION=$(curl -q -LSs -D - -o /dev/null --no-location "${DOCKER_BASE_URL}/${DOCKER_LINK_ID}" | \
     tr -d '\r' | awk '/^[Ll]ocation:/ {print $2}')
 [[ "${DOCKER_LINK_LOCATION}" == "${DOCKER_LINK_TARGET}" ]] || \
     __fail "Link paste view: expected Location ${DOCKER_LINK_TARGET}, got ${DOCKER_LINK_LOCATION}"
@@ -307,7 +307,7 @@ DOCKER_LINK_LOCATION=$(curl -q -s -D - -o /dev/null --no-location "${DOCKER_BASE
 __check_status "Link paste view → 302" GET "${DOCKER_BASE_URL}/${DOCKER_LINK_ID}" 302 --no-location
 __pass "Link paste view redirects to target"
 
-DOCKER_LINK_RAW=$(curl -q -sf "${DOCKER_BASE_URL}/api/v1/pastes/${DOCKER_LINK_ID}/raw") || \
+DOCKER_LINK_RAW=$(curl -q -LSsf "${DOCKER_BASE_URL}/api/v1/pastes/${DOCKER_LINK_ID}/raw") || \
     __fail "Link paste raw: request failed"
 [[ "${DOCKER_LINK_RAW}" == "${DOCKER_LINK_TARGET}" ]] || \
     __fail "Link paste raw: expected ${DOCKER_LINK_TARGET}, got ${DOCKER_LINK_RAW}"
@@ -315,7 +315,7 @@ __pass "Link paste raw returns target URL without redirecting"
 
 # ── Retrieve paste ───────────────────────────────────────────────────────────
 __info "--- Paste retrieval ---"
-DOCKER_GET=$(curl -q -sf \
+DOCKER_GET=$(curl -q -LSsf \
     --header "Accept: application/json" \
     "${DOCKER_BASE_URL}/api/v1/pastes/${DOCKER_PASTE_ID}") || __fail "Get paste: request failed"
 printf '%s' "${DOCKER_GET}" | grep -q -- "hello from docker test" || \
@@ -323,13 +323,13 @@ printf '%s' "${DOCKER_GET}" | grep -q -- "hello from docker test" || \
 __pass "Get paste (JSON)"
 
 # Raw text
-DOCKER_RAW=$(curl -q -sf "${DOCKER_BASE_URL}/api/v1/pastes/${DOCKER_PASTE_ID}/raw") || __fail "Get raw paste: request failed"
+DOCKER_RAW=$(curl -q -LSsf "${DOCKER_BASE_URL}/api/v1/pastes/${DOCKER_PASTE_ID}/raw") || __fail "Get raw paste: request failed"
 [[ "${DOCKER_RAW}" == "hello from docker test" ]] || \
     __fail "Get raw paste: unexpected content: ${DOCKER_RAW}"
 __pass "Get raw paste"
 
 # List pastes
-DOCKER_LIST=$(curl -q -sf --header "Accept: application/json" "${DOCKER_BASE_URL}/api/v1/pastes") || \
+DOCKER_LIST=$(curl -q -LSsf --header "Accept: application/json" "${DOCKER_BASE_URL}/api/v1/pastes") || \
     __fail "List pastes: request failed"
 printf '%s' "${DOCKER_LIST}" | grep -q -- "${DOCKER_PASTE_ID}" || \
     __fail "List pastes: paste ID not found"
@@ -350,7 +350,7 @@ __check_status "Delete with no owner token → 401" DELETE \
 
 # Correct owner token → 200
 if [[ -n "${DOCKER_OWNER_TOKEN}" ]]; then
-    DOCKER_DEL=$(curl -q -sf \
+    DOCKER_DEL=$(curl -q -LSsf \
         --request DELETE \
         --header "Authorization: Bearer ${DOCKER_OWNER_TOKEN}" \
         "${DOCKER_BASE_URL}/api/v1/pastes/${DOCKER_PASTE_ID}") || __fail "Delete paste: request failed"
@@ -377,7 +377,7 @@ __info "--- Compat API endpoints ---"
 # Compat clients are tokenless and cookie-less (curl, CI scripts): none of
 # these requests may carry a CSRF token or Authorization header.
 # pastebin.com compat
-DOCKER_COMPAT_RESPONSE=$(curl -q -sf \
+DOCKER_COMPAT_RESPONSE=$(curl -q -LSsf \
     --data "api_paste_code=compat+test&api_paste_private=0" \
     "${DOCKER_BASE_URL}/api/api_post.php") || __fail "pastebin.com compat POST: request failed"
 printf '%s' "${DOCKER_COMPAT_RESPONSE}" | grep -qi -- "http\|paste\|error" || \
@@ -440,7 +440,7 @@ __check_status "GET /.well-known/security.txt → 200" GET "${DOCKER_BASE_URL}/.
 
 # ── Security headers ─────────────────────────────────────────────────────────
 __info "--- Security headers ---"
-DOCKER_HEADERS=$(curl -q -sI "${DOCKER_BASE_URL}/" | tr '[:upper:]' '[:lower:]')
+DOCKER_HEADERS=$(curl -q -LSsfI "${DOCKER_BASE_URL}/" | tr '[:upper:]' '[:lower:]')
 printf '%s' "${DOCKER_HEADERS}" | grep -q -- "x-content-type-options" || \
     __fail "Missing X-Content-Type-Options header"
 __pass "X-Content-Type-Options present"

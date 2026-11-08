@@ -125,7 +125,9 @@ func (s *Server) ensureSecurityKeypair() {
 		return
 	}
 	log.Printf("pgp: generated project security keypair %s", kp.Fingerprint)
-	go s.publishToKeyservers(kp.PublicArmored)
+	if !s.liveCfg().Server.Tor.UseNetwork {
+		go s.publishToKeyservers(kp.PublicArmored)
+	}
 }
 
 // installKeypair writes both key files and upserts the DB metadata row. When
@@ -244,7 +246,7 @@ func (s *Server) submitToKeyserver(keyserver, pubArmored string) bool {
 			time.Sleep(delay)
 			delay *= 2
 		}
-		if err := pgp.PostKey(keyserver, pubArmored); err != nil {
+		if err := pgp.PostKeyWithClient(keyserver, pubArmored, s.outboundHTTPClient); err != nil {
 			log.Printf("pgp: keyserver %s publish attempt %d failed: %v", keyserver, attempt+1, err)
 			continue
 		}

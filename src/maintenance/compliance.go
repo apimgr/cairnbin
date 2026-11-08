@@ -37,7 +37,7 @@ type standardRequirement struct {
 // action is "report" — the only compliance action AI.md defines.
 func RunCompliance(action string, opts ComplianceOptions) error {
 	if action != "report" {
-		return fmt.Errorf("compliance: unknown action %q (want report)", action)
+		return fmt.Errorf("%s", maintenanceText("compliance_unknown_action", "action", action))
 	}
 
 	cfgPath := filepath.Join(opts.ConfigDir, "server.yml")
@@ -62,12 +62,12 @@ func RunCompliance(action string, opts ComplianceOptions) error {
 	}
 	order := []string{"GDPR", "CCPA", "HIPAA", "SOC2", "PCI-DSS", "ISO27001", "FedRAMP", "LGPD", "PIPEDA", "APPI", "PDPA"}
 
-	fmt.Println("Compliance Standards:")
+	fmt.Println(maintenanceText("compliance_heading"))
 	var active []standardRequirement
 	for _, name := range order {
-		state := "disabled"
+		state := maintenanceText("compliance_disabled")
 		if enabled[name] {
-			state = "enabled"
+			state = maintenanceText("compliance_enabled")
 		}
 		fmt.Printf("  %-9s %s\n", name, state)
 		if req, ok := quantifiedRequirements[name]; ok && enabled[name] {
@@ -77,16 +77,16 @@ func RunCompliance(action string, opts ComplianceOptions) error {
 
 	if len(active) > 0 {
 		fmt.Println()
-		fmt.Println("Resolved Requirements (strictest wins where standards overlap):")
-		fmt.Printf("  Audit log retention: %d year(s)\n", strictestRetention(active))
+		fmt.Println(maintenanceText("compliance_resolved"))
+		fmt.Printf("  %s\n", maintenanceText("compliance_retention", "value", strictestRetention(active)))
 		if hrs := strictestBreachNotification(active); hrs > 0 {
-			fmt.Printf("  Breach notification: within %d hour(s)\n", hrs)
+			fmt.Printf("  %s\n", maintenanceText("compliance_breach", "value", hrs))
 		}
 		if mins := strictestSessionTimeout(active); mins > 0 {
-			fmt.Printf("  Session timeout: %d minute(s)\n", mins)
+			fmt.Printf("  %s\n", maintenanceText("compliance_session", "value", mins))
 		}
-		fmt.Printf("  Right to erasure: %v\n", anyRightToErasure(active))
-		fmt.Printf("  Data portability: %v\n", anyDataPortability(active))
+		fmt.Printf("  %s\n", maintenanceText("compliance_erasure", "value", anyRightToErasure(active)))
+		fmt.Printf("  %s\n", maintenanceText("compliance_portability", "value", anyDataPortability(active)))
 	}
 
 	ac := cfg.Server.Logging.Audit

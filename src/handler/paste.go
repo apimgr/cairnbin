@@ -341,6 +341,11 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 			}
 			// Detect the MIME type from the actual file bytes before storage.
 			detectedCT := http.DetectContentType(raw[:min512(len(raw))])
+			if strings.HasPrefix(detectedCT, "text/plain") {
+				if imageType := rasterImageTypeFromFilename(header.Filename); imageType != "" {
+					detectedCT = imageType
+				}
+			}
 			// Non-text binary data (images, executables, archives, etc.) is
 			// stored as base64 so it round-trips safely through the TEXT column.
 			// ContentType is set so viewers know to decode before rendering.
@@ -790,6 +795,29 @@ func min512(n int) int {
 	return n
 }
 
+func rasterImageTypeFromFilename(filename string) string {
+	extension := ""
+	if dot := strings.LastIndex(filename, "."); dot >= 0 {
+		extension = strings.ToLower(filename[dot:])
+	}
+	switch extension {
+	case ".avif":
+		return "image/avif"
+	case ".bmp":
+		return "image/bmp"
+	case ".gif":
+		return "image/gif"
+	case ".jpeg", ".jpg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	default:
+		return ""
+	}
+}
+
 // readLimited reads r up to limit bytes and reports whether the stream had
 // more data beyond that (i.e. the caller's payload exceeds the configured
 // paste.max_size). It reads limit+1 bytes so an exact-limit-sized body
@@ -804,7 +832,7 @@ func readLimited(r io.Reader, limit int64) (data []byte, tooLarge bool) {
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-// ListPastes returns paginated public pastes as JSON.
+// ListPastes returns paginated public pastes or authenticated owner resources.
 func (h *PasteHandler) ListPastes(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {
@@ -818,15 +846,36 @@ func (h *PasteHandler) ListPastes(w http.ResponseWriter, r *http.Request) {
 		limit = 250
 	}
 
-	// search/sort/order (TODO.md: search recents by id/name/content, sort by
-	// name/date/etc.) — SearchPublicPastes falls back to the same "date desc"
-	// ordering GetPublicPastes always used when these are empty, so it is a
-	// drop-in replacement for the plain listing case too.
+	// Public and owner listings share the same date-desc default ordering.
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	sortBy := strings.TrimSpace(r.URL.Query().Get("sort"))
 	order := strings.TrimSpace(r.URL.Query().Get("order"))
+	pasteType := strings.TrimSpace(r.URL.Query().Get("type"))
 
-	pastes, total, err := h.db.SearchPublicPastes(page, limit, search, sortBy, order)
+	scope := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("scope")))
+	var pastes []model.PasteListItem
+	var total int
+	var err error
+	if scope == "" || scope == "public" {
+		pastes, total, err = h.db.SearchPublicPastes(page, limit, search, sortBy, order, pasteType)
+	} else if scope == "owned" {
+		rawToken := extractOwnerToken(r)
+		ownerDB, hasOwners := h.db.(database.OwnerDB)
+		ownerLister, canList := h.db.(database.OwnerPasteLister)
+		if rawToken == "" || !hasOwners || !canList {
+			sendAPIError(w, r, "UNAUTHORIZED", "valid owner token required")
+			return
+		}
+		token, lookupErr := ownerDB.GetOwnerTokenByHash(sha256.Sum256([]byte(rawToken)))
+		if lookupErr != nil || token == nil {
+			sendAPIError(w, r, "UNAUTHORIZED", "valid owner token required")
+			return
+		}
+		pastes, total, err = ownerLister.SearchOwnerPastes(token.OwnerID, page, limit, search, sortBy, order, pasteType)
+	} else {
+		sendAPIError(w, r, "BAD_REQUEST", "scope must be public or owned")
+		return
+	}
 	if err != nil {
 		sendAPIError(w, r, "SERVER_ERROR", "failed to fetch pastes")
 		return
@@ -837,7 +886,11 @@ func (h *PasteHandler) ListPastes(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = fmt.Fprintf(w, "OK: %d pastes found (page %d)\n", total, page)
 		for _, p := range pastes {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", p.ID, p.Language, p.Title)
+			pasteType := p.ContentType
+			if pasteType == "" {
+				pasteType = p.Language
+			}
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", p.ID, pasteType, p.Title)
 		}
 		return
 	}

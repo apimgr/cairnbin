@@ -1,55 +1,55 @@
 {{define "meta"}}
-    <title>MCP - {{.SiteTitle}}</title>
-    <meta name="description" content="Connect an AI assistant to {{.SiteTitle}} through MCP">
+    <title>{{t .Lang "help.mcp_page_title"}} - {{.SiteTitle}}</title>
+    <meta name="description" content="{{tf .Lang "help.mcp_meta_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
         <section class="search-section">
             <div class="container container-sm">
-                <div class="section-header"><h1 class="section-title">MCP server</h1></div>
+                    <div class="section-header"><h1 class="section-title">{{t .Lang "help.mcp_page_title"}}</h1></div>
                 <div class="paste-view page-view">
-                    <h2 id="overview">What this is</h2>
-                    <p>{{.SiteTitle}} provides a remote MCP server over Streamable HTTP. Every public API operation is available to an assistant as a tool.</p>
+                    <h2 id="overview">{{t .Lang "help.mcp_overview_heading"}}</h2>
+                    <p>{{tf .Lang "help.mcp_overview_body" "site" .SiteTitle}}</p>
 
-                    <h2 id="endpoint">Endpoint</h2>
-                    <p>Use the primary endpoint:</p>
+                    <h2 id="endpoint">{{t .Lang "help.mcp_endpoint_heading"}}</h2>
+                    <p>{{t .Lang "help.mcp_primary_endpoint"}}</p>
                     <p><code class="user-select-all">{{.MCPURL}}</code> <button type="button" class="copy-btn" data-copy="{{.MCPURL}}">{{t .Lang "common.copy"}}</button></p>
-                    <p>Aliases: <code class="user-select-all">{{.MCPAliasAPI}}</code> and <code class="user-select-all">{{.MCPAliasRoot}}</code>.</p>
+                    <p>{{t .Lang "help.mcp_aliases_prefix"}} <code class="user-select-all">{{.MCPAliasAPI}}</code> {{t .Lang "help.mcp_alias_connector"}} <code class="user-select-all">{{.MCPAliasRoot}}</code>.</p>
 
-                    <h2 id="authentication">Authentication</h2>
-                    <p>Send credentials in <code>Authorization: Bearer {token}</code>. This uses the same tokens as the REST API. Public tools also work anonymously. For a client that needs owner access, create a linked token for that client at <a href="/server/preferences/tokens">/server/preferences/tokens</a>, then revoke it separately when no longer needed. Do not use the primary owner token or the operator token.</p>
+                    <h2 id="authentication">{{t .Lang "help.mcp_auth_heading"}}</h2>
+                    <p>{{tfh .Lang "help.mcp_auth_body" "token" "{token}" "tokens_url" (printf "%s/server/preferences/tokens" .AssetPrefix)}}</p>
 
-                    <h2 id="connect">Connect a client</h2>
-                    <h3>Claude Code</h3>
+                    <h2 id="connect">{{t .Lang "help.mcp_connect_heading"}}</h2>
+                    <h3>{{t .Lang "help.mcp_claude_code"}}</h3>
                     <pre><code>claude mcp add --transport http cairnbin {{.MCPURL}} --header "Authorization: Bearer $MCP_TOKEN"</code></pre>
-                    <h3>Generic client configuration</h3>
+                    <h3>{{t .Lang "help.mcp_generic_config"}}</h3>
                     <pre><code>{"mcpServers":{"cairnbin":{"type":"http","url":"{{.MCPURL}}","headers":{"Authorization":"Bearer $MCP_TOKEN"}}}}</code></pre>
-                    <h3>Verify with curl</h3>
-                    <pre><code>curl -X POST '{{.MCPURL}}' \
+                    <h3>{{t .Lang "help.mcp_verify_curl"}}</h3>
+                    <pre><code>curl -q -LSsf -X POST '{{.MCPURL}}' \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2025-06-18' \
   -H "Authorization: Bearer $MCP_TOKEN" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'</code></pre>
 
-                    <h2 id="tools">Tools</h2>
-                    <ul>{{range .MCPTools}}<li><code>{{.name}}</code> — {{.description}}</li>{{else}}<li>No public tools are currently registered.</li>{{end}}</ul>
-                    <p>Authenticated callers may see additional tools when their token has the required access.</p>
+                    <h2 id="tools">{{t .Lang "help.mcp_tools_heading"}}</h2>
+                    <ul>{{range .MCPTools}}<li><code>{{.name}}</code> — {{.description}}</li>{{else}}<li>{{t .Lang "help.mcp_no_tools"}}</li>{{end}}</ul>
+                    <p>{{t .Lang "help.mcp_auth_tools_note"}}</p>
 
-                    <h2 id="limits">Behavior and limits</h2>
-                    <p>The endpoint accepts POST requests only and keeps no sessions. Calls use the same rate limits and audit handling as the API. Present Origin headers are validated. Supported protocol versions are 2025-06-18, 2025-03-26, and 2024-11-05.</p>
+                    <h2 id="limits">{{t .Lang "help.mcp_behavior_heading"}}</h2>
+                    <p>{{t .Lang "help.mcp_behavior_body"}} 2025-06-18, 2025-03-26, 2024-11-05.</p>
 
-                    <h2 id="troubleshooting">Troubleshooting</h2>
+                    <h2 id="troubleshooting">{{t .Lang "help.mcp_troubleshooting_heading"}}</h2>
                     <div class="table-wrapper"><table class="help-table">
-                        <tr><th>Status</th><th>Cause and fix</th></tr>
-                        <tr><td>400</td><td>Check the MCP protocol version and required request headers.</td></tr>
-                        <tr><td>401</td><td>The token is missing, invalid, or expired. Send a valid Bearer token; the response includes <code>WWW-Authenticate: Bearer</code>.</td></tr>
-                        <tr><td>403</td><td>The Origin was rejected or the token lacks access. Use the correct site origin and an appropriate linked token.</td></tr>
-                        <tr><td>404</td><td>MCP is disabled for this server.</td></tr>
-                        <tr><td>405</td><td>The endpoint is POST-only; use POST for MCP requests.</td></tr>
+                        <tr><th>{{t .Lang "help.mcp_status"}}</th><th>{{t .Lang "help.mcp_cause_fix"}}</th></tr>
+                        <tr><td>400</td><td>{{t .Lang "help.mcp_error_400"}}</td></tr>
+                        <tr><td>401</td><td>{{th .Lang "help.mcp_error_401"}}</td></tr>
+                        <tr><td>403</td><td>{{t .Lang "help.mcp_error_403"}}</td></tr>
+                        <tr><td>404</td><td>{{t .Lang "help.mcp_error_404"}}</td></tr>
+                        <tr><td>405</td><td>{{t .Lang "help.mcp_error_405"}}</td></tr>
                     </table></div>
 
-                    {{if .MCPProject}}<section id="project"><h2>Using cairnbin tools</h2>{{.MCPProject}}</section>{{end}}
+                    {{if .MCPProject}}<section id="project"><h2>{{t .Lang "help.mcp_project_heading"}}</h2>{{.MCPProject}}</section>{{end}}
                 </div>
             </div>
         </section>

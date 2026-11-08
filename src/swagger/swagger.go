@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/apimgr/cairnbin/src/common/buildinfo"
@@ -36,6 +38,7 @@ type Handler struct {
 	// csrfTokenFn resolves the CSRF token bound to the request's csrf_token
 	// cookie, used by the no-JS theme-toggle POST form; returns "" when unset.
 	csrfTokenFn func(*http.Request) string
+	languageFn  func(*http.Request) string
 }
 
 // New creates a Handler. baseURL can be left empty to auto-detect from the request.
@@ -95,6 +98,12 @@ func (h *Handler) SetCSRFTokenResolver(fn func(*http.Request) string) {
 	h.csrfTokenFn = fn
 }
 
+// SetLanguageResolver registers the request language used for human-readable
+// OpenAPI annotation text. Operation IDs and schema property names stay stable.
+func (h *Handler) SetLanguageResolver(fn func(*http.Request) string) {
+	h.languageFn = fn
+}
+
 // csrfToken returns the resolved CSRF token, or "" when unset.
 func (h *Handler) csrfToken(r *http.Request) string {
 	if h.csrfTokenFn == nil {
@@ -106,7 +115,11 @@ func (h *Handler) csrfToken(r *http.Request) string {
 // ServeSpec writes the OpenAPI 3.0.3 JSON specification.
 // SetEscapeHTML(false) prevents < > & in description fields from being mangled.
 func (h *Handler) ServeSpec(w http.ResponseWriter, r *http.Request) {
-	spec := h.buildSpec(h.resolveBase(r))
+	lang := "en"
+	if h.languageFn != nil {
+		lang = h.languageFn(r)
+	}
+	spec := h.buildSpec(h.resolveBase(r), lang)
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
@@ -117,7 +130,7 @@ func (h *Handler) ServeSpec(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"ok":      false,
 			"error":   "SERVER_ERROR",
-			"message": "Spec generation error",
+			"message": i18n.Translate(lang, "swagger.spec_generation_error"),
 		})
 		return
 	}
@@ -134,7 +147,7 @@ func (h *Handler) ServeSpec(w http.ResponseWriter, r *http.Request) {
 // static/js/app.js.
 func (h *Handler) ServeUI(w http.ResponseWriter, r *http.Request) {
 	base := h.resolveBase(r)
-	specURL := base + "/api/swagger"
+	specURL := base + "/api/swagger?lang=" + url.QueryEscape(i18n.LangFromRequest(r))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// HTML is never cached; the build-stamp ETag makes an intermediary that
 	// ignores no-store revalidate anyway (AI.md PART 9, line 13287).
@@ -163,9 +176,13 @@ func (h *Handler) resolveBase(r *http.Request) string {
 }
 
 // buildSpec generates the OpenAPI 3.0.3 document from the route annotations.
-func (h *Handler) buildSpec(base string) map[string]interface{} {
+func (h *Handler) buildSpec(base string, languages ...string) map[string]interface{} {
+	lang := "en"
+	if len(languages) > 0 && languages[0] != "" {
+		lang = languages[0]
+	}
 	paths := map[string]interface{}{}
-	for _, route := range Routes(h.apiVersion) {
+	for _, route := range localizeRoutes(Routes(h.apiVersion), lang) {
 		p, ok := paths[route.Path].(map[string]interface{})
 		if !ok {
 			p = map[string]interface{}{}
@@ -230,19 +247,18 @@ func (h *Handler) buildSpec(base string) map[string]interface{} {
 		"info": map[string]interface{}{
 			"title":   h.title,
 			"version": h.version,
-			"description": "A fast, anonymous cairnbin service with REST and GraphQL APIs. " +
-				"Compatible with pastebin.com, microbin, and lenpaste.",
+			"description": i18n.Translate(lang, "swagger.info_description"),
 			"license": map[string]interface{}{
 				"name": "MIT",
 				"url":  "https://opensource.org/licenses/MIT",
 			},
 		},
 		"servers": []map[string]interface{}{
-			{"url": base, "description": "This server"},
+			{"url": base, "description": i18n.Translate(lang, "swagger.this_server")},
 		},
 		"tags": []map[string]interface{}{
-			{"name": "pastes", "description": "Paste creation and retrieval"},
-			{"name": "server", "description": "Server health and metadata"},
+			{"name": i18n.Translate(lang, annotationKey("pastes")), "description": i18n.Translate(lang, "swagger.tag_pastes")},
+			{"name": i18n.Translate(lang, annotationKey("server")), "description": i18n.Translate(lang, "swagger.tag_server")},
 		},
 		"paths": paths,
 	}
@@ -271,18 +287,22 @@ func operationID(method, path string) string {
 // project-wide mechanism (server-rendered `theme` cookie + no-JS POST to
 // /theme) so this viewer never keeps independent theme state.
 func (h *Handler) renderUI(r *http.Request, specURL string) string {
-	assetPrefix := h.assetPrefix(r)
+	rawAssetPrefix := h.assetPrefix(r)
+	assetPrefix := html.EscapeString(rawAssetPrefix)
 	theme := h.theme(r)
 	lang := i18n.LangFromRequest(r)
-	t := func(key string) string { return i18n.Translate(lang, key) }
+	t := func(key string) string { return html.EscapeString(i18n.Translate(lang, key)) }
+	title := html.EscapeString(h.title)
+	version := html.EscapeString(h.version)
+	specURL = html.EscapeString(specURL)
 	return `<!DOCTYPE html>
-<html lang="` + lang + `" dir="ltr" class="theme-` + theme + `">
+<html lang="` + html.EscapeString(lang) + `" dir="` + html.EscapeString(i18n.Direction(lang)) + `" class="theme-` + html.EscapeString(theme) + `">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>` + h.title + ` — API Docs</title>
-    <link rel="stylesheet" href="` + buildinfo.AssetURL(assetPrefix, "/static/css/common.css") + `">
-    <link rel="stylesheet" href="` + buildinfo.AssetURL(assetPrefix, "/static/css/components.css") + `">
+    <title>` + title + ` — ` + t("swagger.ui_title") + `</title>
+    <link rel="stylesheet" href="` + html.EscapeString(buildinfo.AssetURL(rawAssetPrefix, "/static/css/common.css")) + `">
+    <link rel="stylesheet" href="` + html.EscapeString(buildinfo.AssetURL(rawAssetPrefix, "/static/css/components.css")) + `">
   </head>
   <body class="swagger-page">
     <a href="#app" class="skip-link">` + t("nav.skip_to_content") + `</a>
@@ -290,23 +310,23 @@ func (h *Handler) renderUI(r *http.Request, specURL string) string {
       <nav class="nav" aria-label="` + t("nav.main_navigation") + `">
         <a href="` + assetPrefix + `/" class="nav-brand">
           <div class="nav-brand-icon">📋</div>
-          <span>` + h.title + ` <span class="version">v` + h.version + `</span></span>
+          <span>` + title + ` <span class="version">v` + version + `</span></span>
         </a>
         <div class="nav-links">
           <a href="` + assetPrefix + `/" class="nav-link">` + t("nav.home") + `</a>
           <a href="` + assetPrefix + `/create" class="nav-link">` + t("nav.create") + `</a>
           <a href="` + assetPrefix + `/recent" class="nav-link">` + t("nav.recent") + `</a>
           <a href="` + assetPrefix + `/server/docs/graphql" class="nav-link">` + t("nav.graphql") + `</a>
-          <form class="theme-toggle" method="post" action="` + assetPrefix + `/theme"><input type="hidden" name="csrf_token" value="` + h.csrfToken(r) + `"><input type="hidden" name="theme" value="` + nextTheme(theme) + `"><button type="submit" class="theme-button" data-theme-toggle aria-label="Toggle theme">🌙</button></form>
+          <form class="theme-toggle" method="post" action="` + assetPrefix + `/theme"><input type="hidden" name="csrf_token" value="` + html.EscapeString(h.csrfToken(r)) + `"><input type="hidden" name="theme" value="` + html.EscapeString(nextTheme(theme)) + `"><button type="submit" class="theme-button" data-theme-toggle aria-label="` + t("theme.toggle") + `">🌙</button></form>
         </div>
       </nav>
     </header>
     <main class="swagger-ui" id="app" data-spec-url="` + specURL + `">
-      <p class="loading-message">Loading API specification…</p>
+      <p class="loading-message">` + t("swagger.loading") + `</p>
     </main>
     <footer class="footer">
       <div class="footer-content">
-        <nav class="footer-links" aria-label="Footer">
+        <nav class="footer-links" aria-label="` + t("footer.navigation") + `">
           <a href="` + assetPrefix + `/server/about" class="footer-link">` + t("footer.about") + `</a>
           <span class="footer-sep" aria-hidden="true">·</span>
           <a href="` + assetPrefix + `/server/privacy" class="footer-link">` + t("footer.privacy") + `</a>
@@ -318,11 +338,11 @@ func (h *Handler) renderUI(r *http.Request, specURL string) string {
         <div class="footer-made">
           <a href="https://github.com/apimgr/cairnbin" target="_blank" rel="noopener noreferrer" class="footer-repo">` + t("footer.made_with") + ` Go</a> ❤️
           <span class="footer-sep" aria-hidden="true">·</span>
-          <span class="footer-version">v` + h.version + `</span>
+          <span class="footer-version">v` + version + `</span>
         </div>
       </div>
     </footer>
-    <script src="` + buildinfo.AssetURL(assetPrefix, "/static/js/app.js") + `"></script>
+    <script src="` + html.EscapeString(buildinfo.AssetURL(rawAssetPrefix, "/static/js/app.js")) + `"></script>
   </body>
 </html>
 `

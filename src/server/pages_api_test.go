@@ -2,11 +2,13 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/config"
 )
 
@@ -76,6 +78,16 @@ func TestServerPagesAPI(t *testing.T) {
 	full := `{"name":"a","email":"a@example.com","subject":"s","message":"m"}`
 	if w := post(full); w.Code != http.StatusServiceUnavailable {
 		t.Errorf("no delivery channel status=%d, want 503", w.Code)
+	}
+	localized := httptest.NewRecorder()
+	localizedReq := httptest.NewRequest(http.MethodPost, "/?lang=es", strings.NewReader(`{"name":"a","email":"invalid","subject":"s","message":"m"}`))
+	s.handleContactAPI(localized, localizedReq)
+	var localizedBody map[string]interface{}
+	if err := json.Unmarshal(localized.Body.Bytes(), &localizedBody); err != nil {
+		t.Fatalf("localized validation response is not JSON: %v", err)
+	}
+	if localized.Code != http.StatusBadRequest || localizedBody["error"] != "VALIDATION_FAILED" || localizedBody["message"] != i18n.Translate("es", "errors.invalid_email") {
+		t.Errorf("localized validation response changed its contract or message: status=%d body=%q", localized.Code, localized.Body.String())
 	}
 	s.cfg.Server.Pages.Contact.Enabled = false
 	if w := post(full); w.Code != http.StatusNotFound {

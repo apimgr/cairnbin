@@ -1,6 +1,8 @@
 package geoip
 
 import (
+	"bytes"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +10,26 @@ import (
 	"path/filepath"
 	"testing"
 )
+
+type geoipRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f geoipRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestOpenDefersMissingDatabaseDownload(t *testing.T) {
+	called := false
+	client := &http.Client{Transport: geoipRoundTripper(func(*http.Request) (*http.Response, error) {
+		called = true
+		return nil, errors.New("unexpected outbound request before Tor bootstrap")
+	})}
+	db, err := Open(Config{Dir: t.TempDir(), EnableCountry: true, HTTPClient: client, DeferDownloads: true})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	if called {
+		t.Fatal("Open attempted a network download despite DeferDownloads")
+	}
+}
 
 // ─── mustStat ─────────────────────────────────────────────────────────────────
 
@@ -213,6 +235,27 @@ func TestLookup_NilIP(t *testing.T) {
 	defer db.Close()
 	if got := db.Lookup(nil); got != nil {
 		t.Errorf("Lookup(nil IP) = %v; want nil", got)
+	}
+}
+
+func TestLookup_SkipsPrivateAndInternalIPs(t *testing.T) {
+	db, err := Open(Config{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	called := false
+	db.countryOverride = func(net.IP) string {
+		called = true
+		return "US"
+	}
+	for _, value := range []string{"10.1.2.3", "192.168.1.1", "127.0.0.1", "169.254.1.1", "fc00::1", "::1"} {
+		if got := db.Lookup(net.ParseIP(value)); got != nil {
+			t.Errorf("Lookup(%s) = %+v; internal addresses must not be looked up", value, got)
+		}
+	}
+	if called {
+		t.Error("country data lookup ran for a private/internal address")
 	}
 }
 
@@ -496,7 +539,7 @@ func TestIsPrivate_ULAIPv6(t *testing.T) {
 // returns a non-nil error when every database download fails. The URLs point at
 // a local server that always answers 500, so the failure is immediate and
 // deterministic — without this the test would contact the real CDN and block on
-// ensureFile's 5-minute context timeout, per database.
+// refreshMMDB's 5-minute context timeout, per database.
 func TestUpdate_WithEnabledDBs_ReturnsOnDownloadError(t *testing.T) {
 	serveDownloadFailure(t)
 
@@ -513,10 +556,45 @@ func TestUpdate_WithEnabledDBs_ReturnsOnDownloadError(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Update() deletes the files and re-downloads; every download fails.
+	// Update re-downloads each configured database; every download fails.
 	err = db.Update()
 	if err == nil {
 		t.Fatal("Update returned nil error; want non-nil when all downloads fail")
+	}
+}
+
+func TestUpdate_PreservesExistingDatabasesWhenReplacementDownloadFails(t *testing.T) {
+	serveMinimalMMDB(t)
+	tmp := t.TempDir()
+	db, err := Open(Config{Dir: tmp, EnableASN: true, EnableCountry: true, EnableCity: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	paths := []string{"asn.mmdb", "country.mmdb", "dbip-city-ipv4.mmdb", "dbip-city-ipv6.mmdb"}
+	before := make(map[string][]byte, len(paths))
+	for _, name := range paths {
+		before[name], err = os.ReadFile(filepath.Join(tmp, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	serveDownloadFailure(t)
+	if err := db.Update(); err == nil {
+		t.Fatal("Update returned nil error; want replacement download failure")
+	}
+	for _, name := range paths {
+		after, readErr := os.ReadFile(filepath.Join(tmp, name))
+		if readErr != nil {
+			t.Fatalf("existing database %s was removed: %v", name, readErr)
+		}
+		if !bytes.Equal(after, before[name]) {
+			t.Errorf("existing database %s changed after failed update", name)
+		}
+	}
+	if db.asnDB == nil || db.countDB == nil || db.cityDB == nil || db.cityDBv6 == nil {
+		t.Fatal("failed update discarded an active database reader")
 	}
 }
 

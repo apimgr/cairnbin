@@ -71,7 +71,7 @@ type DB interface {
 	CreatePaste(paste *model.Paste) error
 	GetPasteByID(id string) (*model.Paste, error)
 	GetPublicPastes(page, limit int) ([]model.PasteListItem, int, error)
-	SearchPublicPastes(page, limit int, search, sortBy, order string) ([]model.PasteListItem, int, error)
+	SearchPublicPastes(page, limit int, search, sortBy, order string, pasteType ...string) ([]model.PasteListItem, int, error)
 	IncrementViewsAndCheckBurn(id string) (views int, burned bool, err error)
 	DeletePaste(id string) error
 	DeletePasteByToken(id, deleteTokenHash string) error
@@ -147,6 +147,12 @@ type OwnerDB interface {
 	RevokeOwnerToken(ownerID string, id int64) error
 }
 
+// OwnerPasteLister provides paginated private and public resources for one
+// authenticated owner without widening the database contract for other users.
+type OwnerPasteLister interface {
+	SearchOwnerPastes(ownerID string, page, limit int, search, sortBy, order string, pasteTypes ...string) ([]model.PasteListItem, int, error)
+}
+
 // Query timeout constants per PART 10.
 const (
 	// dbReadTimeout is for simple SELECT queries.
@@ -171,7 +177,7 @@ func dbCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
 
 // SQLiteDB implements DB for SQLite.
 type SQLiteDB struct {
-	db *sql.DB
+	db *instrumentedSQLDB
 }
 
 // PoolConfig mirrors server.database.pool from server.yml (AI.md PART 10). It
@@ -253,7 +259,7 @@ func newSQLiteDB(path string, pool PoolConfig) (*SQLiteDB, error) {
 		return nil, err
 	}
 
-	return &SQLiteDB{db: db}, nil
+	return &SQLiteDB{db: &instrumentedSQLDB{DB: db}}, nil
 }
 
 func ensureSchema(db *sql.DB) error {
@@ -679,7 +685,7 @@ func (s *SQLiteDB) GetPublicPastes(page, limit int) ([]model.PasteListItem, int,
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, title, language, views, expires_at, burn_after, created_at
+		`SELECT id, title, language, content_type, views, expires_at, burn_after, created_at
 		 FROM pastes
 		 WHERE visibility = 0 AND (expires_at IS NULL OR expires_at > ?)
 		 ORDER BY created_at DESC LIMIT ? OFFSET ?`,
@@ -694,7 +700,7 @@ func (s *SQLiteDB) GetPublicPastes(page, limit int) ([]model.PasteListItem, int,
 	for rows.Next() {
 		var item model.PasteListItem
 		var expiresAt sql.NullTime
-		if err := rows.Scan(&item.ID, &item.Title, &item.Language, &item.Views, &expiresAt, &item.BurnAfter, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.Language, &item.ContentType, &item.Views, &expiresAt, &item.BurnAfter, &item.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		if expiresAt.Valid {
@@ -722,8 +728,21 @@ var publicPasteSortColumns = map[string]string{
 // and content, and sorted by an allow-listed column. sortBy and order fall
 // back to "date"/"desc" (the same ordering GetPublicPastes always used) for
 // any empty or unrecognized value — never an error, since these come
-// straight off a query string (TODO.md: search + sort + full listing).
-func (s *SQLiteDB) SearchPublicPastes(page, limit int, search, sortBy, order string) ([]model.PasteListItem, int, error) {
+// straight off a query string.
+func (s *SQLiteDB) SearchPublicPastes(page, limit int, search, sortBy, order string, pasteTypes ...string) ([]model.PasteListItem, int, error) {
+	return s.searchPastes("", page, limit, search, sortBy, order, pasteTypes...)
+}
+
+// SearchOwnerPastes returns an owner's non-expired resources, including
+// unlisted pastes, with the same filters and stable pagination as public lists.
+func (s *SQLiteDB) SearchOwnerPastes(ownerID string, page, limit int, search, sortBy, order string, pasteTypes ...string) ([]model.PasteListItem, int, error) {
+	if strings.TrimSpace(ownerID) == "" {
+		return nil, 0, fmt.Errorf("owner ID is required")
+	}
+	return s.searchPastes(ownerID, page, limit, search, sortBy, order, pasteTypes...)
+}
+
+func (s *SQLiteDB) searchPastes(ownerID string, page, limit int, search, sortBy, order string, pasteTypes ...string) ([]model.PasteListItem, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -751,10 +770,25 @@ func (s *SQLiteDB) SearchPublicPastes(page, limit int, search, sortBy, order str
 
 	where := `WHERE visibility = 0 AND (expires_at IS NULL OR expires_at > ?)`
 	args := []interface{}{now}
+	if ownerID != "" {
+		where = `WHERE owner_id = ? AND (expires_at IS NULL OR expires_at > ?)`
+		args = []interface{}{ownerID, now}
+	}
 	if search != "" {
 		where += ` AND (id LIKE ? ESCAPE '\' OR title LIKE ? ESCAPE '\' OR content LIKE ? ESCAPE '\')`
 		term := "%" + escapeLikeTerm(search) + "%"
 		args = append(args, term, term, term)
+	}
+	if len(pasteTypes) > 0 {
+		switch strings.ToLower(strings.TrimSpace(pasteTypes[0])) {
+		case "text":
+			where += ` AND (content_type = '' OR content_type LIKE 'text/%')`
+		case "image", "audio", "video":
+			where += ` AND content_type LIKE ?`
+			args = append(args, strings.ToLower(strings.TrimSpace(pasteTypes[0]))+`/%`)
+		case "file":
+			where += ` AND content_type <> '' AND content_type NOT LIKE 'text/%' AND content_type NOT LIKE 'image/%' AND content_type NOT LIKE 'audio/%' AND content_type NOT LIKE 'video/%'`
+		}
 	}
 
 	var total int
@@ -768,7 +802,7 @@ func (s *SQLiteDB) SearchPublicPastes(page, limit int, search, sortBy, order str
 
 	// column/direction come only from the allow-list above, never from raw
 	// caller input, so this interpolation cannot inject SQL.
-	query := `SELECT id, title, language, views, expires_at, burn_after, created_at
+	query := `SELECT id, title, language, content_type, views, expires_at, burn_after, created_at
 		 FROM pastes ` + where + ` ORDER BY ` + column + ` ` + direction + `, id ASC LIMIT ? OFFSET ?`
 	rows, err := s.db.QueryContext(ctx, query, append(args, limit, offset)...)
 	if err != nil {
@@ -780,7 +814,7 @@ func (s *SQLiteDB) SearchPublicPastes(page, limit int, search, sortBy, order str
 	for rows.Next() {
 		var item model.PasteListItem
 		var expiresAt sql.NullTime
-		if err := rows.Scan(&item.ID, &item.Title, &item.Language, &item.Views, &expiresAt, &item.BurnAfter, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.Language, &item.ContentType, &item.Views, &expiresAt, &item.BurnAfter, &item.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		if expiresAt.Valid {

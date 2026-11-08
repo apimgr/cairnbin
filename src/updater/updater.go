@@ -62,6 +62,12 @@ func NormalizeBranch(branch string) (string, bool) {
 // never changes while its contents are rebuilt nightly.  Returns nil, nil when
 // already up to date or when no release is found.
 func CheckForUpdate(ctx context.Context, currentVersion, branch string, buildEpoch int64) (*Release, error) {
+	return CheckForUpdateWithClient(ctx, currentVersion, branch, buildEpoch, nil)
+}
+
+// CheckForUpdateWithClient queries the release API through a caller-provided
+// shared client when present.
+func CheckForUpdateWithClient(ctx context.Context, currentVersion, branch string, buildEpoch int64, client *http.Client) (*Release, error) {
 	if canon, ok := NormalizeBranch(branch); ok {
 		branch = canon
 	}
@@ -72,17 +78,24 @@ func CheckForUpdate(ctx context.Context, currentVersion, branch string, buildEpo
 	default:
 		apiURL = configuredAPIBase()
 	}
-	return CheckForUpdateURL(ctx, currentVersion, branch, buildEpoch, apiURL)
+	return CheckForUpdateURLWithClient(ctx, currentVersion, branch, buildEpoch, apiURL, client)
 }
 
 // CheckForUpdateURL is the testable core of CheckForUpdate.  It queries the
 // given apiURL (so tests can inject an httptest server) and otherwise behaves
 // identically to CheckForUpdate.
 func CheckForUpdateURL(ctx context.Context, currentVersion, branch string, buildEpoch int64, apiURL string) (*Release, error) {
+	return CheckForUpdateURLWithClient(ctx, currentVersion, branch, buildEpoch, apiURL, nil)
+}
+
+// CheckForUpdateURLWithClient is CheckForUpdateURL with an injected HTTP client.
+func CheckForUpdateURLWithClient(ctx context.Context, currentVersion, branch string, buildEpoch int64, apiURL string, client *http.Client) (*Release, error) {
 	if canon, ok := NormalizeBranch(branch); ok {
 		branch = canon
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, err
@@ -241,6 +254,12 @@ func restartArgs(args []string) []string {
 // DoUpdate downloads the release binary, verifies it, and replaces the
 // running binary. The caller must restart the process afterwards.
 func DoUpdate(ctx context.Context, release *Release) error {
+	return DoUpdateWithClient(ctx, release, nil)
+}
+
+// DoUpdateWithClient downloads and verifies a release through the supplied
+// shared outbound client when present.
+func DoUpdateWithClient(ctx context.Context, release *Release, sharedClient *http.Client) error {
 	assetName := binaryAssetName()
 	var downloadURL string
 	for _, a := range release.Assets {
@@ -273,7 +292,14 @@ func DoUpdate(ctx context.Context, release *Release) error {
 	// best-effort cleanup on error
 	defer func() { _ = os.Remove(tmpPath) }()
 
-	client := &http.Client{Timeout: 10 * time.Minute}
+	client := sharedClient
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Minute}
+	} else {
+		clientCopy := *client
+		clientCopy.Timeout = 10 * time.Minute
+		client = &clientCopy
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
 		_ = tmpFile.Close()
@@ -416,24 +442,36 @@ func matchesBranch(r Release, branch string) bool {
 // (published_at, UTC). The devel channel ignores deferDays because its rolling
 // release is recreated nightly. Manual --update check/yes never use this.
 func CheckForUpdateDeferred(ctx context.Context, currentVersion, branch string, buildEpoch int64, deferDays int) (*Release, error) {
+	return CheckForUpdateDeferredWithClient(ctx, currentVersion, branch, buildEpoch, deferDays, nil)
+}
+
+// CheckForUpdateDeferredWithClient applies deferred eligibility with an
+// injected client for the release API request.
+func CheckForUpdateDeferredWithClient(ctx context.Context, currentVersion, branch string, buildEpoch int64, deferDays int, client *http.Client) (*Release, error) {
 	if deferDays <= 0 {
-		return CheckForUpdate(ctx, currentVersion, branch, buildEpoch)
+		return CheckForUpdateWithClient(ctx, currentVersion, branch, buildEpoch, client)
 	}
 	canon, ok := NormalizeBranch(branch)
 	if !ok {
 		canon = "stable"
 	}
 	if canon == devel {
-		return CheckForUpdate(ctx, currentVersion, canon, buildEpoch)
+		return CheckForUpdateWithClient(ctx, currentVersion, canon, buildEpoch, client)
 	}
-	return checkDeferredURL(ctx, currentVersion, canon, deferDays, configuredAPIBase(), time.Now())
+	return checkDeferredURLWithClient(ctx, currentVersion, canon, deferDays, configuredAPIBase(), time.Now(), client)
 }
 
 // checkDeferredURL lists releases from apiURL (newest first) and returns the
 // newest eligible one newer than currentVersion. Scanning stops at the running
 // version, since everything after it is older.
 func checkDeferredURL(ctx context.Context, currentVersion, branch string, deferDays int, apiURL string, now time.Time) (*Release, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
+	return checkDeferredURLWithClient(ctx, currentVersion, branch, deferDays, apiURL, now, nil)
+}
+
+func checkDeferredURLWithClient(ctx context.Context, currentVersion, branch string, deferDays int, apiURL string, now time.Time, client *http.Client) (*Release, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, err

@@ -119,8 +119,8 @@ func (h *Handler) servePost(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveQuery executes a query and writes the GraphQL response.
-func (h *Handler) serveQuery(w http.ResponseWriter, _ *http.Request, query string, vars map[string]interface{}) {
-	data, errs := h.resolver.Resolve(query, vars)
+func (h *Handler) serveQuery(w http.ResponseWriter, r *http.Request, query string, vars map[string]interface{}) {
+	data, errs := h.resolver.ResolveLocalized(query, vars, i18n.LangFromRequest(r))
 	resp := map[string]interface{}{"data": data}
 	if len(errs) > 0 {
 		resp["errors"] = errs
@@ -168,13 +168,14 @@ func (h *Handler) renderUI(r *http.Request) string {
 	prefix := h.assetPrefix(r)
 	theme := h.theme(r)
 	lang := i18n.LangFromRequest(r)
+	direction := i18n.Direction(lang)
 	t := func(key string) string { return i18n.Translate(lang, key) }
 	return `<!DOCTYPE html>
-<html lang="` + lang + `" dir="ltr" class="theme-` + theme + `">
+<html lang="` + lang + `" dir="` + direction + `" class="theme-` + theme + `">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>` + h.title + ` — GraphQL</title>
+    <title>` + escapeHTML(h.title) + ` — GraphQL</title>
     <link rel="stylesheet" href="` + buildinfo.AssetURL(prefix, "/static/css/common.css") + `">
     <link rel="stylesheet" href="` + buildinfo.AssetURL(prefix, "/static/css/components.css") + `">
   </head>
@@ -184,41 +185,41 @@ func (h *Handler) renderUI(r *http.Request) string {
       <nav class="nav" aria-label="` + t("nav.main_navigation") + `">
         <a href="` + prefix + `/" class="nav-brand">
           <div class="nav-brand-icon">📋</div>
-          <span>` + h.title + ` GraphQL API</span>
+          <span>` + escapeHTML(h.title) + ` ` + t("nav.graphql") + ` API</span>
         </a>
         <div class="nav-links">
           <a href="` + prefix + `/" class="nav-link">` + t("nav.home") + `</a>
           <a href="` + prefix + `/create" class="nav-link">` + t("nav.create") + `</a>
           <a href="` + prefix + `/recent" class="nav-link">` + t("nav.recent") + `</a>
           <a href="` + prefix + `/server/docs/swagger" class="nav-link">` + t("nav.swagger") + `</a>
-          <form class="theme-toggle" method="post" action="` + prefix + `/theme"><input type="hidden" name="csrf_token" value="` + h.csrfToken(r) + `"><input type="hidden" name="theme" value="` + nextTheme(theme) + `"><button type="submit" class="theme-button" data-theme-toggle aria-label="Toggle theme">🌙</button></form>
+          <form class="theme-toggle" method="post" action="` + prefix + `/theme"><input type="hidden" name="csrf_token" value="` + h.csrfToken(r) + `"><input type="hidden" name="theme" value="` + nextTheme(theme) + `"><button type="submit" class="theme-button" data-theme-toggle aria-label="` + t("theme.toggle") + `">🌙</button></form>
         </div>
       </nav>
     </header>
     <div class="graphiql-container" id="graphiql" data-api-url="` + prefix + `/api/graphql">
       <div class="pane">
         <div class="pane-header">
-          <span>Query</span>
-          <button class="execute-button" type="button" data-action="run-graphql-query">&#9654; Run</button>
+          <span>` + t("graphql.query") + `</span>
+          <button class="execute-button" type="button" data-action="run-graphql-query">&#9654; ` + t("graphql.run") + `</button>
         </div>
-        <textarea id="query" spellcheck="false" autocomplete="off" placeholder="# Enter GraphQL query here&#10;{&#10;  pastes(page: 1, limit: 10) {&#10;    total page limit&#10;    pastes { id title language created_at }&#10;  }&#10;}">{ pastes(page: 1, limit: 5) { total page limit pastes { id title language created_at } } }</textarea>
+        <textarea id="query" spellcheck="false" autocomplete="off" placeholder="` + t("graphql.query_placeholder") + `">{ pastes(page: 1, limit: 5) { total page limit pastes { id title language created_at } } }</textarea>
         <div class="vars-pane">
-          <div class="pane-header"><span>Variables (JSON)</span></div>
+          <div class="pane-header"><span>` + t("graphql.variables_json") + `</span></div>
           <textarea id="vars" spellcheck="false" placeholder='{"id": "abc123"}'></textarea>
         </div>
       </div>
       <div class="pane">
-        <div class="pane-header"><span>Response</span></div>
-        <div class="result-window" id="result">Run a query to see results.</div>
+        <div class="pane-header"><span>` + t("graphql.response") + `</span></div>
+        <div class="result-window" id="result">` + t("graphql.result_placeholder") + `</div>
       </div>
       <div class="schema-panel">
-        <h3>Schema</h3>
-        <pre>` + escapeHTML(SchemaSDL) + `</pre>
+        <h3>` + t("graphql.schema") + `</h3>
+        <pre>` + escapeHTML(localizedSchemaSDL(lang)) + `</pre>
       </div>
     </div>
     <footer class="footer">
       <div class="footer-content">
-        <nav class="footer-links" aria-label="Footer">
+        <nav class="footer-links" aria-label="` + t("footer.navigation") + `">
           <a href="` + prefix + `/server/about" class="footer-link">` + t("footer.about") + `</a>
           <span class="footer-sep" aria-hidden="true">·</span>
           <a href="` + prefix + `/server/privacy" class="footer-link">` + t("footer.privacy") + `</a>

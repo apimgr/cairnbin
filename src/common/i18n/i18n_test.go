@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// TestIsSupported covers all 7 supported language codes, unsupported codes,
+// TestIsSupported covers all supported language codes, unsupported codes,
 // and normalization (mixed case, whitespace).
 func TestIsSupported(t *testing.T) {
 	cases := []struct {
@@ -25,13 +25,14 @@ func TestIsSupported(t *testing.T) {
 		{"ar_supported", "ar", true},
 		{"ja_supported", "ja", true},
 		{"zh_supported", "zh", true},
+		{"it_supported_against_registry", "it", true},
 		{"uppercase_EN", "EN", true},
 		{"mixed_case_Fr", "Fr", true},
 		{"leading_space", " en", true},
 		{"trailing_space", "en ", true},
 		{"both_spaces", " en ", true},
 		{"unsupported_ru", "ru", false},
-		{"unsupported_it", "it", false},
+		{"it_supported", "it", true},
 		{"unsupported_empty", "", false},
 		{"unsupported_xx", "xx", false},
 		{"unsupported_en_US", "en-US", false},
@@ -58,6 +59,7 @@ func TestTranslate(t *testing.T) {
 	}{
 		{"en_known_key", "en", "common.save", "Save"},
 		{"fr_known_key", "fr", "common.save", "Enregistrer"},
+		{"it_known_key", "it", "common.save", "Salva"},
 		{"owner_tokens_en", "en", "preferences.owner_tokens", "Owner tokens"},
 		{"owner_tokens_es", "es", "preferences.owner_tokens", "Tokens de propietario"},
 		{"owner_tokens_fr", "fr", "preferences.owner_tokens", "Jetons du propriétaire"},
@@ -169,6 +171,9 @@ func TestTranslatePlural(t *testing.T) {
 		{"fr_two", "fr", "plurals.items", 2, "2 éléments"},
 
 		// Chinese: all counts use "other"
+		{"it_one", "it", "plurals.items", 1, "articolo 1"},
+		{"it_other", "it", "plurals.items", 2, "articoli 2"},
+		{"it_many", "it", "plurals.items", 1000000, "articoli 1000000"},
 		{"zh_zero", "zh", "plurals.items", 0, "0 个项目"},
 		{"zh_one", "zh", "plurals.items", 1, "1 个项目"},
 		{"zh_two", "zh", "plurals.items", 2, "2 个项目"},
@@ -285,7 +290,7 @@ func TestGetLanguage(t *testing.T) {
 		// LANG used when LC_ALL absent
 		{"lang_env", "", "", "", "ar_SA.UTF-8", "ar"},
 		{"lang_env_bare", "", "", "", "zh", "zh"},
-		{"lang_env_unsupported", "", "", "", "it_IT.UTF-8", "en"},
+		{"lang_env_supported", "", "", "", "it_IT.UTF-8", "it"},
 
 		// Nothing set → "en"
 		{"all_empty", "", "", "", "", "en"},
@@ -407,7 +412,7 @@ func flattenKeys(m map[string]interface{}, prefix string) []string {
 }
 
 // TestKeyParity asserts that every locale file has exactly the same set of keys as en.json.
-// This is a build-time check required by PART 30: all 7 locale files MUST have identical keys.
+// This is a build-time check required by PART 30: all supported locale files MUST have identical keys.
 func TestKeyParity(t *testing.T) {
 	fs := LocaleFS()
 
@@ -429,7 +434,7 @@ func TestKeyParity(t *testing.T) {
 		enSet[k] = struct{}{}
 	}
 
-	for _, lang := range []string{"ar", "de", "es", "fr", "ja", "zh"} {
+	for _, lang := range []string{"ar", "de", "es", "fr", "it", "ja", "zh"} {
 		t.Run(lang, func(t *testing.T) {
 			otherKeys := loadKeys(lang)
 			otherSet := make(map[string]struct{}, len(otherKeys))
@@ -591,6 +596,43 @@ func TestConfigure_CookieSettings(t *testing.T) {
 	}
 }
 
+// TestLanguageRegistryMatchesLocales ensures the canonical registry and embedded locale files stay in sync.
+func TestLanguageRegistryMatchesLocales(t *testing.T) {
+	entries, err := localeFS.ReadDir("locales")
+	if err != nil {
+		t.Fatalf("read embedded locales: %v", err)
+	}
+	var files []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		files = append(files, strings.TrimSuffix(entry.Name(), ".json"))
+	}
+	sort.Strings(files)
+	codes := SupportedCodes()
+	required := RequiredCodes()
+	if strings.Join(required, ",") != "ar,de,en,es,fr,it" {
+		t.Fatalf("required language set = %v, want Arabic, German, English, Spanish, French, and Italian", required)
+	}
+	if strings.Join(files, ",") != strings.Join(codes, ",") {
+		t.Fatalf("locale files %v do not match language registry %v", files, codes)
+	}
+	for _, code := range codes {
+		info, ok := LanguageInfo(code)
+		if !ok {
+			t.Fatalf("registry entry missing for %q", code)
+		}
+		if info.NativeName == "" || (info.Direction != "ltr" && info.Direction != "rtl") || len(info.PluralCategories) == 0 {
+			t.Errorf("registry entry for %q has incomplete metadata: %+v", code, info)
+		}
+		locale := translations[code]
+		if locale["meta.language"] != code || locale["meta.native_name"] != info.NativeName || locale["meta.direction"] != info.Direction {
+			t.Errorf("locale %q metadata does not match registry: name=%q direction=%q", code, locale["meta.native_name"], locale["meta.direction"])
+		}
+	}
+}
+
 // TestKeyConsistency is the PART 30 build-time validation beyond key parity:
 // no empty values, matching {token} sets, and every plural category the
 // language requires is present wherever English defines plurals.
@@ -601,11 +643,12 @@ func TestKeyConsistency(t *testing.T) {
 		sort.Strings(found)
 		return strings.Join(found, ",")
 	}
-	required := map[string][]string{
-		"en": {"one", "other"}, "es": {"one", "other"}, "de": {"one", "other"}, "fr": {"one", "other"},
-		"zh": {"other"}, "ja": {"other"}, "ar": {"zero", "one", "two", "few", "many", "other"},
-	}
 	for lang, table := range translations {
+		info, ok := LanguageInfo(lang)
+		if !ok {
+			t.Errorf("locale %q has no language registry entry", lang)
+			continue
+		}
 		for key, val := range table {
 			if strings.TrimSpace(val) == "" {
 				t.Errorf("%s: key %q is empty", lang, key)
@@ -628,7 +671,7 @@ func TestKeyConsistency(t *testing.T) {
 				continue
 			}
 			base := strings.TrimSuffix(key, ".other")
-			for _, form := range required[lang] {
+			for _, form := range info.PluralCategories {
 				if _, ok := table[base+"."+form]; !ok {
 					t.Errorf("%s: plural %q missing category %q", lang, base, form)
 				}

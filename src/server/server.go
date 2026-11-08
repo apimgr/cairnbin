@@ -209,23 +209,29 @@ type SchedulerAPI interface {
 
 // Server owns the HTTP router and all handler dependencies.
 type Server struct {
-	router         *chi.Mux
-	db             database.DB
-	cacheStore     cache.Cache
-	cfg            *config.Config
-	cfgMgr         *config.ConfigManager
-	templates      map[string]*template.Template
-	pasteHandler   *handler.PasteHandler
-	compatHandler  *compat.Handler
-	swaggerHandler *swagger.Handler
-	mcpHandler     *mcp.Handler
+	router              *chi.Mux
+	db                  database.DB
+	cacheStore          cache.Cache
+	cfg                 *config.Config
+	cfgMgr              *config.ConfigManager
+	lastSMTPConfig      config.EmailConfig
+	lastEmailLanguage   string
+	lastI2PConfig       config.I2PConfig
+	emailConfigChangeFn func(config.EmailConfig, string)
+	templates           map[string]*template.Template
+	pasteHandler        *handler.PasteHandler
+	compatHandler       *compat.Handler
+	swaggerHandler      *swagger.Handler
+	mcpHandler          *mcp.Handler
 	// ipBlocks holds temporary (auto) IP blocks and flood counters (PART 11).
 	ipBlocks           *ipBlocks
 	graphqlHandler     *graphql.Handler
 	metricsCollector   *metric.Collector
 	geoipDB            *geoip.DB
 	torManager         *tor.Manager
+	outboundHTTPClient *http.Client
 	i2pManager         *i2p.Manager
+	i2pMonitorOnce     sync.Once
 	readLimiter        *rateLimiter
 	writeLimiter       *rateLimiter
 	healthLimiter      *rateLimiter
@@ -419,6 +425,12 @@ func (s *Server) SetSchedulerAPI(api SchedulerAPI) {
 	s.schedulerAPI = api
 }
 
+// SetEmailConfigChangeFn registers the SMTP/template refresh hook used after a
+// successful server.yml reload.
+func (s *Server) SetEmailConfigChangeFn(fn func(config.EmailConfig, string)) {
+	s.emailConfigChangeFn = fn
+}
+
 // MarkPendingRestart records a config key that requires a restart to take effect.
 // The key is surfaced in the healthz pending_restart / restart_reason fields.
 func (s *Server) MarkPendingRestart(key string) {
@@ -440,6 +452,28 @@ func (s *Server) liveCfg() *config.Config {
 	return s.cfg
 }
 
+func makeI2PConfig(cfg config.I2PConfig, configDir, dataDir, logDir string) i2p.Config {
+	bootstrapTimeout := 5 * time.Minute
+	if d, err := time.ParseDuration(cfg.BootstrapTimeout); err == nil && d > 0 {
+		bootstrapTimeout = d
+	}
+	return i2p.Config{
+		Enabled:          cfg.Enabled,
+		Binary:           cfg.Binary,
+		SAMAddress:       cfg.SAMAddress,
+		VirtualPort:      cfg.VirtualPort,
+		InboundLength:    cfg.InboundLength,
+		OutboundLength:   cfg.OutboundLength,
+		InboundQuantity:  cfg.InboundQuantity,
+		OutboundQuantity: cfg.OutboundQuantity,
+		SignatureType:    cfg.SignatureType,
+		BootstrapTimeout: bootstrapTimeout,
+		ConfigDir:        configDir,
+		DataDir:          dataDir,
+		LogDir:           logDir,
+	}
+}
+
 // apiVersion returns the configured {api_version} route segment (PART 14),
 // falling back to "v1" when unset.
 func (s *Server) apiVersion() string {
@@ -454,17 +488,20 @@ func (s *Server) apiVersion() string {
 // cfgMgr may be nil (e.g. in tests); when set, hot-reloadable settings are read live.
 func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, version, commitID, buildDate, configDir, dataDir string) *Server {
 	s := &Server{
-		ipBlocks:  newIPBlocks(),
-		router:    chi.NewRouter(),
-		db:        db,
-		cfg:       cfg,
-		cfgMgr:    cfgMgr,
-		version:   version,
-		commitID:  commitID,
-		buildDate: buildDate,
-		configDir: configDir,
-		dataDir:   dataDir,
-		startTime: time.Now(),
+		ipBlocks:          newIPBlocks(),
+		router:            chi.NewRouter(),
+		db:                db,
+		cfg:               cfg,
+		cfgMgr:            cfgMgr,
+		lastSMTPConfig:    cfg.Server.Notifications.Email,
+		lastEmailLanguage: cfg.Server.Lang,
+		lastI2PConfig:     cfg.Server.I2P,
+		version:           version,
+		commitID:          commitID,
+		buildDate:         buildDate,
+		configDir:         configDir,
+		dataDir:           dataDir,
+		startTime:         time.Now(),
 	}
 	s.stats.lastHour = time.Now().Hour()
 
@@ -502,6 +539,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	s.swaggerHandler.SetAssetPrefixResolver(s.assetPrefix)
 	s.swaggerHandler.SetThemeResolver(s.themeFromRequest)
 	s.swaggerHandler.SetCSRFTokenResolver(s.csrfTokenFromRequest)
+	s.swaggerHandler.SetLanguageResolver(i18n.LangFromRequest)
 	s.mcpHandler = mcp.New(mcp.Config{
 		APIVersion:    s.apiVersion(),
 		ServerName:    cfg.Web.SiteTitle,
@@ -544,25 +582,6 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 			strings.Join(disabled, ", "))
 	}
 
-	if cfg.Server.GeoIP.Enabled {
-		gcfg := geoip.Config{
-			Dir:            cfg.Server.GeoIP.Dir,
-			EnableASN:      cfg.Server.GeoIP.Databases.ASN,
-			EnableCountry:  cfg.Server.GeoIP.Databases.Country,
-			EnableCity:     cfg.Server.GeoIP.Databases.City,
-			DenyCountries:  cfg.Server.GeoIP.DenyCountries,
-			AllowCountries: cfg.Server.GeoIP.AllowCountries,
-			// Wire server-wide security allowlist into geoip so GeoIP also
-			// bypasses country-blocking for explicitly allowlisted IPs.
-			Allowlist: cfg.Server.Security.AllowlistCIDRs(),
-		}
-		if gdb, err := geoip.Open(gcfg); err != nil {
-			log.Printf("warning: geoip init: %v", err)
-		} else {
-			s.geoipDB = gdb
-		}
-	}
-
 	// Tor hidden service — auto-enabled when Tor binary is found.
 	torCfg := tor.Config{
 		Binary:                    cfg.Server.Tor.Binary,
@@ -592,6 +611,30 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	}
 	serverPort, _ := strconv.Atoi(strings.TrimSpace(portField))
 	s.torManager = tor.NewManager(context.Background(), serverPort, torCfg, s.router)
+	s.outboundHTTPClient = s.torManager.GetHTTPClient(cfg.Server.Tor.UseNetwork)
+
+	if cfg.Server.GeoIP.Enabled {
+		gcfg := geoip.Config{
+			Dir:            cfg.Server.GeoIP.Dir,
+			HTTPClient:     s.outboundHTTPClient,
+			DeferDownloads: cfg.Server.Tor.UseNetwork,
+			EnableASN:      cfg.Server.GeoIP.Databases.ASN,
+			EnableCountry:  cfg.Server.GeoIP.Databases.Country,
+			EnableCity:     cfg.Server.GeoIP.Databases.City,
+			DenyCountries:  cfg.Server.GeoIP.DenyCountries,
+			AllowCountries: cfg.Server.GeoIP.AllowCountries,
+			// Wire server-wide security allowlist into geoip so GeoIP also
+			// bypasses country-blocking for explicitly allowlisted IPs.
+			Allowlist: cfg.Server.Security.AllowlistCIDRs(),
+		}
+		if gdb, err := geoip.Open(gcfg); err != nil {
+			log.Printf("warning: geoip init: %v", err)
+		} else {
+			s.geoipDB = gdb
+		}
+	}
+	s.i2pManager = i2p.NewManager(context.Background(), makeI2PConfig(cfg.Server.I2P,
+		configDir, dataDir, path.GetLogsDir("cairnbin")), s.router)
 
 	// Report Tor state into the tor_* metrics at scrape time.
 	s.metricsCollector.SetTorProvider(func() (enabled, running bool) {
@@ -808,20 +851,21 @@ func (s *Server) buildTemplates() (map[string]*template.Template, error) {
 		"markdown": func(s string) template.HTML {
 			return renderMarkdown(s)
 		},
+		"privacyText": localizedPrivacyText,
 		"trackingEnabled": func() bool {
 			return s.liveCfg().Server.Tracking.Enabled()
 		},
 		"trackingScript": func() template.HTML {
 			return renderTrackingScript(s.liveCfg().Server.Tracking)
 		},
-		"consentConfig": func() template.JS {
-			return renderConsentConfig(s.liveCfg())
+		"consentConfig": func(lang string) template.JS {
+			return renderConsentConfig(s.liveCfg(), lang)
 		},
 		// consentInfo exposes the same consent configuration as plain Go values
 		// (rather than a JSON literal) for the no-JS <noscript> consent form
 		// (AI.md 25598), which cannot execute app.js to read pb-consent-data.
-		"consentInfo": func() consentClientConfig {
-			return buildConsentClientConfig(s.liveCfg())
+		"consentInfo": func(lang string) consentClientConfig {
+			return buildConsentClientConfig(s.liveCfg(), lang)
 		},
 		// asset appends the running build stamp to a static asset path so a
 		// browser never serves a stale file after an update (AI.md PART 9,
@@ -905,6 +949,32 @@ func fmtUserDate(t time.Time) string {
 // OnConfigChange is called by the ConfigManager after each successful hot-reload.
 // It updates rate limiter thresholds and tracks restart-required key changes.
 func (s *Server) OnConfigChange(next *config.Config) {
+	if next != nil {
+		emailConfigChanged := !reflect.DeepEqual(s.lastSMTPConfig, next.Server.Notifications.Email)
+		languageChanged := s.lastEmailLanguage != next.Server.Lang
+		if emailConfigChanged || languageChanged {
+			s.lastSMTPConfig = next.Server.Notifications.Email
+			s.lastEmailLanguage = next.Server.Lang
+			if s.emailConfigChangeFn != nil {
+				s.emailConfigChangeFn(next.Server.Notifications.Email, next.Server.Lang)
+			}
+			if emailConfigChanged && email.SMTPPrivateCertVerificationSkipped(s.lastSMTPConfig.SMTP.Host, s.lastSMTPConfig.SMTP.TLS) {
+				log.Printf("SMTP host %s is a private address: TLS certificate verification skipped", s.lastSMTPConfig.SMTP.Host)
+			}
+		}
+		if !reflect.DeepEqual(s.lastI2PConfig, next.Server.I2P) {
+			s.lastI2PConfig = next.Server.I2P
+			if s.i2pManager != nil {
+				if err := s.i2pManager.UpdateConfig(makeI2PConfig(next.Server.I2P,
+					s.configDir, s.dataDir, s.logDir)); err != nil {
+					log.Printf("i2p: config reload failed: %v", err)
+				} else if s.i2pManager.Running() {
+					s.startI2PMonitor()
+					s.persistB32Address()
+				}
+			}
+		}
+	}
 	applyI18nConfig(next)
 	if s.readLimiter != nil && next.Server.RateLimit.Read.Requests > 0 {
 		s.readLimiter.UpdateLimit(next.Server.RateLimit.Read.Requests)
@@ -937,10 +1007,7 @@ func (s *Server) OnConfigChange(next *config.Config) {
 	if prev.Database.Type != next.Database.Type || prev.Database.Path != next.Database.Path {
 		s.MarkPendingRestart("database")
 	}
-	if prev.Server.Tor.Binary != next.Server.Tor.Binary ||
-		prev.Server.Tor.VirtualPort != next.Server.Tor.VirtualPort ||
-		prev.Server.Tor.CircuitTimeout != next.Server.Tor.CircuitTimeout ||
-		prev.Server.Tor.BootstrapTimeout != next.Server.Tor.BootstrapTimeout {
+	if !reflect.DeepEqual(prev.Server.Tor, next.Server.Tor) {
 		s.MarkPendingRestart("tor")
 	}
 	if prev.Server.TLS.Enabled != next.Server.TLS.Enabled ||
@@ -1087,6 +1154,18 @@ func (s *Server) UpdateGeoIP() error {
 		return nil
 	}
 	return s.geoipDB.Update()
+}
+
+// OutboundHTTPClient returns the server's shared client for app-owned external
+// requests. When Tor networking is enabled, requests fail closed until Tor is
+// ready instead of falling back to clearnet.
+func (s *Server) OutboundHTTPClient() *http.Client {
+	return s.outboundHTTPClient
+}
+
+// TorEnabled reports whether a Tor binary is available for the managed service.
+func (s *Server) TorEnabled() bool {
+	return s.torManager != nil && s.torManager.Enabled()
 }
 
 // TorRunning returns true when the Tor hidden service is active.
@@ -1392,23 +1471,12 @@ func (s *Server) setupRoutes() {
 
 	// ── Metrics endpoint ─────────────────────────────────────────────────────
 	if s.cfg.Server.Metrics.Enabled {
-		endpoint := s.cfg.Server.Metrics.Endpoint
-		if endpoint == "" {
-			endpoint = "/metrics"
-		}
-		r.Handle(endpoint, s.metricsCollector.Handler())
-
 		// PART 20: the bare /metrics root alias is gated on
 		// server.metrics.root.enabled (default true, since Prometheus scrapers
 		// default to /metrics). It serves the SAME handler and is never a
-		// redirect — redirects break scrapers. Skipped when the configured
-		// endpoint already is /metrics, since that registration covers it.
-		if s.cfg.Server.Metrics.Root.Enabled && endpoint != "/metrics" {
-			r.Handle("/metrics", s.metricsCollector.Handler())
-			// Per-service subpaths on the root alias too, so an operator can
-			// point grafana or loki at /metrics/grafana. Only mounted when the
-			// bare path was mounted above, so the two never collide.
-			s.mountMetricsServices(r, "/metrics", false)
+		// redirect — redirects break scrapers.
+		if s.cfg.Server.Metrics.Root.Enabled {
+			s.mountMetricsServices(r, "/metrics", true)
 		}
 
 		// PART 20: the canonical /server/metrics route tree. The bare path is
@@ -1743,9 +1811,7 @@ func (s *Server) requireOperatorToken(next http.Handler) http.Handler {
 			metric.AuthAttemptsTotal.WithLabelValues(source, "failure").Inc()
 			s.authLog(r, "operator", "fail", "missing_bearer_token")
 			w.Header().Set("WWW-Authenticate", `Bearer realm="cairnbin"`)
-			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
-				"ok": false, "error": "UNAUTHORIZED", "message": "operator token required",
-			})
+			writeAPIError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "errors.unauthorized")
 			return
 		}
 		incomingHash := sha256.Sum256([]byte(incoming))
@@ -1753,18 +1819,14 @@ func (s *Server) requireOperatorToken(next http.Handler) http.Handler {
 		if s.operatorTokenHash == zeroHash {
 			metric.AuthAttemptsTotal.WithLabelValues(source, "failure").Inc()
 			s.authLog(r, "operator", "fail", "token_not_configured")
-			writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
-				"ok": false, "error": "SERVER_ERROR", "message": "server.token not configured",
-			})
+			writeAPIError(w, r, http.StatusServiceUnavailable, "SERVER_ERROR", "errors.server_error")
 			return
 		}
 		if subtle.ConstantTimeCompare(incomingHash[:], s.operatorTokenHash[:]) != 1 {
 			metric.AuthAttemptsTotal.WithLabelValues(source, "failure").Inc()
 			s.authLog(r, "operator", "fail", "invalid_token")
 			w.Header().Set("WWW-Authenticate", `Bearer realm="cairnbin"`)
-			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
-				"ok": false, "error": "UNAUTHORIZED", "message": "operator token required",
-			})
+			writeAPIError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "errors.unauthorized")
 			return
 		}
 		metric.AuthAttemptsTotal.WithLabelValues(source, "success").Inc()
@@ -2283,9 +2345,9 @@ func (s *Server) mountMetricsServices(r chi.Router, base string, withBare bool) 
 	// canonical PART 14 envelope instead of chi's bare-text default.
 	r.HandleFunc(base+"/{service}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{
-			"ok":      false,
-			"error":   "NOT_FOUND",
-			"message": "unknown metrics service: " + chi.URLParam(r, "service"),
+			"ok": false, "error": "NOT_FOUND",
+			"message": i18n.Translate(i18n.LangFromRequest(r), "errors.not_found"),
+			"details": map[string]string{"service": chi.URLParam(r, "service")},
 		})
 	})
 }
@@ -2314,7 +2376,7 @@ func (s *Server) secFetchMiddleware(next http.Handler) http.Handler {
 		if fetchSite == "cross-site" && !isEmbedPath(r.URL.Path) {
 			switch r.Header.Get("Sec-Fetch-Dest") {
 			case "iframe", "frame", "embed", "object":
-				writeJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "error": "FORBIDDEN", "message": "cross-site framing of this endpoint is not allowed"})
+				writeAPIError(w, r, http.StatusForbidden, "FORBIDDEN", "errors.forbidden")
 				return
 			}
 		}
@@ -2327,7 +2389,7 @@ func (s *Server) secFetchMiddleware(next http.Handler) http.Handler {
 				if !hasBearerCredential(r) {
 					// Check CSRF exempt paths.
 					if !isCSRFExempt(r.URL.Path, cfg.Server.CSRF.ExemptPaths) {
-						writeJSON(w, http.StatusForbidden, map[string]interface{}{"ok": false, "error": "FORBIDDEN", "message": "cross-site state-changing request blocked"})
+						writeAPIError(w, r, http.StatusForbidden, "FORBIDDEN", "errors.forbidden")
 						return
 					}
 				}
@@ -2606,7 +2668,7 @@ func (s *Server) csrfFailureResponse(w http.ResponseWriter, r *http.Request, rea
 		body := map[string]interface{}{
 			"ok":      false,
 			"error":   "CSRF_FAILED",
-			"message": "CSRF token validation failed",
+			"message": i18n.Translate(i18n.LangFromRequest(r), "errors.forbidden"),
 		}
 		// Tier 3 diagnostics (PART 11): which check tripped is only revealed in
 		// debug mode; production responses never carry the _debug field.
@@ -2745,6 +2807,18 @@ func (s *Server) startManagedNetworkServices() {
 			} else if s.torManager.Running() {
 				go s.torManager.Monitor()
 				s.persistOnionAddress()
+				if s.liveCfg().Server.Tor.UseNetwork {
+					if s.geoipDB != nil {
+						go func() {
+							if err := s.UpdateGeoIP(); err != nil {
+								log.Printf("geoip: initial Tor-routed refresh failed: %v", err)
+							}
+						}()
+					}
+					if key := s.projectPGPPublicKey(); key != "" && s.liveCfg().PublishPGPKeyEnabled() {
+						go s.publishToKeyservers(key)
+					}
+				}
 			}
 		}()
 	}
@@ -2753,11 +2827,18 @@ func (s *Server) startManagedNetworkServices() {
 			if err := s.i2pManager.Start(); err != nil {
 				log.Printf("i2p: start failed: %v", err)
 			} else if s.i2pManager.Running() {
-				go s.i2pManager.Monitor()
+				s.startI2PMonitor()
 				s.persistB32Address()
 			}
 		}()
 	}
+}
+
+func (s *Server) startI2PMonitor() {
+	if s.i2pManager == nil {
+		return
+	}
+	s.i2pMonitorOnce.Do(func() { go s.i2pManager.Monitor() })
 }
 
 // Run starts the HTTP server on addr and blocks until ctx is cancelled or a
@@ -2781,30 +2862,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		defer s.torManager.Close()
 	}
 
-	// Start I2P eepsite (opt-in; disabled unless server.i2p.enabled is set).
-	// Constructed here rather than in New() because it depends on s.logDir,
-	// which main only populates via SetLogDir() after New() returns.
-	i2pCfg := s.liveCfg().Server.I2P
-	if i2pCfg.Enabled {
-		bootstrapTimeout := 5 * time.Minute
-		if d, err := time.ParseDuration(i2pCfg.BootstrapTimeout); err == nil && d > 0 {
-			bootstrapTimeout = d
-		}
-		s.i2pManager = i2p.NewManager(context.Background(), i2p.Config{
-			Enabled:          i2pCfg.Enabled,
-			Binary:           i2pCfg.Binary,
-			SAMAddress:       i2pCfg.SAMAddress,
-			VirtualPort:      i2pCfg.VirtualPort,
-			InboundLength:    i2pCfg.InboundLength,
-			OutboundLength:   i2pCfg.OutboundLength,
-			InboundQuantity:  i2pCfg.InboundQuantity,
-			OutboundQuantity: i2pCfg.OutboundQuantity,
-			SignatureType:    i2pCfg.SignatureType,
-			BootstrapTimeout: bootstrapTimeout,
-			ConfigDir:        s.configDir,
-			DataDir:          s.dataDir,
-			LogDir:           s.logDir,
-		}, s.router)
+	if s.i2pManager != nil {
 		defer s.i2pManager.Close()
 	}
 
@@ -3278,6 +3336,9 @@ func (s *Server) buildI2PInfo() I2PInfo {
 	if s.i2pManager == nil {
 		return I2PInfo{Enabled: false, Running: false, Status: "disabled", Hostname: "", Provider: "none"}
 	}
+	if !s.i2pManager.Enabled() {
+		return I2PInfo{Enabled: false, Running: false, Status: "disabled", Hostname: "", Provider: "none"}
+	}
 	running := s.i2pManager.Running()
 	addr := s.i2pManager.Address()
 	status := "starting"
@@ -3667,6 +3728,7 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	search := strings.TrimSpace(q.Get("search"))
+	pasteType := strings.TrimSpace(q.Get("type"))
 
 	sortBy := strings.TrimSpace(q.Get("sort"))
 	if sortBy == "" {
@@ -3688,7 +3750,7 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 		order = "desc"
 	}
 
-	pastes, total, _ := s.db.SearchPublicPastes(page, limit, search, sortBy, order)
+	pastes, total, _ := s.db.SearchPublicPastes(page, limit, search, sortBy, order, pasteType)
 	pages := (total + limit - 1) / limit
 	if pages < 1 {
 		pages = 1
@@ -3707,6 +3769,7 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 		"PrevPage":    page - 1,
 		"NextPage":    page + 1,
 		"Search":      search,
+		"Type":        pasteType,
 		"Sort":        sortBy,
 		"Order":       order,
 		"CurrentPath": r.URL.Path,
@@ -3720,7 +3783,11 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 			// Fallback when templates are unavailable: minimal plain text.
 			_, _ = fmt.Fprintf(w, "# Recent pastes (%d total)\n", total)
 			for _, p := range pastes {
-				_, _ = fmt.Fprintf(w, "%s/%s\t%s\t%s\n", s.baseURL(r), p.ID, p.Language, p.Title)
+				pasteType := p.ContentType
+				if pasteType == "" {
+					pasteType = p.Language
+				}
+				_, _ = fmt.Fprintf(w, "%s/%s\t%s\t%s\n", s.baseURL(r), p.ID, pasteType, p.Title)
 			}
 			return
 		}
@@ -3794,7 +3861,7 @@ func (s *Server) renderPasteView(w http.ResponseWriter, r *http.Request, forceVi
 	if err != nil {
 		switch detectClientType(r) {
 		case "json":
-			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "error": "SERVER_ERROR", "message": "internal server error"})
+			writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		default:
 			s.renderErrorPage(w, r, http.StatusInternalServerError, "An internal error occurred. Please try again.")
 		}
@@ -4008,11 +4075,7 @@ func (s *Server) handleQRImage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// The QR route serves an image, so the failure body must stay
 		// machine-readable rather than negotiating to an HTML page.
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"ok":      false,
-			"error":   "SERVER_ERROR",
-			"message": "QR generation failed",
-		})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	w.Header().Set("Content-Type", "image/png")
@@ -4054,7 +4117,7 @@ func (s *Server) handleRemovePage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRemoveSubmit(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if err := r.ParseForm(); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "BAD_REQUEST", "message": "bad request"})
+		writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.bad_request")
 		return
 	}
 	token := r.FormValue("token")
@@ -4224,7 +4287,7 @@ func (s *Server) handleURLRedirect(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 	if detectClientType(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		html, err := s.renderTemplateToString(r, "about.html", s.aboutPageData())
+		html, err := s.renderTemplateToString(r, "about.html", s.aboutPageData(r))
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "%s\n%s/server/about\n", s.liveCfg().Web.SiteTitle, s.baseURL(r))
 			return
@@ -4232,19 +4295,45 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 		return
 	}
-	s.renderTemplate(w, r, "about.html", s.aboutPageData())
+	s.renderTemplate(w, r, "about.html", s.aboutPageData(r))
 }
 
 // aboutPageData builds the /server/about template data, sourcing the tagline,
 // description, feature list, and links from the operator's Branding config with a
 // real IDEA.md fallback (PART 16 page-content sourcing). No content is hardcoded
 // in the template and no field is ever blank or a generic placeholder.
-func (s *Server) aboutPageData() map[string]interface{} {
+func (s *Server) aboutPageData(r *http.Request) map[string]interface{} {
 	b := s.liveCfg().Server.Branding
+	lang := i18n.LangFromRequest(r)
+	defaults := config.DefaultConfig().Server.Branding
+	tagline := b.EffectiveTagline()
+	if tagline == defaults.EffectiveTagline() {
+		tagline = i18n.Translate(lang, "about.default_tagline")
+	}
+	description := b.EffectiveDescription()
+	if description == defaults.EffectiveDescription() {
+		description = i18n.Translate(lang, "about.default_description")
+	}
+	features := b.EffectiveFeatures()
+	if len(features) == len(defaults.EffectiveFeatures()) {
+		matchesDefaults := true
+		for idx := range features {
+			if features[idx] != defaults.EffectiveFeatures()[idx] {
+				matchesDefaults = false
+				break
+			}
+		}
+		if matchesDefaults {
+			features = make([]string, len(features))
+			for idx := range features {
+				features[idx] = i18n.Translate(lang, fmt.Sprintf("about.default_feature_%d", idx+1))
+			}
+		}
+	}
 	data := s.pageData()
-	data["Tagline"] = b.EffectiveTagline()
-	data["Description"] = b.EffectiveDescription()
-	data["Features"] = b.EffectiveFeatures()
+	data["Tagline"] = tagline
+	data["Description"] = description
+	data["Features"] = features
 	data["Links"] = b.EffectiveLinks()
 	data["GeoIPEnabled"] = s.liveCfg().Server.GeoIP.Enabled
 	data["PageContent"] = pageContentHTML(s.liveCfg().Server.Pages.About.Content)
@@ -4427,7 +4516,7 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 // user-facing message. Shared by the web form and the JSON API.
 func (s *Server) deliverContact(r *http.Request, cfg *config.Config, name, fromEmail, subject, message string) (int, string) {
 	to := strings.TrimSpace(cfg.GeneralEmail())
-	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, s.baseURL(r), cfg.Server.FQDN)
+	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, s.baseURL(r), cfg.Server.FQDN, cfg.Server.Lang)
 	emailReady := to != "" && m.Enabled()
 	webhookTargets := cfg.WebhookTargets("general")
 
@@ -5253,11 +5342,7 @@ func (s *Server) serveBrandingImage(w http.ResponseWriter, r *http.Request, fiel
 		if encErr != nil {
 			// Same as the QR route: an image endpoint answering with the
 			// canonical JSON envelope, never an HTML error page.
-			writeJSON(w, http.StatusInternalServerError, map[string]any{
-				"ok":      false,
-				"error":   "SERVER_ERROR",
-				"message": "Image unavailable",
-			})
+			writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 			return
 		}
 		data = fallback
@@ -5280,7 +5365,7 @@ func (s *Server) handleOffline(w http.ResponseWriter, r *http.Request) {
 // handleSchedulerList returns all registered tasks.
 func (s *Server) handleSchedulerList(w http.ResponseWriter, r *http.Request) {
 	if s.schedulerAPI == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok": false, "error": "MAINTENANCE", "message": "scheduler not available"})
+		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
 		return
 	}
 	tasks := s.schedulerAPI.GetTasks()
@@ -5290,13 +5375,13 @@ func (s *Server) handleSchedulerList(w http.ResponseWriter, r *http.Request) {
 // handleSchedulerShow returns the state for a single task.
 func (s *Server) handleSchedulerShow(w http.ResponseWriter, r *http.Request) {
 	if s.schedulerAPI == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok": false, "error": "MAINTENANCE", "message": "scheduler not available"})
+		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
 		return
 	}
 	id := chi.URLParam(r, "id")
 	t, ok := s.schedulerAPI.GetTask(id)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]interface{}{"ok": false, "error": "NOT_FOUND", "message": "task not found"})
+		writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": t})
@@ -5305,12 +5390,12 @@ func (s *Server) handleSchedulerShow(w http.ResponseWriter, r *http.Request) {
 // handleSchedulerRun triggers a task to run immediately.
 func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
 	if s.schedulerAPI == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok": false, "error": "MAINTENANCE", "message": "scheduler not available"})
+		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
 		return
 	}
 	id := chi.URLParam(r, "id")
 	if err := s.schedulerAPI.RunNow(id); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "BAD_REQUEST", "message": err.Error()})
+		writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.bad_request")
 		return
 	}
 	// PART 11 audit event: task manually triggered (task name + actor IP).
@@ -5326,12 +5411,12 @@ func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
 // handleSchedulerEnable enables a task.
 func (s *Server) handleSchedulerEnable(w http.ResponseWriter, r *http.Request) {
 	if s.schedulerAPI == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok": false, "error": "MAINTENANCE", "message": "scheduler not available"})
+		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
 		return
 	}
 	id := chi.URLParam(r, "id")
 	if _, ok := s.schedulerAPI.GetTask(id); !ok {
-		writeJSON(w, http.StatusNotFound, map[string]interface{}{"ok": false, "error": "NOT_FOUND", "message": "task not found"})
+		writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
 		return
 	}
 	s.schedulerAPI.EnableTask(id)
@@ -5341,12 +5426,12 @@ func (s *Server) handleSchedulerEnable(w http.ResponseWriter, r *http.Request) {
 // handleSchedulerDisable disables a task.
 func (s *Server) handleSchedulerDisable(w http.ResponseWriter, r *http.Request) {
 	if s.schedulerAPI == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok": false, "error": "MAINTENANCE", "message": "scheduler not available"})
+		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
 		return
 	}
 	id := chi.URLParam(r, "id")
 	if _, ok := s.schedulerAPI.GetTask(id); !ok {
-		writeJSON(w, http.StatusNotFound, map[string]interface{}{"ok": false, "error": "NOT_FOUND", "message": "task not found"})
+		writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
 		return
 	}
 	s.schedulerAPI.DisableTask(id)
@@ -5358,7 +5443,7 @@ func (s *Server) handleSchedulerHistory(w http.ResponseWriter, r *http.Request) 
 	id := chi.URLParam(r, "id")
 	history, err := s.db.ListTaskHistory(id, 20)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"ok": false, "error": "SERVER_ERROR", "message": "could not retrieve history"})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": history})
@@ -5613,7 +5698,7 @@ func (s *Server) injectTorData(data map[string]interface{}) {
 // active; the .b32.i2p address is only meaningful while running.
 func (s *Server) injectI2PData(data map[string]interface{}) {
 	running := s.I2PRunning()
-	data["I2PEnabled"] = s.i2pManager != nil
+	data["I2PEnabled"] = s.i2pManager != nil && s.i2pManager.Enabled()
 	data["I2PRunning"] = running
 	if running {
 		data["I2PAddress"] = s.I2PAddress()
@@ -5646,7 +5731,7 @@ func (s *Server) injectOwnerTokenData(r *http.Request, data map[string]interface
 	data["OwnedResourceURL"] = s.assetPrefix(r) + "/" + resourceID
 	// The dropdown's visible link text uses the full pre-translated
 	// nav.manage_my_paste sentence (grammar/word-order differs too much
-	// across the 7 supported languages to safely concatenate "Manage my"
+	// across all supported languages to safely concatenate "Manage my"
 	// with a bare noun); ResourceLabel is kept as plain data for callers
 	// that need the resource kind on its own.
 	data["ResourceLabel"] = "paste"

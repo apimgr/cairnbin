@@ -2,7 +2,10 @@ package tor
 
 import (
 	"context"
+	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -267,15 +270,23 @@ func TestManager_DoubleClose(t *testing.T) {
 }
 
 // TestManager_GetHTTPClient_UseTorNoSvc verifies that requesting a Tor client
-// when no service is running returns a direct client with a non-zero timeout.
+// before bootstrap fails closed instead of silently using clearnet.
 func TestManager_GetHTTPClient_UseTorNoSvc(t *testing.T) {
 	m := NewManager(context.Background(), 9000, Config{}, http.NewServeMux())
 	c := m.GetHTTPClient(true)
 	if c == nil {
 		t.Fatal("GetHTTPClient returned nil")
 	}
-	if c.Timeout == 0 {
-		t.Error("expected non-zero timeout on fallback direct client")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "clearnet")
+	}))
+	defer srv.Close()
+	resp, err := c.Get(srv.URL)
+	if err == nil {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		t.Fatal("Tor client unexpectedly connected directly before Tor was ready")
 	}
 }
 
@@ -286,6 +297,52 @@ func TestManager_GetHTTPClient_DirectTimeout(t *testing.T) {
 	c := m.GetHTTPClient(false)
 	if c.Timeout.Seconds() != 30 {
 		t.Errorf("direct client timeout = %v; want 30s", c.Timeout)
+	}
+}
+
+func TestManager_GetHTTPClient_DirectModeRoutesDirectly(t *testing.T) {
+	m := NewManager(context.Background(), 9000, Config{}, http.NewServeMux())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "direct")
+	}))
+	defer srv.Close()
+	resp, err := m.GetHTTPClient(false).Get(srv.URL)
+	if err != nil {
+		t.Fatalf("direct client request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	if string(body) != "direct" {
+		t.Fatalf("body = %q, want direct", body)
+	}
+}
+
+func TestManager_GetHTTPClientCreatedBeforeBootstrapUsesTorDialerAfterward(t *testing.T) {
+	m := NewManager(context.Background(), 9000, Config{UseNetwork: true}, http.NewServeMux())
+	c := m.GetHTTPClient(true)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "routed")
+	}))
+	defer srv.Close()
+
+	var dialed bool
+	m.mu.Lock()
+	m.outboundDialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		dialed = true
+		return (&net.Dialer{}).DialContext(ctx, network, address)
+	}
+	m.mu.Unlock()
+
+	resp, err := c.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("request using pre-bootstrap client: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if !dialed {
+		t.Fatal("Tor dialer was not used after it became available")
 	}
 }
 

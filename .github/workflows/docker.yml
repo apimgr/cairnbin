@@ -85,6 +85,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
+          cache-from: type=gha,scope=cairnbin-standard
+          cache-to: type=gha,mode=max,scope=cairnbin-standard
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
             VERSION=${{ env.VERSION }}
@@ -156,6 +158,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
+          cache-from: type=gha,scope=cairnbin-devel
+          cache-to: type=gha,mode=max,scope=cairnbin-devel
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel
           build-args: |
             BUILD_DATE=${{ env.BUILD_DATE }}

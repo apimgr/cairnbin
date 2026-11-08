@@ -49,7 +49,6 @@ description="%[2]s"
 # actual binary (may differ from %[1]s after rename)
 command="%[3]s"
 command_args=""
-command_user="%[4]s:%[4]s"
 pidfile="/var/run/%[5]s/%[1]s.pid"
 command_background=true
 output_log="/var/log/%[5]s/%[1]s/server.log"

@@ -117,7 +117,7 @@ func TestListPastes_LimitExceedsMax(t *testing.T) {
 }
 
 // TestListPastes_Search verifies the ?search= query param filters by
-// id/title/content (TODO.md item 1).
+// ID, title, and content.
 func TestListPastes_Search(t *testing.T) {
 	h, _ := newTestHandler(t)
 
@@ -154,7 +154,7 @@ func TestListPastes_Search(t *testing.T) {
 }
 
 // TestListPastes_SortByName verifies the ?sort=name&order=asc query params
-// order results alphabetically (TODO.md item 3).
+// order results alphabetically.
 func TestListPastes_SortByName(t *testing.T) {
 	h, _ := newTestHandler(t)
 

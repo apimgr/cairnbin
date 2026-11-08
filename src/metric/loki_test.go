@@ -185,6 +185,25 @@ func TestServiceHandler_Loki_MaxEntries(t *testing.T) {
 	}
 }
 
+func TestServiceHandler_Loki_MaxEntriesSortsGroupedProviderEntries(t *testing.T) {
+	now := time.Now()
+	entries := []LokiEntry{
+		{Labels: map[string]string{"file": "access.log"}, Time: now.Add(5 * time.Second), Line: "newest"},
+		{Labels: map[string]string{"file": "server.log"}, Time: now.Add(time.Second), Line: "oldest"},
+		{Labels: map[string]string{"file": "access.log"}, Time: now.Add(3 * time.Second), Line: "middle"},
+	}
+	streams := decodeLoki(t, getService(t, lokiCollector(t, 2, "1h", entries), ServiceLoki, "loki-token").Body.Bytes())
+	var lines []string
+	for _, stream := range streams {
+		for _, value := range stream.Values {
+			lines = append(lines, value[1])
+		}
+	}
+	if len(lines) != 2 || lines[0] != "middle" || lines[1] != "newest" {
+		t.Errorf("Loki retained entries = %v, want [middle newest] in timestamp order", lines)
+	}
+}
+
 // TestServiceHandler_Loki_MaxAge verifies entries older than loki.max_age are
 // dropped, and a zero timestamp is kept — an unknown age is not a reason to
 // discard a line.

@@ -503,3 +503,16 @@ func TestManager_CloseWithoutStart(t *testing.T) {
 	m.Close()
 	m.Close() // must not panic on double-close
 }
+
+func TestManagerUpdateConfigDisablesProvider(t *testing.T) {
+	m := NewManager(context.Background(), Config{Enabled: true}, http.NewServeMux())
+	if err := m.UpdateConfig(Config{Enabled: false}); err != nil {
+		t.Fatalf("UpdateConfig disable: %v", err)
+	}
+	if m.Enabled() {
+		t.Fatal("manager reports enabled after disabled config")
+	}
+	if m.Running() {
+		t.Fatal("manager is running after disabled config")
+	}
+}

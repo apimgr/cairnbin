@@ -3,6 +3,7 @@
 package metric
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"log"
@@ -366,16 +367,11 @@ type Collector struct {
 	httpReqSize     *prometheus.HistogramVec
 	httpRespSize    *prometheus.HistogramVec
 
-	// CPU sampling state for delta-based usage percentage (system metrics).
-	lastCPUTotal uint64
-	lastCPUIdle  uint64
-
 	torMu    sync.Mutex
 	torState func() (enabled, running bool)
 
-	// collectMu guards the delta-sampling state (lastPauseTotalNs, lastCPUTotal,
-	// lastCPUIdle) and serializes concurrent /metrics scrapes, which run in
-	// separate request goroutines.
+	// collectMu serializes concurrent metrics scrapes while sampling runtime
+	// counters and gauges.
 	collectMu sync.Mutex
 }
 
@@ -432,6 +428,61 @@ func New(version, commit, buildDate string, startTime time.Time, token string) *
 		StartTime:      startTime,
 		IncludeRuntime: true,
 	})
+}
+
+// RecordDBOperation records one database query without retaining query text or
+// argument values in metric labels.
+func RecordDBOperation(query string, duration time.Duration, err error, open, inUse int) {
+	operation, table := parseDBLabels(query)
+	DBQueriesTotal.WithLabelValues(operation, table).Inc()
+	DBQueryDuration.WithLabelValues(operation, table).Observe(duration.Seconds())
+	if err != nil && err.Error() != "sql: no rows in result set" {
+		DBErrors.WithLabelValues(operation, classifyDBError(err)).Inc()
+	}
+	DBConnectionsOpen.Set(float64(open))
+	DBConnectionsInUse.Set(float64(inUse))
+}
+
+func parseDBLabels(query string) (operation, table string) {
+	parts := strings.Fields(strings.ToUpper(strings.TrimSpace(query)))
+	if len(parts) == 0 {
+		return "unknown", "unknown"
+	}
+	operation = strings.ToLower(parts[0])
+	needle := "FROM"
+	switch operation {
+	case "insert", "replace":
+		needle = "INTO"
+	case "update":
+		if len(parts) > 1 {
+			return operation, strings.ToLower(strings.Trim(parts[1], "`\"[]"))
+		}
+	case "delete", "select":
+	default:
+		return operation, "unknown"
+	}
+	for i, part := range parts {
+		if part == needle && i+1 < len(parts) {
+			return operation, strings.ToLower(strings.Trim(parts[i+1], "`\"[]"))
+		}
+	}
+	return operation, "unknown"
+}
+
+func classifyDBError(err error) string {
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "connection"):
+		return "connection"
+	case strings.Contains(message, "timeout") || strings.Contains(message, "deadline"):
+		return "timeout"
+	case strings.Contains(message, "constraint"):
+		return "constraint"
+	case strings.Contains(message, "duplicate") || strings.Contains(message, "unique"):
+		return "duplicate"
+	default:
+		return "other"
+	}
 }
 
 // NewWithOptions creates a Collector, seeds app_info, builds the HTTP
@@ -617,8 +668,11 @@ func (c *Collector) authorize(service string, r *http.Request) authzResult {
 		return authzDisabled
 	}
 	auth := r.Header.Get("Authorization")
-	// Constant-time comparison to prevent token timing attacks.
-	if subtle.ConstantTimeCompare([]byte(auth), []byte("Bearer "+want)) != 1 {
+	// Hash both values before comparing so the comparison itself always uses
+	// equal-length inputs; ConstantTimeCompare returns early on length mismatch.
+	authHash := sha256.Sum256([]byte(auth))
+	wantHash := sha256.Sum256([]byte("Bearer " + want))
+	if subtle.ConstantTimeCompare(authHash[:], wantHash[:]) != 1 {
 		return authzUnauthorized
 	}
 	return authzOK
@@ -698,15 +752,21 @@ func (c *Collector) serveLoki(w http.ResponseWriter, r *http.Request) {
 		entries = c.logProvider()
 	}
 
-	cutoff := time.Now().Add(-c.lokiMaxAge)
+	now := time.Now()
+	cutoff := now.Add(-c.lokiMaxAge)
 	kept := entries[:0:0]
 	for _, e := range entries {
+		if e.Time.IsZero() {
+			e.Time = now
+		}
 		if !e.Time.IsZero() && e.Time.Before(cutoff) {
 			continue
 		}
 		kept = append(kept, e)
 	}
-	// Keep the newest max_entries; the provider returns oldest-first.
+	// Providers may group entries by file rather than global timestamp, so sort
+	// before retaining the newest bounded set.
+	sort.SliceStable(kept, func(i, j int) bool { return kept[i].Time.Before(kept[j].Time) })
 	if len(kept) > c.lokiMaxEntries {
 		kept = kept[len(kept)-c.lokiMaxEntries:]
 	}
@@ -827,16 +887,9 @@ func (c *Collector) collectSystem() {
 		SystemMemUsedBytes.Set(float64(st.memUsed))
 		SystemMemUsagePct.Set(float64(st.memUsed) / float64(st.memTotal) * 100)
 	}
-	// CPU percentage is derived from the delta between consecutive scrapes.
-	if c.lastCPUTotal != 0 && st.cpuTotal > c.lastCPUTotal {
-		totalDelta := st.cpuTotal - c.lastCPUTotal
-		idleDelta := st.cpuIdle - c.lastCPUIdle
-		if totalDelta > 0 {
-			SystemCPUUsagePct.Set(float64(totalDelta-idleDelta) / float64(totalDelta) * 100)
-		}
+	if st.cpuValid {
+		SystemCPUUsagePct.Set(st.cpuUsage)
 	}
-	c.lastCPUTotal = st.cpuTotal
-	c.lastCPUIdle = st.cpuIdle
 	if st.diskTotal > 0 && c.dataDir != "" {
 		SystemDiskTotalBytes.WithLabelValues(c.dataDir).Set(float64(st.diskTotal))
 		SystemDiskUsedBytes.WithLabelValues(c.dataDir).Set(float64(st.diskUsed))

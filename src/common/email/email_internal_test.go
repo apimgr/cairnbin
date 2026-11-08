@@ -1,7 +1,12 @@
 package email
 
 import (
+	"bytes"
 	"encoding/base64"
+	"io"
+	"mime"
+	"mime/multipart"
+	"net/mail"
 	"os"
 	"strings"
 	"testing"
@@ -67,11 +72,11 @@ func TestBuildMessage_Basic(t *testing.T) {
 	s := string(msg)
 
 	checks := []string{
-		"From: Sender <from@example.com>",
-		"To: to@example.com",
+		`From: "Sender" <from@example.com>`,
+		"To: <to@example.com>",
 		"Subject: Test Subject",
 		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=utf-8",
+		"Content-Type: text/plain; charset=UTF-8",
 		"Hello body",
 	}
 	for _, want := range checks {
@@ -84,7 +89,7 @@ func TestBuildMessage_Basic(t *testing.T) {
 func TestBuildMessage_WithReplyTo(t *testing.T) {
 	msg := buildMessage("Name", "from@example.com", "to@example.com", "Subj", "Body", "reply@example.com")
 	s := string(msg)
-	if !strings.Contains(s, "Reply-To: reply@example.com") {
+	if !strings.Contains(s, "Reply-To: <reply@example.com>") {
 		t.Errorf("expected Reply-To header, got:\n%s", s)
 	}
 }
@@ -96,38 +101,105 @@ func TestBuildMessage_NoReplyTo(t *testing.T) {
 	}
 }
 
-// TestBuildMessage_HeaderInjection verifies CR/LF supplied in a header value
-// (e.g. a researcher-controlled security-report summary folded into Subject)
-// cannot inject additional headers or a forged body (CWE-93).
-func TestBuildMessage_HeaderInjection(t *testing.T) {
-	subject := "Legit\r\nBcc: evil@example.com\r\n\r\nInjected body"
-	msg := string(buildMessage("N", "from@example.com", "to@example.com", subject, "Body", ""))
-	headerBlock := msg
-	if i := strings.Index(msg, "\r\n\r\n"); i >= 0 {
-		headerBlock = msg[:i]
+// TestBuildRFCMessage_RejectsHeaderInjection verifies caller-controlled header
+// values containing CR or LF are rejected before a message is generated.
+func TestBuildRFCMessage_RejectsHeaderInjection(t *testing.T) {
+	cases := []struct { name string; args []string }{
+		{"from name", []string{"Name\r\nBcc: bad@example.com", "from@example.com", "to@example.com", "Subject", "Body", "", "example.com"}},
+		{"from address", []string{"Name", "from@example.com\nBcc: bad@example.com", "to@example.com", "Subject", "Body", "", "example.com"}},
+		{"recipient", []string{"Name", "from@example.com", "to@example.com\r\nBcc: bad@example.com", "Subject", "Body", "", "example.com"}},
+		{"subject", []string{"Name", "from@example.com", "to@example.com", "Subject\r\nBcc: bad@example.com", "Body", "", "example.com"}},
+		{"reply-to", []string{"Name", "from@example.com", "to@example.com", "Subject", "Body", "reply@example.com\nBcc: bad@example.com", "example.com"}},
 	}
-	for _, line := range strings.Split(headerBlock, "\r\n") {
-		if strings.HasPrefix(line, "Bcc:") {
-			t.Errorf("CRLF injection produced a standalone Bcc header:\n%s", headerBlock)
-		}
-	}
-	if strings.Count(headerBlock, "\r\nSubject:") > 1 || strings.Count(headerBlock, "Subject:") != 1 {
-		t.Errorf("expected exactly one Subject header, got:\n%s", headerBlock)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := buildRFCMessage(tc.args[0], tc.args[1], tc.args[2], tc.args[3], tc.args[4], tc.args[5], tc.args[6]); err == nil {
+				t.Fatal("expected header injection input to be rejected")
+			}
+		})
 	}
 }
 
-// TestBuildMultipartMessage_FilenameInjection verifies a quote or CR/LF in the
-// attachment filename cannot break out of the Content-Disposition quoted string.
-func TestBuildMultipartMessage_FilenameInjection(t *testing.T) {
-	msg := string(buildMultipartMessage("N", "from@e.com", "to@e.com", "S", "B", "",
-		"a\"\r\nX-Evil: 1.enc", []byte("data")))
-	for _, line := range strings.Split(msg, "\r\n") {
-		if strings.HasPrefix(line, "X-Evil:") {
-			t.Errorf("filename injection produced a standalone X-Evil header:\n%s", msg)
+func TestBuildRFCMessage_RequiredHeadersAndAlternativeParts(t *testing.T) {
+	msg, err := buildRFCMessage("Cairnbín", "from@example.com", "to@example.com", "Résumé – report", "<script>alert('x')</script>", "reply@example.com", "example.com")
+	if err != nil { t.Fatal(err) }
+	parsed, err := mail.ReadMessage(bytes.NewReader(msg))
+	if err != nil { t.Fatal(err) }
+	for _, name := range []string{"From", "To", "Subject", "Date", "Message-Id", "MIME-Version", "Auto-Submitted"} {
+		if parsed.Header.Get(name) == "" { t.Errorf("required %s header missing", name) }
+	}
+	if parsed.Header.Get("Auto-Submitted") != "auto-generated" { t.Errorf("Auto-Submitted = %q", parsed.Header.Get("Auto-Submitted")) }
+	if !strings.Contains(parsed.Header.Get("From"), "=?UTF-8?b?") || !strings.Contains(parsed.Header.Get("Subject"), "=?UTF-8?b?") {
+		t.Errorf("non-ASCII display name and subject must use RFC 2047 encoding: %#v", parsed.Header)
+	}
+	decodedSubject, err := (&mime.WordDecoder{}).DecodeHeader(parsed.Header.Get("Subject"))
+	if err != nil || decodedSubject != "Résumé – report" {
+		t.Errorf("RFC 2047 subject decode = %q, %v", decodedSubject, err)
+	}
+	fromAddress, err := mail.ParseAddress(parsed.Header.Get("From"))
+	if err != nil || fromAddress.Name != "Cairnbín" {
+		t.Errorf("RFC 2047 display name decode = %#v, %v", fromAddress, err)
+	}
+	if _, err := mail.ParseDate(parsed.Header.Get("Date")); err != nil { t.Errorf("Date is not RFC 5322 formatted: %v", err) }
+	if !strings.HasPrefix(parsed.Header.Get("Message-Id"), "<") || !strings.HasSuffix(parsed.Header.Get("Message-Id"), "@example.com>") {
+		t.Errorf("Message-ID has wrong format: %q", parsed.Header.Get("Message-Id"))
+	}
+	mediaType, params, err := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
+	if err != nil || mediaType != "multipart/alternative" { t.Fatalf("Content-Type = %q (%v)", parsed.Header.Get("Content-Type"), err) }
+	reader := multipart.NewReader(parsed.Body, params["boundary"])
+	plain, err := reader.NextPart()
+	if err != nil { t.Fatal(err) }
+	if plain.Header.Get("Content-Type") != "text/plain; charset=UTF-8" { t.Errorf("first part content type = %q", plain.Header.Get("Content-Type")) }
+	if !strings.Contains(string(msg), "Content-Transfer-Encoding: quoted-printable") { t.Error("quoted-printable transfer encoding missing from raw MIME parts") }
+	plainBody, err := io.ReadAll(plain)
+	if err != nil || strings.TrimSpace(string(plainBody)) == "" { t.Errorf("plain-text part must be non-empty: body=%q err=%v", plainBody, err) }
+	htmlPart, err := reader.NextPart()
+	if err != nil { t.Fatal(err) }
+	if htmlPart.Header.Get("Content-Type") != "text/html; charset=UTF-8" { t.Errorf("second part content type = %q", htmlPart.Header.Get("Content-Type")) }
+	htmlBody, err := io.ReadAll(htmlPart)
+	if err != nil { t.Fatal(err) }
+	if !strings.Contains(string(htmlBody), "&lt;script&gt;") { t.Errorf("HTML part does not escape the message body: %q", htmlBody) }
+	for _, line := range strings.Split(string(msg), "\r\n") {
+		if len(line) > 998 { t.Errorf("RFC 5322 line exceeds 998 octets (%d): %q", len(line), line) }
+	}
+	second, err := buildRFCMessage("Cairnbín", "from@example.com", "to@example.com", "Résumé – report", "Body", "reply@example.com", "example.com")
+	if err != nil { t.Fatal(err) }
+	secondMessage, err := mail.ReadMessage(bytes.NewReader(second))
+	if err != nil { t.Fatal(err) }
+	if parsed.Header.Get("Message-Id") == secondMessage.Header.Get("Message-Id") { t.Error("Message-ID must be unique per message") }
+}
+
+func TestBuildRFCMessage_FoldsLongHeadersWithoutBreakingAddressTokens(t *testing.T) {
+	longAddress := strings.Repeat("a", 64) + "@" + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 45) + ".com"
+	longFQDN := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63)
+	msg, err := buildRFCMessage(strings.Repeat("Résumé ", 12), "from@example.com", longAddress, strings.Repeat("long subject ", 12), "Body", "reply@example.com", longFQDN)
+	if err != nil {
+		t.Fatalf("buildRFCMessage with long legal values: %v", err)
+	}
+	parsed, err := mail.ReadMessage(bytes.NewReader(msg))
+	if err != nil {
+		t.Fatalf("parse folded message: %v", err)
+	}
+	to, err := mail.ParseAddress(parsed.Header.Get("To"))
+	if err != nil || to.Address != longAddress {
+		t.Errorf("folded recipient changed address: %q, %v", to, err)
+	}
+	rawHeaders := strings.SplitN(string(msg), "\r\n\r\n", 2)[0]
+	for _, line := range strings.Split(rawHeaders, "\r\n") {
+		if len(line) > 78 && !strings.HasPrefix(line, "To: ") && !strings.HasPrefix(line, "Message-ID: ") {
+			t.Errorf("foldable header line exceeds 78 octets (%d): %q", len(line), line)
 		}
 	}
-	if !strings.Contains(msg, `filename="aX-Evil: 1.enc"`) {
-		t.Errorf("expected injected chars folded into the quoted filename, got:\n%s", msg)
+	for _, line := range strings.Split(string(msg), "\r\n") {
+		if len(line) > 998 {
+			t.Errorf("RFC 5322 line exceeds 998 octets (%d)", len(line))
+		}
+	}
+}
+
+func TestBuildMultipartMessage_FilenameInjection(t *testing.T) {
+	if _, err := buildMultipartRFCMessage("N", "from@e.com", "to@e.com", "S", "B", "", "a.enc\r\nX-Evil: 1", []byte("data"), "example.com"); err == nil {
+		t.Fatal("expected CR/LF in the attachment filename to be rejected")
 	}
 }
 
@@ -138,17 +210,26 @@ func TestBuildMultipartMessage_Attachment(t *testing.T) {
 	msg := buildMultipartMessage("Sender", "from@example.com", "to@example.com",
 		"Encrypted Report", "See attached encrypted file.", "", "sec_abc123.enc", data)
 	s := string(msg)
+	parsed, err := mail.ReadMessage(bytes.NewReader(msg))
+	if err != nil {
+		t.Fatalf("parse multipart message: %v", err)
+	}
+	mediaType, params, err := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
+	if err != nil || mediaType != "multipart/mixed" || params["boundary"] == "" {
+		t.Fatalf("top-level Content-Type = %q (%v)", parsed.Header.Get("Content-Type"), err)
+	}
 
 	checks := []string{
-		"From: Sender <from@example.com>",
-		"To: to@example.com",
+		`From: "Sender" <from@example.com>`,
+		"To: <to@example.com>",
 		"Subject: Encrypted Report",
-		"MIME-Version: 1.0",
-		"Content-Type: multipart/mixed; boundary=",
-		"Content-Type: text/plain; charset=utf-8",
+		"Content-Type: text/plain; charset=UTF-8",
 		"See attached encrypted file.",
 		"Content-Transfer-Encoding: base64",
-		`Content-Disposition: attachment; filename="sec_abc123.enc"`,
+		"Content-Disposition: attachment; filename=sec_abc123.enc",
+	}
+	if parsed.Header.Get("MIME-Version") != "1.0" {
+		t.Errorf("MIME-Version = %q", parsed.Header.Get("MIME-Version"))
 	}
 	for _, want := range checks {
 		if !strings.Contains(s, want) {
@@ -168,7 +249,7 @@ func TestBuildMultipartMessage_Attachment(t *testing.T) {
 func TestBuildMultipartMessage_WithReplyTo(t *testing.T) {
 	msg := buildMultipartMessage("Name", "from@example.com", "to@example.com",
 		"Subj", "Body", "reply@example.com", "f.enc", []byte("x"))
-	if !strings.Contains(string(msg), "Reply-To: reply@example.com") {
+	if !strings.Contains(string(msg), "Reply-To: <reply@example.com>") {
 		t.Errorf("expected Reply-To header, got:\n%s", msg)
 	}
 }
@@ -177,12 +258,7 @@ func TestBuildMultipartMessage_WithReplyTo(t *testing.T) {
 
 func TestRenderTemplate_EmbeddedTest(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: true, SMTP: config.SMTPConfig{Host: "smtp.example.com"}}
-	m := &Mailer{
-		cfg:     cfg,
-		appName: "TestApp",
-		appURL:  "https://test.example.com",
-		fqdn:    "test.example.com",
-	}
+	m := New(cfg, "TestApp", "https://test.example.com", "test.example.com")
 
 	body, err := m.renderTemplate("test", map[string]string{"extra_key": "extra_value"})
 	if err != nil {
@@ -202,7 +278,7 @@ func TestRenderTemplate_EmbeddedTest(t *testing.T) {
 
 func TestRenderTemplate_NonexistentTemplate(t *testing.T) {
 	cfg := &config.EmailConfig{}
-	m := &Mailer{cfg: cfg, appName: "App", appURL: "https://a.com", fqdn: "a.com"}
+	m := New(cfg, "App", "https://a.com", "a.com")
 
 	_, err := m.renderTemplate("nonexistent_template_xyz", nil)
 	if err == nil {
@@ -219,7 +295,7 @@ func TestRenderTemplate_CustomDir(t *testing.T) {
 	}
 
 	cfg := &config.EmailConfig{TemplateDir: dir}
-	m := &Mailer{cfg: cfg, appName: "MyApp", appURL: "https://b.com", fqdn: "b.com"}
+	m := New(cfg, "MyApp", "https://b.com", "b.com")
 
 	body, err := m.renderTemplate("custom", nil)
 	if err != nil {
@@ -241,7 +317,7 @@ func TestRenderTemplate_OnionI2PReplyTo(t *testing.T) {
 	}
 
 	cfg := &config.EmailConfig{TemplateDir: dir, ReplyTo: "noc@b.com"}
-	m := &Mailer{cfg: cfg, appName: "App", appURL: "https://b.com", fqdn: "b.com"}
+	m := New(cfg, "App", "https://b.com", "b.com")
 
 	// No hidden services set: onion/i2p resolve to empty, reply-to from config.
 	body, err := m.renderTemplate("vars", nil)

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/apimgr/cairnbin/src/common/i18n"
 )
 
 // pageContentHTML renders an operator's server.pages.<page>.content Markdown
@@ -87,8 +88,11 @@ func (s *Server) handleTermsAPI(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func apiPageError(w http.ResponseWriter, status int, code, msg string) {
-	writeJSON(w, status, map[string]interface{}{"ok": false, "error": code, "message": msg})
+func apiPageError(w http.ResponseWriter, r *http.Request, status int, code, messageKey string) {
+	writeJSON(w, status, map[string]interface{}{
+		"ok": false, "error": code,
+		"message": i18n.Translate(i18n.LangFromRequest(r), messageKey),
+	})
 }
 
 // contactRequest is the JSON body of POST /api/{api_version}/server/contact.
@@ -107,12 +111,12 @@ func (s *Server) handleContactAPI(w http.ResponseWriter, r *http.Request) {
 	cfg := s.liveCfg()
 	pc := cfg.Server.Pages.Contact
 	if !pc.Enabled {
-		apiPageError(w, http.StatusNotFound, "NOT_FOUND", "Contact form is disabled")
+		apiPageError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
 		return
 	}
 	var req contactRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
-		apiPageError(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON body")
+		apiPageError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.bad_request")
 		return
 	}
 	name := strings.TrimSpace(req.Name)
@@ -120,25 +124,28 @@ func (s *Server) handleContactAPI(w http.ResponseWriter, r *http.Request) {
 	subject := strings.TrimSpace(req.Subject)
 	message := strings.TrimSpace(req.Message)
 	if name == "" || from == "" || subject == "" || message == "" {
-		apiPageError(w, http.StatusBadRequest, "VALIDATION_FAILED", "All fields are required")
+		apiPageError(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "errors.required")
 		return
 	}
 	if !strings.Contains(from, "@") || strings.ContainsAny(from, " \t\r\n") {
-		apiPageError(w, http.StatusBadRequest, "VALIDATION_FAILED", "Invalid email address")
+		apiPageError(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "errors.invalid_email")
 		return
 	}
 	if pc.Captcha == "simple" && !s.validateSimpleCaptcha(req.CaptchaToken, req.Captcha) {
-		apiPageError(w, http.StatusBadRequest, "VALIDATION_FAILED", "Captcha answer was incorrect")
+		apiPageError(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "errors.invalid_format")
 		return
 	}
-	if status, msg := s.deliverContact(r, cfg, name, from, subject, message); status != http.StatusOK {
+	if status, _ := s.deliverContact(r, cfg, name, from, subject, message); status != http.StatusOK {
 		code := "SERVER_ERROR"
 		if status == http.StatusServiceUnavailable {
 			code = "MAINTENANCE"
 		}
-		apiPageError(w, status, code, msg)
+		messageKey := "errors.server_error"
+		if code == "MAINTENANCE" {
+			messageKey = "errors.maintenance_mode"
+		}
+		apiPageError(w, r, status, code, messageKey)
 		return
 	}
 	apiPageOK(w, map[string]interface{}{"message": pc.SuccessMessage})
 }
-

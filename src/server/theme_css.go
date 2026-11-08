@@ -62,11 +62,7 @@ func (s *Server) handleCSS(name string) http.HandlerFunc {
 			// A stylesheet is fetched by the browser as a machine-readable
 			// asset, so return the canonical JSON error envelope rather than
 			// the themed HTML page renderErrorPage would negotiate to.
-			writeJSON(w, http.StatusInternalServerError, map[string]any{
-				"ok":      false,
-				"error":   "SERVER_ERROR",
-				"message": "Internal server error",
-			})
+			writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 			return
 		}
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")

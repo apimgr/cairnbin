@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/config"
 )
 
@@ -131,20 +132,39 @@ func TestBuildConsentClientConfig(t *testing.T) {
 	})
 }
 
+func TestBuildConsentClientConfigLocalizesDefaultsAndPreservesOverrides(t *testing.T) {
+	cfg := config.DefaultConfig()
+	for _, lang := range []string{"en", "es", "fr", "de", "ar", "it", "ja", "zh"} {
+		got := buildConsentClientConfig(cfg, lang)
+		if want := i18n.Translate(lang, "privacy.consent_banner"); got.Message != want {
+			t.Errorf("%s default consent message = %q, want %q", lang, got.Message, want)
+		}
+		if want := i18n.Translate(lang, "privacy.cookie_essential_description"); got.Descriptions.Essential != want {
+			t.Errorf("%s essential description = %q, want %q", lang, got.Descriptions.Essential, want)
+		}
+	}
+
+	cfg.Server.Privacy.Consent.Message = "Operator consent copy"
+	cfg.Server.Privacy.Cookies.Essential.Description = "Operator cookie description"
+	got := buildConsentClientConfig(cfg, "es")
+	if got.Message != "Operator consent copy" || got.Descriptions.Essential != "Operator cookie description" {
+		t.Errorf("operator overrides were translated: message=%q essential=%q", got.Message, got.Descriptions.Essential)
+	}
+}
+
 // TestRenderConsentConfig verifies the emitted JSON is valid and carries the
 // banner text.
 func TestRenderConsentConfig(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Server.Privacy.Consent.Message = "Hello cookies"
+	cfg := config.DefaultConfig()
 	cfg.Server.Privacy.Consent.ShowUntilAcknowledged = true
 
-	js := string(renderConsentConfig(cfg))
+	js := string(renderConsentConfig(cfg, "es"))
 	var decoded map[string]any
 	if err := json.Unmarshal([]byte(js), &decoded); err != nil {
 		t.Fatalf("emitted config is not valid JSON: %v\n%s", err, js)
 	}
-	if decoded["message"] != "Hello cookies" {
-		t.Errorf("message = %v, want Hello cookies", decoded["message"])
+	if decoded["message"] != i18n.Translate("es", "privacy.consent_banner") {
+		t.Errorf("message = %v, want translated Spanish default", decoded["message"])
 	}
 	if decoded["showUntilAcknowledged"] != true {
 		t.Errorf("showUntilAcknowledged = %v, want true", decoded["showUntilAcknowledged"])

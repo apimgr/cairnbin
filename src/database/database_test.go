@@ -249,23 +249,24 @@ func TestGetPublicPastes(t *testing.T) {
 	}
 }
 
-// TestSearchPublicPastes verifies search-by-id/title/content matching and
-// sort-by-name/date/views ordering in both directions (TODO.md items 1-3).
+// TestSearchPublicPastes verifies search-by-ID/title/content matching and
+// sort-by-name/date/views ordering in both directions.
 func TestSearchPublicPastes(t *testing.T) {
 	db := newTestDB(t)
 
 	specs := []struct {
-		id, title, content string
-		views              int
+		id, title, content, contentType string
+		views                           int
 	}{
-		{"aaa00001", "Zebra notes", "unique-alpha-content", 5},
-		{"bbb00002", "Apple pie", "unique-beta-content", 20},
-		{"ccc00003", "Mango salad", "search-target-here", 10},
+		{"aaa00001", "Zebra notes", "unique-alpha-content", "", 5},
+		{"bbb00002", "Apple pie", "unique-beta-content", "image/png", 20},
+		{"ccc00003", "Mango salad", "search-target-here", "application/pdf", 10},
 	}
 	for _, s := range specs {
 		p := samplePaste(s.id)
 		p.Title = s.title
 		p.Content = s.content
+		p.ContentType = s.contentType
 		p.Visibility = model.VisibilityPublic
 		if err := db.CreatePaste(p); err != nil {
 			t.Fatalf("CreatePaste %s: %v", s.id, err)
@@ -316,6 +317,25 @@ func TestSearchPublicPastes(t *testing.T) {
 			t.Fatalf("got total=%d items=%v, want no matches", total, items)
 		}
 	})
+
+	for _, filter := range []struct {
+		pasteType string
+		wantID    string
+	}{
+		{pasteType: "text", wantID: "aaa00001"},
+		{pasteType: "image", wantID: "bbb00002"},
+		{pasteType: "file", wantID: "ccc00003"},
+	} {
+		t.Run("filter by type "+filter.pasteType, func(t *testing.T) {
+			items, total, err := db.SearchPublicPastes(1, 10, "", "", "", filter.pasteType)
+			if err != nil {
+				t.Fatalf("SearchPublicPastes: %v", err)
+			}
+			if total != 1 || len(items) != 1 || items[0].ID != filter.wantID {
+				t.Fatalf("got total=%d items=%v, want 1 match for %s", total, items, filter.pasteType)
+			}
+		})
+	}
 
 	t.Run("sort by name asc", func(t *testing.T) {
 		items, total, err := db.SearchPublicPastes(1, 10, "", "name", "asc")

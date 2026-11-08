@@ -2,6 +2,7 @@ package maintenance_test
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,6 +86,40 @@ func TestBackupAndVerify_WithEncryption(t *testing.T) {
 	// Verify with correct password.
 	if err := maintenance.VerifyBackup(bkpPath, "s3cur3p@ssw0rd"); err != nil {
 		t.Fatalf("VerifyBackup (correct password) error: %v", err)
+	}
+}
+
+func TestBackup_StagingFailurePreservesExistingBackup(t *testing.T) {
+	cfgDir, dataDir, bkpDir := makeTestDirs(t)
+	name := "cairnbin_backup_2026-11-06.tar.gz"
+	dest := filepath.Join(bkpDir, name)
+	staged := dest + ".tmp"
+	original := []byte("previous verified backup")
+	if err := os.WriteFile(dest, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staged, []byte("another task owns this staging file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := maintenance.Backup(maintenance.BackupOptions{
+		ConfigDir: cfgDir,
+		DataDir:   dataDir,
+		BackupDir: bkpDir,
+		Filename:  name,
+	})
+	if err == nil {
+		t.Fatal("Backup succeeded despite an occupied staging path")
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("existing backup changed after staging failure: %q", got)
+	}
+	if _, err := os.Stat(staged); err != nil {
+		t.Fatalf("Backup removed a staging file it did not create: %v", err)
 	}
 }
 
@@ -333,6 +368,26 @@ func TestSetup(t *testing.T) {
 func TestPrintHelp(t *testing.T) {
 	// Should not panic.
 	maintenance.PrintHelp("cairnbin")
+}
+
+func TestPrintHelpUsesRequestedLanguage(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Stdout
+	os.Stdout = writer
+	maintenance.PrintHelp("cairnbin", "es")
+	_ = writer.Close()
+	os.Stdout = previous
+	output, err := io.ReadAll(reader)
+	_ = reader.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(output), "Comandos de mantenimiento") || !strings.Contains(string(output), "Ejemplos") {
+		t.Fatalf("Spanish maintenance help not localized: %q", output)
+	}
 }
 
 // ─── VerifyBackup — SQLite magic ─────────────────────────────────────────────

@@ -349,6 +349,13 @@ func TestSSLRenewalWithEmail_SendsExpiringAt3Days(t *testing.T) {
 	if m.calls[0].vars["fqdn"] != "example.com" {
 		t.Errorf("fqdn var: got %q, want example.com", m.calls[0].vars["fqdn"])
 	}
+	state := sslLoadState(filepath.Join(certRoot, "expiring.pem.ssl_state.json"))
+	if !containsInt(state.NotifiedThresholds, 3) {
+		t.Errorf("sent expiration threshold was not persisted: %#v", state.NotifiedThresholds)
+	}
+	if containsInt(state.NotifiedThresholds, 7) {
+		t.Errorf("at three days, alert should record threshold 3 rather than stale threshold 7: %#v", state.NotifiedThresholds)
+	}
 }
 
 // TestSSLRenewalWithEmail_ExpiringEmailSendError verifies SSLRenewalWithEmail
@@ -547,6 +554,33 @@ func TestSSLRenewalWithEmail_RenewedEmailSendError(t *testing.T) {
 	if err := SSLRenewalWithEmail(cfgSecond)(context.Background()); err != nil {
 		t.Fatalf("SSLRenewalWithEmail must return nil even when ssl_renewed email fails: %v", err)
 	}
+}
+
+func TestSSLRenewalFailedEmailIncludesExpiryDate(t *testing.T) {
+	dir := t.TempDir()
+	certRoot := filepath.Join(dir, "ssl", "letsencrypt", "example.com")
+	if err := os.MkdirAll(certRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	certPath := filepath.Join(certRoot, "cert.pem")
+	certDER := selfSignedCertDERInternal(t, 5*24*time.Hour)
+	if err := os.WriteFile(certPath, certDER, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &mockMailer{enabled: true}
+	cfg := SSLRenewalConfig{
+		ConfigDir: dir, FQDN: "example.com", OperatorEmail: "admin@example.com",
+		Mailer: m, SendRenewalFailed: true,
+	}
+	if err := SSLRenewalWithEmail(cfg)(context.Background()); err != nil { t.Fatal(err) }
+	if err := SSLRenewalWithEmail(cfg)(context.Background()); err != nil { t.Fatal(err) }
+	for _, call := range m.calls {
+		if call.template == "ssl_renewal_failed" {
+			if call.vars["expiry_date"] == "" { t.Fatal("ssl_renewal_failed must include expiry_date") }
+			return
+		}
+	}
+	t.Fatal("expected ssl_renewal_failed email")
 }
 
 // TestSSLRenewalWithEmail_CertNotRenewed verifies no ssl_renewed email is sent

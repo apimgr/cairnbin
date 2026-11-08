@@ -76,7 +76,7 @@ func (s *Server) requirePrimaryOwner(w http.ResponseWriter, r *http.Request) (*d
 	db, ok := s.ownerDB()
 	if err != nil || !ok {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "UNAUTHORIZED"})
+			writeAPIError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "errors.unauthorized")
 		} else {
 			http.Redirect(w, r, "/server/preferences/tokens", http.StatusSeeOther)
 		}
@@ -84,7 +84,7 @@ func (s *Server) requirePrimaryOwner(w http.ResponseWriter, r *http.Request) (*d
 	}
 	if rec.Kind != "primary" {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			writeJSON(w, http.StatusForbidden, map[string]any{"ok": false, "error": "FORBIDDEN", "message": "primary token required"})
+			writeAPIError(w, r, http.StatusForbidden, "FORBIDDEN", "errors.forbidden")
 		} else {
 			http.Error(w, "Primary token required", http.StatusForbidden)
 		}
@@ -100,7 +100,7 @@ func (s *Server) handleOwnerTokensAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	tokens, err := db.ListOwnerTokens(primary.OwnerID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "SERVER_ERROR"})
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
 	items := make([]map[string]any, 0, len(tokens))
@@ -616,7 +616,8 @@ func (s *Server) decryptOwnerToken(encoded string) (string, error) {
 
 func (s *Server) tokenActionError(w http.ResponseWriter, r *http.Request, status int, message string) {
 	if strings.HasPrefix(r.URL.Path, "/api/") {
-		writeJSON(w, status, map[string]any{"ok": false, "error": errorCodeForStatus(status), "message": message})
+		code := errorCodeForStatus(status)
+		writeAPIError(w, r, status, code, apiErrorTranslationKey(code, message))
 		return
 	}
 	s.renderErrorPage(w, r, status, message)
