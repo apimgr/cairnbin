@@ -50,6 +50,19 @@ POST https://pste.us/api/v1/pastes
 !!! warning
     A new owner receives an `owner_token` in the creation response. It remains viewable, masked by default, at `/server/preferences/tokens`; use a linked token for long-lived clients.
 
+## Frontend Content Negotiation
+
+Frontend resource routes use the same client detection as the API. Browsers receive HTML, known HTTP tools receive text, and explicit `Accept` values win in this order: `application/json`, `text/html`, then `text/plain`.
+
+| Frontend route | JSON response |
+|---------------|---------------|
+| `GET /` | `{ "ok": true, "data": [...] }` with recent public pastes |
+| `GET /pastes` | `{ "ok": true, "data": [...], "pagination": {...} }` with the requested list and pagination |
+| `GET /{id}` | The same paste object envelope as `GET /api/v1/pastes/{id}`; link pastes redirect to their target |
+| `POST /pastes` | JSON create response when `Accept: application/json` is sent |
+
+Use `Accept: text/plain` for the CLI-friendly text representation, or `Accept: text/html` to force the browser page.
+
 ## Get Paste
 
 ```
