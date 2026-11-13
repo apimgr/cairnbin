@@ -158,7 +158,7 @@ GET https://pste.us/api/v1/server/healthz
 GET https://pste.us/api/healthz
 ```
 
-`/server/healthz` is content negotiated: HTML for browsers, JSON for API clients, plain text for CLI. The two API routes always return JSON; `/api/healthz` is a direct alias (no redirect). An optional `/healthz` alias exists when `server.healthz.root.enabled: true`.
+`/server/healthz` and the optional `/healthz` root alias use the same content negotiation: `Accept: application/json` returns the health JSON (and takes precedence when the header also lists HTML or plain text), `Accept: text/html` returns HTML, and `Accept: text/plain` or a CLI user agent returns plain text. The API routes return JSON by default; `Accept: application/json` takes precedence over `Accept: text/plain`, while `.txt`, `Accept: text/plain`, or a curl-style client requests plain text. `/api/healthz` is a direct alias of `/api/v1/server/healthz` with no redirect.
 
 ### Server pages
 
