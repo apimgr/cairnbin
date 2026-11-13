@@ -78,7 +78,7 @@ GET https://pste.us/api/v1/pastes/{id}
 }
 ```
 
-`visibility` is `0` for public and `1` for unlisted. `content_type` is empty for plain-text pastes and set to the detected MIME type for binary uploads.
+`visibility` is `0` for public and `1` for unlisted. `content_type` is empty for text pastes and set to the detected MIME type for binary uploads. Multipart uploads use file bytes and recognized filename extensions to identify formats Go's byte sniffer cannot distinguish, including DOCX and other Office documents. Raster images render as images and Markdown files receive a sanitized preview; other document formats are available through the download endpoint.
 
 If the paste is a link (`is_link: true`), the frontend and API view routes (`GET /{id}` and `GET /api/v1/pastes/{id}`) respond with a `302 Found` redirect to the target URL instead of the JSON body above. Use the `/raw` endpoint to retrieve the target URL as plain text without redirecting.
 

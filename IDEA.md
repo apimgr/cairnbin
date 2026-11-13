@@ -36,6 +36,9 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 
 **In scope:**
 - Anonymous paste creation via web form, JSON API, raw body (curl pipe), or multipart file upload
+- Correctly identify common image, text, Markdown, archive, and office document uploads, including DOC and DOCX files
+- Preview safe raster images and Markdown; display readable text and syntax-highlighted source, and provide original document and unsupported-file downloads
+- Show users a useful detected format label (such as PNG image, Markdown, DOCX document, or PDF document) instead of misclassifying supported uploads as generic text or binary
 - Server-side syntax highlighting — rendered on the server, no client-side JS library required
 - Language auto-detection from file extension on upload; manual selection otherwise
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never` (default), or a custom duration in seconds
@@ -81,6 +84,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 ### Features
 
 - **Anonymous paste creation** — web form, JSON API, raw body (curl pipe), or multipart file upload; no account required
+- **File format handling** — identify common images, text, Markdown, archives, and office documents including DOC/DOCX; preview raster images and sanitized Markdown; keep other uploaded documents available for download with clear format labels
 - **Server-side syntax highlighting** — language auto-detected from file extension or manually selected
 - **Expiry options** — `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never` (default), or a custom duration in seconds
 - **Burn after N reads** — paste is permanently deleted once its view count reaches a user-set threshold (1–9999)

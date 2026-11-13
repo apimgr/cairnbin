@@ -13,9 +13,10 @@ uses it as the default server; use `--server <url>` to target your own instance.
 ## Features
 
 - Anonymous paste creation via web form, JSON API, raw body, or multipart file upload
-- MIME-detected images, audio, and video render as safe media; active formats such as SVG and HTML are served as downloads
+- Audio and video render as browser media; active formats such as SVG and HTML are served as downloads
 - Server-side syntax highlighting via Chroma — no client-side JS required
 - Language auto-detection from file extension on upload
+- Correct format labels for images, Markdown, text, and common documents including DOC/DOCX; safe image and Markdown previews with downloads for other documents
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never`, or custom seconds
 - Burn after N reads — paste deleted once view count reaches threshold
 - Public and unlisted visibility
