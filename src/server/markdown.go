@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"sync"
 
+	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
 )
 
@@ -38,4 +39,19 @@ func renderMarkdown(src string) template.HTML {
 		return template.HTML(template.HTMLEscapeString(src))
 	}
 	return template.HTML(buf.String())
+}
+
+var pasteMarkdownPolicy = bluemonday.UGCPolicy()
+
+// renderPasteMarkdown renders user markdown with raw HTML disabled and applies
+// the UGC allow-list before marking the result safe for the template.
+func renderPasteMarkdown(src string) template.HTML {
+	if src == "" {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := markdownEngine().Convert([]byte(src), &buf); err != nil {
+		return template.HTML(template.HTMLEscapeString(src))
+	}
+	return template.HTML(pasteMarkdownPolicy.Sanitize(buf.String()))
 }

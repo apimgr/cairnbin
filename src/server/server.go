@@ -3612,11 +3612,18 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		// list) so a transient DB error never takes the landing page down.
 		log.Printf("home: recent pastes query failed: %v", err)
 	}
+	if pastes == nil {
+		pastes = []model.PasteListItem{}
+	}
 	data := map[string]interface{}{
 		"SiteTitle": s.liveCfg().Web.SiteTitle,
 		"Theme":     s.liveCfg().Web.Theme,
 		"BaseURL":   s.baseURL(r),
 		"Recent":    pastes,
+	}
+	if detectClientType(r) == "json" {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": pastes})
+		return
 	}
 
 	// Content negotiation: HTTP tools get the full template rendered as plain text.
@@ -3751,6 +3758,9 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pastes, total, _ := s.db.SearchPublicPastes(page, limit, search, sortBy, order, pasteType)
+	if pastes == nil {
+		pastes = []model.PasteListItem{}
+	}
 	pages := (total + limit - 1) / limit
 	if pages < 1 {
 		pages = 1
@@ -3773,6 +3783,16 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 		"Sort":        sortBy,
 		"Order":       order,
 		"CurrentPath": r.URL.Path,
+	}
+	if detectClientType(r) == "json" {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":   true,
+			"data": pastes,
+			"pagination": map[string]interface{}{
+				"page": page, "limit": limit, "total": total, "pages": pages,
+			},
+		})
+		return
 	}
 
 	// Content negotiation: HTTP tools get the full template rendered as plain text.
@@ -3802,24 +3822,23 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 // Accept header per PART 14 content negotiation rules.
 //
 // Priority order:
-//  1. Explicit Accept header overrides UA detection, checked text/html, then
-//     text/plain, then application/json (PART 16 Smart Content Detection).
+//  1. Explicit Accept header overrides UA detection, checked application/json,
+//     then text/html, then text/plain (PART 16 Smart Content Detection).
 //  2. Our CLI client (cairnbin-cli/) → "json" (INTERACTIVE, renders its own TUI).
 //  3. Text browsers (lynx, w3m, etc.) → "html" (INTERACTIVE, no JavaScript).
 //  4. HTTP tools (curl, wget, empty UA) → "text" (NON-INTERACTIVE, dump output).
 //  5. Anything else (regular browsers) → "html".
 func detectClientType(r *http.Request) string {
 	accept := r.Header.Get("Accept")
+	if strings.Contains(accept, "application/json") {
+		return "json"
+	}
 	if strings.Contains(accept, "text/html") {
 		return "html"
 	}
 	if strings.Contains(accept, "text/plain") {
 		return "text"
 	}
-	if strings.Contains(accept, "application/json") {
-		return "json"
-	}
-
 	// Our client is INTERACTIVE — receives JSON, renders own TUI/GUI.
 	if httputil.IsOurCliClient(r) {
 		return "json"
@@ -3901,14 +3920,23 @@ func (s *Server) renderPasteView(w http.ResponseWriter, r *http.Request, forceVi
 
 	cc := classifyPasteContent(paste)
 	embedHTML, embedMarkdown := buildEmbedSnippets(s.baseURL(r), id, paste.Title, cc.IsImage)
+	content := handler.HighlightedContent(paste, true)
+	var markdownContent template.HTML
+	if cc.IsMarkdown {
+		content = template.HTML(template.HTMLEscapeString(paste.Content))
+		markdownContent = renderPasteMarkdown(paste.Content)
+	}
 
 	s.renderTemplate(w, r, "paste.html", map[string]interface{}{
 		"SiteTitle":       s.liveCfg().Web.SiteTitle,
 		"Theme":           s.liveCfg().Web.Theme,
 		"Paste":           paste,
 		"ID":              id,
-		"Content":         handler.HighlightedContent(paste, true),
+		"Content":         content,
+		"MarkdownContent": markdownContent,
 		"IsImage":         cc.IsImage,
+		"IsMarkdown":      cc.IsMarkdown,
+		"ContentLabel":    cc.ContentLabel,
 		"ImageDataURI":    cc.ImageDataURI,
 		"IsAudio":         cc.IsAudio,
 		"IsVideo":         cc.IsVideo,
@@ -3946,11 +3974,13 @@ func buildEmbedSnippets(base, id, title string, isImage bool) (embedHTML, embedM
 // pasteContentClass categorises stored paste content for template rendering.
 type pasteContentClass struct {
 	IsImage         bool
+	IsMarkdown      bool
 	IsAudio         bool
 	IsVideo         bool
 	IsActiveContent bool
 	IsBinary        bool
 	FileContentType string
+	ContentLabel    string
 	ImageDataURI    template.URL
 	MediaDataURI    template.URL
 }
@@ -4010,14 +4040,37 @@ func classifyPasteContent(paste *model.Paste) pasteContentClass {
 
 	return pasteContentClass{
 		IsImage:         isImage,
+		IsMarkdown:      fileCT == "text/markdown" || strings.EqualFold(paste.Language, "markdown") || strings.EqualFold(filepath.Ext(paste.Title), ".md") || strings.EqualFold(filepath.Ext(paste.Title), ".markdown"),
 		IsAudio:         isAudio,
 		IsVideo:         isVideo,
 		IsActiveContent: isActiveContent,
 		IsBinary:        isBinary,
 		FileContentType: fileCT,
+		ContentLabel:    pasteContentLabel(paste, fileCT),
 		ImageDataURI:    imageDataURI,
 		MediaDataURI:    mediaDataURI,
 	}
+}
+
+func pasteContentLabel(paste *model.Paste, contentType string) string {
+	ext := strings.ToLower(filepath.Ext(paste.Title))
+	labels := map[string]string{
+		".avif": "AVIF image", ".bmp": "BMP image", ".gif": "GIF image", ".jpeg": "JPEG image", ".jpg": "JPEG image", ".png": "PNG image", ".webp": "WebP image",
+		".md": "Markdown", ".markdown": "Markdown", ".txt": "Text",
+		".doc": "Word document", ".docx": "Word document (DOCX)", ".odt": "OpenDocument text",
+		".pdf": "PDF document", ".rtf": "Rich text document", ".xls": "Excel spreadsheet", ".xlsx": "Excel spreadsheet (XLSX)", ".ods": "OpenDocument spreadsheet",
+		".ppt": "PowerPoint presentation", ".pptx": "PowerPoint presentation (PPTX)", ".odp": "OpenDocument presentation",
+	}
+	if label := labels[ext]; label != "" {
+		return label
+	}
+	if contentType != "" {
+		return contentType
+	}
+	if paste.Language != "" {
+		return paste.Language
+	}
+	return "Text"
 }
 
 // isEmbedPath reports whether the request path is the embeddable paste view.

@@ -18,6 +18,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -340,12 +341,7 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 				return nil, http.StatusRequestEntityTooLarge, fmt.Errorf("paste exceeds maximum size of %d bytes", limit)
 			}
 			// Detect the MIME type from the actual file bytes before storage.
-			detectedCT := http.DetectContentType(raw[:min512(len(raw))])
-			if strings.HasPrefix(detectedCT, "text/plain") {
-				if imageType := rasterImageTypeFromFilename(header.Filename); imageType != "" {
-					detectedCT = imageType
-				}
-			}
+			detectedCT := detectUploadContentType(raw, header.Filename)
 			// Non-text binary data (images, executables, archives, etc.) is
 			// stored as base64 so it round-trips safely through the TEXT column.
 			// ContentType is set so viewers know to decode before rendering.
@@ -795,27 +791,37 @@ func min512(n int) int {
 	return n
 }
 
-func rasterImageTypeFromFilename(filename string) string {
-	extension := ""
-	if dot := strings.LastIndex(filename, "."); dot >= 0 {
-		extension = strings.ToLower(filename[dot:])
+// detectUploadContentType combines byte sniffing with a conservative extension
+// map for formats Go's 512-byte sniffer cannot distinguish, such as Office ZIPs.
+func detectUploadContentType(raw []byte, filename string) string {
+	detected := http.DetectContentType(raw[:min512(len(raw))])
+	if detected != "text/plain; charset=utf-8" && detected != "application/octet-stream" && detected != "application/zip" {
+		return detected
 	}
-	switch extension {
-	case ".avif":
-		return "image/avif"
-	case ".bmp":
-		return "image/bmp"
-	case ".gif":
-		return "image/gif"
-	case ".jpeg", ".jpg":
-		return "image/jpeg"
-	case ".png":
-		return "image/png"
-	case ".webp":
-		return "image/webp"
-	default:
-		return ""
+	ext := strings.ToLower(filepath.Ext(filename))
+	if contentType, ok := uploadContentTypes[ext]; ok {
+		return contentType
 	}
+	return detected
+}
+
+var uploadContentTypes = map[string]string{
+	".avif": "image/avif", ".bmp": "image/bmp", ".gif": "image/gif",
+	".jpeg": "image/jpeg", ".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
+	".md": "text/markdown; charset=utf-8", ".markdown": "text/markdown; charset=utf-8",
+	".pdf": "application/pdf", ".doc": "application/msword",
+	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".odt":  "application/vnd.oasis.opendocument.text", ".rtf": "application/rtf",
+	".xls":  "application/vnd.ms-excel",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".ods":  "application/vnd.oasis.opendocument.spreadsheet",
+	".ppt":  "application/vnd.ms-powerpoint",
+	".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	".odp":  "application/vnd.oasis.opendocument.presentation",
+	".csv":  "text/csv; charset=utf-8", ".json": "text/plain; charset=utf-8",
+	".xml": "text/plain; charset=utf-8", ".yaml": "text/plain; charset=utf-8", ".yml": "text/plain; charset=utf-8",
+	".toml": "text/plain; charset=utf-8", ".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8",
+	".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8",
 }
 
 // readLimited reads r up to limit bytes and reports whether the stream had
@@ -856,9 +862,10 @@ func (h *PasteHandler) ListPastes(w http.ResponseWriter, r *http.Request) {
 	var pastes []model.PasteListItem
 	var total int
 	var err error
-	if scope == "" || scope == "public" {
+	switch scope {
+	case "", "public":
 		pastes, total, err = h.db.SearchPublicPastes(page, limit, search, sortBy, order, pasteType)
-	} else if scope == "owned" {
+	case "owned":
 		rawToken := extractOwnerToken(r)
 		ownerDB, hasOwners := h.db.(database.OwnerDB)
 		ownerLister, canList := h.db.(database.OwnerPasteLister)
@@ -872,7 +879,7 @@ func (h *PasteHandler) ListPastes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		pastes, total, err = ownerLister.SearchOwnerPastes(token.OwnerID, page, limit, search, sortBy, order, pasteType)
-	} else {
+	default:
 		sendAPIError(w, r, "BAD_REQUEST", "scope must be public or owned")
 		return
 	}

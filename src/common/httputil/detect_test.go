@@ -73,6 +73,34 @@ func TestIsHttpTool(t *testing.T) {
 		{"Go-http-client/1.1", true},
 		{"axios/0.21.1", true},
 		{"node-fetch/2.6.1", true},
+		{"xh/0.20.1", true},
+		{"hurl/4.3.0", true},
+		{"python-urllib/3.12", true},
+		{"python-httpx/0.27.0", true},
+		{"aiohttp/3.9.5", true},
+		{"urllib3/2.2.1", true},
+		{"go-resty/2.12.0", true},
+		{"fasthttp", true},
+		{"reqwest/0.12.4", true},
+		{"ureq/2.9.7", true},
+		{"hyper/1.3.1", true},
+		{"undici/6.15.0", true},
+		{"superagent/9.0.2", true},
+		{"Deno/1.42.4", true},
+		{"bun/1.1.4", true},
+		{"okhttp/4.12.0", true},
+		{"Apache-HttpClient/5.3", true},
+		{"Java/21", true},
+		{"GuzzleHttp/7.8", true},
+		{"libwww-perl/6.77", true},
+		{"lwp-trivial/6.77", true},
+		{"Faraday v2.9.0", true},
+		{"Dart/3.3", true},
+		{"WindowsPowerShell/5.1", true},
+		{"PostmanRuntime/7.37.0", true},
+		{"insomnia/9.2.0", true},
+		{"bruno-runtime/1.17.0", true},
+		{"k6/0.50.0", true},
 		// no UA = non-interactive
 		{"", true},
 		{"Mozilla/5.0", false},
@@ -173,6 +201,13 @@ func TestGetAPIResponseFormat_AcceptJSON(t *testing.T) {
 	got2 := GetAPIResponseFormat(r2)
 	if got2 != "json" {
 		t.Errorf("Accept: application/json (browser): got %q, want %q", got2, "json")
+	}
+
+	r3 := httptest.NewRequest(http.MethodGet, "/api/v1/pastes", nil)
+	r3.Header.Set("Accept", "application/json, text/plain")
+	r3.Header.Set("User-Agent", "curl/7.68.0")
+	if got3 := GetAPIResponseFormat(r3); got3 != "json" {
+		t.Errorf("Accept: application/json, text/plain (curl): got %q, want %q", got3, "json")
 	}
 }
 

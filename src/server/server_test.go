@@ -595,14 +595,15 @@ func TestDetectClientType(t *testing.T) {
 		{"httpie user-agent", "", "HTTPie/3.2.1", "text"},
 		{"mozilla browser ua", "", "Mozilla/5.0 (X11; Linux x86_64)", "html"},
 		{"chrome browser ua", "", "Chrome/113.0", "html"},
+		{"unrecognized user-agent treated as browser", "", "CairnbinMonitor/1.0", "html"},
 		{"empty ua and accept", "", "", "text"},
 		{"cairnbin-cli ua", "", "cairnbin-cli/1.0.0", "json"},
 		{"go http client ua", "", "Go-http-client/1.1", "text"},
 		{"accept star-star", "*/*", "", "text"},
 		{"accept json beats ua", "application/json", "Mozilla/5.0", "json"},
 		{"accept html beats ua", "text/html", "curl/7.88.1", "html"},
-		{"accept html beats json", "application/json, text/html", "", "html"},
-		{"accept text beats json", "application/json, text/plain", "", "text"},
+		{"accept json beats html", "application/json, text/html", "", "json"},
+		{"accept json beats text", "application/json, text/plain", "", "json"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2852,7 +2853,8 @@ func TestHandleHealthz(t *testing.T) {
 		db := &stubDB{}
 		s := newServerWithDB(&config.Config{}, db)
 		r := httptest.NewRequest(http.MethodGet, "/server/healthz", nil)
-		r.Header.Set("Accept", "application/json")
+		r.Header.Set("Accept", "application/json, text/html")
+		r.Header.Set("User-Agent", "Mozilla/5.0")
 		w := httptest.NewRecorder()
 		s.handleHealthz(w, r)
 		if w.Code != http.StatusOK {
@@ -3052,6 +3054,28 @@ func TestHandleOfflineNilTemplates(t *testing.T) {
 // ─── Handlers using db + nil templates ───────────────────────────────────────
 
 func TestHandleHomeNilTemplates(t *testing.T) {
+	t.Run("JSON accept returns recent paste data", func(t *testing.T) {
+		db := &stubDB{}
+		s := newServerWithDB(&config.Config{}, db)
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		s.handleHome(w, r)
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("home JSON response invalid: %v", err)
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("home JSON Content-Type = %q, want application/json", ct)
+		}
+		if response["ok"] != true {
+			t.Errorf("home JSON response missing data: %#v", response)
+		}
+		if _, ok := response["data"].([]interface{}); !ok {
+			t.Errorf("home JSON data is not an array: %#v", response["data"])
+		}
+	})
+
 	t.Run("text UA returns plain text", func(t *testing.T) {
 		db := &stubDB{}
 		s := newServerWithDB(&config.Config{}, db)
@@ -3082,6 +3106,28 @@ func TestHandleHomeNilTemplates(t *testing.T) {
 }
 
 func TestHandleRecentNilTemplates(t *testing.T) {
+	t.Run("JSON accept returns list and pagination", func(t *testing.T) {
+		db := &stubDB{}
+		s := newServerWithDB(&config.Config{}, db)
+		r := httptest.NewRequest(http.MethodGet, "/recent", nil)
+		r.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		s.handleRecent(w, r)
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("recent JSON response invalid: %v", err)
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("recent JSON Content-Type = %q, want application/json", ct)
+		}
+		if response["ok"] != true || response["pagination"] == nil {
+			t.Errorf("recent JSON response missing list or pagination: %#v", response)
+		}
+		if _, ok := response["data"].([]interface{}); !ok {
+			t.Errorf("recent JSON data is not an array: %#v", response["data"])
+		}
+	})
+
 	t.Run("text UA returns plain text", func(t *testing.T) {
 		db := &stubDB{}
 		s := newServerWithDB(&config.Config{}, db)
@@ -4192,8 +4238,8 @@ func TestNewHandlersWithTemplates(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Errorf("image paste HTML status = %d, want 200; body: %q", w.Code, w.Body.String()[:min(len(w.Body.String()), 300)])
 		}
-		if !strings.Contains(w.Body.String(), `<span class="language">image/png</span>`) || strings.Contains(w.Body.String(), `<span class="language">text</span>`) {
-			t.Errorf("image paste metadata should show its MIME type instead of the text language label")
+		if !strings.Contains(w.Body.String(), `<span class="language">PNG image</span>`) || strings.Contains(w.Body.String(), `<span class="language">text</span>`) {
+			t.Errorf("image paste metadata should show its detected image label instead of the text language label")
 		}
 	})
 

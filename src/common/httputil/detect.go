@@ -69,9 +69,18 @@ func IsHttpTool(r *http.Request) bool {
 	ua := strings.ToLower(r.Header.Get("User-Agent"))
 
 	httpTools := []string{
-		"curl/", "wget/", "httpie/",
-		"libcurl/", "python-requests/",
-		"go-http-client/", "axios/", "node-fetch/",
+		// Command-line tools.
+		"curl/", "wget/", "httpie/", "xh/", "hurl/", "libcurl/",
+		// Python clients.
+		"python-requests/", "python-urllib/", "python-httpx/", "aiohttp/", "urllib3/",
+		// Go and Rust clients.
+		"go-http-client/", "go-resty/", "fasthttp", "reqwest/", "ureq/", "hyper/",
+		// JavaScript runtimes and libraries.
+		"axios/", "node-fetch/", "undici", "superagent/", "deno/", "bun/",
+		// JVM, PHP, Perl, Ruby, Dart, and PowerShell clients.
+		"okhttp/", "apache-httpclient/", "java/", "guzzlehttp/", "libwww-perl/", "lwp-trivial/", "faraday", "dart/", "windowspowershell/",
+		// API clients and load tools.
+		"postmanruntime/", "insomnia/", "bruno-runtime/", "k6/",
 	}
 	for _, tool := range httpTools {
 		if strings.Contains(ua, tool) {
@@ -122,11 +131,11 @@ func GetAPIResponseFormat(r *http.Request) string {
 
 	accept := r.Header.Get("Accept")
 
-	if strings.Contains(accept, "text/plain") {
-		return "text"
-	}
 	if strings.Contains(accept, "application/json") {
 		return "json"
+	}
+	if strings.Contains(accept, "text/plain") {
+		return "text"
 	}
 
 	// Non-interactive clients (curl, wget, empty UA) get plain text.

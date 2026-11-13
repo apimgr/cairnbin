@@ -10,11 +10,7 @@
                     <div class="paste-header">
                         <h1>{{.Paste.Title}}</h1>
                         <div class="paste-meta">
-                            {{if .Paste.ContentType}}
-                            <span class="language">{{.Paste.ContentType}}</span>
-                            {{else}}
-                            <span class="language">{{.Paste.Language}}</span>
-                            {{end}}
+                            <span class="language">{{.ContentLabel}}</span>
                             <span>{{.Paste.Views}} {{t .Lang "paste.views"}}</span>
                             <span>{{t .Lang "paste.created"}} {{fmtTime .Paste.CreatedAt}}</span>
                         </div>
@@ -48,6 +44,8 @@
                                 {{t .Lang "paste.video_unsupported"}}
                             </video>
                         </div>
+                        {{else if .IsMarkdown}}
+                        <div class="paste-markdown" id="paste-code">{{.MarkdownContent}}</div>
                         {{else if .IsActiveContent}}
                         <div class="paste-binary">
                             <div class="alert alert-warning" role="alert">

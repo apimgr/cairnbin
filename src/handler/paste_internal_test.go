@@ -18,6 +18,25 @@ import (
 	"github.com/apimgr/cairnbin/src/model"
 )
 
+func TestDetectUploadContentTypeUsesKnownFileExtensions(t *testing.T) {
+	tests := []struct {
+		name, filename, want string
+		data                 []byte
+	}{
+		{"docx archive", "report.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", []byte("PK\x03\x04office document")},
+		{"image extension fallback", "photo.png", "image/png", []byte("image bytes")},
+		{"markdown remains text", "notes.md", "text/markdown; charset=utf-8", []byte("# Heading\n")},
+		{"unknown archive", "backup.zip", "application/zip", []byte("PK\x03\x04archive")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := detectUploadContentType(tt.data, tt.filename); got != tt.want {
+				t.Errorf("detectUploadContentType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 func newInternalTestDB(t *testing.T) database.DB {
