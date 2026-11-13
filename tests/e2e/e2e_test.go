@@ -59,10 +59,50 @@ func TestMain(m *testing.M) {
 		os.Exit(2)
 	}
 	go serveE2ESMTP(smtpListener)
+	if readyFile := os.Getenv("E2E_READY_FILE"); readyFile != "" {
+		if err := os.WriteFile(readyFile, []byte("ready\n"), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, "signal E2E integration doubles ready:", err)
+			_ = smtpListener.Close()
+			_ = server.Close()
+			os.Exit(2)
+		}
+	}
+	waitForServer(os.Getenv("E2E_BASE_URL"))
 	code := m.Run()
 	_ = smtpListener.Close()
 	_ = server.Close()
 	os.Exit(code)
+}
+
+func waitForServer(base string) {
+	serverIPFile := os.Getenv("E2E_SERVER_IP_FILE")
+	deadline := time.Now().Add(2 * time.Minute)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		if serverIPFile != "" {
+			if data, err := os.ReadFile(serverIPFile); err == nil {
+				if ip := strings.TrimSpace(string(data)); ip != "" {
+					base = "http://" + ip
+					_ = os.Setenv("E2E_BASE_URL", base)
+				}
+			}
+		}
+		if base != "" {
+			resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(strings.TrimRight(base, "/") + "/server/healthz")
+			if err == nil {
+				_ = resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					return
+				}
+				lastErr = fmt.Errorf("health endpoint returned %s", resp.Status)
+			} else {
+				lastErr = err
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	fmt.Fprintf(os.Stderr, "E2E server %s did not become healthy before the startup deadline: %v\n", base, lastErr)
+	os.Exit(2)
 }
 
 func serveE2ESMTP(listener net.Listener) {
@@ -277,7 +317,7 @@ func TestTier1OwnerAndLinkedTokenLifecycleAPI(t *testing.T) {
 	if primary == "" {
 		t.Fatal("new owner response omitted primary token")
 	}
-	preferencesReq, err := http.NewRequest(http.MethodGet, base+"/server/preferences?lang=es", nil)
+	preferencesReq, err := http.NewRequest(http.MethodGet, base+"/server/preferences/tokens?lang=es", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -498,7 +538,13 @@ func TestTier1RecentSearchAndSavedSort(t *testing.T) {
 	createPaste(t, base, map[string]interface{}{"content": "recent target", "title": "e2e-recent-target", "expires_in": "never"})
 	createPaste(t, base, map[string]interface{}{"content": "other recent", "title": "e2e-recent-other", "expires_in": "never"})
 	createPaste(t, base, map[string]interface{}{"content": "hidden recent", "title": "e2e-recent-hidden", "visibility": "unlisted", "expires_in": "never"})
-	resp, err := getHTML(client(), base+"/recent?search=e2e-recent-target&sort=name&order=asc&limit=50")
+	req, err := http.NewRequest(http.MethodGet, base+"/recent?search=e2e-recent-target&sort=name&order=asc&limit=50", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "text/html")
+	addPreferenceConsent(req)
+	resp, err := client().Do(req)
 	if err != nil {
 		t.Fatalf("GET filtered recent page: %v", err)
 	}
@@ -520,6 +566,13 @@ func TestTier1RecentSearchAndSavedSort(t *testing.T) {
 			t.Errorf("recent request did not save %q preference: %s", preference, setCookies)
 		}
 	}
+}
+
+func addPreferenceConsent(req *http.Request) {
+	req.AddCookie(&http.Cookie{
+		Name:  "cookie_consent",
+		Value: url.PathEscape(`{"essential":true,"preferences":true,"analytics":false,"timestamp":1}`),
+	})
 }
 
 func TestTier1LocalIntegrationDoubles(t *testing.T) {
@@ -765,9 +818,14 @@ func TestTier1InternalLinkCrawl(t *testing.T) {
 
 func TestTier1RegisteredGETRoutes(t *testing.T) {
 	base := baseURL(t)
-	resp, err := client().Get(base + "/debug/routes")
+	req, err := http.NewRequest(http.MethodGet, base+"/debug/routes", nil)
 	if err != nil {
-		t.Fatalf("GET debug route inventory: %v", err)
+		t.Fatalf("build authenticated debug route request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+e2eOperatorToken)
+	resp, err := client().Do(req)
+	if err != nil {
+		t.Fatalf("GET authenticated debug route inventory: %v", err)
 	}
 	var inventory struct {
 		Data struct {
@@ -1263,15 +1321,13 @@ func TestTier1MicrobinRoundTrip(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	var created struct {
-		Data struct {
-			ID         string `json:"id"`
-			OwnerToken string `json:"owner_token"`
-		} `json:"data"`
+		ID          string `json:"id"`
+		DeleteToken string `json:"deleteToken"`
 	}
-	if (resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK) || json.Unmarshal(body, &created) != nil || created.Data.ID == "" || created.Data.OwnerToken == "" {
+	if resp.StatusCode != http.StatusCreated || json.Unmarshal(body, &created) != nil || created.ID == "" || created.DeleteToken == "" {
 		t.Fatalf("microbin create response = %d %s", resp.StatusCode, body)
 	}
-	getReq, err := http.NewRequest(http.MethodGet, base+"/api/v1/pasta/"+url.PathEscape(created.Data.ID), nil)
+	getReq, err := http.NewRequest(http.MethodGet, base+"/api/v1/pasta/"+url.PathEscape(created.ID), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1282,17 +1338,14 @@ func TestTier1MicrobinRoundTrip(t *testing.T) {
 		t.Fatalf("get microbin paste: %v", err)
 	}
 	var result struct {
-		Data struct {
-			Content string `json:"content"`
-		} `json:"data"`
+		Content string `json:"content"`
 	}
 	getBody, err := io.ReadAll(getResp.Body)
 	getResp.Body.Close()
-	if err != nil || getResp.StatusCode != http.StatusOK || json.Unmarshal(getBody, &result) != nil || result.Data.Content != content {
+	if err != nil || getResp.StatusCode != http.StatusOK || json.Unmarshal(getBody, &result) != nil || result.Content != content {
 		t.Fatalf("microbin get response = %d %s (%v)", getResp.StatusCode, getBody, err)
 	}
-	delReq, _ := http.NewRequest(http.MethodDelete, base+"/api/v1/pasta/"+url.PathEscape(created.Data.ID), nil)
-	delReq.Header.Set("Authorization", "Bearer "+created.Data.OwnerToken)
+	delReq, _ := http.NewRequest(http.MethodDelete, base+"/api/v1/pasta/"+url.PathEscape(created.ID)+"?deleteToken="+url.QueryEscape(created.DeleteToken), nil)
 	delResp, err := client().Do(delReq)
 	if err != nil {
 		t.Fatalf("delete microbin paste: %v", err)
@@ -2156,16 +2209,19 @@ func TestTier3FullBrowser(t *testing.T) {
 	}
 	if err := chromedp.Run(ctx,
 		chromedp.Evaluate(`document.querySelector("#token").form.requestSubmit()`, nil),
+		chromedp.WaitVisible(`#confirm-dialog[open]`, chromedp.ByQuery),
+		chromedp.Click(`#confirm-dialog button[value="confirm"]`, chromedp.ByQuery),
+		chromedp.WaitVisible(".delete-success-icon", chromedp.ByQuery),
 	); err != nil {
-		t.Fatalf("submit empty owner-token form in browser: %v", err)
+		t.Fatalf("submit blank owner-token form with cookie-backed authorization: %v", err)
 	}
-	var jsValidation string
+	var cookieDelete string
 	if err := chromedp.Run(ctx,
-		chromedp.Evaluate(`(() => { const token = document.querySelector("#token"); const error = document.querySelector("#token-error"); return JSON.stringify({required:token.required, valid:token.form.checkValidity(), ariaInvalid:token.getAttribute("aria-invalid"), errorVisible:!error.hidden}); })()`, &jsValidation),
+		chromedp.Evaluate(`JSON.stringify({deleted:!!document.querySelector(".delete-success-icon"), form:!!document.querySelector("#token")})`, &cookieDelete),
 	); err != nil {
-		t.Errorf("check client-side form validation: %v", err)
-	} else if !strings.Contains(jsValidation, `"required":true`) || !strings.Contains(jsValidation, `"valid":false`) || !strings.Contains(jsValidation, `"ariaInvalid":"true"`) || !strings.Contains(jsValidation, `"errorVisible":true`) {
-		t.Errorf("browser form validation is not active: %s", jsValidation)
+		t.Errorf("check cookie-backed delete result: %v", err)
+	} else if !strings.Contains(cookieDelete, `"deleted":true`) || !strings.Contains(cookieDelete, `"form":false`) {
+		t.Errorf("blank token with owner cookie did not delete the paste: %s", cookieDelete)
 	}
 	var notFoundHTML string
 	if err := chromedp.Run(ctx,
@@ -2244,7 +2300,26 @@ func TestTier3FullBrowser(t *testing.T) {
 				continue
 			}
 			dest := baseParsed.ResolveReference(ref)
-			if dest.Scheme == baseParsed.Scheme && dest.Host == baseParsed.Host {
+			if dest.Scheme != baseParsed.Scheme || dest.Host != baseParsed.Host ||
+				strings.HasPrefix(dest.Path, "/dl/") {
+				continue
+			}
+			probe, probeErr := http.NewRequest(http.MethodGet, dest.String(), nil)
+			if probeErr != nil {
+				t.Errorf("build browser crawl request for %s: %v", dest, probeErr)
+				continue
+			}
+			probe.Header.Set("Accept", "text/html")
+			probeClient := *client()
+			probeClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+			probeResp, probeErr := probeClient.Do(probe)
+			if probeErr != nil {
+				t.Errorf("probe browser crawl %s: %v", dest, probeErr)
+				continue
+			}
+			contentType := probeResp.Header.Get("Content-Type")
+			probeResp.Body.Close()
+			if probeResp.StatusCode == http.StatusOK && strings.Contains(contentType, "text/html") {
 				queue = append(queue, dest.RequestURI())
 			}
 		}
@@ -2389,6 +2464,7 @@ func TestTier3RecentSearchAndSavedSort(t *testing.T) {
 	defer cancel()
 	var resultTitle, pageURL, cookies string
 	if err := chromedp.Run(ctx,
+		network.SetCookie("cookie_consent", url.PathEscape(`{"essential":true,"preferences":true,"analytics":false,"timestamp":1}`)).WithURL(base).WithPath("/"),
 		chromedp.Navigate(base+"/recent"),
 		chromedp.SetValue(`#recent-search`, "e2e-browser-recent-target", chromedp.ByQuery),
 		chromedp.SetValue(`#recent-sort`, "name", chromedp.ByQuery),

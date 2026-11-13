@@ -32,14 +32,15 @@ E2E_IMAGE_NAME="${E2E_PROJECT_NAME}:e2e-$$"
 E2E_COMPOSE_PROJECT="${E2E_PROJECT_NAME}-e2e-$$"
 E2E_CONTAINER_NAME="${E2E_PROJECT_NAME}-app"
 E2E_PORT="80"
-E2E_BASE_URL="http://cairnbin:${E2E_PORT}"
-E2E_BROWSER_URL="http://cairnbin-e2e-browser:9222"
+E2E_BASE_URL=""
+E2E_BROWSER_URL=""
 E2E_SERVER_IP=""
 E2E_BROWSER_IP=""
 E2E_TEMP_DIR=""
 E2E_ARTIFACT_DIR=""
 E2E_KEEP=false
 E2E_ERRORS=0
+E2E_TEST_PID=""
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 __pass() { printf "[PASS] %s\n" "$*"; }
@@ -48,6 +49,15 @@ __info() { printf "[INFO] %s\n" "$*"; }
 
 # shellcheck disable=SC2329 # Called indirectly by the EXIT/INT/TERM trap.
 __cleanup() {
+    if [[ -n "${E2E_TEST_PID}" ]] && kill -0 "${E2E_TEST_PID}" 2>/dev/null; then
+        kill "${E2E_TEST_PID}" 2>/dev/null || true
+        wait "${E2E_TEST_PID}" 2>/dev/null || true
+    fi
+    local runner_container
+    runner_container="$(docker ps -q --filter label=cairnbin.e2e.runner=true 2>/dev/null || true)"
+    if [[ -n "${runner_container}" ]]; then
+        docker stop --time 10 "${runner_container}" >/dev/null 2>&1 || true
+    fi
     if [[ "${E2E_KEEP}" == true ]]; then
         __info "Keeping stack and temp dir at ${E2E_TEMP_DIR} (--keep)"
         return 0
@@ -55,6 +65,9 @@ __cleanup() {
     if [[ -n "${E2E_TEMP_DIR}" && -d "${E2E_TEMP_DIR}" ]]; then
         (cd -- "${E2E_TEMP_DIR}" && docker compose -p "${E2E_COMPOSE_PROJECT}" down -v --remove-orphans >/dev/null 2>&1 || true)
         if [[ "${E2E_ERRORS}" -gt 0 && -n "${E2E_ARTIFACT_DIR}" && -d "${E2E_ARTIFACT_DIR}" ]]; then
+            if [[ -f "${E2E_TEMP_DIR}/e2e.log" ]]; then
+                cp -- "${E2E_TEMP_DIR}/e2e.log" "${E2E_ARTIFACT_DIR}/e2e.log"
+            fi
             local preserved_dir
             preserved_dir="$(mktemp -d "${TMPDIR:-/tmp}/${E2E_PROJECT_ORG}/${E2E_PROJECT_NAME}-e2e-artifacts-XXXXXX")"
             cp -a -- "${E2E_ARTIFACT_DIR}/." "${preserved_dir}/"
@@ -80,16 +93,20 @@ mkdir -p "${TMPDIR:-/tmp}/${E2E_PROJECT_ORG}"
 E2E_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${E2E_PROJECT_ORG}/${E2E_PROJECT_NAME}-XXXXXX")"
 mkdir -p "${E2E_TEMP_DIR}/volumes/config" "${E2E_TEMP_DIR}/volumes/data"
 mkdir -p "${E2E_TEMP_DIR}/volumes/config/cairnbin"
+mkdir -p "${E2E_TEMP_DIR}/ready"
 E2E_ARTIFACT_DIR="${E2E_TEMP_DIR}/artifacts"
 mkdir -p "${E2E_ARTIFACT_DIR}"
 cat >"${E2E_TEMP_DIR}/volumes/config/cairnbin/server.yml" <<'EOF'
 server:
   rate_limit:
     enabled: true
+    read:
+      requests: 10000
+      window: 60
     write:
       requests: 1000
       window: 60
-    global_burst: 2000
+    global_burst: 20000
   token: e2e-operator-token-only
   geoip:
     enabled: true
@@ -143,8 +160,57 @@ sed -i.bak \
 
 (
     cd -- "${E2E_TEMP_DIR}"
-    docker compose -p "${E2E_COMPOSE_PROJECT}" up -d
+    docker compose -p "${E2E_COMPOSE_PROJECT}" up -d cairnbin-cache cairnbin-e2e-browser
 )
+
+# Start the Go integration runner first so its local HTTP and SMTP doubles are
+# resolvable when the app performs its startup SMTP probe.
+__info "Starting the E2E runner and waiting for its local fixtures..."
+E2E_BROWSER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "cairnbin").IPAddress}}' cairnbin-e2e-browser)"
+if [[ -z "${E2E_BROWSER_IP}" ]]; then
+    __fail "could not resolve the E2E browser address"
+    exit 1
+fi
+E2E_BROWSER_URL="http://${E2E_BROWSER_IP}:9222"
+(
+    cd -- "${E2E_PROJECT_DIR}"
+    bash "${HOME}/.codex/hooks/test-lint-run.sh" test -- make test \
+    TEST_TAGS="-tags e2e" \
+    TEST_PKGS="./tests/e2e/..." \
+    TEST_RUN="-count=1" \
+    TEST_COVERAGE=0 \
+    TEST_NETWORK=cairnbin \
+    EXTRA_ENV="--label=cairnbin.e2e.runner=true --network-alias=cairnbin-e2e-runner -v ${E2E_TEMP_DIR}/ready:/e2e -e E2E_READY_FILE=/e2e/ready -e E2E_SERVER_IP_FILE=/e2e/server-ip -e CAIRNBIN_E2E_UPDATE_API_URL=http://cairnbin-e2e-runner:64980/update -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
+) >"${E2E_TEMP_DIR}/e2e.log" 2>&1 &
+E2E_TEST_PID=$!
+E2E_FIXTURES_READY=false
+for _ in $(seq 1 240); do
+    if [[ -f "${E2E_TEMP_DIR}/ready/ready" ]]; then
+        E2E_FIXTURES_READY=true
+        break
+    fi
+    if ! kill -0 "${E2E_TEST_PID}" 2>/dev/null; then
+        break
+    fi
+    sleep 0.5
+done
+if [[ "${E2E_FIXTURES_READY}" != true ]]; then
+    __fail "E2E integration fixtures did not start"
+    cat "${E2E_TEMP_DIR}/e2e.log" >&2 || true
+    exit 1
+fi
+
+(
+    cd -- "${E2E_TEMP_DIR}"
+    docker compose -p "${E2E_COMPOSE_PROJECT}" up -d cairnbin
+)
+E2E_SERVER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "cairnbin").IPAddress}}' "${E2E_CONTAINER_NAME}")"
+if [[ -z "${E2E_SERVER_IP}" ]]; then
+    __fail "could not resolve the server address"
+    exit 1
+fi
+E2E_BASE_URL="http://${E2E_SERVER_IP}:${E2E_PORT}"
+printf '%s\n' "${E2E_SERVER_IP}" >"${E2E_TEMP_DIR}/ready/server-ip"
 
 __info "Waiting for ${E2E_BASE_URL}/server/healthz..."
 E2E_READY=false
@@ -162,33 +228,17 @@ if [[ "${E2E_READY}" != true ]]; then
     exit 1
 fi
 
-E2E_SERVER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "cairnbin").IPAddress}}' "${E2E_CONTAINER_NAME}")"
-E2E_BROWSER_IP="$(docker inspect --format '{{(index .NetworkSettings.Networks "cairnbin").IPAddress}}' cairnbin-e2e-browser)"
-if [[ -z "${E2E_SERVER_IP}" || -z "${E2E_BROWSER_IP}" ]]; then
-    __fail "could not resolve test service addresses"
-    exit 1
-fi
-E2E_BASE_URL="http://${E2E_SERVER_IP}:${E2E_PORT}"
-E2E_BROWSER_URL="http://${E2E_BROWSER_IP}:9222"
-
 # ── Tiers 1–3 (SSR, no-JS browser, full browser) ─────────────────────────
 __info "Running all browser E2E tiers..."
-if (
-    cd -- "${E2E_PROJECT_DIR}"
-    bash "${HOME}/.codex/hooks/test-lint-run.sh" test -- make test \
-    TEST_TAGS="-tags e2e" \
-    TEST_PKGS="./tests/e2e/..." \
-    TEST_RUN="-count=1" \
-    TEST_COVERAGE=0 \
-    TEST_NETWORK=cairnbin \
-    EXTRA_ENV="--network-alias=cairnbin-e2e-runner -e CAIRNBIN_E2E_UPDATE_API_URL=http://cairnbin-e2e-runner:64980/update -e E2E_BASE_URL=${E2E_BASE_URL} -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
-); then
+if wait "${E2E_TEST_PID}"; then
     __pass "E2E tiers 1–3"
 else
     __fail "E2E tiers 1–3"
     docker logs "${E2E_CONTAINER_NAME}" >"${E2E_ARTIFACT_DIR}/server.log" 2>&1 || true
     docker logs cairnbin-e2e-browser >"${E2E_ARTIFACT_DIR}/browser.log" 2>&1 || true
 fi
+E2E_TEST_PID=""
+cat "${E2E_TEMP_DIR}/e2e.log"
 
 if [[ "${E2E_ERRORS}" -gt 0 ]]; then
     __fail "${E2E_ERRORS} e2e failure(s)"
