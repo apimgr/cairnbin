@@ -138,6 +138,15 @@ references.
 
 `server.pages.{about,help,privacy,terms}.content` takes Markdown. For `about` and `help` it is appended to the page; for `privacy` and `terms` a non-empty value replaces the default body. `server.pages.help.mcp` adds project-specific Markdown after the base sections on `/server/help/mcp` and in its API mirror; the route is available only when `server.mcp.enabled` is true. `server.pages.contact` has `enabled`, `captcha` and `success_message`.
 
+Configuration may be split between `server.yml` and the optional `yaml.d/`
+directory beside it. The server loads `server.yml` first, then regular `*.yml`
+and `*.yaml` drop-ins in byte-wise filename order. Maps merge recursively;
+later scalars and lists replace earlier values. Hidden files, backups, other
+extensions and subdirectories are ignored. Explicit nulls, duplicate scalar
+keys and drop-ins writable by group or others are rejected. Reloads keep the
+last valid merged configuration if a new version fails validation. Backups
+include `yaml.d/` when it exists.
+
 ### Branding and SEO (`server.branding`, `server.seo`)
 
 ```yaml
@@ -158,13 +167,21 @@ server:
       bing: ""
       custom: []
     sitemap:
-      # false makes /sitemap.xml return 404
-      enabled: true
       # 1-50000; out-of-range values warn and use 50000
       max_urls: 50000
       # add the OpenGraph image to the homepage entry
       include_images: false
+    feed:
+      # Entries per feed; 1-200
+      max_items: 50
+      # defaults to the application title
+      title: ""
 ```
+
+`/sitemap.xml` is always served and contains only anonymous public HTML pages
+allowed by the robots allow and deny rules. `/feed.xml` (Atom 1.0) and
+`/rss.xml` (RSS 2.0) are also always served with the same recent public pastes;
+they use a five-minute public cache, ETag and Last-Modified validators.
 
 ### CSRF (`server.csrf`)
 

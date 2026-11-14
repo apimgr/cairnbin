@@ -74,6 +74,7 @@ Health responses report only `ok`/`error` per check and never include connection
 
 - Researchers read `/.well-known/security.txt` for the contact address, policy link and PGP key.
 - `/server/contact?security_id=...` opens the contact form pre-filled as a security report; the submitter receives a tracking id and can follow progress at `/server/security/report/{tracking_id}`.
+- Contact fields are length-checked after trimming by Unicode character count. Standard name/email/subject/message limits are 100/254/200/5000; security report limits follow the field metadata returned by the contact API.
 - `/server/security` explains the process in plain language and `/server/security/policy` states the disclosure policy.
 
 ## Well-Known Namespace

@@ -181,10 +181,14 @@ GET  https://pste.us/api/v1/server/privacy
 GET  https://pste.us/api/v1/server/help
 GET  https://pste.us/api/v1/server/help/mcp   # 404 when MCP is disabled
 GET  https://pste.us/api/v1/server/terms
+GET  https://pste.us/api/v1/server/contact
 POST https://pste.us/api/v1/server/contact
+GET  https://pste.us/api/v1/server/auth/check
 ```
 
-The GET routes return `{"ok": true, "data": {...}}` with the same facts the matching `/server/*` page shows. `POST /server/contact` takes a JSON body (`name`, `email`, `subject`, `message`, plus `captcha_token` and `captcha` when the built-in captcha is on) and follows the same rules as the web form.
+The GET routes return `{"ok": true, "data": {...}}` with the same facts the matching `/server/*` page shows. `GET /server/contact` describes the form fields, required flags, character limits, captcha provider, security URL and public abuse email; it never returns recipient addresses. Name, email, subject and message limits are 100, 254, 200 and 5000 Unicode characters after trimming. `POST /server/contact` takes the same JSON fields (plus `captcha_token` and `captcha` when required) and follows the web form's validation.
+
+`GET /server/auth/check` accepts only `Authorization: Bearer {token}`. It returns `200` with `data.kind` set to `operator` or `owner` for a valid credential, and `401` for a missing or invalid token. The check is rate-limited, does not update token activity, and never returns the token.
 
 ## Guest Preferences
 
