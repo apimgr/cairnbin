@@ -139,12 +139,46 @@ type OwnerDB interface {
 	CreatePasteWithPrimaryToken(paste *model.Paste, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error
 	CreateOwnerWithPrimaryToken(ownerID, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error
 	GetOwnerTokenByHash(tokenHash [32]byte) (*APITokenRecord, error)
+	GetOwnerTokenByHashReadOnly(tokenHash [32]byte) (*APITokenRecord, error)
 	GetOwnerTokenByID(ownerID string, id int64) (*APITokenRecord, error)
 	CreateLinkedToken(ownerID, tokenHash, tokenPrefix, tokenSuffix, name, tokenEnc string, expiresAt *time.Time, maxActive int) (int64, error)
 	ListOwnerTokens(ownerID string) ([]*APITokenRecord, error)
 	RotateOwnerToken(ownerID string, id int64, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error
 	UpdateOwnerToken(ownerID string, id int64, name string, expiresAt *time.Time, maxActive int) error
 	RevokeOwnerToken(ownerID string, id int64) error
+}
+
+// GetOwnerTokenByHashReadOnly validates an active token without touching
+// token or owner activity timestamps.
+func (s *SQLiteDB) GetOwnerTokenByHashReadOnly(tokenHash [32]byte) (*APITokenRecord, error) {
+	hashHex := hex.EncodeToString(tokenHash[:])
+	ctx, cancel := dbCtx(dbReadTimeout)
+	defer cancel()
+	rec := &APITokenRecord{}
+	var stored string
+	var expires, lastUsed, revoked sql.NullInt64
+	var created int64
+	err := s.db.QueryRowContext(ctx, `SELECT id, owner_id, kind, COALESCE(name,''), token_prefix, token_enc, resource_type, resource_id, token_hash, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE token_hash = ?`, hashHex).Scan(&rec.ID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &stored, &created, &expires, &lastUsed, &revoked)
+	if err != nil {
+		return nil, err
+	}
+	if subtle.ConstantTimeCompare([]byte(stored), []byte(hashHex)) != 1 || revoked.Valid || (expires.Valid && expires.Int64 <= time.Now().Unix()) {
+		return nil, fmt.Errorf("token not found")
+	}
+	rec.CreatedAt = time.Unix(created, 0)
+	if expires.Valid {
+		t := time.Unix(expires.Int64, 0)
+		rec.ExpiresAt = &t
+	}
+	if lastUsed.Valid {
+		t := time.Unix(lastUsed.Int64, 0)
+		rec.LastUsedAt = &t
+	}
+	if revoked.Valid {
+		t := time.Unix(revoked.Int64, 0)
+		rec.RevokedAt = &t
+	}
+	return rec, nil
 }
 
 // OwnerPasteLister provides paginated private and public resources for one
@@ -1230,6 +1264,10 @@ func (s *SQLiteDB) GetOwnerTokenByHash(tokenHash [32]byte) (*APITokenRecord, err
 	}
 	if _, err := s.db.ExecContext(ctx, `UPDATE api_tokens SET last_used_at = CASE WHEN last_used_at IS NULL OR last_used_at <= ? THEN ? ELSE last_used_at END WHERE id = ?`, now-60, now, rec.ID); err != nil {
 		return nil, err
+	}
+	if !lastUsed.Valid || lastUsed.Int64 <= now-60 {
+		lastUsedAt := time.Unix(now, 0)
+		rec.LastUsedAt = &lastUsedAt
 	}
 	if _, err := s.db.ExecContext(ctx, `UPDATE owners SET last_seen_at = ? WHERE id = ?`, now, rec.OwnerID); err != nil {
 		return nil, err

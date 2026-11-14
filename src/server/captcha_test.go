@@ -43,6 +43,9 @@ func TestSimpleCaptchaRoundTrip(t *testing.T) {
 	if !s.validateSimpleCaptcha(cap.Token, answer) {
 		t.Errorf("valid answer %q rejected for question %q", answer, cap.Question)
 	}
+	if s.validateSimpleCaptcha(cap.Token, answer) {
+		t.Error("single-use challenge was accepted more than once")
+	}
 }
 
 func TestSimpleCaptchaWrongAnswer(t *testing.T) {

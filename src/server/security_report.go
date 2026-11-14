@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apimgr/cairnbin/src/audit"
 	"github.com/apimgr/cairnbin/src/common/email"
@@ -203,7 +204,6 @@ func sanitizeComponent(s string) string {
 // email, logs a PII-free security.log entry, and renders a content-negotiated
 // success response. The plaintext report body is NEVER persisted.
 func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
-	pc := cfg.Server.Pages.Contact
 	data := s.contactData(r)
 	// Force security-mode rendering: contactData only enables it when a valid
 	// security_id rides in the query string, but a re-validated id may have
@@ -250,6 +250,17 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 	data["FormCreditName"] = creditName
 
 	fail := func(status int, msg string) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			code := "SERVER_ERROR"
+			if status == http.StatusBadRequest {
+				code = "VALIDATION_FAILED"
+			}
+			if status == http.StatusServiceUnavailable {
+				code = "MAINTENANCE"
+			}
+			writeJSON(w, status, map[string]interface{}{"ok": false, "error": code, "message": msg})
+			return
+		}
 		data["ContactError"] = msg
 		w.WriteHeader(status)
 		s.renderTemplate(w, r, "contact.html", data)
@@ -265,6 +276,22 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 		fail(http.StatusBadRequest, "Please enter a valid email address.")
 		return
 	}
+	lengths := map[string]int{"name": 100, "email": 254, "researcher_gpg": 16384, "component": 255, "component_other": 255, "endpoint": 2048, "summary": 200, "steps": 10000, "impact": 5000, "suggested_fix": 5000}
+	values := map[string]string{"name": name, "email": fromEmail, "researcher_gpg": gpg, "component": component, "component_other": componentOther, "endpoint": endpoint, "summary": summary, "steps": steps, "impact": impact, "suggested_fix": suggestedFix, "credit_name": creditName}
+	for field, limit := range lengths {
+		value := values[field]
+		if strings.HasPrefix(field, "component") && component != "other" && field == "component_other" {
+			continue
+		}
+		if utf8.RuneCountInString(value) > limit || (field == "researcher_gpg" && strings.HasPrefix(strings.ToLower(value), "https://") && utf8.RuneCountInString(value) > 2048) {
+			fail(http.StatusBadRequest, fmt.Sprintf("%s must be at most %d characters.", field, limit))
+			return
+		}
+	}
+	if creditPref == "handle" && utf8.RuneCountInString(creditName) > 100 {
+		fail(http.StatusBadRequest, "credit_name must be at most 100 characters.")
+		return
+	}
 	if !validSeverities[severity] {
 		fail(http.StatusBadRequest, "Please choose a valid severity.")
 		return
@@ -273,18 +300,22 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 		fail(http.StatusBadRequest, "Please choose a valid credit preference.")
 		return
 	}
+	if creditPref == "handle" && creditName == "" {
+		fail(http.StatusBadRequest, "Please enter the credit handle to display.")
+		return
+	}
 	if !agreement {
 		fail(http.StatusBadRequest, "You must agree to coordinated disclosure to submit a report.")
 		return
 	}
 
-	// Validate the built-in simple captcha (provider captchas are not verified
-	// server-side here — same policy as the standard contact form).
-	if pc.Captcha == "simple" {
-		if !s.validateSimpleCaptcha(r.PostFormValue("captcha_token"), r.PostFormValue("captcha")) {
-			fail(http.StatusBadRequest, "Captcha answer was incorrect. Please try again.")
-			return
-		}
+	response := r.PostFormValue("g-recaptcha-response")
+	if response == "" {
+		response = r.PostFormValue("h-captcha-response")
+	}
+	if !s.verifyContactCaptcha(r, r.PostFormValue("captcha_token"), r.PostFormValue("captcha"), response) {
+		fail(http.StatusBadRequest, "Captcha answer was incorrect. Please try again.")
+		return
 	}
 
 	// Resolve the affected component: "other" defers to the free-text field.
@@ -351,9 +382,12 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 
 	// Credit is only displayed for name/handle; anonymous and no-credit keep the
 	// display name out of the stored metadata.
-	storedCreditName := creditName
-	if creditPref == "anonymous" || creditPref == "no" {
-		storedCreditName = ""
+	storedCreditName := ""
+	switch creditPref {
+	case "name":
+		storedCreditName = name
+	case "handle":
+		storedCreditName = creditName
 	}
 
 	rec := &database.SecurityReport{

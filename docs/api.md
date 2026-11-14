@@ -186,9 +186,25 @@ POST https://pste.us/api/v1/server/contact
 GET  https://pste.us/api/v1/server/auth/check
 ```
 
-The GET routes return `{"ok": true, "data": {...}}` with the same facts the matching `/server/*` page shows. `GET /server/contact` describes the form fields, required flags, character limits, captcha provider, security URL and public abuse email; it never returns recipient addresses. Name, email, subject and message limits are 100, 254, 200 and 5000 Unicode characters after trimming. `POST /server/contact` takes the same JSON fields (plus `captcha_token` and `captcha` when required) and follows the web form's validation.
+The GET routes return `{"ok": true, "data": {...}}` with the same facts the matching `/server/*` page shows. `GET /server/contact` describes the form fields, required flags, character limits, captcha provider, security URL and public abuse email; it never returns recipient addresses. Name, email, subject and message limits are 100, 254, 200 and 5000 Unicode characters after trimming. For the `simple` captcha, GET returns a one-use `challenge_id` and question; POST accepts that ID as `challenge_id` or `captcha_token`, together with the answer in `captcha`. Provider captchas accept `g-recaptcha-response` or `h-captcha-response`.
 
 `GET /server/auth/check` accepts only `Authorization: Bearer {token}`. It returns `200` with `data.kind` set to `operator` or `owner` for a valid credential, and `401` for a missing or invalid token. The check is rate-limited, does not update token activity, and never returns the token.
+
+When `GET /server/contact?security_id={id}` returns security-report fields, submit them to the same POST route with `security_id` and the report fields (`researcher_gpg`, `component`, `component_other`, `endpoint`, `severity`, `summary`, `steps`, `impact`, `suggested_fix`, `cve_requested`, `disclosure_days`, `credit_preference`, `credit_name`, and `agreement`). The server revalidates the ID and applies the HTML form's validation and CAPTCHA rules. GPG URLs are limited to 2048 characters; a pasted key may contain up to 16384 Unicode characters. `credit_name` is required only when `credit_preference` is `handle`; `name` uses the submitted reporter name, and other preferences ignore `credit_name`. A successful submission returns a `tracking_id`.
+
+Security-report text limits are counted in Unicode characters after trimming:
+
+| Field | Maximum |
+|-------|---------|
+| `name` / `email` | 100 / 254 |
+| `researcher_gpg` | 16384 (2048 when it is an HTTPS URL) |
+| `component` / `component_other` | 255 |
+| `endpoint` | 2048 |
+| `summary` / `credit_name` | 200 / 100 |
+| `steps` | 10000 |
+| `impact` / `suggested_fix` | 5000 |
+
+Enum, checkbox, number, generated and hidden fields have `max_length: null` in the metadata. `credit_name` is required only when `credit_preference` is `handle`; the API descriptor currently reports `required: false` because the shared field schema has no conditional requirement.
 
 ## Guest Preferences
 

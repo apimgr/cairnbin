@@ -162,6 +162,9 @@ func Backup(opts BackupOptions) error {
 	}
 
 	addFile(filepath.Join(opts.ConfigDir, "server.yml"), "server.yml")
+	if err := addDir(filepath.Join(opts.ConfigDir, "yaml.d"), "yaml.d"); err != nil {
+		return fmt.Errorf("collect drop-in config backup files: %w", err)
+	}
 	addFile(filepath.Join(opts.DataDir, "db", "server.db"), "server.db")
 	addFile(filepath.Join(opts.DataDir, "db", "users.db"), "users.db")
 	for _, item := range []struct{ dir, prefix string }{

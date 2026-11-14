@@ -74,7 +74,7 @@ Health responses report only `ok`/`error` per check and never include connection
 
 - Researchers read `/.well-known/security.txt` for the contact address, policy link and PGP key.
 - `/server/contact?security_id=...` opens the contact form pre-filled as a security report; the submitter receives a tracking id and can follow progress at `/server/security/report/{tracking_id}`.
-- Contact fields are length-checked after trimming by Unicode character count. Standard name/email/subject/message limits are 100/254/200/5000; security report limits follow the field metadata returned by the contact API.
+- Contact fields are length-checked after trimming by Unicode character count. Standard name/email/subject/message limits are 100/254/200/5000. Security reports cap GPG input at 16384 characters (2048 for an HTTPS URL), component/free text at 255, endpoint at 2048, summary at 200, steps at 10000, impact/suggested fix at 5000, and credit handle at 100. A handle is required only for the handle credit choice and is stored only for that choice.
 - `/server/security` explains the process in plain language and `/server/security/policy` states the disclosure policy.
 
 ## Well-Known Namespace

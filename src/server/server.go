@@ -32,6 +32,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apimgr/cairnbin/src/audit"
 	"github.com/apimgr/cairnbin/src/cache"
@@ -61,6 +62,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	qrcode "github.com/skip2/go-qrcode"
+	"golang.org/x/text/unicode/norm"
 )
 
 //go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/public/*.tmpl template/page/*.tmpl
@@ -237,6 +239,8 @@ type Server struct {
 	healthLimiter      *rateLimiter
 	burstLimiter       *rateLimiter
 	strictLimiter      *rateLimiter
+	captchaMu          sync.Mutex
+	captchaChallenges  map[string]simpleCaptchaState
 	restoreFailLimiter *rateLimiter
 	version            string
 	commitID           string
@@ -1432,6 +1436,11 @@ func (s *Server) setupRoutes() {
 	r.Get("/sw.js", s.handleServiceWorker)
 	r.Get("/robots.txt", s.handleRobots)
 	r.Get("/sitemap.xml", s.handleSitemap)
+	r.Get("/sitemap-{page}.xml", s.handleSitemap)
+	r.Get("/feed.xml", s.maybeReadRateLimit(s.handleAtomFeed))
+	r.Head("/feed.xml", s.maybeReadRateLimit(s.handleAtomFeed))
+	r.Get("/rss.xml", s.maybeReadRateLimit(s.handleRSSFeed))
+	r.Head("/rss.xml", s.maybeReadRateLimit(s.handleRSSFeed))
 	// AI-agent discovery file (PART 13/14) — canonical well-known path plus the
 	// bare /llms.txt alias; both serve the same generated document.
 	r.Get("/.well-known/llms.txt", s.handleLLMs)
@@ -1546,8 +1555,8 @@ func (s *Server) setupRoutes() {
 	r.Get("/server/preferences/tokens", s.handleOwnerTokensPage)
 	r.Get("/server/preferences/export", s.handlePreferencesExport)
 	r.Get("/server/preferences/import", s.handlePreferencesImport)
-	r.Get("/server/contact", s.handleContact)
-	r.Post("/server/contact", s.handleContactPost)
+	r.Get("/server/contact", s.maybeReadRateLimit(s.handleContact))
+	r.Post("/server/contact", s.maybeStrictRateLimit(s.handleContactPost))
 	// Coordinated-disclosure public pages (PART 11, AI.md 14157-14161).
 	// Security overview page — human-readable security.txt (AI.md 14474).
 	r.Get("/server/security", s.handleSecurityOverview)
@@ -1665,7 +1674,9 @@ func (s *Server) setupRoutes() {
 		r.Get("/server/help", s.handleHelpAPI)
 		r.Get("/server/help/mcp", s.handleHelpMCP)
 		r.Get("/server/terms", s.handleTermsAPI)
+		r.Get("/server/contact", s.maybeReadRateLimit(s.handleContactAPIGet))
 		r.Post("/server/contact", s.maybeStrictRateLimit(s.handleContactAPI))
+		r.Get("/server/auth/check", s.maybeStrictRateLimit(s.handleAuthCheck))
 		// Cross-device preference sync API mirror (AI.md 23509-23512) — same
 		// handlers as the web routes above; each content-negotiates JSON here.
 		r.Get("/server/preferences", s.handlePreferences)
@@ -2089,6 +2100,24 @@ func (s *Server) buildCSP(r *http.Request) (header string, reportOnly bool) {
 	}
 	connectSrc := cspDirective(connectBase, csp.ConnectSrcExtra, csp.ConnectSrcOverride, nonce)
 	frameSrc := cspDirective("'self'", csp.FrameSrcExtra, csp.FrameSrcOverride, nonce)
+	if r.URL.Path == "/server/contact" && !s.isOverlayRequest(r) {
+		var scriptExtra, connectExtra, frameExtra string
+		switch cfg.Server.Pages.Contact.Captcha {
+		case "recaptcha":
+			scriptExtra, connectExtra, frameExtra = " https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/", " https://www.google.com/recaptcha/", " https://www.google.com/recaptcha/"
+		case "hcaptcha":
+			scriptExtra, connectExtra, frameExtra = " https://hcaptcha.com https://*.hcaptcha.com", " https://hcaptcha.com https://*.hcaptcha.com", " https://hcaptcha.com https://*.hcaptcha.com"
+		}
+		if csp.ScriptSrcOverride == "" {
+			scriptSrc += scriptExtra
+		}
+		if csp.ConnectSrcOverride == "" {
+			connectSrc += connectExtra
+		}
+		if csp.FrameSrcOverride == "" {
+			frameSrc += frameExtra
+		}
+	}
 	// /emb/{id} is the frame-ancestors allow-listed endpoint (PART 11) — it is
 	// designed to be iframed by third-party sites. Everything else stays 'self'.
 	frameAncestors := "'self'"
@@ -2458,11 +2487,51 @@ var reservedSlugs = map[string]struct{}{
 	"recent":        {},
 }
 
+var specReservedSlugs = strings.Fields(`api server static assets healthz health status metrics version webhook webhooks internal private public well-known cgi-bin tmp temp backup backups debug test dev staging null undefined nil true false default index home main admin administrator administration root superuser sysadmin sysop system sys operator owner staff moderator mod manager management manage console panel cpanel backend config configuration wp-admin wp-login phpmyadmin adminer webmaster postmaster hostmaster abuse noreply no-reply bot bots anonymous guest everyone nobody me self www mail ftp smtp imap pop ns ns1 ns2 localhost login logout register signup signin signout auth oauth callback account accounts profile settings dashboard user users org orgs organization organizations team teams group groups password reset verify invite invites preferences search explore discover trending help support docs documentation about contact terms privacy legal security info new edit delete create update all download downloads upload billing sales hello graphql mcp swagger rest rpc ws websocket cdn media uploads files images css js fonts img .well-known robots.txt sitemap.xml feed.xml rss.xml atom.xml favicon.ico manifest.json humans.txt security.txt llms.txt ads.txt feed rss atom sitemap robots favicon manifest browserconfig.xml sw.js service-worker.js`)
+
 // isReservedSlug reports whether id is a reserved system name and must not
 // be treated as a paste identifier.
 func isReservedSlug(id string) bool {
-	_, ok := reservedSlugs[strings.ToLower(id)]
-	return ok
+	name := norm.NFKC.String(strings.ToLower(strings.TrimSpace(id)))
+	name = strings.TrimPrefix(name, "@")
+	if name == "" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+		return true
+	}
+	if _, ok := reservedSlugs[name]; ok {
+		return true
+	}
+	for _, reserved := range specReservedSlugs {
+		if name == reserved {
+			return true
+		}
+	}
+	for _, ext := range []string{".xml", ".txt", ".json", ".ico", ".html", ".htm", ".php", ".js", ".css", ".map", ".webmanifest", ".png", ".jpg", ".svg", ".zip"} {
+		if strings.HasSuffix(name, ext) {
+			return true
+		}
+	}
+	privileged := strings.Fields("admin administrator administration root superuser sysadmin sysop system sys operator owner staff moderator mod manager management manage console panel cpanel backend config configuration wp-admin wp-login phpmyadmin adminer webmaster postmaster hostmaster abuse noreply no-reply bot bots anonymous guest everyone nobody me self www mail ftp smtp imap pop ns ns1 ns2 localhost")
+	for _, reserved := range privileged {
+		if strings.HasPrefix(name, reserved) && len(name) > len(reserved) {
+			suffix := name[len(reserved):]
+			if allASCIIDigits(suffix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func allASCIIDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // csrfTokenKey is the context key under which the generated CSRF token string is stored.
@@ -4421,15 +4490,17 @@ func (s *Server) contactData(r *http.Request) map[string]interface{} {
 	cfg := s.liveCfg()
 	pc := cfg.Server.Pages.Contact
 	data := map[string]interface{}{
-		"SiteTitle":   cfg.Web.SiteTitle,
-		"Theme":       cfg.Web.Theme,
-		"Contact":     s.publicContactEmail(r),
-		"Abuse":       s.publicAbuseEmail(r),
-		"BaseURL":     s.baseURL(r),
-		"FormEnabled": pc.Enabled,
-		"CaptchaType": pc.Captcha,
+		"SiteTitle":      cfg.Web.SiteTitle,
+		"Theme":          cfg.Web.Theme,
+		"Contact":        s.publicContactEmail(r),
+		"Abuse":          s.publicAbuseEmail(r),
+		"BaseURL":        s.baseURL(r),
+		"FormEnabled":    pc.Enabled,
+		"CaptchaType":    s.contactCaptchaProvider(r),
+		"CaptchaSiteKey": pc.CaptchaSiteKey,
+		"CaptchaScript":  map[string]string{"recaptcha": "https://www.google.com/recaptcha/api.js", "hcaptcha": "https://js.hcaptcha.com/1/api.js"}[s.contactCaptchaProvider(r)],
 	}
-	if pc.Enabled && pc.Captcha == "simple" {
+	if pc.Enabled && s.contactCaptchaProvider(r) == "simple" {
 		if cap, err := s.generateSimpleCaptcha(); err == nil {
 			data["CaptchaQuestion"] = cap.Question
 			data["CaptchaToken"] = cap.Token
@@ -4529,6 +4600,15 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 		s.renderTemplate(w, r, "contact.html", data)
 		return
 	}
+	for field, limit := range map[string]int{"name": 100, "email": 254, "subject": 200, "message": 5000} {
+		value := map[string]string{"name": name, "email": fromEmail, "subject": subject, "message": message}[field]
+		if utf8.RuneCountInString(value) > limit {
+			data["ContactError"] = fmt.Sprintf("%s must be at most %d characters.", strings.Title(field), limit)
+			w.WriteHeader(http.StatusBadRequest)
+			s.renderTemplate(w, r, "contact.html", data)
+			return
+		}
+	}
 	if !strings.Contains(fromEmail, "@") || strings.ContainsAny(fromEmail, " \t\r\n") {
 		data["ContactError"] = "Please enter a valid email address."
 		w.WriteHeader(http.StatusBadRequest)
@@ -4536,15 +4616,15 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the built-in simple captcha; provider captchas (recaptcha,
-	// hcaptcha) require site keys and are not verified server-side here.
-	if pc.Captcha == "simple" {
-		if !s.validateSimpleCaptcha(r.PostFormValue("captcha_token"), r.PostFormValue("captcha")) {
-			data["ContactError"] = "Captcha answer was incorrect. Please try again."
-			w.WriteHeader(http.StatusBadRequest)
-			s.renderTemplate(w, r, "contact.html", data)
-			return
-		}
+	response := r.PostFormValue("g-recaptcha-response")
+	if response == "" {
+		response = r.PostFormValue("h-captcha-response")
+	}
+	if !s.verifyContactCaptcha(r, r.PostFormValue("captcha_token"), r.PostFormValue("captcha"), response) {
+		data["ContactError"] = "Captcha answer was incorrect. Please try again."
+		w.WriteHeader(http.StatusBadRequest)
+		s.renderTemplate(w, r, "contact.html", data)
+		return
 	}
 
 	if status, msg := s.deliverContact(r, cfg, name, fromEmail, subject, message); status != http.StatusOK {

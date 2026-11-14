@@ -3,8 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -51,7 +53,7 @@ func TestPageContentOverride(t *testing.T) {
 func TestServerPagesAPI(t *testing.T) {
 	s := pagesServer(t)
 	s.cfg.Server.Pages.Contact.Enabled = true
-	s.cfg.Server.Pages.Contact.Captcha = "none"
+	s.cfg.Server.Pages.Contact.Captcha = "simple"
 
 	for name, h := range map[string]http.HandlerFunc{
 		"about": s.handleAboutAPI, "privacy": s.handlePrivacyAPI,
@@ -75,7 +77,14 @@ func TestServerPagesAPI(t *testing.T) {
 	if w := post(`{"name":"a"}`); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "VALIDATION_FAILED") {
 		t.Errorf("missing fields: %d %q", w.Code, w.Body.String())
 	}
-	full := `{"name":"a","email":"a@example.com","subject":"s","message":"m"}`
+	challenge, err := s.generateSimpleCaptcha()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.Fields(challenge.Question)
+	a, _ := strconv.Atoi(parts[2])
+	b, _ := strconv.Atoi(strings.TrimSuffix(parts[4], "?"))
+	full := fmt.Sprintf(`{"name":"a","email":"a@example.com","subject":"s","message":"m","captcha_token":%q,"captcha":%q}`, challenge.Token, strconv.Itoa(a+b))
 	if w := post(full); w.Code != http.StatusServiceUnavailable {
 		t.Errorf("no delivery channel status=%d, want 503", w.Code)
 	}
@@ -92,6 +101,74 @@ func TestServerPagesAPI(t *testing.T) {
 	s.cfg.Server.Pages.Contact.Enabled = false
 	if w := post(full); w.Code != http.StatusNotFound {
 		t.Errorf("disabled status=%d, want 404", w.Code)
+	}
+}
+
+func TestContactAPIGetFormDefinition(t *testing.T) {
+	s := pagesServer(t)
+	s.cfg.Server.Pages.Contact.Enabled = true
+	s.cfg.Server.Pages.Contact.Captcha = "simple"
+	w := httptest.NewRecorder()
+	s.handleContactAPIGet(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET contact status=%d body=%q", w.Code, w.Body.String())
+	}
+	var response struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Fields []struct {
+				Name      string `json:"name"`
+				Type      string `json:"type"`
+				Required  bool   `json:"required"`
+				MaxLength *int   `json:"max_length"`
+			} `json:"fields"`
+			Captcha     map[string]interface{} `json:"captcha"`
+			SecurityURL string                 `json:"security_url"`
+			AbuseEmail  string                 `json:"abuse_email"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode GET contact: %v", err)
+	}
+	if !response.OK || len(response.Data.Fields) != 5 {
+		t.Fatalf("unexpected contact form definition: %s", w.Body.String())
+	}
+	if response.Data.Fields[0].Name != "name" || response.Data.Fields[0].MaxLength == nil || *response.Data.Fields[0].MaxLength != 100 {
+		t.Errorf("unexpected first field descriptor: %+v", response.Data.Fields[0])
+	}
+	if response.Data.Fields[4].Name != "captcha" || response.Data.Fields[4].MaxLength != nil {
+		t.Errorf("captcha should have null max_length: %+v", response.Data.Fields[4])
+	}
+	if response.Data.Captcha["provider"] != "simple" || response.Data.Captcha["question"] == "" || response.Data.Captcha["challenge_id"] == "" {
+		t.Errorf("missing simple captcha challenge descriptor: %#v", response.Data.Captcha)
+	}
+	if _, exists := response.Data.Captcha["recipient"]; exists || strings.Contains(w.Body.String(), "admin@example.com") {
+		t.Errorf("contact API must not expose recipient details: %s", w.Body.String())
+	}
+
+	s.cfg.Server.Pages.Contact.Enabled = false
+	disabled := httptest.NewRecorder()
+	s.handleContactAPIGet(disabled, httptest.NewRequest(http.MethodGet, "/", nil))
+	if disabled.Code != http.StatusNotFound {
+		t.Errorf("disabled GET contact status=%d, want 404", disabled.Code)
+	}
+}
+
+func TestContactAPIMaxLengthsCountUnicodeRunes(t *testing.T) {
+	s := pagesServer(t)
+	s.cfg.Server.Pages.Contact.Enabled = true
+	s.cfg.Server.Pages.Contact.Captcha = "none"
+	// Trimming precedes length validation; a multi-byte character counts once.
+	body := `{"name":" ` + strings.Repeat("界", 101) + ` ","email":"a@example.com","subject":"s","message":"m"}`
+	w := httptest.NewRecorder()
+	s.handleContactAPI(w, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body)))
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode validation response: %v", err)
+	}
+	details, _ := response["details"].(map[string]interface{})
+	if w.Code != http.StatusBadRequest || response["error"] != "VALIDATION_FAILED" || details["field"] != "name" || details["max_length"] != float64(100) {
+		t.Errorf("unexpected max-length response: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 
@@ -168,18 +245,19 @@ func TestCheckTrackingAllowedHonorsGPC(t *testing.T) {
 
 func TestSitemapConfig(t *testing.T) {
 	s := pagesServer(t)
-	s.cfg.Server.SEO.Sitemap = config.SitemapConfig{Enabled: true, MaxURLs: 2, IncludeImages: true}
+	s.cfg.Web.Robots.Allow = []string{"/"}
+	s.cfg.Server.SEO.Sitemap = config.SitemapConfig{MaxURLs: 50000, IncludeImages: true}
 	w := httptest.NewRecorder()
 	s.handleSitemap(w, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
 	body := w.Body.String()
-	if strings.Count(body, "<url>") != 2 || !strings.Contains(body, "og-image.png") {
-		t.Errorf("max_urls/include_images not honored: %s", body)
+	if w.Code != http.StatusOK || !strings.Contains(body, "<urlset") || !strings.Contains(body, "og-image.png") {
+		t.Errorf("always-on sitemap/include_images not honored: status=%d body=%s", w.Code, body)
 	}
-	s.cfg.Server.SEO.Sitemap.Enabled = false
+	s.cfg.Server.SEO.Sitemap.MaxURLs = 2
 	w = httptest.NewRecorder()
 	s.handleSitemap(w, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
-	if w.Code != http.StatusNotFound {
-		t.Errorf("disabled sitemap status=%d, want 404", w.Code)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "sitemapindex") {
+		t.Errorf("small max_urls must split static pages into child files: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -222,7 +223,7 @@ func TestGetTLSConfig_LocalCert_Expired_FallsThrough(t *testing.T) {
 	// Expired cert in priority-4 dir — validateCertFile rejects it, so we fall
 	// through to "no certs available" → error (LE disabled).
 	certDir := t.TempDir()
-	fqdn := "localhost"
+	fqdn := fmt.Sprintf("expired-cert-%d.invalid", time.Now().UnixNano())
 	localDir := filepath.Join(certDir, "local", fqdn)
 	if err := os.MkdirAll(localDir, 0o755); err != nil {
 		t.Fatal(err)

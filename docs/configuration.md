@@ -98,7 +98,7 @@ and `server.i2p.b32_address` are normally maintained by the server.
 | `server` | `port`, `address`, `fqdn`, `mode`, `lang`, `api_version`, `baseurl`, `user`, `group`, `pidfile`, `daemonize`, `token`, `data_dir` | Listener, branding inputs, service identity, operator token, and data location. |
 | `server.tokens` | `max_linked`, `cookie_max_age`, `idle_purge_days` | Owner-token limits and cleanup. |
 | `server.contact.{admin,security,abuse,general}` | `email`, `webhooks` | Per-role notification destinations; empty roles use the documented fallback chain. |
-| `server.pages.{about,privacy,contact,help,terms}` | `content`; `help.mcp`; `contact.enabled`, `contact.captcha`, `contact.success_message` | Operator-authored page content and contact form behavior. |
+| `server.pages.{about,privacy,contact,help,terms}` | `content`; `help.mcp`; `contact.enabled`, `contact.captcha`, `contact.captcha_site_key`, `contact.captcha_secret_key`, `contact.success_message` | Operator-authored page content and contact form behavior. |
 | `database` | `driver`, `url`, `token`, `pool.max_open`, `pool.max_idle`, `pool.max_lifetime`, `pool.max_idle_time` | SQLite or remote libSQL/Turso storage and connection pooling. SQLite is the local default. |
 | `paste` | `max_size`, `default_expiry`, `default_language`, `max_burn_after`, `allow_unlisted` | Paste size, expiry, language, burn-after-read, and visibility defaults. |
 | `server.cache` | `type`, `url`, `host`, `port`, `username`, `password`, `db`, `tls`, `tls_skip_verify`, `pool_size`, `min_idle`, `timeout`, `prefix`, `ttl` | In-memory or remote Redis/Valkey cache. `url` takes precedence over individual connection fields. |
@@ -136,7 +136,7 @@ references.
 
 `web.footer.custom_html` may use `{current_year}`, `{project_name}`, `{project_org}`, `{project_version}`, `{build_datetime}`, `{onion_address}` and `{i2p_address}`; the last two are empty unless Tor or I2P is running with a published address.
 
-`server.pages.{about,help,privacy,terms}.content` takes Markdown. For `about` and `help` it is appended to the page; for `privacy` and `terms` a non-empty value replaces the default body. `server.pages.help.mcp` adds project-specific Markdown after the base sections on `/server/help/mcp` and in its API mirror; the route is available only when `server.mcp.enabled` is true. `server.pages.contact` has `enabled`, `captcha` and `success_message`.
+`server.pages.{about,help,privacy,terms}.content` takes Markdown. For `about` and `help` it is appended to the page; for `privacy` and `terms` a non-empty value replaces the default body. `server.pages.help.mcp` adds project-specific Markdown after the base sections on `/server/help/mcp` and in its API mirror; the route is available only when `server.mcp.enabled` is true. `server.pages.contact` has `enabled`, `captcha`, `captcha_site_key`, `captcha_secret_key` and `success_message`. The two keys are required for `recaptcha` or `hcaptcha`; they are ignored by the built-in `simple` challenge. The secret key stays server-side.
 
 Configuration may be split between `server.yml` and the optional `yaml.d/`
 directory beside it. The server loads `server.yml` first, then regular `*.yml`

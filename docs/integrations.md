@@ -100,7 +100,8 @@ curl -q -LSsf -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
 | `/server/security`, `/server/security/policy`, `/server/security/thanks`, `/server/security/report/{tracking_id}` | Security overview, disclosure policy, report acknowledgment, and researcher status |
 | `/api/swagger`, `/api/graphql`, `/api/healthz` | Unversioned aliases of the versioned `/api/v1/server/*` routes (served directly, never redirected) |
 | `/.well-known/llms.txt`, `/llms.txt` | AI-agent discovery document |
-| `/sitemap.xml`, `/robots.txt`, `/manifest.json`, `/sw.js` | Search, crawler and PWA metadata |
+| `/sitemap.xml`, `/robots.txt`, `/feed.xml`, `/rss.xml` | Search and syndication metadata |
+| `/manifest.json`, `/sw.js` | PWA metadata |
 | `9999/tcp` | termbin/fiche raw-TCP listener (`echo text \| nc host 9999`); disable with `server.termbin.enabled: false` or `TERMBIN_ENABLED=false` |
 
 ## External Identity

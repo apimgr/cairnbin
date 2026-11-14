@@ -24,6 +24,9 @@
                             <tr><td>DELETE</td><td><code>{{.APIBase}}/pastes/{id}</code></td><td>{{t .Lang "help.row_delete_paste"}}</td></tr>
                             <tr><td>GET</td><td><code>{{.APIBase}}/server/healthz</code></td><td>{{t .Lang "help.row_health"}}</td></tr>
                             <tr><td>GET</td><td><code>{{.APIBase}}/server/version</code></td><td>{{t .Lang "help.row_version"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/server/contact</code></td><td>{{t .Lang "help.row_contact_get"}}</td></tr>
+                            <tr><td>POST</td><td><code>{{.APIBase}}/server/contact</code></td><td>{{t .Lang "help.row_contact_post"}}</td></tr>
+                            <tr><td>GET</td><td><code>{{.APIBase}}/server/auth/check</code></td><td>{{t .Lang "help.row_auth_check"}}</td></tr>
                         </table>
                     </div>
                     <p>{{t .Lang "help.interactive_docs"}}</p>
@@ -32,7 +35,7 @@
                         <li><a href="{{.AssetPrefix}}/server/docs/graphql">GraphiQL</a> — {{t .Lang "help.docs_graphql_desc"}}</li>
                         {{if .MCPEnabled}}<li><a href="{{.AssetPrefix}}/server/help/mcp">MCP server</a> — connect an AI assistant to this application</li>{{end}}
                     </ul>
-                    <p>{{tfh .Lang "help.graphql_endpoint" "graphql" (print .BaseURL "/api/graphql") "swagger" (print .BaseURL "/api/swagger")}}</p>
+                    <p>{{tfh .Lang "help.graphql_endpoint" "graphql" (print .BaseURL .APIBase "/server/graphql") "swagger" (print .BaseURL .APIBase "/server/swagger")}}</p>
 
                     <h3>{{t .Lang "help.h_create_paste"}}</h3>
                     <div class="code-block-multi">

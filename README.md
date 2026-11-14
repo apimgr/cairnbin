@@ -39,6 +39,8 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Full web frontend (server-side Go templates, dark/light/auto theme, PWA, mobile-first)
 - Cookie-based preferences with inline export/import, consent controls, and local reset at `/server/preferences`; owner-token management at `/server/preferences/tokens`
 - Server pages: `/server/about`, `/server/contact`, `/server/help`, `/server/help/mcp` (when MCP is enabled), `/server/healthz`, `/server/privacy`, `/server/security`, `/server/security/policy`, `/server/security/thanks`, `/server/security/report/{tracking_id}`, `/server/terms`
+- Machine-readable server API includes contact-form metadata and submissions plus a side-effect-free Bearer token check at `/api/v1/server/auth/check`
+- Always-on `/sitemap.xml`, Atom `/feed.xml`, and RSS `/rss.xml` discovery endpoints for public pages and recent public pastes
 - CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only queries)

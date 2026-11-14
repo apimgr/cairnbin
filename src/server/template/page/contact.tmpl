@@ -32,7 +32,7 @@
                         <div class="form-group">
                             <label for="contact-name" class="form-label">{{t .Lang "contact.name"}}</label>
                             <input type="text" id="contact-name" name="name" class="form-input"
-                                   value="{{.FormName}}" required autocomplete="name" maxlength="200"
+                                   value="{{.FormName}}" required autocomplete="name" maxlength="100"
                                    aria-describedby="contact-name-error" aria-invalid="false">
                             <span id="contact-name-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -40,7 +40,7 @@
                         <div class="form-group">
                             <label for="contact-email" class="form-label">{{t .Lang "contact.email"}}</label>
                             <input type="email" id="contact-email" name="email" class="form-input"
-                                   value="{{.FormEmail}}" required autocomplete="email" maxlength="320"
+                                   value="{{.FormEmail}}" required autocomplete="email" maxlength="254"
                                    aria-describedby="contact-email-error" aria-invalid="false">
                             <span id="contact-email-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -48,7 +48,7 @@
                         <div class="form-group">
                             <label for="sec-gpg" class="form-label">{{t .Lang "contact.sec_gpg"}}</label>
                             <textarea id="sec-gpg" name="researcher_gpg" class="form-input long-string" rows="3"
-                                      maxlength="20000" placeholder="{{t .Lang "contact.sec_gpg_placeholder"}}"
+                                      maxlength="16384" placeholder="{{t .Lang "contact.sec_gpg_placeholder"}}"
                                       aria-describedby="sec-gpg-error" aria-invalid="false">{{.FormGPG}}</textarea>
                             <span id="sec-gpg-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -61,7 +61,7 @@
                             </select>
                             <span id="sec-component-error" class="field-error" role="alert" hidden></span>
                             <input type="text" id="sec-component-other" name="component_other" class="form-input section-mt-sm"
-                                   value="{{.FormComponentOther}}" maxlength="200" placeholder="{{t .Lang "contact.sec_component_other"}}"
+                                   value="{{.FormComponentOther}}" maxlength="255" placeholder="{{t .Lang "contact.sec_component_other"}}"
                                    aria-describedby="sec-component-other-error" aria-invalid="false">
                             <span id="sec-component-other-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -69,7 +69,7 @@
                         <div class="form-group">
                             <label for="sec-endpoint" class="form-label">{{t .Lang "contact.sec_endpoint"}}</label>
                             <input type="text" id="sec-endpoint" name="endpoint" class="form-input long-string"
-                                   value="{{.FormEndpoint}}" maxlength="2000"
+                                   value="{{.FormEndpoint}}" maxlength="2048"
                                    aria-describedby="sec-endpoint-error" aria-invalid="false">
                             <span id="sec-endpoint-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -90,7 +90,7 @@
                         <div class="form-group">
                             <label for="sec-summary" class="form-label">{{t .Lang "contact.sec_summary"}}</label>
                             <input type="text" id="sec-summary" name="summary" class="form-input"
-                                   value="{{.FormSummary}}" required maxlength="300"
+                                   value="{{.FormSummary}}" required maxlength="200"
                                    aria-describedby="sec-summary-error" aria-invalid="false">
                             <span id="sec-summary-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -98,7 +98,7 @@
                         <div class="form-group">
                             <label for="sec-steps" class="form-label">{{t .Lang "contact.sec_steps"}}</label>
                             <textarea id="sec-steps" name="steps" class="form-input" rows="6"
-                                      required maxlength="50000"
+                                      required maxlength="10000"
                                       aria-describedby="sec-steps-error" aria-invalid="false">{{.FormSteps}}</textarea>
                             <span id="sec-steps-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -106,7 +106,7 @@
                         <div class="form-group">
                             <label for="sec-impact" class="form-label">{{t .Lang "contact.sec_impact"}}</label>
                             <textarea id="sec-impact" name="impact" class="form-input" rows="4"
-                                      required maxlength="50000"
+                                      required maxlength="5000"
                                       aria-describedby="sec-impact-error" aria-invalid="false">{{.FormImpact}}</textarea>
                             <span id="sec-impact-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -114,7 +114,7 @@
                         <div class="form-group">
                             <label for="sec-fix" class="form-label">{{t .Lang "contact.sec_fix"}}</label>
                             <textarea id="sec-fix" name="suggested_fix" class="form-input" rows="4"
-                                      maxlength="50000"
+                                      maxlength="5000"
                                       aria-describedby="sec-fix-error" aria-invalid="false">{{.FormSuggestedFix}}</textarea>
                             <span id="sec-fix-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -144,7 +144,7 @@
                             </select>
                             <span id="sec-credit-error" class="field-error" role="alert" hidden></span>
                             <input type="text" id="sec-credit-name" name="credit_name" class="form-input section-mt-sm"
-                                   value="{{.FormCreditName}}" maxlength="200" placeholder="{{t .Lang "contact.sec_credit_display"}}"
+                                   value="{{.FormCreditName}}" maxlength="100" placeholder="{{t .Lang "contact.sec_credit_display"}}"
                                    aria-describedby="sec-credit-name-error" aria-invalid="false">
                             <span id="sec-credit-name-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -167,6 +167,8 @@
                             <input type="hidden" name="captcha_token" value="{{.CaptchaToken}}">
                         </div>
                         {{end}}
+                        {{if eq .CaptchaType "recaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="g-recaptcha" data-sitekey="{{.CaptchaSiteKey}}"></div>{{end}}
+                        {{if eq .CaptchaType "hcaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="h-captcha" data-sitekey="{{.CaptchaSiteKey}}"></div>{{end}}
 
                         <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.sending"}}">{{t .Lang "contact.sec_send"}}</button>
                     </form>
@@ -177,7 +179,7 @@
                         <div class="form-group">
                             <label for="contact-name" class="form-label">{{t .Lang "contact.name"}}</label>
                             <input type="text" id="contact-name" name="name" class="form-input"
-                                   value="{{.FormName}}" required autocomplete="name" maxlength="200"
+                                   value="{{.FormName}}" required autocomplete="name" maxlength="100"
                                    aria-describedby="contact-name-error" aria-invalid="false">
                             <span id="contact-name-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -185,7 +187,7 @@
                         <div class="form-group">
                             <label for="contact-email" class="form-label">{{t .Lang "contact.email"}}</label>
                             <input type="email" id="contact-email" name="email" class="form-input"
-                                   value="{{.FormEmail}}" required autocomplete="email" maxlength="320"
+                                   value="{{.FormEmail}}" required autocomplete="email" maxlength="254"
                                    aria-describedby="contact-email-error" aria-invalid="false">
                             <span id="contact-email-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -201,7 +203,7 @@
                         <div class="form-group">
                             <label for="contact-message" class="form-label">{{t .Lang "contact.message"}}</label>
                             <textarea id="contact-message" name="message" class="form-input" rows="8"
-                                      required maxlength="10000"
+                                      required maxlength="5000"
                                       aria-describedby="contact-message-error" aria-invalid="false">{{.FormMessage}}</textarea>
                             <span id="contact-message-error" class="field-error" role="alert" hidden></span>
                         </div>
@@ -216,6 +218,8 @@
                             <input type="hidden" name="captcha_token" value="{{.CaptchaToken}}">
                         </div>
                         {{end}}
+                        {{if eq .CaptchaType "recaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="g-recaptcha" data-sitekey="{{.CaptchaSiteKey}}"></div>{{end}}
+                        {{if eq .CaptchaType "hcaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="h-captcha" data-sitekey="{{.CaptchaSiteKey}}"></div>{{end}}
 
                         <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.sending"}}">{{t .Lang "contact.send"}}</button>
                     </form>

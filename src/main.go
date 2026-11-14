@@ -279,42 +279,42 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			service.PrintHelp(binaryName, earlyLang)
 		case "start":
 			if err := service.Start(); err != nil {
-			writeServiceFailure(stderr, earlyLang, binaryName, "start", err)
+				writeServiceFailure(stderr, earlyLang, binaryName, "start", err)
 				return 1
 			}
 			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_started"))
 		case "stop":
 			if err := service.Stop(); err != nil {
-			writeServiceFailure(stderr, earlyLang, binaryName, "stop", err)
+				writeServiceFailure(stderr, earlyLang, binaryName, "stop", err)
 				return 1
 			}
 			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_stopped"))
 		case "restart":
 			if err := service.Restart(); err != nil {
-			writeServiceFailure(stderr, earlyLang, binaryName, "restart", err)
+				writeServiceFailure(stderr, earlyLang, binaryName, "restart", err)
 				return 1
 			}
 			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_restarted"))
 		case "reload":
 			if err := service.Reload(); err != nil {
-			writeServiceFailure(stderr, earlyLang, binaryName, "reload", err)
+				writeServiceFailure(stderr, earlyLang, binaryName, "reload", err)
 				return 1
 			}
 			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_reloaded"))
 		case "--install":
 			if err := service.Install(); err != nil {
-			writeServiceFailure(stderr, earlyLang, binaryName, "install", err)
+				writeServiceFailure(stderr, earlyLang, binaryName, "install", err)
 				return 1
 			}
 		case "--disable":
 			if err := service.Disable(); err != nil {
-			writeServiceFailure(stderr, earlyLang, binaryName, "disable", err)
+				writeServiceFailure(stderr, earlyLang, binaryName, "disable", err)
 				return 1
 			}
 			_, _ = fmt.Fprintln(stdout, cliMessage(earlyLang, "service_disabled"))
 		case "--uninstall":
 			if err := service.Uninstall(); err != nil {
-			writeServiceFailure(stderr, earlyLang, binaryName, "uninstall", err)
+				writeServiceFailure(stderr, earlyLang, binaryName, "uninstall", err)
 				return 1
 			}
 		default:
@@ -367,7 +367,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 					return 1
 				}
 				if err := maintenance.TestSecurityKeypair(mcConfigDir, installSecret); err != nil {
-				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "update_action_failed", "error", err.Error()))
+					_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "update_action_failed", "error", err.Error()))
 					return 1
 				}
 				return 0
@@ -814,6 +814,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// alias (default-on), (4) default false. An explicit DEBUG env var always wins over the alias,
 	// regardless of whether "debug" came from the MODE env var or the --mode CLI flag.
 	mode.ApplyModeAndDebug(modeFlag, debugFlag)
+	config.SetDebugLoggingEnabled(mode.IsDebugEnabled())
 
 	if debugFlag {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -1865,7 +1866,7 @@ func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer, l
 				return 1
 			}
 			for _, c := range data.Checks {
-			label := cliMessage(torLang, "tor_label_ok")
+				label := cliMessage(torLang, "tor_label_ok")
 				switch c.Status {
 				case "warn":
 					label = cliMessage(torLang, "tor_label_warn")
@@ -1890,7 +1891,7 @@ func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer, l
 		}
 		env, err := torControlRequest(http.MethodPost, baseURL, "/server/tor/restart", nil, "")
 		if err != nil {
-				_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "restart", "error", err.Error()))
+			_, _ = fmt.Fprintln(stderr, cliMessage(torLang, "tor_operation_error", "binary", binaryName, "action", "restart", "error", err.Error()))
 			return 1
 		}
 		var info torControlTorInfo

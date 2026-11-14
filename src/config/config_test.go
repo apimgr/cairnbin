@@ -194,6 +194,7 @@ func TestLoadEnv_SITE_TITLE(t *testing.T) {
 // TestLoadEnv_MAX_SIZE_BYTES verifies that the deprecated $MAX_SIZE_BYTES raw-byte
 // alias still overrides the config file value.
 func TestLoadEnv_MAX_SIZE_BYTES(t *testing.T) {
+	t.Setenv("MAX_SIZE", "")
 	t.Setenv("MAX_SIZE_BYTES", "5242880")
 
 	path := tempConfigPath(t)

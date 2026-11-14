@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -40,6 +41,7 @@ func newSecurityReportTestServer(t *testing.T) *Server {
 	cfg := &config.Config{Web: config.WebConfig{SiteTitle: "Cairnbin", Theme: "dark"}}
 	cfg.Server.Security.EncryptionKey = securityReportTestKey
 	cfg.Server.Pages.Contact.Enabled = true
+	cfg.Server.Pages.Contact.Captcha = "simple"
 
 	s := &Server{
 		cfg:           cfg,
@@ -79,6 +81,18 @@ func securityReportForm() url.Values {
 // postSecurityReport drives a POST through the real contact dispatcher with the
 // security_id in the query string and JSON content negotiation.
 func postSecurityReport(s *Server, form url.Values) *httptest.ResponseRecorder {
+	if form.Get("captcha_token") == "" {
+		challenge, err := s.generateSimpleCaptcha()
+		if err != nil {
+			panic(fmt.Sprintf("generate captcha: %v", err))
+		}
+		var left, right int
+		if _, err := fmt.Sscanf(challenge.Question, "What is %d + %d?", &left, &right); err != nil {
+			panic(fmt.Sprintf("parse captcha challenge: %v", err))
+		}
+		form.Set("captcha_token", challenge.Token)
+		form.Set("captcha", fmt.Sprint(left+right))
+	}
 	target := "/server/contact?security_id=" + url.QueryEscape(s.currentSecurityID())
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -139,6 +153,9 @@ func TestSecurityReportSubmissionEndToEnd(t *testing.T) {
 	}
 	if rep.Component != "api" {
 		t.Errorf("stored component: got %q, want api", rep.Component)
+	}
+	if rep.CreditName != "Ada Researcher" {
+		t.Errorf("real-name credit stored as %q, want reporter name", rep.CreditName)
 	}
 
 	// Plaintext must never be persisted: none of the sensitive fields may appear
@@ -241,6 +258,7 @@ func TestSecurityReportValidationRejects(t *testing.T) {
 		{"bad email", func(f url.Values) { f.Set("email", "not-an-email") }},
 		{"invalid severity", func(f url.Values) { f.Set("severity", "Apocalyptic") }},
 		{"invalid credit pref", func(f url.Values) { f.Set("credit_preference", "bribe") }},
+		{"missing required credit handle", func(f url.Values) { f.Set("credit_preference", "handle"); f.Del("credit_name") }},
 		{"no agreement", func(f url.Values) { f.Set("agreement", "no") }},
 	}
 	for _, tc := range cases {

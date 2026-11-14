@@ -7,7 +7,17 @@ import (
 	"testing"
 
 	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/model"
 )
+
+type largeSitemapDB struct {
+	*stubDB
+	total int
+}
+
+func (d *largeSitemapDB) GetPublicPastes(page, limit int) ([]model.PasteListItem, int, error) {
+	return nil, d.total, nil
+}
 
 func TestHandleSitemap_XML(t *testing.T) {
 	db := &stubDB{}
@@ -40,6 +50,34 @@ func TestHandleSitemap_XML(t *testing.T) {
 	// Never expose /api/* endpoints.
 	if strings.Contains(body, "/api/") {
 		t.Errorf("sitemap must not include /api/ endpoints: %s", body)
+	}
+}
+
+func TestHandleSitemapBuildsIndexAndChildFiles(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.SEO.Sitemap.MaxURLs = 12
+	db := &largeSitemapDB{stubDB: &stubDB{}, total: 3}
+	s := New(db, cfg, nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
+	w := httptest.NewRecorder()
+	s.router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "sitemapindex") || !strings.Contains(w.Body.String(), "/sitemap-2.xml") {
+		t.Fatalf("unexpected sitemap index: status=%d body=%s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	s.router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sitemap-2.xml", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "urlset") {
+		t.Fatalf("child sitemap response=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleSitemapHonorsRobotsDeny(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Web.Robots.Deny = []string{"/server"}
+	s := New(&stubDB{}, cfg, nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
+	w := httptest.NewRecorder()
+	s.router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "/server/") {
+		t.Fatalf("robots deny not applied to sitemap: %d %s", w.Code, w.Body.String())
 	}
 }
 

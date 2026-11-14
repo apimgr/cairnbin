@@ -1143,6 +1143,28 @@ func TestOwnerTokenLifecycle(t *testing.T) {
 	}
 }
 
+func TestOwnerTokenReadOnlyLookupDoesNotTouchActivity(t *testing.T) {
+	db := newTestDB(t)
+	ownerDB := db.(database.OwnerDB)
+	_, hash, hashHex, prefix := makeToken(t)
+	if err := ownerDB.CreateOwnerWithPrimaryToken("owner-read-only", hashHex, prefix, "test", "encrypted"); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		rec, err := ownerDB.GetOwnerTokenByHashReadOnly(hash)
+		if err != nil || rec.OwnerID != "owner-read-only" {
+			t.Fatalf("read-only lookup = %#v, %v", rec, err)
+		}
+		if rec.LastUsedAt != nil {
+			t.Fatalf("read-only lookup touched token: %v", rec.LastUsedAt)
+		}
+	}
+	primary, err := ownerDB.GetOwnerTokenByHash(hash)
+	if err != nil || primary.LastUsedAt == nil {
+		t.Fatalf("normal lookup should touch activity: %#v, %v", primary, err)
+	}
+}
+
 func TestCreatePasteWithPrimaryTokenIsAtomic(t *testing.T) {
 	db := newTestDB(t)
 	ownerDB := db.(database.OwnerDB)

@@ -37,7 +37,26 @@ type Config struct {
 	Web      WebConfig      `yaml:"web"`
 	// FirstRun is true when Load() created server.yml because none existed.
 	// Runtime-only — never persisted (startup step 20, AI.md:10631).
-	FirstRun bool `yaml:"-"`
+	FirstRun     bool              `yaml:"-"`
+	configPath   string            `yaml:"-"`
+	fieldSources map[string]string `yaml:"-"`
+}
+
+var configDebugMu sync.RWMutex
+var configDebugEnabled bool
+
+// SetDebugLoggingEnabled controls configuration-layer debug logs during load
+// and reload. The application sets it after resolving CLI and environment flags.
+func SetDebugLoggingEnabled(enabled bool) {
+	configDebugMu.Lock()
+	configDebugEnabled = enabled
+	configDebugMu.Unlock()
+}
+
+func shouldLogConfigDebug() bool {
+	configDebugMu.RLock()
+	defer configDebugMu.RUnlock()
+	return configDebugEnabled
 }
 
 // ServerConfig holds listener and runtime settings.
@@ -204,7 +223,9 @@ type ContactPageConfig struct {
 	Enabled bool `yaml:"enabled"`
 	// Captcha selects the spam-prevention challenge: "simple" (built-in),
 	// "recaptcha", or "hcaptcha". Default "simple".
-	Captcha string `yaml:"captcha"`
+	Captcha          string `yaml:"captcha"`
+	CaptchaSiteKey   string `yaml:"captcha_site_key"`
+	CaptchaSecretKey string `yaml:"captcha_secret_key"`
 	// SuccessMessage is shown after a successful submission.
 	SuccessMessage string `yaml:"success_message"`
 }
@@ -845,7 +866,8 @@ type PasteConfig struct {
 	MaxSize string `yaml:"max_size"`
 	// MaxSizeBytes is MaxSize resolved to a byte count; zero means unlimited.
 	// Computed at load/validation time, never serialized to server.yml.
-	MaxSizeBytes int64 `yaml:"-"`
+	MaxSizeBytes       int64 `yaml:"-"`
+	maxSizeBytesEnvSet bool  `yaml:"-"`
 	// DefaultExpiry is "never" or an expiry code.
 	DefaultExpiry string `yaml:"default_expiry"`
 	// DefaultLanguage is the fallback syntax language (default "text").
@@ -1564,16 +1586,28 @@ type SEOConfig struct {
 	TwitterHandle string                `yaml:"twitter_handle"`
 	Verification  SEOVerificationConfig `yaml:"verification"`
 	Sitemap       SitemapConfig         `yaml:"sitemap"`
+	Feed          FeedConfig            `yaml:"feed"`
 }
 
 // SitemapConfig controls /sitemap.xml generation (PART 16 "Sitemap Configuration").
 type SitemapConfig struct {
-	// Enabled turns /sitemap.xml on (default true); when false the route is 404.
-	Enabled bool `yaml:"enabled"`
 	// MaxURLs caps the URLs per sitemap file (protocol limit 50000).
 	MaxURLs int `yaml:"max_urls"`
 	// IncludeImages adds the branding OG image to the homepage entry.
 	IncludeImages bool `yaml:"include_images"`
+}
+
+// FeedConfig controls the generated RSS feed.
+type FeedConfig struct {
+	MaxItems int    `yaml:"max_items"`
+	Title    string `yaml:"title"`
+}
+
+func validateFeedConfig(c *FeedConfig) {
+	if c.MaxItems < 1 || c.MaxItems > 200 {
+		log.Printf("[config] WARNING: invalid server.seo.feed.max_items %d, using default 50", c.MaxItems)
+		c.MaxItems = 50
+	}
 }
 
 // validateSitemapConfig warns and substitutes the default for an out-of-range
@@ -1811,7 +1845,8 @@ func DefaultConfig() *Config {
 			},
 			SEO: SEOConfig{
 				Keywords: []string{},
-				Sitemap:  SitemapConfig{Enabled: true, MaxURLs: 50000},
+				Sitemap:  SitemapConfig{MaxURLs: 50000},
+				Feed:     FeedConfig{MaxItems: 50, Title: "Cairnbin"},
 			},
 			PIDFile:   true,
 			Daemonize: false,
@@ -2269,33 +2304,73 @@ func DefaultConfig() *Config {
 // auto-generated and persisted to server.yml immediately.
 func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
+	cfg.configPath = path
 	cfg.loadEnv()
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			if genErr := cfg.ensureEncryptionKey(); genErr != nil {
-				log.Printf("config: warning: could not generate encryption key: %v", genErr)
-			}
-			if genErr := cfg.ensureServerToken(); genErr != nil {
-				log.Printf("config: warning: could not generate server token: %v", genErr)
-			} else {
-				log.Printf("config: generated server.token — copy it from %s", path)
-			}
-			// Write canonical defaults to disk. Never bake runtime env-var overrides
-			// (MODE, DEBUG, etc.) into the persisted config — env vars are runtime-only.
-			// Copy only the generated secrets so they survive the next startup.
-			saveCfg := DefaultConfig()
-			saveCfg.Server.FQDN = cfg.ResolveFQDN()
-			saveCfg.Server.Security.EncryptionKey = cfg.Server.Security.EncryptionKey
-			saveCfg.Server.Token = cfg.Server.Token
-			if saveErr := Save(path, saveCfg); saveErr != nil {
-				log.Printf("config: warning: could not persist generated secrets to %s: %v", path, saveErr)
-			}
-			cfg.FirstRun = true
-			return cfg, nil
+	_, statErr := os.Stat(path)
+	if statErr != nil && !os.IsNotExist(statErr) {
+		return cfg, statErr
+	}
+	missing := os.IsNotExist(statErr)
+	if missing {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return cfg, err
 		}
-		return cfg, err
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			return cfg, err
+		}
+	}
+	fieldSources, decodeErr := decodeConfigFiles(path, cfg)
+	if decodeErr != nil {
+		var typeErr *yaml.TypeError
+		if !errors.As(decodeErr, &typeErr) {
+			if missing {
+				_ = os.Remove(path)
+			}
+			return cfg, decodeErr
+		}
+	}
+	cfg.fieldSources = fieldSources
+	for _, key := range []string{"server.port", "server.token"} {
+		if source := cfg.SourceFile(key); source != "" && source != path {
+			log.Printf("[config] generated setting %s is overridden by %s", key, source)
+		}
+	}
+	cfg.loadEnv()
+	Validate(cfg)
+	if provider := cfg.Server.Pages.Contact.Captcha; provider == "recaptcha" || provider == "hcaptcha" {
+		if strings.TrimSpace(cfg.Server.Pages.Contact.CaptchaSiteKey) == "" || strings.TrimSpace(cfg.Server.Pages.Contact.CaptchaSecretKey) == "" {
+			return cfg, fmt.Errorf("server.pages.contact.captcha %q requires captcha_site_key and captcha_secret_key", provider)
+		}
+	}
+	if cfg.Server.SEO.Feed.Title == "" || cfg.SourceFile("server.seo.feed.title") == "" {
+		cfg.Server.SEO.Feed.Title = cfg.Server.Branding.EffectiveTitle()
+	}
+	if missing {
+		if genErr := cfg.ensureEncryptionKey(); genErr != nil {
+			log.Printf("config: warning: could not generate encryption key: %v", genErr)
+		}
+		if genErr := cfg.ensureServerToken(); genErr != nil {
+			log.Printf("config: warning: could not generate server token: %v", genErr)
+		} else {
+			log.Printf("config: generated server.token — copy it from %s", path)
+		}
+		// Write canonical defaults to disk. Never bake runtime env-var overrides
+		// (MODE, DEBUG, etc.) into the persisted config — env vars are runtime-only.
+		// Copy only the generated secrets so they survive the next startup.
+		saveCfg := DefaultConfig()
+		saveCfg.Server.FQDN = cfg.ResolveFQDN()
+		if !cfg.IsDropInOverride("server.security.encryption_key") {
+			saveCfg.Server.Security.EncryptionKey = cfg.Server.Security.EncryptionKey
+		}
+		if !cfg.IsDropInOverride("server.token") {
+			saveCfg.Server.Token = cfg.Server.Token
+		}
+		if saveErr := Save(path, saveCfg); saveErr != nil {
+			log.Printf("config: warning: could not persist generated secrets to %s: %v", path, saveErr)
+		}
+		cfg.FirstRun = true
+		cfg.fieldSources = fieldSources
+		return cfg, decodeErr
 	}
 
 	// A YAML type/unknown-key error (*yaml.TypeError) still fills every valid
@@ -2304,29 +2379,16 @@ func Load(path string) (*Config, error) {
 	// leave the encryption key and operator token empty and break token
 	// creation over a single typo (PART 5: never fail on invalid config —
 	// warn and use the default). A real syntax error is still returned as-is.
-	var decodeErr error
-	data = migrateLegacyKeys(data)
-	if err := decodeConfig(data, cfg); err != nil {
-		var typeErr *yaml.TypeError
-		if !errors.As(err, &typeErr) {
-			return cfg, err
-		}
-		decodeErr = err
-	}
+	// Individual files are validated before merge; merged decoding already populated cfg.
 
 	// Env always wins over file.
-	cfg.loadEnv()
-
-	// Validate and sanitize — replace invalid values with defaults, never crash.
-	Validate(cfg)
-
 	// Show the operator exactly what a configured footer.custom_html will
 	// render as, once it has survived Validate() (PART 16 Sanitization Preview).
 	LogFooterSanitizationPreview(cfg.Web.Footer.CustomHTML)
 
 	// Generate and persist encryption key if missing (upgrade path for older configs).
 	needSave := false
-	if cfg.Server.Security.EncryptionKey == "" {
+	if cfg.Server.Security.EncryptionKey == "" && !cfg.IsDropInOverride("server.security.encryption_key") {
 		if genErr := cfg.ensureEncryptionKey(); genErr != nil {
 			log.Printf("config: warning: could not generate encryption key: %v", genErr)
 		} else {
@@ -2335,7 +2397,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	// Generate and persist server.token if missing (upgrade path for older configs).
-	if cfg.Server.Token == "" {
+	if cfg.Server.Token == "" && !cfg.IsDropInOverride("server.token") {
 		if genErr := cfg.ensureServerToken(); genErr != nil {
 			log.Printf("config: warning: could not generate server token: %v", genErr)
 		} else {
@@ -2355,7 +2417,7 @@ func Load(path string) (*Config, error) {
 	// Never rewrite a file that held invalid entries: Save would silently drop
 	// them, so the operator could not see what to fix.
 	if needSave && decodeErr == nil {
-		if saveErr := Save(path, cfg); saveErr != nil {
+		if saveErr := persistGeneratedSecrets(path, cfg); saveErr != nil {
 			log.Printf("config: warning: could not persist generated secrets to %s: %v", path, saveErr)
 		}
 	}
@@ -2366,16 +2428,11 @@ func Load(path string) (*Config, error) {
 // ReadLanguage reads only server.lang without creating a missing config file or
 // generating runtime secrets. It is used for early CLI output such as --help.
 func ReadLanguage(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
+	if _, err := os.Stat(path); err != nil {
 		return "", err
 	}
-	var cfg struct {
-		Server struct {
-			Lang string `yaml:"lang"`
-		} `yaml:"server"`
-	}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	cfg := DefaultConfig()
+	if _, err := decodeConfigFiles(path, cfg); err != nil {
 		return "", err
 	}
 	return cfg.Server.Lang, nil
@@ -2944,6 +3001,7 @@ func (c *Config) loadEnv() {
 			}
 			c.Paste.MaxSize = fmt.Sprintf("%d", n)
 			c.Paste.MaxSizeBytes = n
+			c.Paste.maxSizeBytesEnvSet = true
 		}
 	}
 	if v := os.Getenv("SMTP_HOST"); v != "" {
@@ -3065,6 +3123,7 @@ func Validate(cfg *Config) {
 		cfg.Web.PermissionsPolicy = DefaultPermissionsPolicy()
 	}
 	validateSitemapConfig(&cfg.Server.SEO.Sitemap)
+	validateFeedConfig(&cfg.Server.SEO.Feed)
 	validateUpdate(&cfg.Server.Update)
 	validateI18n(&cfg.Server.I18n)
 	validateBackupRetention(&cfg.Server.Backup.Retention)
@@ -3238,13 +3297,15 @@ func Validate(cfg *Config) {
 
 	// Paste size must be a valid human-readable size ("10mb", "1gb", ...); zero
 	// or negative is allowed and means unlimited.
-	if n, err := ParseSize(cfg.Paste.MaxSize, d.Paste.MaxSizeBytes); err != nil {
-		log.Printf("[config] WARNING: invalid paste.max_size %q, using default %s",
-			cfg.Paste.MaxSize, d.Paste.MaxSize)
-		cfg.Paste.MaxSize = d.Paste.MaxSize
-		cfg.Paste.MaxSizeBytes = d.Paste.MaxSizeBytes
-	} else {
-		cfg.Paste.MaxSizeBytes = n
+	if !cfg.Paste.maxSizeBytesEnvSet {
+		if n, err := ParseSize(cfg.Paste.MaxSize, d.Paste.MaxSizeBytes); err != nil {
+			log.Printf("[config] WARNING: invalid paste.max_size %q, using default %s",
+				cfg.Paste.MaxSize, d.Paste.MaxSize)
+			cfg.Paste.MaxSize = d.Paste.MaxSize
+			cfg.Paste.MaxSizeBytes = d.Paste.MaxSizeBytes
+		} else {
+			cfg.Paste.MaxSizeBytes = n
+		}
 	}
 
 	// Cache TTL and timeout must be parseable.
@@ -3460,7 +3521,7 @@ func Save(path string, cfg *Config) error {
 	}
 	tmpPath := tmp.Name()
 	defer func() { _ = os.Remove(tmpPath) }()
-	if err := tmp.Chmod(0o640); err != nil {
+	if err := tmp.Chmod(0o600); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("chmod temp config: %w", err)
 	}
@@ -3478,6 +3539,104 @@ func Save(path string, cfg *Config) error {
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("renaming temp config: %w", err)
 	}
+	return nil
+}
+
+// persistGeneratedSecrets persists generated values in the canonical config
+// file; drop-ins remain independent inputs and continue to win on reload.
+func persistGeneratedSecrets(path string, cfg *Config) error {
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	var root yaml.Node
+	if len(data) == 0 {
+		root = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	} else if err := yaml.Unmarshal(data, &root); err != nil {
+		return err
+	}
+	if len(root.Content) == 0 {
+		root.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+	}
+	values := make(map[string]string)
+	if !cfg.IsDropInOverride("server.token") {
+		values["server.token"] = cfg.Server.Token
+	}
+	if !cfg.IsDropInOverride("server.security.encryption_key") {
+		values["server.security.encryption_key"] = cfg.Server.Security.EncryptionKey
+	}
+	roles := map[string]ContactRole{"admin": cfg.Server.Contact.Admin, "security": cfg.Server.Contact.Security, "abuse": cfg.Server.Contact.Abuse, "general": cfg.Server.Contact.General}
+	for role, contact := range roles {
+		for key, value := range contact.Webhooks {
+			field := "server.contact." + role + ".webhooks." + key
+			if strings.HasSuffix(key, webhookSecretSuffix) && !cfg.IsDropInOverride(field) {
+				values[field] = value
+			}
+		}
+	}
+	for path, value := range values {
+		if value == "" {
+			continue
+		}
+		if err := setYAMLScalarPath(root.Content[0], strings.Split(path, "."), value); err != nil {
+			return err
+		}
+	}
+	encoded, err := yaml.Marshal(&root)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".server.yml-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(encoded); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
+func setYAMLScalarPath(node *yaml.Node, path []string, value string) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("server.yml path %s is not a mapping", strings.Join(path, "."))
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		if node.Content[i].Value != path[0] {
+			continue
+		}
+		if len(path) == 1 {
+			node.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+			return nil
+		}
+		return setYAMLScalarPath(node.Content[i+1], path[1:], value)
+	}
+	key := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: path[0]}
+	if len(path) == 1 {
+		node.Content = append(node.Content, key, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
+		return nil
+	}
+	child := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	if err := setYAMLScalarPath(child, path[1:], value); err != nil {
+		return err
+	}
+	node.Content = append(node.Content, key, child)
 	return nil
 }
 
@@ -3555,6 +3714,9 @@ func ResolvePort(cfgPath string, cfg *Config, inContainer bool) error {
 	if cfg.Server.Port != "" {
 		return nil
 	}
+	if cfg.IsDropInOverride("server.port") {
+		return fmt.Errorf("server.port is defined by %s but empty", cfg.SourceFile("server.port"))
+	}
 	if inContainer {
 		// Container default when nothing else configured the port.
 		cfg.Server.Port = "80"
@@ -3583,16 +3745,61 @@ func ResolvePort(cfgPath string, cfg *Config, inContainer bool) error {
 // saves the result. Using a clean file-round-trip ensures runtime env-var
 // overrides are never written to disk (AI.md PART 5).
 func persistPortOnly(path string, port string) error {
-	base := DefaultConfig()
-	if data, err := os.ReadFile(path); err == nil {
-		// Abort rather than clobber: if the existing file is malformed, saving
-		// defaults over it would silently destroy the operator's config.
-		if err := decodeConfig(data, base); err != nil {
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if len(data) > 0 {
+		var check Config
+		if err := decodeConfig(data, &check); err != nil {
 			return fmt.Errorf("parse existing config %s: %w", path, err)
 		}
 	}
-	base.Server.Port = port
-	return Save(path, base)
+	var root yaml.Node
+	if len(data) == 0 {
+		root = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	} else if err := yaml.Unmarshal(data, &root); err != nil {
+		return err
+	}
+	if len(root.Content) == 0 {
+		root.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+	}
+	if err := setYAMLScalarPath(root.Content[0], []string{"server", "port"}, port); err != nil {
+		return err
+	}
+	encoded, err := yaml.Marshal(&root)
+	if err != nil {
+		return err
+	}
+	return writeConfigAtomic(path, encoded)
+}
+
+func writeConfigAtomic(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".server.yml-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 func decodeConfig(data []byte, cfg *Config) error {
@@ -3635,10 +3842,11 @@ func randomUnusedPort(lo, hi int) (int, error) {
 // ConfigManager watches a config file and hot-reloads eligible settings.
 // Restart-required settings are logged as warnings but not applied.
 type ConfigManager struct {
-	configPath  string
-	current     *Config
-	lastModTime time.Time
-	mu          sync.RWMutex
+	configPath      string
+	current         *Config
+	lastModTime     time.Time
+	lastFingerprint string
+	mu              sync.RWMutex
 }
 
 // NewConfigManager constructs a ConfigManager for configPath with the already-loaded cfg as its initial state.
@@ -3648,9 +3856,10 @@ func NewConfigManager(configPath string, cfg *Config) *ConfigManager {
 		modTime = info.ModTime()
 	}
 	return &ConfigManager{
-		configPath:  configPath,
-		current:     cfg,
-		lastModTime: modTime,
+		configPath:      configPath,
+		current:         cfg,
+		lastModTime:     modTime,
+		lastFingerprint: configFilesFingerprint(configPath),
 	}
 }
 
@@ -3685,11 +3894,12 @@ func (m *ConfigManager) Start(stop <-chan struct{}, onChange ...func(*Config)) {
 // checkFileChanges stat-checks the config file and reloads if the modtime changed.
 // Returns the new config on a successful reload, nil otherwise.
 func (m *ConfigManager) checkFileChanges() *Config {
-	info, err := os.Stat(m.configPath)
-	if err != nil {
+	info, _ := os.Stat(m.configPath)
+	fingerprint := configFilesFingerprint(m.configPath)
+	if m.lastFingerprint != "" && fingerprint == m.lastFingerprint {
 		return nil
 	}
-	if !info.ModTime().After(m.lastModTime) {
+	if m.lastFingerprint == "" && (info == nil || !info.ModTime().After(m.lastModTime)) {
 		return nil
 	}
 
@@ -3703,7 +3913,10 @@ func (m *ConfigManager) checkFileChanges() *Config {
 	prev := m.current
 	m.applyHotSettings(prev, next)
 	m.current = next
-	m.lastModTime = info.ModTime()
+	if info != nil {
+		m.lastModTime = info.ModTime()
+	}
+	m.lastFingerprint = fingerprint
 	m.mu.Unlock()
 
 	log.Printf("[config] reloaded from %s", m.configPath)

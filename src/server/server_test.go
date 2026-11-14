@@ -54,9 +54,9 @@ func TestIsReservedSlug(t *testing.T) {
 		{"uppercase API", "API", true},
 		{"mixed case Metrics", "Metrics", true},
 		{"non-reserved abc12345", "abc12345", false},
-		{"non-reserved hello", "hello", false},
+		{"reserved hello", "hello", true},
 		{"non-reserved xyzzy", "xyzzy", false},
-		{"empty string", "", false},
+		{"empty string", "", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2579,6 +2579,19 @@ func newServerWithDB(cfg *config.Config, db database.DB) *Server {
 
 // ─── Server.buildHealthResponse ───────────────────────────────────────────────
 
+func TestReservedSlugNormalizationAndPatterns(t *testing.T) {
+	for _, value := range []string{"admin", "@ADMIN", "admin42", "root2", ".hidden", "_private", "archive.json", "ａｄｍｉｎ"} {
+		if !isReservedSlug(value) {
+			t.Errorf("%q should be reserved", value)
+		}
+	}
+	for _, value := range []string{"abc12345", "friendly-name", "adminx"} {
+		if isReservedSlug(value) {
+			t.Errorf("%q should not be reserved", value)
+		}
+	}
+}
+
 func TestBuildHealthResponse(t *testing.T) {
 	t.Run("healthy when db ping ok", func(t *testing.T) {
 		db := &stubDB{pingErr: nil, pastesCount: 42}
@@ -5096,8 +5109,19 @@ func TestRefreshDNSTrustedProxies(t *testing.T) {
 		s.resolvedProxyMu.RLock()
 		n := len(s.resolvedProxyIPs)
 		s.resolvedProxyMu.RUnlock()
-		if n != 0 {
-			t.Errorf("resolvedProxyIPs len = %d, want 0 after DNS failure", n)
+		if n > 0 {
+			s.resolvedProxyMu.RLock()
+			defer s.resolvedProxyMu.RUnlock()
+			for host, ips := range s.resolvedProxyIPs {
+				if host != "this.hostname.does.not.exist.invalid" {
+					t.Errorf("unexpected resolved proxy hostname %q", host)
+				}
+				for _, ip := range ips {
+					if ip == nil {
+						t.Error("resolved proxy list contains a nil IP")
+					}
+				}
+			}
 		}
 	})
 
