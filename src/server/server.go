@@ -4603,7 +4603,7 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 	for field, limit := range map[string]int{"name": 100, "email": 254, "subject": 200, "message": 5000} {
 		value := map[string]string{"name": name, "email": fromEmail, "subject": subject, "message": message}[field]
 		if utf8.RuneCountInString(value) > limit {
-			data["ContactError"] = fmt.Sprintf("%s must be at most %d characters.", strings.Title(field), limit)
+			data["ContactError"] = fmt.Sprintf("%s must be at most %d characters.", strings.ToUpper(field[:1])+field[1:], limit)
 			w.WriteHeader(http.StatusBadRequest)
 			s.renderTemplate(w, r, "contact.html", data)
 			return
