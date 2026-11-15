@@ -55,7 +55,7 @@ import (
 	"github.com/apimgr/cairnbin/src/mode"
 	"github.com/apimgr/cairnbin/src/model"
 	"github.com/apimgr/cairnbin/src/notify"
-	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/paths"
 	"github.com/apimgr/cairnbin/src/ssl"
 	"github.com/apimgr/cairnbin/src/swagger"
 	"github.com/apimgr/cairnbin/src/tor"
@@ -603,7 +603,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		VirtualPort:               cfg.Server.Tor.VirtualPort,
 		ConfigDir:                 configDir,
 		DataDir:                   dataDir,
-		LogDir:                    path.GetLogsDir("cairnbin"),
+		LogDir:                    paths.GetLogsDir("cairnbin"),
 	}
 	// Forward the hidden service to the server's real HTTP listener. Port may be a
 	// dual "http,https" value (PART 5/15); the onion maps :virtual → the plaintext
@@ -638,7 +638,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		}
 	}
 	s.i2pManager = i2p.NewManager(context.Background(), makeI2PConfig(cfg.Server.I2P,
-		configDir, dataDir, path.GetLogsDir("cairnbin")), s.router)
+		configDir, dataDir, paths.GetLogsDir("cairnbin")), s.router)
 
 	// Report Tor state into the tor_* metrics at scrape time.
 	s.metricsCollector.SetTorProvider(func() (enabled, running bool) {

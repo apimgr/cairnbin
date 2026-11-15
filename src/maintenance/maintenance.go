@@ -24,7 +24,7 @@ import (
 	"github.com/apimgr/cairnbin/src/audit"
 	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/common/secretbox"
-	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/paths"
 	"github.com/apimgr/cairnbin/src/pgp"
 )
 
@@ -521,7 +521,7 @@ func PrintHelp(binaryName string, languages ...string) {
 	}
 	fmt.Println(i18n.TranslateFormat(lang, "cli.maintenance_help", i18n.Args(
 		"project_name", binaryName,
-		"backup_dir", path.GetBackupDir(projectName),
+		"backup_dir", paths.GetBackupDir(projectName),
 	)))
 }
 

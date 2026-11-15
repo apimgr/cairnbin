@@ -103,7 +103,9 @@
 | `.claude/rules/cicd-rules.md` | 27 |
 | `.claude/rules/testing-rules.md` | 28, 29, 30 |
 
-**File hierarchy:** SPEC.md > AI.md > global CLAUDE.md. `AI.md` = HOW (read-only), `IDEA.md` = WHAT (editable), `SPEC.md` = project-specific overrides.
+**File hierarchy:** AI.md > project rules > global CLAUDE.md. AI.md is the implementation source of truth; SPEC.md may document project context but cannot override it. `IDEA.md` = WHAT (editable).
+
+**IDEA.md alignment:** when IDEA.md conflicts with AI.md, fix IDEA.md while preserving product intent. Never bend implementation rules or edit AI.md. If AI.md itself is contradictory, follow its local decision rules and record the issue in the parent `TODO.API.md` under the project-specific AI.md issues heading; do not add it to `TODO.AI.md`.
 
 **Audit** is triggered ONLY by explicit user command ("audit", "check compliance", "verify project") — not by discovery/Check Files/migration/normal dev. Use `AUDIT.AI.md` only when >5 issues found; delete when resolved.
 

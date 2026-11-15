@@ -93,7 +93,7 @@ type ServerConfig struct {
 	// All operator-protected API endpoints require: Authorization: Bearer <token>
 	Token  string            `yaml:"token"`
 	Tokens OwnerTokensConfig `yaml:"tokens"`
-	// DataDir is the runtime data directory. Resolved at startup by main from path.GetDataDir.
+	// DataDir is the runtime data directory. Resolved at startup by main from paths.GetDataDir.
 	// Used by middleware (blocklist) and tasks that need access to security databases.
 	DataDir       string              `yaml:"data_dir"`
 	Metrics       MetricsConfig       `yaml:"metrics"`

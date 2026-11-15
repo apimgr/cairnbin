@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/apimgr/cairnbin/src/common/i18n"
-	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/paths"
 	"github.com/apimgr/cairnbin/src/pid"
 )
 
@@ -486,11 +486,11 @@ func confirmDestructive() bool {
 // are honored instead of hardcoded Linux locations.
 func purgeDirs() []string {
 	return []string{
-		path.GetConfigDir(appName),
-		path.GetDataDir(appName),
-		path.GetCacheDir(appName),
-		path.GetLogsDir(appName),
-		path.GetBackupDir(appName),
+		paths.GetConfigDir(appName),
+		paths.GetDataDir(appName),
+		paths.GetCacheDir(appName),
+		paths.GetLogsDir(appName),
+		paths.GetBackupDir(appName),
 	}
 }
 
@@ -514,7 +514,7 @@ func purgeData() {
 	}
 
 	// PART 23: remove the PID file left behind by a previous run.
-	pidFile := path.GetPIDFile(appName)
+	pidFile := paths.GetPIDFile(appName)
 	if rmErr := os.Remove(pidFile); rmErr != nil && !os.IsNotExist(rmErr) {
 		fmt.Printf("%s\n", outputText("service_warning", "error", rmErr.Error()))
 	}
@@ -1262,7 +1262,7 @@ func GetStatus() Status {
 
 	// The PID file is authoritative for "running" and supplies the PID,
 	// regardless of what the service manager reports.
-	if running, foundPID, err := pid.CheckPIDFile(path.GetPIDFile(appName)); err == nil && running {
+	if running, foundPID, err := pid.CheckPIDFile(paths.GetPIDFile(appName)); err == nil && running {
 		st.Running = true
 		st.PID = foundPID
 	}

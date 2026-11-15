@@ -1,6 +1,6 @@
 //go:build !windows
 
-package path
+package paths
 
 // Internal tests for paths package — exercises non-container and OS-specific
 // branches by overriding containerCheck, rootCheck, and detectedOS.

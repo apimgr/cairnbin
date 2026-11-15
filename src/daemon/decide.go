@@ -4,7 +4,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/paths"
 )
 
 // ManagedByServiceManager reports whether the process was started by a
@@ -13,7 +13,7 @@ import (
 // (INVOCATION_ID), launchd (macOS with PPID 1), runit (SVDIR), s6
 // (S6_LOGGING), or any container.
 func ManagedByServiceManager() bool {
-	if path.IsContainer() {
+	if paths.IsContainer() {
 		return true
 	}
 	if os.Getenv("INVOCATION_ID") != "" || os.Getenv("SVDIR") != "" || os.Getenv("S6_LOGGING") != "" {

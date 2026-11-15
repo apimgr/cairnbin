@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/paths"
 )
 
 // ─── reservedIDs: nobody/nogroup ─────────────────────────────────────────────
@@ -26,11 +26,11 @@ func TestPurgeDirs_MatchesPathsPackage(t *testing.T) {
 	got := purgeDirs()
 
 	want := []string{
-		path.GetConfigDir(appName),
-		path.GetDataDir(appName),
-		path.GetCacheDir(appName),
-		path.GetLogsDir(appName),
-		path.GetBackupDir(appName),
+		paths.GetConfigDir(appName),
+		paths.GetDataDir(appName),
+		paths.GetCacheDir(appName),
+		paths.GetLogsDir(appName),
+		paths.GetBackupDir(appName),
 	}
 
 	if len(got) != len(want) {
@@ -46,7 +46,7 @@ func TestPurgeDirs_MatchesPathsPackage(t *testing.T) {
 // TestPurgeDirs_IncludesBackupDir verifies the backup directory is part of the
 // uninstall purge list (PART 23 step 4: remove {backup_dir}).
 func TestPurgeDirs_IncludesBackupDir(t *testing.T) {
-	backupDir := path.GetBackupDir(appName)
+	backupDir := paths.GetBackupDir(appName)
 
 	for _, dir := range purgeDirs() {
 		if dir == backupDir {

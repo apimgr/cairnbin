@@ -21,7 +21,7 @@ import (
 
 	"github.com/apimgr/cairnbin/src/audit"
 	"github.com/apimgr/cairnbin/src/common/i18n"
-	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/paths"
 	"github.com/apimgr/cairnbin/src/tor"
 )
 
@@ -74,7 +74,7 @@ func (s *Server) torControlConfig() tor.Config {
 		VirtualPort:               cfg.Server.Tor.VirtualPort,
 		ConfigDir:                 s.configDir,
 		DataDir:                   s.dataDir,
-		LogDir:                    path.GetLogsDir("cairnbin"),
+		LogDir:                    paths.GetLogsDir("cairnbin"),
 	}
 }
 
@@ -139,7 +139,7 @@ func (s *Server) handleTorControlValidate(w http.ResponseWriter, r *http.Request
 	}
 
 	for _, dir := range []string{filepath.Join(cfg.ConfigDir, "tor"), filepath.Join(cfg.DataDir, "tor")} {
-		if err := path.EnsureDir(dir); err != nil {
+		if err := paths.EnsureDir(dir); err != nil {
 			checks = append(checks, torValidateCheck{Name: dir, Status: "fail", Detail: err.Error()})
 			valid = false
 			continue

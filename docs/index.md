@@ -20,9 +20,10 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never`, or custom seconds
 - Burn after N reads — paste deleted once view count reaches threshold
 - Public and unlisted visibility
+- Raw paste, downloadable file, iframe embed, and QR code/image views
 - Owner token — cryptographically random `tok_` value returned when a new owner is created, stored as a SHA-256 hash plus an encrypted recoverable copy, viewable masked by default at `/server/preferences/tokens`, and usable to list owned public and unlisted pastes with `scope=owned`
-- QR code generation at `/qr/{id}`
 - View count tracking with automatic background cleanup
+- Automatic cleanup of expired and burned pastes, scheduled backups, and security-data refreshes
 - Full web frontend (dark/light/auto theme, PWA, mobile-first)
 - CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
@@ -31,9 +32,13 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Security overview, policy, acknowledgment, and report status at `/server/security` and its subroutes
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only)
 - MCP tools through `/api/v1/server/mcp` when enabled
+- Sitemap, Atom, and RSS discovery feeds for public pages and recent public pastes
+- Internal-only Prometheus metrics and per-endpoint rate limiting
 - Compatibility routes for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, curl-upload services, and termbin/fiche
 - Termbin/fiche raw TCP listener on port 9999, enabled by default
 - Tor hidden-service support and optional I2P eepsite access
+- Optional email notifications when SMTP is configured
+- Cross-platform service management and checksum-verified self-updates
 - Self-contained static binary with local SQLite by default or optional remote libSQL/Turso
 
 ## Quick Start

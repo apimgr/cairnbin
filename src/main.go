@@ -32,7 +32,7 @@ import (
 	"github.com/apimgr/cairnbin/src/logging"
 	"github.com/apimgr/cairnbin/src/maintenance"
 	"github.com/apimgr/cairnbin/src/mode"
-	"github.com/apimgr/cairnbin/src/path"
+	"github.com/apimgr/cairnbin/src/paths"
 	"github.com/apimgr/cairnbin/src/pid"
 	"github.com/apimgr/cairnbin/src/scheduler"
 	"github.com/apimgr/cairnbin/src/server"
@@ -199,7 +199,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	applyColor(colorFlag)
 	earlyConfigDir := configFlag
 	if earlyConfigDir == "" {
-		earlyConfigDir = path.GetConfigDir(appName)
+		earlyConfigDir = paths.GetConfigDir(appName)
 	}
 	configuredLang, _ := config.ReadLanguage(filepath.Join(earlyConfigDir, "server.yml"))
 	earlyLang := i18n.GetLanguage(langFlag, configuredLang)
@@ -222,7 +222,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	// Directory flags beat the CONFIG_DIR/DATA_DIR/LOG_DIR/CACHE_DIR/BACKUP_DIR/
 	// PID_FILE env fallbacks (PART 8: flag > env > default). Exporting them here
-	// means every path.Get*Dir call below, including the service, maintenance,
+	// means every paths.Get*Dir call below, including the service, maintenance,
 	// update and status code paths, resolves to the flagged location.
 	for envName, flagValue := range map[string]string{
 		"CONFIG_DIR": configFlag,
@@ -329,17 +329,17 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	if maintenanceCmd != "" {
 		// Paths must be resolved before maintenance commands.
-		mcConfigDir := path.GetConfigDir(appName)
-		mcDataDir := path.GetDataDir(appName)
+		mcConfigDir := paths.GetConfigDir(appName)
+		mcDataDir := paths.GetDataDir(appName)
 		// Backups always live in the canonical backup dir (PART 21), matching
 		// the scheduled backup tasks.
-		mcBackupDir := path.GetBackupDir(appName)
+		mcBackupDir := paths.GetBackupDir(appName)
 		// Sensitive maintenance operations (setup/restore/mode) require
 		// authorization proof (AI.md PART 5 sensitive operations).
 		mcAuthOpts := maintenance.AuthOptions{
 			ConfigDir:   mcConfigDir,
-			DBPath:      path.GetDBPath(appName),
-			LogDir:      path.GetLogsDir(appName),
+			DBPath:      paths.GetDBPath(appName),
+			LogDir:      paths.GetLogsDir(appName),
 			ServiceUser: appName,
 		}
 
@@ -353,7 +353,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				btCfgFile := filepath.Join(mcConfigDir, "server.yml")
 				btCfg, _ := config.Load(btCfgFile)
 				if btCfg.Database.Path == "" {
-					btCfg.Database.Path = path.GetDBPath(appName)
+					btCfg.Database.Path = paths.GetDBPath(appName)
 				}
 				btDB, dbErr := database.NewDatabase(btCfg.Database.Type, btCfg.Database.Path)
 				if dbErr != nil {
@@ -483,8 +483,8 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			pgpOpts := maintenance.PGPOptions{
 				ConfigDir: mcConfigDir,
 				DataDir:   mcDataDir,
-				DBPath:    path.GetDBPath(appName),
-				LogDir:    path.GetLogsDir(appName),
+				DBPath:    paths.GetDBPath(appName),
+				LogDir:    paths.GetLogsDir(appName),
 			}
 			if err := maintenance.RunPGP(maintenanceArg, maintenancePGP, pgpOpts); err != nil {
 				writeMaintenanceFailure(stderr, earlyLang, binaryName, "pgp", err)
@@ -500,7 +500,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			tkCfgFile := filepath.Join(mcConfigDir, "server.yml")
 			tkCfg, _ := config.Load(tkCfgFile)
 			if tkCfg.Database.Path == "" {
-				tkCfg.Database.Path = path.GetDBPath(appName)
+				tkCfg.Database.Path = paths.GetDBPath(appName)
 			}
 			tkDB, err := database.NewDatabase(tkCfg.Database.Type, tkCfg.Database.Path)
 			if err != nil {
@@ -572,8 +572,8 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 			dataOpts := maintenance.DataOptions{
 				ConfigDir: mcConfigDir,
-				DBPath:    path.GetDBPath(appName),
-				LogDir:    path.GetLogsDir(appName),
+				DBPath:    paths.GetDBPath(appName),
+				LogDir:    paths.GetLogsDir(appName),
 			}
 			if err := maintenance.AuthorizeDataOp(mcAuthOpts); err != nil {
 				writeMaintenanceFailure(stderr, earlyLang, binaryName, "data", err)
@@ -600,8 +600,8 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 			if err := maintenance.RunSecret(maintenanceArg, secretName, maintenance.SecretOptions{
 				ConfigDir: mcConfigDir,
-				DBPath:    path.GetDBPath(appName),
-				LogDir:    path.GetLogsDir(appName),
+				DBPath:    paths.GetDBPath(appName),
+				LogDir:    paths.GetLogsDir(appName),
 			}); err != nil {
 				writeMaintenanceFailure(stderr, earlyLang, binaryName, "secret", err)
 				return 1
@@ -613,7 +613,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 			complianceOpts := maintenance.ComplianceOptions{
 				ConfigDir: mcConfigDir,
-				LogDir:    path.GetLogsDir(appName),
+				LogDir:    paths.GetLogsDir(appName),
 			}
 			if err := maintenance.RunCompliance(maintenanceArg, complianceOpts); err != nil {
 				writeMaintenanceFailure(stderr, earlyLang, binaryName, "compliance", err)
@@ -651,9 +651,9 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		emailOpts := maintenance.EmailOptions{
-			ConfigDir: path.GetConfigDir(appName),
-			DBPath:    path.GetDBPath(appName),
-			LogDir:    path.GetLogsDir(appName),
+			ConfigDir: paths.GetConfigDir(appName),
+			DBPath:    paths.GetDBPath(appName),
+			LogDir:    paths.GetLogsDir(appName),
 			Stdout:    stdout,
 			Lang:      earlyLang,
 		}
@@ -677,7 +677,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	if updateCmd != "" {
 		// Load config to resolve configured update branch.
-		updateCfgFile := filepath.Join(path.GetConfigDir(appName), "server.yml")
+		updateCfgFile := filepath.Join(paths.GetConfigDir(appName), "server.yml")
 		updateCfg, _ := config.Load(updateCfgFile)
 		updateLang := i18n.GetLanguage(langFlag, updateCfg.Server.Lang)
 		configuredBranch := updateCfg.Server.Update.Branch
@@ -737,8 +737,8 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 			_, _ = fmt.Fprintln(stdout, cliMessage(updateLang, "update_installed"))
 			maintenance.AuditMaintenanceEvent(maintenance.AuthOptions{
-				ConfigDir: path.GetConfigDir(appName),
-				LogDir:    path.GetLogsDir(appName),
+				ConfigDir: paths.GetConfigDir(appName),
+				LogDir:    paths.GetLogsDir(appName),
 			}, "server.updated", map[string]any{
 				"old_version": Version,
 				"new_version": rel.TagName,
@@ -826,12 +826,12 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	// ── Directory resolution ─────────────────────────────────────────────────
 
-	configDir := path.GetConfigDir(appName)
-	dataDir := path.GetDataDir(appName)
-	logsDir := path.GetLogsDir(appName)
-	cacheDir := path.GetCacheDir(appName)
-	backupDir := path.GetBackupDir(appName)
-	pidFile := path.GetPIDFile(appName)
+	configDir := paths.GetConfigDir(appName)
+	dataDir := paths.GetDataDir(appName)
+	logsDir := paths.GetLogsDir(appName)
+	cacheDir := paths.GetCacheDir(appName)
+	backupDir := paths.GetBackupDir(appName)
+	pidFile := paths.GetPIDFile(appName)
 
 	if dataFlag != "" {
 		dataDir = dataFlag
@@ -859,13 +859,13 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	}
 
 	for _, dir := range []string{configDir, dataDir, logsDir, cacheDir, backupDir} {
-		if err := path.EnsureDir(dir); err != nil {
+		if err := paths.EnsureDir(dir); err != nil {
 			log.Printf("warning: could not create directory %s: %v", dir, err)
 		}
 	}
 
 	// Ensure parent of PID file exists.
-	if err := path.EnsureDir(filepath.Dir(pidFile)); err != nil {
+	if err := paths.EnsureDir(filepath.Dir(pidFile)); err != nil {
 		log.Printf("warning: could not create pid file directory: %v", err)
 	}
 
@@ -1003,7 +1003,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	// ── Port resolution (random 64xxx on first run; 80 in container) ──────────
 
-	if err := config.ResolvePort(cfgFile, cfg, path.IsContainer()); err != nil {
+	if err := config.ResolvePort(cfgFile, cfg, paths.IsContainer()); err != nil {
 		log.Printf("warning: %v", err)
 		if cfg.Server.Port == "" {
 			// last-resort fallback
@@ -1056,7 +1056,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		cfg.Server.GeoIP.Dir = filepath.Join(dataDir, "security", "geoip")
 	}
 	if cfg.Server.GeoIP.Enabled {
-		if err := path.EnsureDir(cfg.Server.GeoIP.Dir); err != nil {
+		if err := paths.EnsureDir(cfg.Server.GeoIP.Dir); err != nil {
 			log.Printf("warning: geoip dir: %v", err)
 		}
 	}
@@ -1073,10 +1073,10 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	if !remoteDB {
 		if cfg.Database.Path == "" {
 			// Derive from the (possibly --data-overridden) dataDir, not the global
-			// path.GetDBPath() which ignores the --data flag.
+			// paths.GetDBPath() which ignores the --data flag.
 			cfg.Database.Path = filepath.Join(dataDir, "db", "server.db")
 		}
-		if err := path.EnsureDir(filepath.Dir(cfg.Database.Path)); err != nil {
+		if err := paths.EnsureDir(filepath.Dir(cfg.Database.Path)); err != nil {
 			log.Printf("warning: db dir: %v", err)
 		}
 	}
@@ -1456,7 +1456,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// container: the container runtime supervises the process, so a PID file is
 	// never created or checked there (PART 8).
 
-	if !path.IsContainer() {
+	if !paths.IsContainer() {
 		if err := pid.WritePIDFile(pidFile); err != nil {
 			log.Printf("pid file: %v", err)
 			// EX_IOERR
@@ -1505,7 +1505,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			<-sig
 			log.Printf("shutting down…")
 			logMgr.Server("info", "server shutting down")
-			if !path.IsContainer() {
+			if !paths.IsContainer() {
 				pid.RemovePIDFile(pidFile) //nolint:errcheck
 			}
 			close(stopCfgMgr)
@@ -1785,8 +1785,8 @@ func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer, l
 		return 2
 	}
 
-	tcConfigDir := path.GetConfigDir(appName)
-	tcDataDir := path.GetDataDir(appName)
+	tcConfigDir := paths.GetConfigDir(appName)
+	tcDataDir := paths.GetDataDir(appName)
 	tcCfg, _ := config.Load(filepath.Join(tcConfigDir, "server.yml"))
 	torLang := i18n.GetLanguage(requestedLang, tcCfg.Server.Lang)
 	torCfg := tor.Config{
@@ -1805,7 +1805,7 @@ func runTorCommand(binaryName string, args []string, stdout, stderr io.Writer, l
 		VirtualPort:               tcCfg.Server.Tor.VirtualPort,
 		ConfigDir:                 tcConfigDir,
 		DataDir:                   tcDataDir,
-		LogDir:                    path.GetLogsDir(appName),
+		LogDir:                    paths.GetLogsDir(appName),
 	}
 
 	baseURL, serverUp := torServerBaseURL(tcConfigDir)
@@ -2010,7 +2010,7 @@ func validateTorConfig(binaryName string, cfg tor.Config, stdout, stderr io.Writ
 		_, _ = fmt.Fprintf(stdout, "  [%s]   %s\n", cliMessage(lang, "tor_label_ok"), cliMessage(lang, "tor_virtual_port", "port", cfg.VirtualPort))
 	}
 	for _, dir := range []string{filepath.Join(cfg.ConfigDir, "tor"), filepath.Join(cfg.DataDir, "tor")} {
-		if err := path.EnsureDir(dir); err != nil {
+		if err := paths.EnsureDir(dir); err != nil {
 			_, _ = fmt.Fprintf(stdout, "  [%s] %s: %v\n", cliMessage(lang, "tor_label_fail"), dir, err)
 			ok = false
 			continue

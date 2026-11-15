@@ -46,10 +46,12 @@ server:
   # first run picks a random unused 64000-64999 port and saves it here
   port: "64123"
   mode: "production"
-  base_url: ""
+  baseurl: ""
   cors:
-    allowed_origins: ["*"] # list of origins; [""] disables CORS headers
-    allow_credentials: true # effective only for explicitly allowed origins
+    # List of origins; [""] disables CORS headers.
+    allowed_origins: ["*"]
+    # Effective only for explicitly allowed origins.
+    allow_credentials: true
     max_age: 86400
   rate_limit:
     enabled: true
@@ -58,14 +60,16 @@ server:
     health: {requests: 120, window: 60}
     global_burst: 240
   termbin:
-    enabled: true # raw-TCP termbin/fiche listener (on by default)
+    # Raw-TCP termbin/fiche listener (on by default).
+    enabled: true
     port: 9999
     max_size: 32768
     timeout: "5s"
 
 database:
   driver: "sqlite"
-  url: "" # default: {data_dir}/db/server.db
+  # Default: {data_dir}/db/server.db.
+  url: ""
 
 web:
   csp:

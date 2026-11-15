@@ -4,7 +4,7 @@
 
 ## CRITICAL - NEVER DO
 
-- NEVER ship a project without a fully functional, professional frontend — all features must work in browser, not just via API.
+- NEVER omit browser support for user-facing features; system-only endpoints documented by PART 14 remain API-only.
 - NEVER make the frontend break or become unusable with JavaScript disabled — JS enhances, it never enables core functionality.
 - NEVER put admin/server-administration links, hints, or a Dashboard/Settings link in public nav — there is no admin web UI; server admin is config-file/CLI only.
 - NEVER use trailing slashes as canonical URLs — normalize and 301-redirect `/path/` → `/path` (except root `/` and explicit file requests).
@@ -39,7 +39,7 @@
 
 ## CRITICAL - ALWAYS DO
 
-- ALWAYS make ALL user-facing API features accessible via the browser frontend (API is source of truth; frontend consumes it).
+- ALWAYS make user-facing API features accessible via the browser frontend; document system-only API endpoints without inventing a frontend route.
 - ALWAYS validate the same rules on the frontend as the backend, and show real-time success/error feedback from backend responses.
 - ALWAYS support full CRUD via HTML forms (browser), JSON API (programmatic), and form-encoded/text (CLI) — all three must work.
 - ALWAYS detect client type (HTML vs text vs JSON) via `Accept` header first, then User-Agent, defaulting to HTML.
