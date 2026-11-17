@@ -1175,7 +1175,21 @@ type CSRFConfig struct {
 
 // NotificationsConfig holds email notification settings.
 type NotificationsConfig struct {
-	Email EmailConfig `yaml:"email"`
+	Email   EmailConfig   `yaml:"email"`
+	DiskLow DiskLowConfig `yaml:"disk_low"`
+}
+
+// DiskLowConfig controls periodic low-disk alerts for the server's data,
+// log, and backup volumes.
+type DiskLowConfig struct {
+	// Enabled controls the disk_check scheduler task.
+	Enabled          bool   `yaml:"enabled"`
+	// ThresholdPercent triggers an alert at or above this used-space percent.
+	ThresholdPercent int    `yaml:"threshold_percent"`
+	// CheckInterval controls disk_check cadence as a Go duration string.
+	CheckInterval    string `yaml:"check_interval"`
+	// Repeat is the minimum interval between alerts for a volume.
+	Repeat           string `yaml:"repeat"`
 }
 
 // EmailConfig holds SMTP and sender settings for outbound email.
@@ -1192,6 +1206,8 @@ type EmailConfig struct {
 // EmailEventsConfig controls which operator events trigger an email (AI.md:26587-26598).
 // All fields default to false except the high-signal events that are true by default.
 type EmailEventsConfig struct {
+	Startup          bool `yaml:"startup"`
+	Shutdown         bool `yaml:"shutdown"`
 	BackupComplete   bool `yaml:"backup_complete"`
 	BackupFailed     bool `yaml:"backup_failed"`
 	SSLExpiring      bool `yaml:"ssl_expiring"`
@@ -2024,6 +2040,12 @@ func DefaultConfig() *Config {
 				},
 			},
 			Notifications: NotificationsConfig{
+				DiskLow: DiskLowConfig{
+					Enabled:          true,
+					ThresholdPercent: 85,
+					CheckInterval:    "5m",
+					Repeat:           "24h",
+				},
 				Email: EmailConfig{
 					Enabled: false,
 					SMTP: SMTPConfig{
@@ -2033,6 +2055,8 @@ func DefaultConfig() *Config {
 					},
 					// Per-event defaults from AI.md:26591-26597: high-signal events on, low-noise off.
 					Events: EmailEventsConfig{
+						Startup:          false,
+						Shutdown:         false,
 						BackupComplete:   false,
 						BackupFailed:     true,
 						SSLExpiring:      true,

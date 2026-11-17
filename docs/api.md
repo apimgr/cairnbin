@@ -248,6 +248,78 @@ The HTML page is `GET /server/preferences/tokens`. Its web action forms use the 
 
 Restore by pasting the primary token is web-only (`POST /server/preferences/token/restore`).
 
+### Browser privacy controls
+
+These HTML form actions are available to browser visitors and require the
+page's CSRF token:
+
+| Method | Route | Form fields | Result |
+|--------|-------|-------------|--------|
+| `POST` | `/server/consent` | `choice=accept`, `decline`, or `save`; for `save`, optional `preferences` and `analytics` | Saves essential and selected cookie categories in `cookie_consent`, then redirects to the same-site referring page or `/` |
+| `POST` | `/server/ccpa` | `choice=opt-in` to clear the opt-out; any other value opts out | Sets or clears the one-year `ccpa_opt_out` cookie, then redirects to the same-site referring page or the privacy page |
+| `POST` | `/announcements/dismiss` | `id`; optional same-site relative `return_to` | Adds the banner ID to `dismissed_announcements` for one year and redirects to `return_to` or `/` |
+
+The consent form always preserves essential storage. Analytics consent is only
+recorded when server-side tracking is configured. Choosing a narrower consent
+state can trigger the configured `Clear-Site-Data` behavior.
+
+## Server Operations
+
+### Version
+
+```http
+GET /api/v1/server/version
+```
+
+Returns the server version and build information in the standard success
+envelope. The endpoint is public.
+
+### Scheduler
+
+The scheduler API is rooted at `/api/v1/schedulers`. Listing tasks, viewing one
+task, and viewing its recent history are public read operations. Running,
+enabling, or disabling a task requires the operator token in the Bearer
+authorization header.
+
+| Method | Route | Access | Purpose |
+|--------|-------|--------|---------|
+| `GET` | `/api/v1/schedulers` | Public | List scheduled tasks |
+| `GET` | `/api/v1/schedulers/{id}` | Public | Show one task |
+| `GET` | `/api/v1/schedulers/{id}/history` | Public | Show recent execution history |
+| `POST` | `/api/v1/schedulers/{id}/run` | Operator token | Run a task immediately |
+| `POST` | `/api/v1/schedulers/{id}/enable` | Operator token | Enable a task |
+| `POST` | `/api/v1/schedulers/{id}/disable` | Operator token | Disable a task |
+
+### Browser reports
+
+```http
+POST /api/v1/server/reports/{name}
+```
+
+Accepts browser security reports for `csp`, `nel`, `default`, `deprecation`,
+`intervention`, and `crash`. The server bounds and sanitizes report fields,
+applies per-IP rate limits, and returns `204 No Content` without echoing the
+submitted body. See [Configuration](configuration.md) for the
+`web.reports.*` rate-limit settings.
+
+### Internal metrics
+
+Metrics are available only when `server.metrics.enabled` is enabled. Each
+service endpoint is protected by its configured service-specific Bearer token;
+these endpoints are intended for internal scrapers and are not public paste
+API routes.
+
+| Service | Canonical route | Aliases |
+|---------|----------------|---------|
+| Prometheus | `/server/metrics/prometheus` | `/server/metrics`, `/api/v1/server/metrics/prometheus`, `/api/v1/server/metrics`, `/api/metrics/prometheus`, `/api/metrics`, and `/metrics` |
+| Grafana | `/server/metrics/grafana` | `/api/v1/server/metrics/grafana`, `/api/metrics/grafana` |
+| Loki | `/server/metrics/loki` | `/api/v1/server/metrics/loki`, `/api/metrics/loki` |
+
+The root aliases `/metrics`, `/metrics/prometheus`, `/metrics/grafana`, and
+`/metrics/loki` also require `server.metrics.root.enabled`. Configure service
+tokens under `server.metrics.auth.tokens`; see [Security](security.md) and
+[Configuration](configuration.md).
+
 ## OpenAPI / Swagger
 
 Interactive API docs (Swagger UI) at `https://pste.us/server/docs/swagger`. The OpenAPI document is served at `https://pste.us/api/v1/server/swagger` with the unversioned alias `https://pste.us/api/swagger`.

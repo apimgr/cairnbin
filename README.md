@@ -46,7 +46,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only queries)
 - MCP endpoint at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`) so AI clients can use the API as tools with the same Bearer tokens
 - Full route compatibility with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (sprunge/0x0/ix.io), and termbin/fiche (raw TCP on port 9999, enabled by default)
-- Built-in scheduler for expiry cleanup, backups, security-database updates, and self-update checks (no external cron)
+- Built-in scheduler for expiry cleanup, backups, low-disk alerts, security-database updates, and self-update checks (no external cron)
 - Backup and restore with optional AES-256-GCM encryption (Argon2id key derivation)
 - Self-update with SHA-256 checksum verification (stable/beta/devel channels)
 - Internal metrics services at `/server/metrics`; the `/metrics[/{service}]` root aliases are gated by `server.metrics.root.enabled` (enabled by default)
@@ -54,7 +54,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Rate limiting per read/write/health class
 - Tor hidden-service support (auto-enabled when the `tor` binary is present) and optional I2P eepsite access
 - Internationalization: English, Spanish, French, German, Italian, Chinese, Arabic (RTL), and Japanese (8 locales; see the [translation guide](docs/translating.md))
-- Operator email notifications with SMTP auto-detection (no email attempted without working SMTP)
+- Operator email notifications with SMTP auto-detection (no email attempted without working SMTP), including optional startup/shutdown and low-disk alerts
 - Cookie-consent banner and privacy/terms pages
 - Cross-platform service management (systemd, OpenRC, SysVinit, runit, launchd, rc.d, Windows Service)
 - Self-contained static binary with local SQLite by default or optional remote libSQL/Turso
@@ -68,16 +68,17 @@ docker run -d \
   --name cairnbin \
   -p 172.17.0.1:64580:80 \
   -p 9999:9999 \
-  -v ./volumes/config:/config:z \
-  -v ./volumes/data:/data:z \
+  -v cairnbin-config:/config:z \
+  -v cairnbin-data:/data:z \
   ghcr.io/apimgr/cairnbin:latest
 ```
 
 ### Docker Compose
 
 ```bash
-curl -q -LSsf -O https://raw.githubusercontent.com/apimgr/cairnbin/main/docker/docker-compose.yml
-docker compose up -d
+mkdir -p /srv/cairnbin
+curl -q -LSsf -o /srv/cairnbin/docker-compose.yml https://raw.githubusercontent.com/apimgr/cairnbin/main/docker/docker-compose.yml
+cd /srv/cairnbin && docker compose up -d
 ```
 
 ### Binary
@@ -133,7 +134,8 @@ cairnbin-cli list --limit 20
 ## Configuration
 
 The server reads `/etc/apimgr/cairnbin/server.yml` on Linux (created automatically on
-first run). All settings can be overridden via CLI flags.
+first run). Supported CLI flags and environment variables override their matching
+configuration values.
 
 ### Server (`cairnbin`) Environment Variables
 
@@ -147,16 +149,25 @@ first run). All settings can be overridden via CLI flags.
 | `PID_FILE` | Platform default | PID file path |
 | `PORT` | Random 64xxx | Listen port (80 in container) |
 | `ADDRESS` | `0.0.0.0` | Listen address |
+| `LISTEN` | Unset | Full listen address and port override |
 | `BASE_URL` | Auto-detected | Public base URL for link generation |
+| `DOMAIN` | Auto-detected | Primary FQDN for links and certificates |
+| `MODE` | `production` | Application mode (`production`, `development`, or `debug`) |
+| `DEBUG` | `false` | Enable development diagnostics and debug endpoints |
+| `TZ` | `America/New_York` | Process timezone |
 | `DATABASE_DRIVER` | `sqlite` | Database driver: local `sqlite` or remote `libsql`/Turso |
 | `DATABASE_URL` | Unset (local SQLite path is used) | Database URL/path; set a `libsql://` URL for remote libSQL/Turso |
+| `DATABASE_DIR` | `{data_dir}/db` | Directory holding the SQLite database |
 | `DB_PATH` | `{data_dir}/db/server.db` | SQLite database path |
+| `CACHE_URL` | In-memory cache | Cache backend URL (memory, Valkey, or Redis) |
 | `SITE_TITLE` | `Cairnbin` | Site title shown in the web UI |
 | `THEME` | `dark` | UI theme: `dark`, `light`, or `auto` |
 | `MAX_SIZE` | `10mb` | Maximum paste size; accepts `kb`/`mb`/`gb`/`tb` suffixes, a bare number (defaults to MB), or `0`/negative for unlimited |
 | `MAX_SIZE_BYTES` | unset | Deprecated alias for `MAX_SIZE` in raw bytes |
 | `NO_COLOR` | unset | Set to any value to disable ANSI color output |
 | `_DAEMON_CHILD` | unset | Internal: set by `--daemon` to mark the child process |
+
+The [Configuration Reference](docs/configuration.md#environment-variables) lists the complete server environment-variable set, including SMTP, termbin, and I2P settings.
 
 Platform default paths:
 
@@ -181,8 +192,24 @@ Platform default paths:
 | `CAIRNBIN_OUTPUT_FORMAT` | `cli.yml` value | Output format override (`json`, `table`, `plain`) |
 | `CAIRNBIN_OUTPUT_COLOR` | `auto` | Color output override (`auto`, `yes`, `no`) |
 | `CAIRNBIN_DEBUG` | `cli.yml` value | Debug output override (truthy/falsy) |
+| `CAIRNBIN_FORMAT` | `cli.yml` value | Preferred output-format override; takes precedence over `CAIRNBIN_OUTPUT_FORMAT` |
+| `CAIRNBIN_OUTPUT_PAGER`, `CAIRNBIN_OUTPUT_VERBOSE`, `CAIRNBIN_OUTPUT_QUIET` | `cli.yml` values | Pager selection and output verbosity defaults |
+| `CAIRNBIN_DISPLAY_MODE` | `auto` | Display mode (`auto`, `tui`, `gui`) |
+| `CAIRNBIN_UPDATE_CHANNEL`, `CAIRNBIN_UPDATE_CHECK_INTERVAL`, `CAIRNBIN_UPDATE_AUTO` | `cli.yml` values | Update channel, check interval, and automatic checks |
+| `CAIRNBIN_DEFAULTS_LANG`, `CAIRNBIN_DEFAULTS_OUTPUT` | `cli.yml` values | Default language and command output format |
+| `CAIRNBIN_PUBLIC`, `CAIRNBIN_EXPIRE`, `CAIRNBIN_SYNTAX`, `CAIRNBIN_LIMIT` | `cli.yml` values | Default paste visibility, expiry, syntax, and list limit |
+| `CAIRNBIN_TUI_ENABLED`, `CAIRNBIN_TUI_THEME`, `CAIRNBIN_TUI_MOUSE`, `CAIRNBIN_TUI_UNICODE` | `cli.yml` values | TUI availability, theme, mouse, and Unicode settings |
+| `CAIRNBIN_LOGGING_LEVEL`, `CAIRNBIN_LOGGING_FILE`, `CAIRNBIN_LOGGING_MAX_SIZE`, `CAIRNBIN_LOGGING_MAX_FILES` | `cli.yml` values | CLI logging and log rotation |
+| `CAIRNBIN_CACHE_ENABLED`, `CAIRNBIN_CACHE_TTL`, `CAIRNBIN_CACHE_MAX_SIZE` | `cli.yml` values | Response-cache behavior |
+| `CAIRNBIN_LANG` | `auto` | Output language preference |
+| `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME` | Platform defaults | Unix home and client config, data, and cache directories |
+| `APPDATA`, `LOCALAPPDATA` | Platform defaults | Windows client config, data, cache, and log directories |
+| `LC_ALL`, `LANG`, `LANGUAGE` | Platform locale | Locale fallback when no explicit client language is selected |
+| `PAGER`, `SHELL`, `TMPDIR`, `TERM` | Platform values | Pager fallback, shell detection, update temp files, and terminal capability detection |
 | `CLI_CONFIG` | Platform default | Path to the client `cli.yml` configuration file |
 | `NO_COLOR` | unset | Set to any value to disable ANSI color output |
+
+See the [CLI Reference](docs/cli.md#global-flags) for environment-variable precedence and full client behavior.
 
 ## API
 

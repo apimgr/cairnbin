@@ -1666,6 +1666,18 @@
   },
   "email": {
     "templates": {
+      "disk_low": {
+        "subject": "Espace disque faible - {app_name}",
+        "body": "ESPACE DISQUE FAIBLE\n\nDe : {app_name} ({fqdn})\nHeure : {timestamp}\n\nLe système de fichiers contenant {path} utilise {used_percent} pour cent de son espace.\nSeuil d’alerte : {threshold_percent} pour cent\nOctets libres : {free_bytes}\n\n{app_url}"
+      },
+      "server_started": {
+        "subject": "Serveur démarré - {app_name}",
+        "body": "SERVEUR DÉMARRÉ\n\nDe : {app_name} ({fqdn})\nHeure : {timestamp}\n\nHôte : {hostname}\nVersion : {version}\nMode : {mode}\n\n{app_url}"
+      },
+      "server_stopped": {
+        "subject": "Serveur arrêté - {app_name}",
+        "body": "SERVEUR ARRÊTÉ\n\nDe : {app_name} ({fqdn})\nHeure : {timestamp}\n\nHôte : {hostname}\nVersion : {version}\nMode : {mode}\nMotif : {reason}\n\n{app_url}"
+      },
       "backup_complete": {
         "subject": "Sauvegarde terminée - {app_name}",
         "body": "SAUVEGARDE TERMINÉE\n\nDe : {app_name} ({fqdn})\nHeure : {timestamp}\n\nLa sauvegarde a réussi.\nFichier : {filename}\nTaille : {size}\n\n{app_url}"

@@ -45,7 +45,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 
 ```bash
 # Docker
-docker run --name "cairnbin-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -p 172.17.0.1:64580:80 -p 9999:9999 ghcr.io/apimgr/cairnbin:latest
+docker run --name "cairnbin-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -p 172.17.0.1:64580:80 -p 9999:9999 -v cairnbin-config:/config -v cairnbin-data:/data ghcr.io/apimgr/cairnbin:latest
 
 # Binary
 ./cairnbin-linux-amd64

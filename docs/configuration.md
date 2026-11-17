@@ -18,7 +18,7 @@ Override the directory with: `--config /path/to/config-dir` (the file inside is 
 --help / -h               Show help
 --version / -v            Show version
 --status                  Show server status and health
---mode {production|development}  Application mode (default: production)
+--mode {production|development|debug}  Application mode (default: production)
 --config DIR              Config directory
 --data DIR                Data directory
 --log DIR                 Log directory
@@ -111,7 +111,8 @@ and `server.i2p.b32_address` are normally maintained by the server.
 | `server.i2p` | `enabled`, `binary`, `sam_address`, `virtual_port`, `inbound_length`, `outbound_length`, `inbound_quantity`, `outbound_quantity`, `signature_type`, `bootstrap_timeout`, `b32_address` | Optional I2P eepsite; disabled by default. The address is generated and persisted after startup. |
 | `server.tor` | `binary`, `use_network`, `max_circuits`, `circuit_timeout`, `bootstrap_timeout`, `safe_logging`, `max_streams_per_circuit`, `close_circuit_on_stream_limit`, `bandwidth_rate`, `bandwidth_burst`, `max_monthly_bandwidth`, `num_intro_points`, `virtual_port`, `onion_address`, `contact_email` | Tor hidden-service settings; the service is auto-enabled when a Tor binary is found. The onion address is generated and persisted after successful bootstrap. When `use_network: true`, app-owned downloads and configured keyserver requests use Tor and fail closed until Tor is ready. Caller-supplied webhook/report destinations stay direct; branding URLs keep their SSRF-safe fetch path. |
 | `server.tls` | `enabled`, `cert`, `key`, `min_version`, `letsencrypt.{enabled,email,challenge,staging}`, `dns_provider`, `dns_credentials_encrypted` | HTTPS certificates, ACME, and encrypted DNS-provider credentials. |
-| `server.notifications.email` | `enabled`, `smtp.{host,port,username,password,tls}`, `from.{name,email}`, `reply_to`, `template_dir`, `events.*` | SMTP transport, sender identity, custom template directory, and per-event email switches. TLS accepts `auto`, `starttls`, `tls`, or `none`. |
+| `server.notifications.email` | `enabled`, `smtp.{host,port,username,password,tls}`, `from.{name,email}`, `reply_to`, `template_dir`, `events.{startup,shutdown,...}` | SMTP transport, sender identity, custom template directory, and per-event email switches. Startup and graceful-shutdown emails default off; TLS accepts `auto`, `starttls`, `tls`, or `none`. |
+| `server.notifications.disk_low` | `enabled`, `threshold_percent`, `check_interval`, `repeat` | Monitors data, log, and backup filesystems once per volume. Defaults: enabled, 85% used, every 5 minutes, repeat alerts every 24 hours while still above threshold; recovery is logged after usage falls 5 percentage points below threshold. |
 | `server.privacy` | `data.{sold,stored_on_server,sharing}`, `retention.{period,export_available,deletion_available}`, `consent.*`, `cookies.{essential,preferences,analytics}`, `third_party.services`, `content.*` | Data-disclosure, consent banner, cookie categories, third-party list, and privacy-page text. `data.sold` controls the CCPA opt-out control. |
 | `server.tracking` | `type`, `id`, `url` | Optional analytics provider; empty or `none` disables tracking. |
 | `server.security` | `encryption_key`, `allowlist`, `blocked_ips`, `abuse_detection.{request_flood,auto_block_ip,auto_alert}`, `blocklists.{enabled,sources}`, `cve.*`, `trivy.*` | At-rest encryption key, IP controls, abuse response, and downloaded security data. |
@@ -359,7 +360,7 @@ they are read individually (no `.env` file is ever loaded).
 | `LISTEN` | Full listen spec (`address:port`) |
 | `BASE_URL` | Public base URL / path prefix |
 | `DOMAIN` | Primary FQDN used for links and certificates |
-| `MODE`   | Application mode (`production` or `development`) |
+| `MODE`   | Application mode (`production`, `development`, or `debug`) |
 | `DEBUG`  | Enable debug endpoints when truthy |
 | `TZ`     | Timezone (default: `America/New_York`) |
 

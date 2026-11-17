@@ -18,6 +18,7 @@ volumes/
 docs/
 tests/
 *.md
+!README.md
 !docker/
 .DS_Store
 *.log

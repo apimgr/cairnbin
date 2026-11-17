@@ -4,6 +4,7 @@ package service
 
 import (
 	"log"
+	"time"
 
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
@@ -43,8 +44,10 @@ func isWindowsServiceInstalled() bool {
 // windowsService wraps a user-supplied start function as a svc.Handler.
 // The function is expected to block for the lifetime of the service.
 type windowsService struct {
-	start func()
-	stop  chan struct{}
+	start      func()
+	startWithStop func(<-chan struct{})
+	stop       chan struct{}
+	stopSignal chan struct{}
 }
 
 // Execute implements svc.Handler. It transitions the service through
@@ -55,6 +58,10 @@ func (ws *windowsService) Execute(_ []string, r <-chan svc.ChangeRequest, s chan
 
 	go func() {
 		defer close(ws.stop)
+		if ws.startWithStop != nil {
+			ws.startWithStop(ws.stopSignal)
+			return
+		}
 		ws.start()
 	}()
 
@@ -64,6 +71,13 @@ func (ws *windowsService) Execute(_ []string, r <-chan svc.ChangeRequest, s chan
 		switch c.Cmd {
 		case svc.Stop, svc.Shutdown:
 			s <- svc.Status{State: svc.StopPending}
+			if ws.stopSignal != nil {
+				close(ws.stopSignal)
+			}
+			select {
+			case <-ws.stop:
+			case <-time.After(20 * time.Second):
+			}
 			return false, 0
 		default:
 			log.Printf("service: unexpected control request #%d", c)
@@ -82,5 +96,12 @@ func RunAsWindowsService(appName string, start func()) error {
 		start: start,
 		stop:  make(chan struct{}),
 	}
+	return svc.Run(appName, ws)
+}
+
+// RunAsWindowsServiceWithStop passes SCM stop/shutdown notifications to the
+// service body so it can drain requests and complete its graceful shutdown.
+func RunAsWindowsServiceWithStop(appName string, start func(<-chan struct{})) error {
+	ws := &windowsService{startWithStop: start, stop: make(chan struct{}), stopSignal: make(chan struct{})}
 	return svc.Run(appName, ws)
 }

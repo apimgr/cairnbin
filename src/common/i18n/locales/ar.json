@@ -1666,6 +1666,18 @@
   },
   "email": {
     "templates": {
+      "disk_low": {
+        "subject": "مساحة القرص منخفضة - {app_name}",
+        "body": "مساحة القرص منخفضة\n\nمن: {app_name} ({fqdn})\nالوقت: {timestamp}\n\nيستخدم نظام الملفات الذي يحتوي على {path} نسبة {used_percent} بالمئة من مساحته.\nحد التنبيه: {threshold_percent} بالمئة\nالبايتات المتاحة: {free_bytes}\n\n{app_url}"
+      },
+      "server_started": {
+        "subject": "بدأ الخادم - {app_name}",
+        "body": "بدأ الخادم\n\nمن: {app_name} ({fqdn})\nالوقت: {timestamp}\n\nالمضيف: {hostname}\nالإصدار: {version}\nالوضع: {mode}\n\n{app_url}"
+      },
+      "server_stopped": {
+        "subject": "توقف الخادم - {app_name}",
+        "body": "توقف الخادم\n\nمن: {app_name} ({fqdn})\nالوقت: {timestamp}\n\nالمضيف: {hostname}\nالإصدار: {version}\nالوضع: {mode}\nالسبب: {reason}\n\n{app_url}"
+      },
       "backup_complete": {
         "subject": "اكتمل النسخ الاحتياطي - {app_name}",
         "body": "اكتمل النسخ الاحتياطي\n\nمن: {app_name} ({fqdn})\nالوقت: {timestamp}\n\nاكتمل النسخ الاحتياطي بنجاح.\nالملف: {filename}\nالحجم: {size}\n\n{app_url}"

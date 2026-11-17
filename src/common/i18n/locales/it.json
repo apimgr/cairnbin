@@ -1666,6 +1666,18 @@
   },
   "email": {
     "templates": {
+      "disk_low": {
+        "subject": "Spazio su disco insufficiente - {app_name}",
+        "body": "SPAZIO SU DISCO INSUFFICIENTE\n\nDa: {app_name} ({fqdn})\nOra: {timestamp}\n\nIl filesystem che contiene {path} utilizza il {used_percent} percento dello spazio.\nSoglia di avviso: {threshold_percent} percento\nByte liberi: {free_bytes}\n\n{app_url}"
+      },
+      "server_started": {
+        "subject": "Server avviato - {app_name}",
+        "body": "SERVER AVVIATO\n\nDa: {app_name} ({fqdn})\nOra: {timestamp}\n\nHost: {hostname}\nVersione: {version}\nModalità: {mode}\n\n{app_url}"
+      },
+      "server_stopped": {
+        "subject": "Server arrestato - {app_name}",
+        "body": "SERVER ARRESTATO\n\nDa: {app_name} ({fqdn})\nOra: {timestamp}\n\nHost: {hostname}\nVersione: {version}\nModalità: {mode}\nMotivo: {reason}\n\n{app_url}"
+      },
       "backup_complete": {
         "subject": "backup completato - {app_name}",
         "body": "BACKUP COMPLETATO\n\nDa: {app_name} ({fqdn})\nOrario: {timestamp}\n\nIl backup è stato completato con successo.\nNome file: {filename}\nTaglia: {size}\n\n{app_url}"

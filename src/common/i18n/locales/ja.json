@@ -1666,6 +1666,18 @@
   },
   "email": {
     "templates": {
+      "disk_low": {
+        "subject": "ディスク容量不足 - {app_name}",
+        "body": "ディスク容量不足\n\n送信元: {app_name} ({fqdn})\n時刻: {timestamp}\n\n{path} を含むファイルシステムは容量の {used_percent} パーセントを使用しています。\n警告しきい値: {threshold_percent} パーセント\n空きバイト数: {free_bytes}\n\n{app_url}"
+      },
+      "server_started": {
+        "subject": "サーバー起動 - {app_name}",
+        "body": "サーバー起動\n\n送信元: {app_name} ({fqdn})\n時刻: {timestamp}\n\nホスト: {hostname}\nバージョン: {version}\nモード: {mode}\n\n{app_url}"
+      },
+      "server_stopped": {
+        "subject": "サーバー停止 - {app_name}",
+        "body": "サーバー停止\n\n送信元: {app_name} ({fqdn})\n時刻: {timestamp}\n\nホスト: {hostname}\nバージョン: {version}\nモード: {mode}\n理由: {reason}\n\n{app_url}"
+      },
       "backup_complete": {
         "subject": "バックアップ完了 - {app_name}",
         "body": "バックアップ完了\n\n送信元: {app_name} ({fqdn})\n時刻: {timestamp}\n\nバックアップは正常に完了しました。\nファイル: {filename}\nサイズ: {size}\n\n{app_url}"

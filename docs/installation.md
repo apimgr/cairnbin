@@ -30,6 +30,7 @@ docker run -d \
   --name cairnbin \
   -p 172.17.0.1:64580:80 \
   -p 9999:9999 \
+  -v cairnbin-config:/config \
   -v cairnbin-data:/data \
   ghcr.io/apimgr/cairnbin:latest
 ```

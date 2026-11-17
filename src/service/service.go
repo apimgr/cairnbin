@@ -27,6 +27,8 @@ const (
 
 var outputLanguage = "en"
 
+const updateRestartMarkerName = ".update-restart"
+
 // SetOutputLanguage selects the locale used by service-management output.
 func SetOutputLanguage(lang string) {
 	outputLanguage = i18n.GetLanguage(lang, "")
@@ -1332,6 +1334,15 @@ func RestartAfterUpdate() (bool, error) {
 	if !st.Installed || !st.Running {
 		return false, nil
 	}
+	markerPath, markerErr := writeUpdateRestartMarker()
+	if markerErr != nil {
+		fmt.Printf("service: could not mark update restart reason: %v\n", markerErr)
+	}
+	defer func() {
+		if markerPath != "" {
+			_ = os.Remove(markerPath)
+		}
+	}()
 	switch DetectServiceManager() {
 	case ServiceSystemd:
 		return true, exec.Command("systemctl", "restart", appName).Run()
@@ -1353,4 +1364,28 @@ func RestartAfterUpdate() (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+// ConsumeUpdateRestartMarker reports whether a service-manager stop belongs to
+// an update restart and removes the marker when the service account can do so.
+func ConsumeUpdateRestartMarker() bool {
+	path := filepath.Join(paths.GetDataDir(appName), updateRestartMarkerName)
+	data, err := os.ReadFile(path)
+	if err != nil || strings.TrimSpace(string(data)) != "update restart" {
+		return false
+	}
+	_ = os.Remove(path)
+	return true
+}
+
+func writeUpdateRestartMarker() (string, error) {
+	dir := paths.GetDataDir(appName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, updateRestartMarkerName)
+	if err := os.WriteFile(path, []byte("update restart\n"), 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
 }

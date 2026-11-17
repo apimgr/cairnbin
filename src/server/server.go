@@ -272,6 +272,8 @@ type Server struct {
 	// pendingRestartMu guards pendingRestartKeys.
 	pendingRestartMu   sync.Mutex
 	pendingRestartKeys []string
+	lifecycleMu        sync.Mutex
+	shutdownReason     string
 	// csrfSecret is the HMAC key for CSRF token signing, loaded from the DB at startup.
 	csrfSecret []byte
 	// installSecret is the root installation_secret (PART 11 Cryptographic Keys),
@@ -2949,16 +2951,13 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		}
 	}
 
-	// Server-lifecycle audit events (AI.md server.* catalog).
-	s.auditLog(nil, audit.Entry{
-		Event:    "server.started",
-		Severity: audit.SeverityInfo,
-		Details:  map[string]any{"address": addr, "version": s.version},
-	})
-	defer s.auditLog(nil, audit.Entry{
-		Event:    "server.stopped",
-		Severity: audit.SeverityInfo,
-	})
+	defer func() {
+		if !gracefulShutdown(ctx) {
+			return
+		}
+		reason := s.getShutdownReason()
+		s.serverStopped(s.liveCfg(), reason)
+	}()
 
 	// Start the runtime self-healing maintenance monitor (PART 20). It probes
 	// critical systems and toggles maintenance mode until ctx is cancelled.
@@ -3057,6 +3056,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 				return fmt.Errorf("bind %s: %w", addr, err)
 			}
 			s.startManagedNetworkServices()
+			s.serverStarted(cfg, addr)
 			go func() {
 				if err := srv.ServeTLS(ln, "", ""); err != nil && err != http.ErrServerClosed {
 					errCh <- err
@@ -3081,6 +3081,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		return fmt.Errorf("bind %s: %w", addr, err)
 	}
 	s.startManagedNetworkServices()
+	s.serverStarted(cfg, addr)
 	go func() {
 		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			errCh <- err
@@ -3176,6 +3177,7 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 		return fmt.Errorf("dual-port: %w", dropErr)
 	}
 	s.startManagedNetworkServices()
+	s.serverStarted(cfg, httpAddr+","+httpsAddr)
 
 	log.Printf("dual-port: HTTP on %s, HTTPS on %s", httpAddr, httpsAddr)
 
@@ -4819,6 +4821,17 @@ func priorConsentState(r *http.Request) (consentState, bool) {
 	return prior, true
 }
 
+// auditConsentUpdate records the current cookie-consent categories and time
+// without creating a server-side preference profile.
+func (s *Server) auditConsentUpdate(r *http.Request, state consentState) {
+	s.auditLog(r, audit.Entry{Event: "compliance.consent_updated", Category: "security", Severity: audit.SeverityInfo, Result: audit.ResultSuccess, Details: map[string]any{
+		"essential":   state.Essential,
+		"preferences": state.Preferences,
+		"analytics":   state.Analytics,
+		"timestamp":   state.Timestamp,
+	}})
+}
+
 // handleConsentSet persists the visitor's cookie-consent choice in the
 // server-readable cookie_consent cookie and redirects back to the originating
 // page (AI.md 25598), giving no-JS visitors a working consent banner via the
@@ -4870,14 +4883,8 @@ func (s *Server) handleConsentSet(w http.ResponseWriter, r *http.Request) {
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
-	// Consent changes are always audited with a timestamp (PART 11: "All
-	// consents logged with timestamp"); the entry carries the new categories.
-	s.auditLog(r, audit.Entry{Event: "compliance.consent_updated", Category: "security", Severity: audit.SeverityInfo, Result: audit.ResultSuccess, Details: map[string]any{
-		"essential":   state.Essential,
-		"preferences": state.Preferences,
-		"analytics":   state.Analytics,
-		"timestamp":   state.Timestamp,
-	}})
+	// Consent changes are always audited with a timestamp (AI.md PART 11).
+	s.auditConsentUpdate(r, state)
 	// Return to the referring page so the visitor lands back where they were;
 	// fall back to the site root when no same-origin referer is present.
 	dest := "/"
@@ -5116,6 +5123,7 @@ func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 			ccpa = "true"
 		}
 		http.SetCookie(w, &http.Cookie{Name: "ccpa_opt_out", Value: ccpa, Path: "/", MaxAge: prefCookieMaxAge, Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
+		s.auditConsentUpdate(r, state)
 		if state.Preferences {
 			prefsReq := r.Clone(r.Context())
 			cookiePairs := make([]string, 0, len(r.Cookies())+1)
@@ -5147,6 +5155,7 @@ func (s *Server) resetPreferences(w http.ResponseWriter, r *http.Request) {
 	for name := range seen {
 		http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
 	}
+	s.auditConsentUpdate(r, consentState{Essential: true, Timestamp: time.Now().Unix()})
 }
 
 func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {

@@ -41,10 +41,24 @@ src/
   database/        — SQLite and libSQL database layer
   handler/         — HTTP request handlers
   model/           — data models
-  path/            — platform-aware path resolution
+  paths/           — platform-aware path resolution
   pid/             — PID file management
-  task/            — built-in scheduled tasks
-  server/          — HTTP server and routing
+  scheduler/       — built-in scheduler
+  task/            — scheduled task implementations
+  server/          — HTTP server, pages, templates, and routing
+  server/static/   — embedded CSS and JavaScript
+  server/template/ — embedded HTML and email templates
+  common/          — shared i18n, terminal, theme, URL, and HTTP utilities
+  client/tui/      — interactive terminal client
+  client/gui/      — graphical client
+  graphql/         — GraphQL API and browser UI
+  swagger/         — OpenAPI generation and browser UI
+  mcp/             — Model Context Protocol API
+  geoip/           — GeoIP database and request filtering
+  tor/, i2p/       — optional overlay network services
+  service/         — operating-system service management
+  maintenance/     — administrative maintenance operations
+  updater/         — binary update support
   shell/           — shell completion generation
 docker/
   Dockerfile       — production container (:latest)
@@ -61,8 +75,18 @@ make dev
 # Run the printed temporary binary path with the documented options:
 <temporary-directory>/cairnbin --mode development --port 8080
 
-# Or via Docker Compose
-docker compose -f docker/docker-compose.dev.yml up
+# Docker Compose must run from a project-scoped temporary directory so its
+# relative volume mounts do not write runtime data into the source checkout.
+mkdir -p "${TMPDIR:-/tmp}/apimgr"
+DEV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/cairnbin-XXXXXX")
+cp docker/docker-compose.dev.yml "$DEV_DIR/docker-compose.yml"
+(cd "$DEV_DIR" && docker compose up -d)
+
+# Stop the stack and remove its temporary runtime data when finished.
+if [[ -n "${DEV_DIR:-}" && "$DEV_DIR" == "${TMPDIR:-/tmp}/apimgr/cairnbin-"* ]]; then
+  (cd "$DEV_DIR" && docker compose down)
+  rm -rf -- "$DEV_DIR"
+fi
 ```
 
 ## Testing
@@ -90,15 +114,16 @@ The built-in scheduler runs the following tasks automatically:
 | `expire-pastes` | Every 10 min | Remove expired and burned pastes |
 | `ssl_renewal` | Daily 03:00 | Renew SSL certificates |
 | `blocklist_update` | Daily 04:00 | Update IP/domain blocklists |
-| `cve_update` | Daily 05:00 | Update CVE database |
-| `update_check` | Daily 06:00 | Check for updates and optionally install them |
-| `backup_daily` | Daily 02:00 | Full daily backup |
+| `cve_update` | Daily 05:00 | Update CVE/NVD and Trivy vulnerability databases |
+| `update_check` | Daily 06:00 | Check the configured release channel; notify only unless automatic installation is enabled |
+| `backup_daily` | Daily 02:00 | Full backup and daily incremental backup |
 | `geoip_update` | Sunday 03:00 | Update GeoIP databases (only when GeoIP is enabled) |
 | `log_rotation` | Daily 00:00 | Rotate and compress logs |
 | `public_ip_refresh` | Every 12 hours | Refresh the cached public IP (also runs at startup) |
 | `ip_block_release` | Every minute | Release expired temporary IP blocks |
-| `token_cleanup` | Every 15 min | Remove expired tokens |
+| `token_cleanup` | Every 15 min | Expire CAPTCHA challenges and apply owner-token idle-purge policy |
 | `backup_hourly` | Hourly (disabled) | Hourly incremental backup |
+| `disk_check` | Every 5 min | Check available disk space and report low-space conditions |
 | `branding_refresh` | Every 24 hours by default | Refresh cached branding image variants; configurable with `server.branding.image_refresh_interval` |
 | `healthcheck_self` | Every 5 min | Self-health check |
 | `tor_health` | Every 10 min | Tor connectivity check |

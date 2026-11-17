@@ -1666,6 +1666,18 @@
   },
   "email": {
     "templates": {
+      "disk_low": {
+        "subject": "Low Disk Space - {app_name}",
+        "body": "LOW DISK SPACE\n\nFrom: {app_name} ({fqdn})\nTime: {timestamp}\n\nThe filesystem containing {path} is using {used_percent} percent of its space.\nAlert threshold: {threshold_percent} percent\nFree bytes: {free_bytes}\n\n{app_url}"
+      },
+      "server_started": {
+        "subject": "Server Started - {app_name}",
+        "body": "SERVER STARTED\n\nFrom: {app_name} ({fqdn})\nTime: {timestamp}\n\nHost: {hostname}\nVersion: {version}\nMode: {mode}\n\n{app_url}"
+      },
+      "server_stopped": {
+        "subject": "Server Stopped - {app_name}",
+        "body": "SERVER STOPPED\n\nFrom: {app_name} ({fqdn})\nTime: {timestamp}\n\nHost: {hostname}\nVersion: {version}\nMode: {mode}\nReason: {reason}\n\n{app_url}"
+      },
       "backup_complete": {
         "subject": "Backup Complete - {app_name}",
         "body": "BACKUP COMPLETE\n\nFrom: {app_name} ({fqdn})\nTime: {timestamp}\n\nThe backup completed successfully.\nFilename: {filename}\nSize: {size}\n\n{app_url}"

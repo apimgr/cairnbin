@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/apimgr/cairnbin/src/audit"
 	"github.com/apimgr/cairnbin/src/config"
 )
 
@@ -83,5 +86,67 @@ func TestPreferencesImport_ConsentBlockedValuesAreIgnored(t *testing.T) {
 	}
 	if out.Data.Theme != "dark" || len(out.Data.Applied) != 0 || len(out.Data.Ignored) != 1 || out.Data.Ignored[0] != "theme" {
 		t.Errorf("response state=%+v, want default theme, no applied values, theme ignored", out.Data)
+	}
+}
+
+func TestPreferencesConsentChangesAreAudited(t *testing.T) {
+	tests := []struct {
+		name string
+		form string
+		want map[string]any
+	}{
+		{
+			name: "consent form",
+			form: "consent_form=1&consent_preferences=on",
+			want: map[string]any{"essential": true, "preferences": true, "analytics": false},
+		},
+		{
+			name: "reset",
+			form: "action=reset",
+			want: map[string]any{"essential": true, "preferences": false, "analytics": false},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			auditDir := t.TempDir()
+			s := newMinimalServer(config.DefaultConfig())
+			s.SetAuditWriter(audit.New(audit.Config{
+				Enabled: true,
+				Dir:     auditDir,
+				Events:  audit.EventCategories{Security: true},
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader(tc.form))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			s.handlePreferencesSet(rec, req)
+			if rec.Code != http.StatusSeeOther {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+			}
+
+			data, err := os.ReadFile(filepath.Join(auditDir, "audit.log"))
+			if err != nil {
+				t.Fatalf("read audit log: %v", err)
+			}
+			var event struct {
+				Event   string         `json:"event"`
+				Details map[string]any `json:"details"`
+			}
+			if err := json.Unmarshal(data, &event); err != nil {
+				t.Fatalf("decode audit event: %v", err)
+			}
+			if event.Event != "compliance.consent_updated" {
+				t.Fatalf("event = %q, want compliance.consent_updated", event.Event)
+			}
+			for key, want := range tc.want {
+				if got := event.Details[key]; got != want {
+					t.Errorf("details[%q] = %v, want %v", key, got, want)
+				}
+			}
+			if timestamp, ok := event.Details["timestamp"].(float64); !ok || timestamp <= 0 {
+				t.Errorf("details[timestamp] = %v, want positive Unix timestamp", event.Details["timestamp"])
+			}
+		})
 	}
 }

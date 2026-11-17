@@ -1,6 +1,10 @@
 package service
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // TestRestartAfterUpdateNoRunningService verifies the fallback contract: when
 // no system service is installed and running, RestartAfterUpdate reports
@@ -12,5 +16,22 @@ func TestRestartAfterUpdateNoRunningService(t *testing.T) {
 	restarted, err := RestartAfterUpdate()
 	if restarted || err != nil {
 		t.Fatalf("RestartAfterUpdate() = (%v, %v), want (false, nil)", restarted, err)
+	}
+}
+
+func TestConsumeUpdateRestartMarker(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DATA_DIR", dataDir)
+	if _, err := writeUpdateRestartMarker(); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	if !ConsumeUpdateRestartMarker() {
+		t.Fatal("ConsumeUpdateRestartMarker() = false, want true")
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, updateRestartMarkerName)); !os.IsNotExist(err) {
+		t.Fatalf("marker still exists after consume: %v", err)
+	}
+	if ConsumeUpdateRestartMarker() {
+		t.Fatal("ConsumeUpdateRestartMarker() = true without a marker")
 	}
 }

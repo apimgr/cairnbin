@@ -1265,6 +1265,25 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	}))
 	logSchedErr(sched.Register("log_rotation", "Log Rotation", "0 0 * * *", true,
 		task.LogRotation(logMgr)))
+	diskLow := cfg.Server.Notifications.DiskLow
+	diskInterval := 5 * time.Minute
+	if configured, err := time.ParseDuration(strings.TrimSpace(diskLow.CheckInterval)); err == nil && configured > 0 {
+		diskInterval = configured
+	}
+	diskRepeat := 24 * time.Hour
+	if configured, err := time.ParseDuration(strings.TrimSpace(diskLow.Repeat)); err == nil && configured > 0 {
+		diskRepeat = configured
+	}
+	diskSchedule := "@every " + diskInterval.String()
+	logSchedErr(sched.Register("disk_check", "Disk Space Low Check", diskSchedule, diskLow.Enabled,
+		task.DiskCheck(task.DiskLowConfig{
+			Paths:            []string{dataDir, logsDir, backupDir},
+			ThresholdPercent: diskLow.ThresholdPercent,
+			Repeat:           diskRepeat,
+			OperatorEmail:    taskOperatorEmail,
+			Mailer:           taskMailer,
+			Log:              logMgr.Server,
+		})))
 	backupCfg := task.BackupConfig{
 		ProjectName:    appName,
 		ConfigDir:      configDir,
@@ -1398,7 +1417,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	sched.SetRetry("branding_refresh", true, time.Hour, 0)
 	skippableTasks := map[string]bool{
 		"geoip_update": true, "blocklist_update": true, "cve_update": true,
-		"update_check": true, "backup_daily": true, "backup_hourly": true,
+		"update_check": true, "backup_daily": true, "backup_hourly": true, "disk_check": true,
 	}
 	for id, tc := range cfg.Server.Scheduler.Tasks {
 		if tc.Schedule != "" {
@@ -1475,7 +1494,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	// runServer is the shared startup closure used both for interactive mode
 	// and for the Windows Service Control Manager path.
-	runServer := func() {
+	runServer := func(serviceStop <-chan struct{}) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -1502,9 +1521,21 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		cfgMgr.Start(stopCfgMgr, srv.OnConfigChange)
 
 		go func() {
-			<-sig
+			reason := "signal"
+			select {
+			case <-sig:
+				if service.ConsumeUpdateRestartMarker() {
+					reason = "update restart"
+				}
+			case <-serviceStop:
+				reason = "service stop"
+				if service.ConsumeUpdateRestartMarker() {
+					reason = "update restart"
+				}
+			}
 			log.Printf("shutting down…")
 			logMgr.Server("info", "server shutting down")
+			srv.SetShutdownReason(reason)
 			if !paths.IsContainer() {
 				pid.RemovePIDFile(pidFile) //nolint:errcheck
 			}
@@ -1566,11 +1597,6 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		if cfg.FirstRun {
 			log.Printf("first run: generated config at %s", cfgFile)
 		}
-		logMgr.Server("info", "server started",
-			"address", listenURL,
-			"version", Version,
-			"mode", string(mode.Get()))
-
 		if err := srv.Run(ctx, addr); err != nil {
 			log.Printf("server: %v", err)
 			logMgr.Error("server run failed", "error", err.Error())
@@ -1582,7 +1608,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// On Windows, if we were started by the SCM, hand control to the service
 	// handler. On all other platforms (and interactive Windows), run directly.
 	if service.IsWindowsService() {
-		if err := service.RunAsWindowsService(appName, runServer); err != nil {
+		if err := service.RunAsWindowsServiceWithStop(appName, runServer); err != nil {
 			log.Printf("windows service: %v", err)
 			// EX_SOFTWARE
 			os.Exit(70)
@@ -1590,7 +1616,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	runServer()
+	runServer(nil)
 	return 0
 }
 

@@ -33,7 +33,7 @@
                     <ul>
                         <li><a href="{{.AssetPrefix}}/server/docs/swagger">Swagger UI</a> — {{t .Lang "help.docs_swagger_desc"}}</li>
                         <li><a href="{{.AssetPrefix}}/server/docs/graphql">GraphiQL</a> — {{t .Lang "help.docs_graphql_desc"}}</li>
-                        {{if .MCPEnabled}}<li><a href="{{.AssetPrefix}}/server/help/mcp">MCP server</a> — connect an AI assistant to this application</li>{{end}}
+                        {{if .MCPEnabled}}<li><a href="{{.AssetPrefix}}/server/help/mcp">{{t .Lang "mcp_page_title"}}</a> — {{tf .Lang "mcp_meta_description" "site" .SiteTitle}}</li>{{end}}
                     </ul>
                     <p>{{tfh .Lang "help.graphql_endpoint" "graphql" (print .BaseURL .APIBase "/server/graphql") "swagger" (print .BaseURL .APIBase "/server/swagger")}}</p>
 

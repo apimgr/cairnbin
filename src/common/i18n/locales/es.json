@@ -1666,6 +1666,18 @@
   },
   "email": {
     "templates": {
+      "disk_low": {
+        "subject": "Poco espacio en disco - {app_name}",
+        "body": "POCO ESPACIO EN DISCO\n\nDe: {app_name} ({fqdn})\nHora: {timestamp}\n\nEl sistema de archivos que contiene {path} está usando el {used_percent} por ciento de su espacio.\nUmbral de alerta: {threshold_percent} por ciento\nBytes libres: {free_bytes}\n\n{app_url}"
+      },
+      "server_started": {
+        "subject": "Servidor iniciado - {app_name}",
+        "body": "SERVIDOR INICIADO\n\nDe: {app_name} ({fqdn})\nHora: {timestamp}\n\nHost: {hostname}\nVersión: {version}\nModo: {mode}\n\n{app_url}"
+      },
+      "server_stopped": {
+        "subject": "Servidor detenido - {app_name}",
+        "body": "SERVIDOR DETENIDO\n\nDe: {app_name} ({fqdn})\nHora: {timestamp}\n\nHost: {hostname}\nVersión: {version}\nModo: {mode}\nMotivo: {reason}\n\n{app_url}"
+      },
       "backup_complete": {
         "subject": "Copia de seguridad completada - {app_name}",
         "body": "COPIA DE SEGURIDAD COMPLETADA\n\nDe: {app_name} ({fqdn})\nHora: {timestamp}\n\nLa copia de seguridad se completó correctamente.\nArchivo: {filename}\nTamaño: {size}\n\n{app_url}"
