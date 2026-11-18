@@ -1840,7 +1840,7 @@ func DefaultConfig() *Config {
 				},
 			},
 			Port:       "",
-			Address:    "0.0.0.0",
+			Address:    "[::]",
 			FQDN:       "",
 			Mode:       "production",
 			APIVersion: "v1",
@@ -4017,6 +4017,34 @@ func PeekServerPort(path string) string {
 		server := doc.Content[i+1]
 		for j := 0; j+1 < len(server.Content); j += 2 {
 			if server.Content[j].Value == "port" && server.Content[j+1].Kind == yaml.ScalarNode {
+				return strings.TrimSpace(server.Content[j+1].Value)
+			}
+		}
+	}
+	return ""
+}
+
+// PeekServerAddress reads only server.address before full config validation.
+func PeekServerAddress(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var root yaml.Node
+	if yaml.Unmarshal(data, &root) != nil || len(root.Content) == 0 {
+		return ""
+	}
+	doc := root.Content[0]
+	if doc.Kind != yaml.MappingNode {
+		return ""
+	}
+	for i := 0; i+1 < len(doc.Content); i += 2 {
+		if doc.Content[i].Value != "server" || doc.Content[i+1].Kind != yaml.MappingNode {
+			continue
+		}
+		server := doc.Content[i+1]
+		for j := 0; j+1 < len(server.Content); j += 2 {
+			if server.Content[j].Value == "address" && server.Content[j+1].Kind == yaml.ScalarNode {
 				return strings.TrimSpace(server.Content[j+1].Value)
 			}
 		}

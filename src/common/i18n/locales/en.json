@@ -1320,7 +1320,7 @@
     "update_cmd": "Check/perform updates",
     "shell_help": "Show shell help",
     "mode_default": "Application mode (default: production)",
-    "addr_default": "Listen address (default: 0.0.0.0)",
+    "addr_default": "Listen address (default: [::], dual-stack)",
     "port_default": "Listen port (default: random 64xxx, 80 in container)",
     "url_default": "URL path prefix (default: /)",
     "color_default": "Color output (default: auto)",

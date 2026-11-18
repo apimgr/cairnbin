@@ -1176,7 +1176,7 @@
     "update_cmd": "Comprobar/realizar actualizaciones",
     "shell_help": "Mostrar ayuda del shell",
     "mode_default": "Modo de aplicación (predeterminado: production)",
-    "addr_default": "Dirección de escucha (predeterminada: 0.0.0.0)",
+    "addr_default": "Dirección de escucha (predeterminada: [::], doble pila)",
     "port_default": "Puerto de escucha (predeterminado: aleatorio 64xxx, 80 en contenedor)",
     "url_default": "Prefijo de ruta URL (predeterminado: /)",
     "color_default": "Salida en color (predeterminado: auto)",

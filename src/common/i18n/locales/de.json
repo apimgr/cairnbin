@@ -1176,7 +1176,7 @@
     "update_cmd": "Updates prüfen/durchführen",
     "shell_help": "Shell-Hilfe anzeigen",
     "mode_default": "Anwendungsmodus (Standard: production)",
-    "addr_default": "Abhöradresse (Standard: 0.0.0.0)",
+    "addr_default": "Abhöradresse (Standard: [::], Dual-Stack)",
     "port_default": "Abhörport (Standard: zufällig 64xxx, 80 im Container)",
     "url_default": "URL-Pfadpräfix (Standard: /)",
     "color_default": "Farbausgabe (Standard: auto)",

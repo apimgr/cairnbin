@@ -39,8 +39,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Server.Port != "" {
 		t.Errorf("Server.Port: got %q, want empty string (first-run randomisation pending)", cfg.Server.Port)
 	}
-	if cfg.Server.Address != "0.0.0.0" {
-		t.Errorf("Server.Address: got %q, want %q", cfg.Server.Address, "0.0.0.0")
+	if cfg.Server.Address != "[::]" {
+		t.Errorf("Server.Address: got %q, want %q", cfg.Server.Address, "[::]")
 	}
 	if cfg.Paste.MaxSizeBytes != 10<<20 {
 		t.Errorf("Paste.MaxSizeBytes: got %d, want %d", cfg.Paste.MaxSizeBytes, 10<<20)
@@ -258,6 +258,17 @@ func TestPeekServerPortMissing(t *testing.T) {
 	}
 	if got := config.PeekServerPort(path); got != "" {
 		t.Fatalf("PeekServerPort() = %q, want empty", got)
+	}
+}
+
+func TestPeekServerAddressReadsOnlyAddress(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	contents := "server:\n  address: '[::]'\n  port: invalid but ignored\ndatabase: [invalid-for-config]\n"
+	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := config.PeekServerAddress(path); got != "[::]" {
+		t.Fatalf("PeekServerAddress() = %q, want %q", got, "[::]")
 	}
 }
 

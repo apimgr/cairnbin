@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -899,7 +900,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		// AI.md PART 11 Display Rules: never hardcode a static IP such as
 		// 127.0.0.1 — use the "localhost" name for this loopback self-probe.
 		address := statusCfg.Server.Address
-		if address == "" || address == "0.0.0.0" {
+		if address == "" || address == "0.0.0.0" || address == "[::]" || address == "::" {
 			address = "localhost"
 		}
 		apiVersion := strings.TrimSpace(statusCfg.Server.APIVersion)
@@ -948,12 +949,16 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// configuration validation so unrelated malformed settings do not affect
 	// early listener setup.
 	earlyConfigPort := config.PeekServerPort(cfgFile)
+	earlyConfigAddress := config.PeekServerAddress(cfgFile)
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		log.Printf("warning: config load: %v", err)
 	}
 	if cfg.Server.Port == "" {
 		cfg.Server.Port = earlyConfigPort
+	}
+	if earlyConfigAddress != "" {
+		cfg.Server.Address = earlyConfigAddress
 	}
 
 	// server.daemonize applies to manual starts only (PART 8): the --daemon flag
@@ -980,6 +985,9 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// CLI flag overrides on config.
 	if portFlag != "" {
 		cfg.Server.Port = portFlag
+	}
+	if listen := os.Getenv("LISTEN"); listen != "" {
+		cfg.Server.Address = listen
 	}
 	if addressFlag != "" {
 		cfg.Server.Address = addressFlag
@@ -1513,7 +1521,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		defer pid.RemovePIDFile(pidFile) //nolint:errcheck
 	}
 
-	addr := cfg.Server.Address + ":" + cfg.Server.Port
+	addr := net.JoinHostPort(strings.Trim(cfg.Server.Address, "[]"), cfg.Server.Port)
 
 	// Register privilege drop: after binding the listen port as root, switch to the
 	// unprivileged service account, chowning runtime paths first (PART 23 step 8g).

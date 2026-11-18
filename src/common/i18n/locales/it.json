@@ -1320,7 +1320,7 @@
     "update_cmd": "controlla/esegui aggiornamenti",
     "shell_help": "mostra la guida della shell",
     "mode_default": "modalità di applicazione (impostazione predefinita: produzione)",
-    "addr_default": "indirizzo di ascolto (predefinito: 0.0.0.0)",
+    "addr_default": "indirizzo di ascolto (predefinito: [::], dual-stack)",
     "port_default": "porta di ascolto (impostazione predefinita: casuale 64xxx, 80 nel contenitore)",
     "url_default": "prefisso percorso URL (predefinito: /)",
     "color_default": "output a colori (impostazione predefinita: automatico)",

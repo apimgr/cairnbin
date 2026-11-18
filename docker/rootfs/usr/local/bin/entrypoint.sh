@@ -37,9 +37,9 @@ trap cleanup SIGTERM SIGINT SIGQUIT
 # =============================================================================
 log "Starting ${APP_NAME}..."
 
-# Build flags from environment
-FLAGS="--address ${ADDRESS:-0.0.0.0} --port ${PORT:-80}"
-[ "${DEBUG:-false}" = "true" ] && FLAGS="$FLAGS --debug"
+# Build flags from environment; arrays preserve arguments and prevent glob expansion.
+FLAGS=(--port "${PORT:-80}")
+[ "${DEBUG:-false}" = "true" ] && FLAGS+=(--debug)
 
 # exec replaces this shell — tini becomes PID 1 parent, binary is the process
-exec $APP_BIN $FLAGS "$@"
+exec "$APP_BIN" --address "${LISTEN:-[::]}" "${FLAGS[@]}" "$@"

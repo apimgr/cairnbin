@@ -1176,7 +1176,7 @@
     "update_cmd": "更新の確認/実行",
     "shell_help": "シェルのヘルプを表示",
     "mode_default": "アプリケーションモード（既定: production）",
-    "addr_default": "待受アドレス（既定: 0.0.0.0）",
+    "addr_default": "待受アドレス（既定: [::]、デュアルスタック）",
     "port_default": "待受ポート（既定: ランダム64xxx、コンテナ内は80）",
     "url_default": "URLパスのプレフィックス（既定: /）",
     "color_default": "カラー出力（既定: auto）",

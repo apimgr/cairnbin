@@ -1176,7 +1176,7 @@
     "update_cmd": "检查/执行更新",
     "shell_help": "显示 Shell 帮助",
     "mode_default": "应用模式（默认：production）",
-    "addr_default": "监听地址（默认：0.0.0.0）",
+    "addr_default": "监听地址（默认：[::]，双栈）",
     "port_default": "监听端口（默认：随机 64xxx，容器内为 80）",
     "url_default": "URL 路径前缀（默认：/）",
     "color_default": "彩色输出（默认：auto）",

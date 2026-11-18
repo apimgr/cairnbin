@@ -40,6 +40,7 @@ import (
 	"github.com/apimgr/cairnbin/src/common/email"
 	"github.com/apimgr/cairnbin/src/common/httputil"
 	"github.com/apimgr/cairnbin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/common/listener"
 	"github.com/apimgr/cairnbin/src/common/theme"
 	"github.com/apimgr/cairnbin/src/config"
 	"github.com/apimgr/cairnbin/src/database"
@@ -387,7 +388,7 @@ func (s *Server) SetPrivilegeDrop(user, group string, chownPaths []string) {
 // 1024 succeed), then chowns the runtime paths and drops to the unprivileged service
 // account (PART 23 step 8g). The returned listener is ready for Serve/ServeTLS.
 func (s *Server) bindAndDrop(addr string) (net.Listener, error) {
-	ln, err := net.Listen("tcp", addr)
+	ln, err := listener.ListenTCP(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -2872,8 +2873,8 @@ func (s *Server) startTermbin(ctx context.Context, cfg *config.Config) func() {
 		return func() {}
 	}
 
-	addr := net.JoinHostPort(cfg.Server.Address, strconv.Itoa(tb.Port))
-	ln, err := net.Listen("tcp", addr)
+	addr := net.JoinHostPort(strings.Trim(cfg.Server.Address, "[]"), strconv.Itoa(tb.Port))
+	ln, err := listener.ListenTCP(addr)
 	if err != nil {
 		log.Printf("termbin: listen on %s failed: %v — disabled", addr, err)
 		return func() {}
@@ -3209,11 +3210,11 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 	// Bind both privileged listeners before dropping privileges so ports <1024
 	// succeed. bindAndDrop is not reused here because it drops privileges on the
 	// first call, which would prevent binding the second privileged port.
-	httpsLn, err := net.Listen("tcp", httpsAddr)
+	httpsLn, err := listener.ListenTCP(httpsAddr)
 	if err != nil {
 		return fmt.Errorf("dual-port: listen HTTPS %s: %w", httpsAddr, err)
 	}
-	httpLn, err := net.Listen("tcp", httpAddr)
+	httpLn, err := listener.ListenTCP(httpAddr)
 	if err != nil {
 		_ = httpsLn.Close()
 		return fmt.Errorf("dual-port: listen HTTP %s: %w", httpAddr, err)

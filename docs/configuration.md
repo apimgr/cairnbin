@@ -42,6 +42,7 @@ Override the directory with: `--config /path/to/config-dir` (the file inside is 
 
 ```yaml
 server:
+  # Quote [::]; it enables dual-stack IPv4/IPv6 and falls back to IPv4 if IPv6 is unsupported.
   address: "[::]"
   # first run picks a random unused 64000-64999 port and saves it here
   port: "64123"
@@ -356,7 +357,7 @@ they are read individually (no `.env` file is ever loaded).
 |----------|-------------|
 | `PORT`   | Override listen port (dual format `"8090,8443"` supported) |
 | `CAIRNBIN_PORT` | Alias for `PORT` |
-| `LISTEN` | Listen address (default `[::]`, dual-stack; `0.0.0.0` is IPv4-only) |
+| `LISTEN` | Listen address (default `[::]`, dual-stack; falls back only if IPv6 is unsupported; `0.0.0.0` is IPv4-only) |
 | `BASE_URL` | Public base URL / path prefix |
 | `DOMAIN` | Primary FQDN used for links and certificates |
 | `MODE`   | Application mode (`production`, `development`, or `debug`) |
