@@ -25,7 +25,7 @@ Override the directory with: `--config /path/to/config-dir` (the file inside is 
 --cache DIR               Cache directory
 --backup DIR              Backup directory
 --pid FILE                PID file path
---address ADDR            Listen address (default: 0.0.0.0)
+--address ADDR            Listen address (default: [::], dual-stack)
 --port PORT               Listen port (default: random 64xxx local, 80 container)
 --baseurl PATH            URL path prefix (default: /)
 --debug                   Enable debug mode
@@ -42,7 +42,7 @@ Override the directory with: `--config /path/to/config-dir` (the file inside is 
 
 ```yaml
 server:
-  address: "0.0.0.0"
+  address: "[::]"
   # first run picks a random unused 64000-64999 port and saves it here
   port: "64123"
   mode: "production"
@@ -356,8 +356,7 @@ they are read individually (no `.env` file is ever loaded).
 |----------|-------------|
 | `PORT`   | Override listen port (dual format `"8090,8443"` supported) |
 | `CAIRNBIN_PORT` | Alias for `PORT` |
-| `ADDRESS` | Listen address (e.g. `0.0.0.0`) |
-| `LISTEN` | Full listen spec (`address:port`) |
+| `LISTEN` | Listen address (default `[::]`, dual-stack; `0.0.0.0` is IPv4-only) |
 | `BASE_URL` | Public base URL / path prefix |
 | `DOMAIN` | Primary FQDN used for links and certificates |
 | `MODE`   | Application mode (`production`, `development`, or `debug`) |

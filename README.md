@@ -152,8 +152,7 @@ configuration values.
 | `BACKUP_DIR` | Platform default | Backup directory path |
 | `PID_FILE` | Platform default | PID file path |
 | `PORT` | Random 64xxx | Listen port (80 in container) |
-| `ADDRESS` | `0.0.0.0` | Listen address |
-| `LISTEN` | Unset | Full listen address and port override |
+| `LISTEN` | `[::]` | Dual-stack listen address; `0.0.0.0` selects IPv4 only |
 | `BASE_URL` | Auto-detected | Public base URL for link generation |
 | `DOMAIN` | Auto-detected | Primary FQDN for links and certificates |
 | `MODE` | `production` | Application mode (`production`, `development`, or `debug`) |
