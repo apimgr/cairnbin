@@ -868,6 +868,24 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	if err := paths.EnsureDir(filepath.Dir(pidFile)); err != nil {
 		log.Printf("warning: could not create pid file directory: %v", err)
 	}
+	privatePaths := []struct {
+		path string
+		dir  bool
+	}{
+		{filepath.Join(configDir, "server.yml"), false},
+		{filepath.Join(configDir, "yaml.d"), true},
+		{filepath.Join(configDir, "ssl"), true},
+		{filepath.Join(configDir, "tor"), true},
+		{filepath.Join(configDir, "i2p"), true},
+		{filepath.Join(dataDir, "security"), true},
+		{filepath.Join(dataDir, "tor"), true},
+	}
+	for _, privatePath := range privatePaths {
+		if err := paths.EnforcePrivatePath(privatePath.path, privatePath.dir); err != nil {
+			log.Printf("ERROR: %v", err)
+			return 73
+		}
+	}
 
 	// --status probes the live server via HTTP and exits 0=healthy, 1=unhealthy (PART 8).
 	// Must run after paths are resolved but loads config independently.
@@ -921,10 +939,21 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 		}
 	}
+	if err := paths.EnforcePrivatePath(cfgFile, false); err != nil {
+		log.Printf("ERROR: %v", err)
+		return 73
+	}
 
+	// PART 8 early config peek: inspect only server.port before the full
+	// configuration validation so unrelated malformed settings do not affect
+	// early listener setup.
+	earlyConfigPort := config.PeekServerPort(cfgFile)
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		log.Printf("warning: config load: %v", err)
+	}
+	if cfg.Server.Port == "" {
+		cfg.Server.Port = earlyConfigPort
 	}
 
 	// server.daemonize applies to manual starts only (PART 8): the --daemon flag

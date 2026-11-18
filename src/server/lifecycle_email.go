@@ -111,7 +111,7 @@ func lifecycleBaseURL(cfg *config.Config) string {
 		host = "localhost"
 	}
 	port := strings.TrimSpace(cfg.Server.Port)
-	if port != "" && !strings.Contains(port, ",") && !((proto == "http" && port == "80") || (proto == "https" && port == "443")) {
+	if port != "" && !strings.Contains(port, ",") && (proto != "http" || port != "80") && (proto != "https" || port != "443") {
 		host += ":" + port
 	}
 	return fmt.Sprintf("%s://%s", proto, host)

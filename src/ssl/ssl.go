@@ -55,7 +55,8 @@ type LetsEncryptConfig struct {
 	// DNSCredentials holds decrypted provider credentials.
 	DNSCredentials map[string]string
 	// Staging selects the LE staging CA.
-	Staging bool
+	Staging        bool
+	OnDNSValidated func(time.Time) error
 }
 
 // Manager handles SSL/TLS certificates.
@@ -153,7 +154,7 @@ func (m *Manager) GetTLSConfig(domains []string) (*tls.Config, error) {
 		if len(validDomains) > 0 {
 			// dns-01 uses lego (no port 80/443 listener requirement, supports
 			// wildcards). http-01/tls-alpn-01 keep using autocert, unchanged.
-			if m.config.LetsEncrypt.Challenge == "dns-01" && m.config.LetsEncrypt.DNSProviderType != "" {
+			if m.config.LetsEncrypt.Challenge == "dns-01" {
 				return m.getLetsEncryptTLSConfigDNS01(validDomains)
 			}
 			return m.getLetsEncryptTLSConfig(validDomains)
@@ -206,59 +207,14 @@ func (m *Manager) getLetsEncryptTLSConfig(domains []string) (*tls.Config, error)
 	return acmeMgr.TLSConfig(), nil
 }
 
-// dnsProviderEnvMapping maps our generic DNSCredentials field names to the
-// actual environment variable names lego's DNS-01 provider factories read
-// (verified against github.com/go-acme/lego/v4's provider source, not
-// guessed — several differ from the "obvious" name, e.g. rfc2136 uses the
-// DNSUPDATE_ prefix, and cloudflare's short aliases are CF_-prefixed).
-// Covers PART 15's "Common Providers" table. Any other lego-supported
-// provider (https://go-acme.github.io/lego/dns/) is still constructible —
-// see buildDNSProvider's fallback branch.
-var dnsProviderEnvMapping = map[string]map[string]string{
-	"cloudflare": {
-		"api_token": "CF_DNS_API_TOKEN",
-		"api_key":   "CF_API_KEY",
-		"email":     "CF_API_EMAIL",
-	},
-	"route53": {
-		"access_key_id":     "AWS_ACCESS_KEY_ID",
-		"secret_access_key": "AWS_SECRET_ACCESS_KEY",
-		"region":            "AWS_REGION",
-	},
-	"digitalocean": {
-		"auth_token": "DO_AUTH_TOKEN",
-	},
-	"godaddy": {
-		"api_key":    "GODADDY_API_KEY",
-		"api_secret": "GODADDY_API_SECRET",
-	},
-	"namecheap": {
-		"api_user": "NAMECHEAP_API_USER",
-		"api_key":  "NAMECHEAP_API_KEY",
-		// client_ip has no lego env var — lego auto-detects the caller's
-		// public IP when NAMECHEAP_API_USER/KEY are set and no ClientIP is
-		// supplied, so this field is intentionally not mapped.
-	},
-	"rfc2136": {
-		"nameserver":     "DNSUPDATE_NAMESERVER",
-		"tsig_key":       "DNSUPDATE_TSIG_KEY",
-		"tsig_secret":    "DNSUPDATE_TSIG_SECRET",
-		"tsig_algorithm": "DNSUPDATE_TSIG_ALGORITHM",
-	},
-}
+// dnsProviderEnvMu serializes the temporary environment setup around lego's
+// provider constructor, which reads credentials from process variables.
+var dnsProviderEnvMu sync.Mutex
 
 // buildDNSProvider constructs a lego DNS-01 challenge.Provider for
-// providerName using credentials. For the 6 providers in
-// dnsProviderEnvMapping, our generic credential field names (e.g.
-// "api_token") are translated to that provider's real lego environment
-// variable name before construction, since lego's provider factories read
-// credentials exclusively from the process environment.
-//
-// For any other lego-supported provider, credentials are set verbatim:
-// operators must key DNSCredentials with that provider's exact lego
-// environment variable name (see https://go-acme.github.io/lego/dns/), since
-// a reliable generic field-name-to-env-var mapping cannot be derived without
-// enumerating every one of lego's ~100 providers.
+// providerName using lego's exact environment variable names. Credentials are
+// restored immediately after construction so they are not retained in the
+// process environment.
 func buildDNSProvider(providerName string, credentials map[string]string) (challenge.Provider, error) {
 	providerName = strings.ToLower(strings.TrimSpace(providerName))
 	if providerName == "" {
@@ -268,32 +224,45 @@ func buildDNSProvider(providerName string, credentials map[string]string) (chall
 		return nil, fmt.Errorf("ssl: dns-01 provider %q has no credentials configured", providerName)
 	}
 
-	if mapping, ok := dnsProviderEnvMapping[providerName]; ok {
-		for field, envVar := range mapping {
-			v, present := credentials[field]
-			if !present || v == "" {
-				continue
-			}
-			if err := os.Setenv(envVar, v); err != nil {
-				return nil, fmt.Errorf("ssl: dns-01 provider %q: set %s: %w", providerName, envVar, err)
-			}
+	dnsProviderEnvMu.Lock()
+	defer dnsProviderEnvMu.Unlock()
+	previous := make(map[string]*string, len(credentials))
+	for envName, value := range credentials {
+		old, exists := os.LookupEnv(envName)
+		if exists {
+			previous[envName] = &old
+		} else {
+			previous[envName] = nil
 		}
-	} else {
-		for envVar, v := range credentials {
-			if v == "" {
-				continue
+		if err := os.Setenv(envName, value); err != nil {
+			for key, prior := range previous {
+				restoreDNSProviderEnv(key, prior)
 			}
-			if err := os.Setenv(envVar, v); err != nil {
-				return nil, fmt.Errorf("ssl: dns-01 provider %q: set %s: %w", providerName, envVar, err)
-			}
+			return nil, fmt.Errorf("ssl: dns-01 provider %q: invalid environment variable name %q", providerName, envName)
 		}
 	}
-
 	provider, err := legodns.NewDNSChallengeProviderByName(providerName)
+	for envName, prior := range previous {
+		restoreDNSProviderEnv(envName, prior)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("ssl: dns-01 provider %q: %w", providerName, err)
+		// lego errors can include provider configuration values. Expose only
+		// the configured variable names to avoid credential disclosure.
+		names := make([]string, 0, len(credentials))
+		for envName := range credentials {
+			names = append(names, envName)
+		}
+		return nil, fmt.Errorf("ssl: dns-01 provider %q rejected credential variables %s", providerName, strings.Join(names, ", "))
 	}
 	return provider, nil
+}
+
+func restoreDNSProviderEnv(name string, value *string) {
+	if value == nil {
+		_ = os.Unsetenv(name)
+		return
+	}
+	_ = os.Setenv(name, *value)
 }
 
 // ValidateDNSProvider attempts to construct the DNS-01 challenge provider
@@ -471,8 +440,13 @@ func (m *Manager) getLetsEncryptTLSConfigDNS01(domains []string) (*tls.Config, e
 	if err := atomicWriteFile(keyPath, cert.PrivateKey, 0o600); err != nil {
 		return nil, fmt.Errorf("ssl: dns-01: write private key: %w", err)
 	}
-	if err := atomicWriteFile(certPath, cert.Certificate, 0o644); err != nil {
+	if err := atomicWriteFile(certPath, cert.Certificate, 0o600); err != nil {
 		return nil, fmt.Errorf("ssl: dns-01: write certificate: %w", err)
+	}
+	if m.config.LetsEncrypt.OnDNSValidated != nil {
+		if err := m.config.LetsEncrypt.OnDNSValidated(time.Now().UTC()); err != nil {
+			return nil, fmt.Errorf("ssl: dns-01: record successful validation: %w", err)
+		}
 	}
 
 	log.Printf("ssl: dns-01: obtained certificate for %v via provider %q", domains, m.config.LetsEncrypt.DNSProviderType)

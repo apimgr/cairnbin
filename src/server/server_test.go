@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -1207,7 +1208,12 @@ func TestIsAllowlisted(t *testing.T) {
 // newMinimalServer returns a *Server with only the config field set.
 // Safe for testing handlers and methods that only call s.liveCfg().
 func newMinimalServer(cfg *config.Config) *Server {
-	return &Server{cfg: cfg}
+	s := &Server{cfg: cfg}
+	if cfg != nil {
+		s.lastDNSProvider = cfg.Server.TLS.LetsEncrypt.DNSProvider
+		s.lastDNSCredentialHash = dnsCredentialHash(cfg)
+	}
+	return s
 }
 
 // ─── Server.handleRobots ─────────────────────────────────────────────────────
@@ -1363,7 +1369,68 @@ func TestHandleServiceWorker(t *testing.T) {
 			if !strings.Contains(body, `const CACHE_VERSION = "`+tc.wantStamp+`";`) {
 				t.Errorf("service worker cache version should use build stamp %q", tc.wantStamp)
 			}
+			for _, required := range []string{
+				"const NAV_TIMEOUT_MS = 8000;",
+				"withTimeout(fetch(request), NAV_TIMEOUT_MS)",
+				"if (response.ok && !response.redirected)",
+				"event.data.type === 'SKIP_WAITING'",
+				"'/static/js/app.js?v=' + CACHE_VERSION",
+			} {
+				if !strings.Contains(body, required) {
+					t.Errorf("service worker is missing recovery contract %q", required)
+				}
+			}
+			installStart := strings.Index(body, "self.addEventListener('install'")
+			activateStart := strings.Index(body, "// ACTIVATE")
+			if installStart < 0 || activateStart <= installStart {
+				t.Fatal("service worker install section is missing or malformed")
+			}
+			if strings.Contains(body[installStart:activateStart], "skipWaiting") {
+				t.Error("service worker install must leave updates waiting for user acceptance")
+			}
+			for _, forbidden := range []string{"  '/',\n", "  '/create',\n", "  '/recent',\n"} {
+				if strings.Contains(body, forbidden) {
+					t.Errorf("service worker contains unsafe cache/update behavior %q", forbidden)
+				}
+			}
 		})
+	}
+}
+
+func TestOpenAPIRoutesAreRegistered(t *testing.T) {
+	cfg := config.DefaultConfig()
+	s := New(&stubDB{}, cfg, nil, "test", "test", "test", t.TempDir(), t.TempDir())
+	response := httptest.NewRecorder()
+	s.swaggerHandler.ServeSpec(response, httptest.NewRequest(http.MethodGet, "/api/v1/server/swagger", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("OpenAPI response status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var document struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &document); err != nil {
+		t.Fatalf("decode OpenAPI: %v", err)
+	}
+	registered := make(map[string]map[string]bool)
+	if err := chi.Walk(s.router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		route = strings.TrimSuffix(route, "/")
+		route = regexp.MustCompile(`\{[^}]+\}`).ReplaceAllString(route, "{id}")
+		if registered[route] == nil {
+			registered[route] = make(map[string]bool)
+		}
+		registered[route][method] = true
+		return nil
+	}); err != nil {
+		t.Fatalf("walk router: %v", err)
+	}
+	for path, operations := range document.Paths {
+		path = strings.TrimSuffix(path, "/")
+		path = regexp.MustCompile(`\{[^}]+\}`).ReplaceAllString(path, "{id}")
+		for method := range operations {
+			if !registered[path][strings.ToUpper(method)] {
+				t.Errorf("OpenAPI documents %s %s, but the router does not register it", strings.ToUpper(method), path)
+			}
+		}
 	}
 }
 

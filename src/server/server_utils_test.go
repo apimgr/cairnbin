@@ -240,6 +240,19 @@ func TestResolveCORSOrigin_OperatorConfig_Unmatched(t *testing.T) {
 	}
 }
 
+func TestResolveCORSOrigin_WildcardNeverAllowsCredentials(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Cors.AllowedOrigins = []string{"*"}
+	cfg.Server.Cors.AllowCredentials = true
+	s := newMinimalServer(cfg)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz", nil)
+	r.Header.Set("Origin", "https://unlisted.example")
+	got, creds, disabled := s.resolveCORSOrigin(r)
+	if got != "*" || creds || disabled {
+		t.Fatalf("wildcard CORS = (%q, %v, %v), want (*, false, false)", got, creds, disabled)
+	}
+}
+
 func TestResolveCORSOrigin_Disabled(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Cors.AllowedOrigins = []string{""}

@@ -12,7 +12,7 @@ x-logging: &default-logging
 
 services:
   cairnbin:
-    image: ghcr.io/apimgr/cairnbin:latest
+    image: ghcr.io/apimgr/cairnbin:${IMAGE_TAG:-latest}
     container_name: cairnbin-app
     hostname: cairnbin
     restart: always
@@ -20,19 +20,19 @@ services:
     logging: *default-logging
     environment:
       PORT: 80
-      TZ: ${TZ:-America/New_York}
+      TZ: America/New_York
       CACHE_URL: valkey://cairnbin-cache:6379
       TERMBIN_ENABLED: true
       # For remote libsql/Turso: set DATABASE_DRIVER=libsql and DATABASE_URL
       # DATABASE_DRIVER: libsql
       # DATABASE_URL: libsql://your-db.turso.io?authToken=your-turso-auth-token
     volumes:
-      - './volumes/config:/config:z'
-      - './volumes/data:/data:z'
+      - '${CONFIG_PATH:-./volumes/config}:/config:z'
+      - '${DATA_PATH:-./volumes/data}:/data:z'
     ports:
-      - '172.17.0.1:64580:80'
+      - '${HOST_BIND:-172.17.0.1}:${HTTP_PORT:-64580}:80'
       # termbin raw-TCP: no reverse proxy can front it, so bind all interfaces
-      - '9999:9999'
+      - '${TERMBIN_PORT:-9999}:9999'
     healthcheck:
       test: ['CMD', '/usr/local/bin/cairnbin', '--status']
       interval: 10s

@@ -132,7 +132,7 @@ func TestGetBackupDir_LinuxRoot(t *testing.T) {
 func TestGetPIDFile_LinuxRoot(t *testing.T) {
 	applyEnv(t, pathEnv{isContainer: false, isRoot: true, goos: "linux"})
 	t.Setenv("PID_FILE", "")
-	want := "/var/run/apimgr/cairnbin.pid"
+	want := "/var/run/apimgr/cairnbin/cairnbin.pid"
 	if got := GetPIDFile("cairnbin"); got != want {
 		t.Errorf("GetPIDFile linux root: got %q, want %q", got, want)
 	}

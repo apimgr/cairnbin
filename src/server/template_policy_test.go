@@ -96,6 +96,28 @@ func TestFrontendValidationAndToastContracts(t *testing.T) {
 	}
 }
 
+func TestServiceWorkerUpdateRecoveryContract(t *testing.T) {
+	data, err := os.ReadFile("static/js/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+	script := string(data)
+	if got := strings.Count(script, "addEventListener('controllerchange'"); got != 1 {
+		t.Errorf("controllerchange listeners = %d, want exactly one", got)
+	}
+	for _, required := range []string{
+		"if (serviceWorkerUpdateAccepted) reloadForServiceWorkerUpdate();",
+		"serviceWorkerUpdateAccepted = true;",
+		"window.setTimeout(reloadForServiceWorkerUpdate, 5000);",
+		"} else {\n        reloadForServiceWorkerUpdate();",
+		"if (serviceWorkerReloading) return;",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("app.js is missing service worker recovery contract %q", required)
+		}
+	}
+}
+
 // TestTemplatesAccessibilityBasics enforces the static half of PART 30
 // "Testing Requirements": skip links that target real anchors, landmark
 // elements, alt text on every image, and a programmatic label for every

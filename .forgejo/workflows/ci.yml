@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ gitea.workflow }}-${{ gitea.ref }}
+  group: ${{ forgejo.workflow }}-${{ forgejo.ref }}
   cancel-in-progress: true
 
 env:
@@ -22,7 +22,7 @@ env:
 jobs:
   lint:
     runs-on: ubuntu-26.04
-    if: gitea.event_name != 'schedule'
+    if: forgejo.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -35,7 +35,7 @@ jobs:
 
   test:
     runs-on: ubuntu-26.04
-    if: gitea.event_name != 'schedule'
+    if: forgejo.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -45,9 +45,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Run tests with coverage
         run: |
-          mkdir -p "/tmp/${{ gitea.repository_owner }}"
-          COVDIR=$(mktemp -d "/tmp/${{ gitea.repository_owner }}/$(basename "${{ gitea.repository }}")-XXXXXX")
-          echo "COVDIR=$COVDIR" >> "$GITEA_ENV"
+          mkdir -p "/tmp/${{ forgejo.repository_owner }}"
+          COVDIR=$(mktemp -d "/tmp/${{ forgejo.repository_owner }}/$(basename "${{ forgejo.repository }}")-XXXXXX")
+          echo "COVDIR=$COVDIR" >> "$FORGEJO_ENV"
           mkdir -p "$COVDIR/tmp"
           TMPDIR="$COVDIR/tmp" go test -buildvcs=false -v -cover -timeout 30m -coverprofile="$COVDIR/coverage.out" ./...
       - name: Enforce coverage threshold
@@ -63,7 +63,7 @@ jobs:
   build:
     needs: [lint, test]
     runs-on: ubuntu-26.04
-    if: gitea.event_name != 'schedule'
+    if: forgejo.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -108,10 +108,10 @@ jobs:
         id: range
         run: |
           BASE=""; HEAD=""
-          if [ "${{ gitea.event_name }}" = "push" ] && [ "${{ gitea.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-            BASE="${{ gitea.event.before }}"; HEAD="${{ gitea.sha }}"
-          elif [ "${{ gitea.event_name }}" = "pull_request" ]; then
-            BASE="${{ gitea.event.pull_request.base.sha }}"; HEAD="${{ gitea.event.pull_request.head.sha }}"
+          if [ "${{ forgejo.event_name }}" = "push" ] && [ "${{ forgejo.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            BASE="${{ forgejo.event.before }}"; HEAD="${{ forgejo.sha }}"
+          elif [ "${{ forgejo.event_name }}" = "pull_request" ]; then
+            BASE="${{ forgejo.event.pull_request.base.sha }}"; HEAD="${{ forgejo.event.pull_request.head.sha }}"
           fi
           echo "base=$BASE" >> "$GITEA_OUTPUT"
           echo "head=$HEAD" >> "$GITEA_OUTPUT"
@@ -142,7 +142,7 @@ jobs:
   coverage:
     needs: [build]
     runs-on: ubuntu-26.04
-    if: gitea.event_name != 'schedule'
+    if: forgejo.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -188,7 +188,7 @@ jobs:
   upload-artifacts:
     needs: [build]
     runs-on: ubuntu-26.04
-    if: gitea.event_name != 'schedule'
+    if: forgejo.event_name != 'schedule'
     container:
       image: casjaysdev/go:latest
       options: "--user 0:0"
@@ -199,20 +199,20 @@ jobs:
       - name: Set build info
         run: |
           if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> "$GITEA_ENV"
+            echo "VERSION=$(cat release.txt)" >> "$FORGEJO_ENV"
           else
-            echo "VERSION=devel" >> "$GITEA_ENV"
+            echo "VERSION=devel" >> "$FORGEJO_ENV"
           fi
-          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$GITEA_ENV"
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$FORGEJO_ENV"
           BUILD_EPOCH=$(date -u +%s)
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITEA_ENV"
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITEA_ENV"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$FORGEJO_ENV"
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> "$FORGEJO_ENV"
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
-            echo "OFFICIAL_SITE=$(cat site.txt)" >> "$GITEA_ENV"
+            echo "OFFICIAL_SITE=$(cat site.txt)" >> "$FORGEJO_ENV"
           else
-            echo "OFFICIAL_SITE=${{ secrets.OFFICIAL_SITE }}" >> "$GITEA_ENV"
+            echo "OFFICIAL_SITE=${{ secrets.OFFICIAL_SITE }}" >> "$FORGEJO_ENV"
           fi
       - name: Build linux/amd64 server
         env:
@@ -232,7 +232,7 @@ jobs:
       - name: Upload CI binaries
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: ci-binaries-${{ gitea.sha }}
+          name: ci-binaries-${{ forgejo.sha }}
           path: |
             cairnbin-linux-amd64
             cairnbin-cli-linux-amd64

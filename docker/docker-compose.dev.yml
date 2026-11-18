@@ -13,7 +13,7 @@ x-logging: &default-logging
 
 services:
   cairnbin:
-    image: ghcr.io/apimgr/cairnbin:devel
+    image: ghcr.io/apimgr/cairnbin:${IMAGE_TAG:-devel}
     pull_policy: always
     container_name: cairnbin-app
     hostname: cairnbin
@@ -23,17 +23,17 @@ services:
       MODE: development
       DEBUG: true
       PORT: 80
-      TZ: ${TZ:-America/New_York}
+      TZ: America/New_York
       TERMBIN_ENABLED: true
     ports:
       # Development: accessible from all interfaces, no 172.17.0.1 bind
-      - '64580:80'
-      - '9999:9999'
+      - '${HTTP_PORT:-64580}:80'
+      - '${TERMBIN_PORT:-9999}:9999'
     volumes:
       # TEMP DIR WORKFLOW: ./volumes/ resolves to $TEMP_DIR/volumes/
       # NEVER run from project directory — always use temp dir workflow
-      - './volumes/config:/config'
-      - './volumes/data:/data'
+      - '${CONFIG_PATH:-./volumes/config}:/config'
+      - '${DATA_PATH:-./volumes/data}:/data'
     healthcheck:
       test: ['CMD', '/usr/local/bin/cairnbin', '--status']
       interval: 10s

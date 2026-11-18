@@ -27,15 +27,23 @@ StandardError=journal
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/%s/%s
-ReadWritePaths=/var/lib/%s/%s
-ReadWritePaths=/var/cache/%s/%s
-ReadWritePaths=/var/log/%s/%s
+# Complete writable set: config, data, cache, log, per-service PID and system backups.
+# A leading "-" makes a path optional so missing directories do not fail namespace setup.
+# ExecStartPre creates the standard directories before ProtectSystem=strict applies.
+# The installer appends moved database or backup paths here in the same optional form.
+ExecStartPre=+/usr/bin/install -d -m 0755 /etc/%s/%s /var/lib/%s/%s /var/cache/%s/%s /var/log/%s/%s /var/run/%s/%s
+ReadWritePaths=-/etc/%s/%s
+ReadWritePaths=-/var/lib/%s/%s
+ReadWritePaths=-/var/cache/%s/%s
+ReadWritePaths=-/var/log/%s/%s
+ReadWritePaths=-/var/run/%s/%s
+ReadWritePaths=-/mnt/Backups/%s/%s
 
 [Install]
 WantedBy=multi-user.target
 `, appName, orgName, appName, binaryPath,
-		orgName, appName, orgName, appName, orgName, appName, orgName, appName)
+		orgName, appName, orgName, appName, orgName, appName, orgName, appName, orgName, appName,
+		orgName, appName, orgName, appName, orgName, appName, orgName, appName, orgName, appName, orgName, appName)
 }
 
 // buildOpenRCScript returns the OpenRC init script (PART 24).
@@ -49,7 +57,7 @@ description="%[2]s"
 # actual binary (may differ from %[1]s after rename)
 command="%[3]s"
 command_args=""
-pidfile="/var/run/%[5]s/%[1]s.pid"
+pidfile="/var/run/%[5]s/%[1]s/%[1]s.pid"
 command_background=true
 output_log="/var/log/%[5]s/%[1]s/server.log"
 error_log="/var/log/%[5]s/%[1]s/error.log"
@@ -61,7 +69,7 @@ depend() {
 }
 
 start_pre() {
-    checkpath -d -m 0755 -o %[4]s:%[4]s /var/run/%[5]s
+    checkpath -d -m 0755 -o %[4]s:%[4]s /var/run/%[5]s/%[1]s
     checkpath -d -m 0755 -o %[4]s:%[4]s /var/log/%[5]s/%[1]s
 }
 `, appName, appTitle, binaryPath, serviceUser, orgName)
@@ -83,7 +91,7 @@ func buildSysVScript(binaryPath string) string {
 NAME=%[1]s
 DAEMON=%[3]s
 DAEMON_USER=%[4]s
-PIDFILE=/var/run/%[5]s/%[1]s.pid
+PIDFILE=/var/run/%[5]s/%[1]s/%[1]s.pid
 LOGFILE=/var/log/%[5]s/%[1]s/server.log
 
 case "$1" in

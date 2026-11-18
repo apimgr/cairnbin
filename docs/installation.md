@@ -44,6 +44,10 @@ mkdir -p /srv/cairnbin && cp docker/docker-compose.yml /srv/cairnbin/
 cd /srv/cairnbin && docker compose up -d
 ```
 
+The defaults work without an `.env` file. To customize deployment values, set
+`IMAGE_TAG`, `HOST_BIND`, `HTTP_PORT`, `TERMBIN_PORT`, `CONFIG_PATH`, or
+`DATA_PATH` in the shell or in an operator-managed `.env` file.
+
 ## Systemd Service
 
 ```bash

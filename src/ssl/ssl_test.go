@@ -442,7 +442,7 @@ func TestValidateDNSProvider_Success_Digitalocean(t *testing.T) {
 	// digitalocean's provider construction performs no network calls, so
 	// this exercises the real success path used for startup validation.
 	t.Setenv("DO_AUTH_TOKEN", "")
-	err := ssl.ValidateDNSProvider("digitalocean", map[string]string{"auth_token": "test-token"})
+	err := ssl.ValidateDNSProvider("digitalocean", map[string]string{"DO_AUTH_TOKEN": "test-token"})
 	if err != nil {
 		t.Errorf("ValidateDNSProvider(digitalocean): unexpected error: %v", err)
 	}
@@ -474,7 +474,7 @@ func TestGetTLSConfig_DNS01_RoutesToDNSProvider(t *testing.T) {
 			Email:           "admin@example.com",
 			Challenge:       "dns-01",
 			DNSProviderType: "digitalocean",
-			DNSCredentials:  map[string]string{"auth_token": "test-token"},
+			DNSCredentials:  map[string]string{"DO_AUTH_TOKEN": "test-token"},
 		},
 	})
 	_, err := m.GetTLSConfig([]string{"example.com"})
@@ -488,10 +488,8 @@ func TestGetTLSConfig_DNS01_RoutesToDNSProvider(t *testing.T) {
 	}
 }
 
-func TestGetTLSConfig_DNS01_NoProviderConfigured_FallsBackToAutocert(t *testing.T) {
-	// challenge=dns-01 but no DNSProviderType set — GetTLSConfig must fall
-	// back to the existing autocert http-01/tls-alpn-01 path rather than
-	// attempting (and failing) the dns-01 path.
+func TestGetTLSConfig_DNS01_NoProviderConfigured_ReturnsError(t *testing.T) {
+	// DNS-01 must not silently fall back to an HTTP-based challenge.
 	certDir := t.TempDir()
 	m := ssl.NewManager(ssl.Config{
 		Enabled: true,
@@ -503,11 +501,7 @@ func TestGetTLSConfig_DNS01_NoProviderConfigured_FallsBackToAutocert(t *testing.
 			Challenge: "dns-01",
 		},
 	})
-	cfg, err := m.GetTLSConfig([]string{"example.com"})
-	if err != nil {
-		t.Fatalf("GetTLSConfig with dns-01 challenge but no provider: %v", err)
-	}
-	if cfg == nil {
-		t.Fatal("expected non-nil *tls.Config falling back to autocert")
+	if _, err := m.GetTLSConfig([]string{"example.com"}); err == nil {
+		t.Fatal("expected missing DNS provider to fail without challenge fallback")
 	}
 }

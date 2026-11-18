@@ -316,7 +316,7 @@ func GetPIDFile(appName string) string {
 		case "windows":
 			return filepath.Join(os.Getenv("ProgramData"), orgName, appName, appName+".pid")
 		default:
-			return filepath.Join("/var", "run", orgName, appName+".pid")
+			return filepath.Join("/var", "run", orgName, appName, appName+".pid")
 		}
 	}
 

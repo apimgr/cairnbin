@@ -102,7 +102,7 @@ type ServerConfig struct {
 	I2P           I2PConfig           `yaml:"i2p"`
 	Logging       LoggingConfig       `yaml:"logs"`
 	Notifications NotificationsConfig `yaml:"notifications"`
-	TLS           TLSConfig           `yaml:"tls"`
+	TLS           TLSConfig           `yaml:"ssl"`
 	// Backup configures backup encryption, compliance, and retention (PART 21).
 	Backup BackupConfig `yaml:"backup"`
 	// Update controls the self-update channel and scheduling behaviour (PART 22).
@@ -1183,13 +1183,13 @@ type NotificationsConfig struct {
 // log, and backup volumes.
 type DiskLowConfig struct {
 	// Enabled controls the disk_check scheduler task.
-	Enabled          bool   `yaml:"enabled"`
+	Enabled bool `yaml:"enabled"`
 	// ThresholdPercent triggers an alert at or above this used-space percent.
-	ThresholdPercent int    `yaml:"threshold_percent"`
+	ThresholdPercent int `yaml:"threshold_percent"`
 	// CheckInterval controls disk_check cadence as a Go duration string.
-	CheckInterval    string `yaml:"check_interval"`
+	CheckInterval string `yaml:"check_interval"`
 	// Repeat is the minimum interval between alerts for a volume.
-	Repeat           string `yaml:"repeat"`
+	Repeat string `yaml:"repeat"`
 }
 
 // EmailConfig holds SMTP and sender settings for outbound email.
@@ -1457,7 +1457,6 @@ type TrivyConfig struct {
 }
 
 // TLSConfig holds SSL/TLS and Let's Encrypt settings (PART 12/15).
-// The yaml key is `tls` per PART 15: "TLS config: server.tls.* keys in config".
 type TLSConfig struct {
 	Enabled bool `yaml:"enabled"`
 	// Cert and Key are optional manual certificate override paths.
@@ -1468,14 +1467,12 @@ type TLSConfig struct {
 	MinVersion string `yaml:"min_version"`
 	// LetsEncrypt holds ACME settings, nested under ssl.letsencrypt per spec.
 	LetsEncrypt LetsEncryptConfig `yaml:"letsencrypt"`
-	// DNSProvider selects the dns-01 provider name (e.g. cloudflare, rfc2136).
-	DNSProvider string `yaml:"dns_provider"`
-	// DNSCredentialsEncrypted stores AES-256-GCM encrypted JSON of provider credentials.
-	// Encrypted using server.security.encryption_key. Never store plaintext credentials here.
-	DNSCredentialsEncrypted string `yaml:"dns_credentials_encrypted"`
+	// Legacy credential fields remain available to callers that migrate old configs.
+	DNSProvider             string `yaml:"-"`
+	DNSCredentialsEncrypted string `yaml:"-"`
 }
 
-// LetsEncryptConfig holds ACME settings nested under server.tls.letsencrypt (PART 12/15).
+// LetsEncryptConfig holds ACME settings nested under server.ssl.letsencrypt (PART 12/15).
 type LetsEncryptConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	Email   string `yaml:"email"`
@@ -1483,6 +1480,10 @@ type LetsEncryptConfig struct {
 	Challenge string `yaml:"challenge"`
 	// Staging uses the LE staging CA for testing.
 	Staging bool `yaml:"staging"`
+	// DNSProvider selects a lego DNS-01 provider.
+	DNSProvider string `yaml:"dns_provider"`
+	// DNSCredentials stores lego environment variable names and encrypted values.
+	DNSCredentials map[string]string `yaml:"dns_credentials"`
 }
 
 // BrandingConfig holds site branding shown in the UI and metadata (PART 12/16).
@@ -1869,7 +1870,8 @@ func DefaultConfig() *Config {
 			TLS: TLSConfig{
 				MinVersion: "TLS1.2",
 				LetsEncrypt: LetsEncryptConfig{
-					Challenge: "http-01",
+					Challenge:      "http-01",
+					DNSCredentials: map[string]string{},
 				},
 			},
 			Scheduler: SchedulerConfig{
@@ -2343,6 +2345,9 @@ func Load(path string) (*Config, error) {
 			return cfg, err
 		}
 	}
+	if err := migrateLegacyTLSFiles(path); err != nil {
+		return cfg, err
+	}
 	fieldSources, decodeErr := decodeConfigFiles(path, cfg)
 	if decodeErr != nil {
 		var typeErr *yaml.TypeError
@@ -2436,6 +2441,22 @@ func Load(path string) (*Config, error) {
 		log.Printf("config: warning: could not generate webhook secret: %v", genErr)
 	} else if gen {
 		needSave = true
+	}
+	for name, value := range cfg.Server.TLS.LetsEncrypt.DNSCredentials {
+		if !strings.HasPrefix(value, "enc:v1:") {
+			source := cfg.SourceFile("server.ssl.letsencrypt.dns_credentials." + name)
+			if source == "" {
+				source = path
+			}
+			sealed, sealErr := cfg.encryptDNSCredential(value)
+			if sealErr != nil {
+				return nil, fmt.Errorf("config: could not encrypt DNS credential %s", name)
+			}
+			if persistErr := persistDNSCredential(source, name, sealed); persistErr != nil {
+				return nil, fmt.Errorf("config: could not persist encrypted DNS credential %s in %s", name, source)
+			}
+			cfg.Server.TLS.LetsEncrypt.DNSCredentials[name] = sealed
+		}
 	}
 
 	// Never rewrite a file that held invalid entries: Save would silently drop
@@ -2540,6 +2561,22 @@ func (c *Config) EncryptDNSCredentials(creds map[string]string) (string, error) 
 // DNSCredentialsEncrypted is not an error — it returns an empty, non-nil
 // map so callers can range over it safely.
 func (c *Config) DecryptDNSCredentials() (map[string]string, error) {
+	configured := c.Server.TLS.LetsEncrypt.DNSCredentials
+	if len(configured) > 0 {
+		creds := make(map[string]string, len(configured))
+		for name, value := range configured {
+			if strings.HasPrefix(value, "enc:v1:") {
+				plain, err := c.decryptDNSCredential(value)
+				if err != nil {
+					return nil, fmt.Errorf("dns credentials: decrypt %s: %w", name, err)
+				}
+				creds[name] = plain
+			} else {
+				creds[name] = value
+			}
+		}
+		return creds, nil
+	}
 	s := c.Server.TLS.DNSCredentialsEncrypted
 	if s == "" {
 		return map[string]string{}, nil
@@ -2564,6 +2601,34 @@ func (c *Config) DecryptDNSCredentials() (map[string]string, error) {
 		creds = map[string]string{}
 	}
 	return creds, nil
+}
+
+func (c *Config) encryptDNSCredential(value string) (string, error) {
+	key, err := c.EncryptionKey()
+	if err != nil {
+		return "", err
+	}
+	sealed, err := secretbox.Seal(key, []byte(value))
+	if err != nil {
+		return "", err
+	}
+	return "enc:v1:" + base64.StdEncoding.EncodeToString(sealed), nil
+}
+
+func (c *Config) decryptDNSCredential(value string) (string, error) {
+	key, err := c.EncryptionKey()
+	if err != nil {
+		return "", err
+	}
+	sealed, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(value, "enc:v1:"))
+	if err != nil {
+		return "", fmt.Errorf("invalid ciphertext")
+	}
+	plain, err := secretbox.Open(key, sealed)
+	if err != nil {
+		return "", fmt.Errorf("authentication failed")
+	}
+	return string(plain), nil
 }
 
 // projectName is the AI.md {project_name} placeholder (PART 12 dynamic
@@ -3606,6 +3671,7 @@ func persistGeneratedSecrets(path string, cfg *Config) error {
 			return err
 		}
 	}
+	migrateLegacyTLSNode(root.Content[0])
 	encoded, err := yaml.Marshal(&root)
 	if err != nil {
 		return err
@@ -3635,6 +3701,169 @@ func persistGeneratedSecrets(path string, cfg *Config) error {
 		return err
 	}
 	return os.Rename(tmpPath, path)
+}
+
+func persistDNSCredential(path, name, encrypted string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return fmt.Errorf("config document is not a mapping")
+	}
+	if err := setYAMLScalarPath(root.Content[0], []string{"server", "ssl", "letsencrypt", "dns_credentials", name}, encrypted); err != nil {
+		return err
+	}
+	encoded, err := yaml.Marshal(&root)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".dns-credentials.*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(encoded); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
+func migrateLegacyTLSFiles(configPath string) error {
+	dropIns, err := readYAMLDropIns(configPath)
+	if err != nil {
+		return err
+	}
+	paths := []string{configPath}
+	for _, dropIn := range dropIns {
+		paths = append(paths, dropIn.path)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read config %s: %w", path, err)
+		}
+		var root yaml.Node
+		if err := yaml.Unmarshal(data, &root); err != nil {
+			return fmt.Errorf("parse config %s: %w", path, err)
+		}
+		if hasLegacyTLSNode(&root) {
+			if err := persistLegacyTLSKey(path); err != nil {
+				return fmt.Errorf("migrate legacy TLS config in %s: %w", path, err)
+			}
+		}
+	}
+	return nil
+}
+
+func hasLegacyTLSNode(doc *yaml.Node) bool {
+	if doc == nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return false
+	}
+	root := doc.Content[0]
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value != "server" || root.Content[i+1].Kind != yaml.MappingNode {
+			continue
+		}
+		server := root.Content[i+1]
+		for j := 0; j+1 < len(server.Content); j += 2 {
+			if server.Content[j].Value == "tls" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func persistLegacyTLSKey(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return err
+	}
+	if len(root.Content) == 0 {
+		return fmt.Errorf("config document is empty")
+	}
+	migrateLegacyTLSNode(root.Content[0])
+	encoded, err := yaml.Marshal(&root)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".tls-config.*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(encoded); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
+func migrateLegacyTLSNode(root *yaml.Node) {
+	if root == nil || root.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value != "server" || root.Content[i+1].Kind != yaml.MappingNode {
+			continue
+		}
+		server := root.Content[i+1]
+		legacy, current := -1, -1
+		for j := 0; j+1 < len(server.Content); j += 2 {
+			switch server.Content[j].Value {
+			case "tls":
+				legacy = j
+			case "ssl":
+				current = j
+			}
+		}
+		if legacy < 0 {
+			return
+		}
+		if current < 0 {
+			server.Content[legacy].Value = "ssl"
+			return
+		}
+		server.Content = append(server.Content[:legacy], server.Content[legacy+2:]...)
+		return
+	}
 }
 
 func setYAMLScalarPath(node *yaml.Node, path []string, value string) error {
@@ -3763,6 +3992,36 @@ func ResolvePort(cfgPath string, cfg *Config, inContainer bool) error {
 		return fmt.Errorf("port allocator: could not persist port to %s: %w", cfgPath, saveErr)
 	}
 	return nil
+}
+
+// PeekServerPort reads only the top-level server.port scalar from an existing
+// YAML config. It deliberately avoids Config validation so unrelated invalid
+// settings cannot prevent early listener setup.
+func PeekServerPort(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var root yaml.Node
+	if yaml.Unmarshal(data, &root) != nil || len(root.Content) == 0 {
+		return ""
+	}
+	doc := root.Content[0]
+	if doc.Kind != yaml.MappingNode {
+		return ""
+	}
+	for i := 0; i+1 < len(doc.Content); i += 2 {
+		if doc.Content[i].Value != "server" || doc.Content[i+1].Kind != yaml.MappingNode {
+			continue
+		}
+		server := doc.Content[i+1]
+		for j := 0; j+1 < len(server.Content); j += 2 {
+			if server.Content[j].Value == "port" && server.Content[j+1].Kind == yaml.ScalarNode {
+				return strings.TrimSpace(server.Content[j+1].Value)
+			}
+		}
+	}
+	return ""
 }
 
 // persistPortOnly reads the config file at path, sets Server.Port to port, and

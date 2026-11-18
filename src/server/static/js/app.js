@@ -198,7 +198,22 @@ document.addEventListener('keydown', function (event) {
 
 // ─── Service worker ───────────────────────────────────────────────────────────
 
+let serviceWorkerUpdateAccepted = false;
+let serviceWorkerReloading = false;
+
+// reloadForServiceWorkerUpdate reloads at most once after an accepted update.
+function reloadForServiceWorkerUpdate() {
+    if (serviceWorkerReloading) return;
+    serviceWorkerReloading = true;
+    window.location.reload();
+}
+
 if ('serviceWorker' in navigator) {
+    // Register once at page load. Updates observed before acceptance are ignored.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (serviceWorkerUpdateAccepted) reloadForServiceWorkerUpdate();
+    });
+
     window.addEventListener('load', async () => {
         try {
             const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
@@ -221,10 +236,6 @@ if ('serviceWorker' in navigator) {
         }
     });
 
-    // Reload when a new SW takes control (after user clicks "Update Now").
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        window.location.reload();
-    });
 }
 
 // showUpdateBanner injects an update-available banner into the #toast-container,
@@ -259,11 +270,20 @@ function showUpdateBanner(registration) {
     window.__swRegistration = registration;
 }
 
-// applyUpdate signals the waiting service worker to skip waiting.
+// applyUpdate signals a waiting worker and always reloads, even if it vanished
+// or never takes control after the user accepts the update.
 function applyUpdate() {
+    serviceWorkerUpdateAccepted = true;
     const reg = window.__swRegistration;
     if (reg && reg.waiting) {
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        window.setTimeout(reloadForServiceWorkerUpdate, 5000);
+        try {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } catch (_) {
+            reloadForServiceWorkerUpdate();
+        }
+    } else {
+        reloadForServiceWorkerUpdate();
     }
 }
 

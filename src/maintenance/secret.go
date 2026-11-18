@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/apimgr/cairnbin/src/common/secretbox"
 	"github.com/apimgr/cairnbin/src/config"
 	"github.com/apimgr/cairnbin/src/database"
@@ -217,23 +219,19 @@ func rotateEncryptionKey(db secretStore, cfg *config.Config, cfgPath string) (in
 		return 0, 0, fmt.Errorf("secret rotate: generate: %w", err)
 	}
 
-	// Re-encrypt the DNS credentials in memory first so a bad blob aborts
-	// before anything is written.
-	var newDNS string
-	if cfg.Server.TLS.DNSCredentialsEncrypted != "" {
-		sealed, err := base64.StdEncoding.DecodeString(cfg.Server.TLS.DNSCredentialsEncrypted)
-		if err != nil {
-			return 0, 0, fmt.Errorf("secret rotate: dns credentials: %w", err)
+	// Re-encrypt DNS credentials in memory first so a bad value aborts before
+	// the key or any database secret is changed.
+	plainDNS, err := cfg.DecryptDNSCredentials()
+	if err != nil {
+		return 0, 0, fmt.Errorf("secret rotate: dns credentials could not be decrypted")
+	}
+	newDNS := make(map[string]string, len(plainDNS))
+	for name, value := range plainDNS {
+		sealed, sealErr := secretbox.Seal(newKey, []byte(value))
+		if sealErr != nil {
+			return 0, 0, fmt.Errorf("secret rotate: dns credential %s could not be encrypted", name)
 		}
-		plain, err := secretbox.Open(oldKey, sealed)
-		if err != nil {
-			return 0, 0, fmt.Errorf("secret rotate: dns credentials do not decrypt with the current key: %w", err)
-		}
-		resealed, err := secretbox.Seal(newKey, plain)
-		if err != nil {
-			return 0, 0, err
-		}
-		newDNS = base64.StdEncoding.EncodeToString(resealed)
+		newDNS[name] = "enc:v1:" + base64.StdEncoding.EncodeToString(sealed)
 	}
 
 	if err := db.ParkAppSecret(EncryptionKeyPreviousSecret, []byte(hex.EncodeToString(oldKey))); err != nil {
@@ -246,10 +244,20 @@ func rotateEncryptionKey(db secretStore, cfg *config.Config, cfgPath string) (in
 	}
 	lines := strings.Split(string(data), "\n")
 	lines = replaceYAMLField(lines, "encryption_key", `"`+hex.EncodeToString(newKey)+`"`)
-	if newDNS != "" {
-		lines = replaceYAMLField(lines, "dns_credentials_encrypted", `"`+newDNS+`"`)
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(strings.Join(lines, "\n")), &root); err != nil {
+		return 0, 0, fmt.Errorf("secret rotate: parse config: %w", err)
 	}
-	if err := atomicWriteFile(cfgPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
+	for name, value := range newDNS {
+		if err := setYAMLSecretPath(root.Content[0], []string{"server", "ssl", "letsencrypt", "dns_credentials", name}, value); err != nil {
+			return 0, 0, fmt.Errorf("secret rotate: update DNS credential %s: %w", name, err)
+		}
+	}
+	encoded, err := yaml.Marshal(&root)
+	if err != nil {
+		return 0, 0, fmt.Errorf("secret rotate: encode config: %w", err)
+	}
+	if err := atomicWriteFile(cfgPath, encoded, 0o600); err != nil {
 		return 0, 0, fmt.Errorf("secret rotate: write config: %w", err)
 	}
 
@@ -285,4 +293,28 @@ func rotateEncryptionKey(db secretStore, cfg *config.Config, cfgPath string) (in
 		fmt.Fprintln(os.Stderr, maintenanceText("secret_partial_warning", "count", tSkip+rSkip))
 	}
 	return tokens, reports, nil
+}
+
+func setYAMLSecretPath(node *yaml.Node, path []string, value string) error {
+	if len(path) == 0 || node.Kind != yaml.MappingNode {
+		return fmt.Errorf("invalid YAML path")
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value != path[0] {
+			continue
+		}
+		if len(path) == 1 {
+			node.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+			return nil
+		}
+		return setYAMLSecretPath(node.Content[i+1], path[1:], value)
+	}
+	child := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	if len(path) == 1 {
+		child = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+	} else if err := setYAMLSecretPath(child, path[1:], value); err != nil {
+		return err
+	}
+	node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: path[0]}, child)
+	return nil
 }

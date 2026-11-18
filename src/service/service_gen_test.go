@@ -35,7 +35,7 @@ func TestSystemdUnitContent_RequiredDirectives(t *testing.T) {
 		}
 	}
 
-	for _, extra := range []string{"NoNewPrivileges", "RuntimeDirectory", "ReadWritePaths=/etc\n", "User="} {
+	for _, extra := range []string{"NoNewPrivileges", "RuntimeDirectory", "User="} {
 		if strings.Contains(serviceContent, extra) {
 			t.Errorf("systemd unit has directive outside PART 24: %q", extra)
 		}
@@ -90,10 +90,12 @@ func TestSystemdUnitContent_HasReadWritePaths(t *testing.T) {
 		fmt.Sprintf("/var/lib/%s/%s", orgName, appName),
 		fmt.Sprintf("/var/cache/%s/%s", orgName, appName),
 		fmt.Sprintf("/var/log/%s/%s", orgName, appName),
+		fmt.Sprintf("/var/run/%s/%s", orgName, appName),
+		fmt.Sprintf("/mnt/Backups/%s/%s", orgName, appName),
 	}
 
 	for _, path := range expectedPaths {
-		if !strings.Contains(serviceContent, "ReadWritePaths="+path) {
+		if !strings.Contains(serviceContent, "ReadWritePaths=-"+path) {
 			t.Errorf("systemd unit missing ReadWritePaths=%s", path)
 		}
 	}
@@ -230,7 +232,7 @@ func TestOpenRCScriptContent_HasPidfile(t *testing.T) {
 	binaryPath := GetBinaryPath()
 	rcContent := buildOpenRCScript(binaryPath)
 
-	expectedPidfile := fmt.Sprintf(`pidfile="/var/run/%s/%s.pid"`, orgName, appName)
+	expectedPidfile := fmt.Sprintf(`pidfile="/var/run/%s/%s/%s.pid"`, orgName, appName, appName)
 	if !strings.Contains(rcContent, expectedPidfile) {
 		t.Errorf("OpenRC script missing pidfile directive")
 	}
@@ -249,9 +251,9 @@ func TestOpenRCScriptContent_HasCheckpathCalls(t *testing.T) {
 	binaryPath := GetBinaryPath()
 	rcContent := buildOpenRCScript(binaryPath)
 
-	expectedRunCheck := fmt.Sprintf("checkpath -d -m 0755 -o %s:%s /var/run/%s", serviceUser, serviceUser, orgName)
+	expectedRunCheck := fmt.Sprintf("checkpath -d -m 0755 -o %s:%s /var/run/%s/%s", serviceUser, serviceUser, orgName, appName)
 	if !strings.Contains(rcContent, expectedRunCheck) {
-		t.Errorf("OpenRC script missing start_pre checkpath for /var/run/%s", orgName)
+		t.Errorf("OpenRC script missing start_pre checkpath for /var/run/%s/%s", orgName, appName)
 	}
 
 	expectedLogCheck := fmt.Sprintf("checkpath -d -m 0755 -o %s:%s /var/log/%s/%s", serviceUser, serviceUser, orgName, appName)
@@ -317,7 +319,7 @@ func TestSysVScriptContent_HasPidfile(t *testing.T) {
 	binaryPath := GetBinaryPath()
 	initContent := buildSysVScript(binaryPath)
 
-	expectedPidfile := fmt.Sprintf("PIDFILE=/var/run/%s/%s.pid", orgName, appName)
+	expectedPidfile := fmt.Sprintf("PIDFILE=/var/run/%s/%s/%s.pid", orgName, appName, appName)
 	if !strings.Contains(initContent, expectedPidfile) {
 		t.Errorf("SysV script missing PIDFILE directive")
 	}

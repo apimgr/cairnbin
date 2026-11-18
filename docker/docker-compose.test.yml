@@ -30,7 +30,7 @@ services:
       PORT: 80
       DEBUG: true
       MODE: development
-      TZ: ${TZ:-America/New_York}
+      TZ: America/New_York
       TERMBIN_ENABLED: true
       CACHE_URL: valkey://cairnbin-cache:6379
       CAIRNBIN_E2E_UPDATE_API_URL: http://cairnbin-e2e-runner:64980/update

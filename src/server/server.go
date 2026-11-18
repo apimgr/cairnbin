@@ -294,6 +294,10 @@ type Server struct {
 	// resolvedProxyIPs maps each DNS name in trusted_proxies.additional to its
 	// current set of resolved IP addresses.  Refreshed every 5 minutes (PART 12).
 	resolvedProxyIPs map[string][]net.IP
+	// dnsConfigMu protects the last applied DNS credential identity across config reloads.
+	dnsConfigMu           sync.Mutex
+	lastDNSProvider       string
+	lastDNSCredentialHash [32]byte
 	// domainLearner observes Host headers and infers baseDomain / wildcardDomain
 	// for dynamic CORS and URL-building support (PART 12 url_detection).
 	domainLearner *domainLearner
@@ -316,6 +320,28 @@ type privDropConfig struct {
 // (PART 11). Call from main after resolving directories, before Run.
 func (s *Server) SetLogDir(dir string) {
 	s.logDir = dir
+}
+
+func (s *Server) dnsValidatedCallback() func(time.Time) error {
+	store, ok := s.db.(interface{ SetAppSecretValue(string, string) error })
+	if !ok {
+		return nil
+	}
+	return func(validatedAt time.Time) error {
+		return store.SetAppSecretValue("dns_validated_at", validatedAt.UTC().Format(time.RFC3339))
+	}
+}
+
+func dnsCredentialHash(cfg *config.Config) [32]byte {
+	credentials, err := cfg.DecryptDNSCredentials()
+	if err != nil {
+		return sha256.Sum256([]byte("invalid-dns-credentials"))
+	}
+	encoded, err := json.Marshal(credentials)
+	if err != nil {
+		return sha256.Sum256([]byte("invalid-dns-credentials"))
+	}
+	return sha256.Sum256(encoded)
 }
 
 // SetAuditWriter registers the JSON Lines audit-log writer (AI.md
@@ -494,20 +520,22 @@ func (s *Server) apiVersion() string {
 // cfgMgr may be nil (e.g. in tests); when set, hot-reloadable settings are read live.
 func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, version, commitID, buildDate, configDir, dataDir string) *Server {
 	s := &Server{
-		ipBlocks:          newIPBlocks(),
-		router:            chi.NewRouter(),
-		db:                db,
-		cfg:               cfg,
-		cfgMgr:            cfgMgr,
-		lastSMTPConfig:    cfg.Server.Notifications.Email,
-		lastEmailLanguage: cfg.Server.Lang,
-		lastI2PConfig:     cfg.Server.I2P,
-		version:           version,
-		commitID:          commitID,
-		buildDate:         buildDate,
-		configDir:         configDir,
-		dataDir:           dataDir,
-		startTime:         time.Now(),
+		ipBlocks:              newIPBlocks(),
+		router:                chi.NewRouter(),
+		db:                    db,
+		cfg:                   cfg,
+		cfgMgr:                cfgMgr,
+		lastSMTPConfig:        cfg.Server.Notifications.Email,
+		lastEmailLanguage:     cfg.Server.Lang,
+		lastI2PConfig:         cfg.Server.I2P,
+		version:               version,
+		commitID:              commitID,
+		buildDate:             buildDate,
+		configDir:             configDir,
+		dataDir:               dataDir,
+		lastDNSProvider:       cfg.Server.TLS.LetsEncrypt.DNSProvider,
+		lastDNSCredentialHash: dnsCredentialHash(cfg),
+		startTime:             time.Now(),
 	}
 	s.stats.lastHour = time.Now().Hour()
 
@@ -1016,6 +1044,20 @@ func (s *Server) OnConfigChange(next *config.Config) {
 	if !reflect.DeepEqual(prev.Server.Tor, next.Server.Tor) {
 		s.MarkPendingRestart("tor")
 	}
+	s.dnsConfigMu.Lock()
+	nextDNSHash := dnsCredentialHash(next)
+	dnsConfigChanged := s.lastDNSProvider != next.Server.TLS.LetsEncrypt.DNSProvider ||
+		s.lastDNSCredentialHash != nextDNSHash
+	s.lastDNSProvider = next.Server.TLS.LetsEncrypt.DNSProvider
+	s.lastDNSCredentialHash = nextDNSHash
+	s.dnsConfigMu.Unlock()
+	if dnsConfigChanged {
+		if store, ok := s.db.(interface{ DeleteAppSecretValue(string) error }); ok {
+			if err := store.DeleteAppSecretValue("dns_validated_at"); err != nil {
+				log.Printf("ERROR: ssl: failed to clear DNS credential validation timestamp")
+			}
+		}
+	}
 	if prev.Server.TLS.Enabled != next.Server.TLS.Enabled ||
 		prev.Server.TLS.Cert != next.Server.TLS.Cert ||
 		prev.Server.TLS.Key != next.Server.TLS.Key ||
@@ -1024,8 +1066,7 @@ func (s *Server) OnConfigChange(next *config.Config) {
 		prev.Server.TLS.LetsEncrypt.Enabled != next.Server.TLS.LetsEncrypt.Enabled ||
 		prev.Server.TLS.LetsEncrypt.Challenge != next.Server.TLS.LetsEncrypt.Challenge ||
 		prev.Server.TLS.LetsEncrypt.Staging != next.Server.TLS.LetsEncrypt.Staging ||
-		prev.Server.TLS.DNSProvider != next.Server.TLS.DNSProvider ||
-		prev.Server.TLS.DNSCredentialsEncrypted != next.Server.TLS.DNSCredentialsEncrypted {
+		dnsConfigChanged {
 		s.MarkPendingRestart("ssl")
 	}
 	if prev.Server.BaseURL != next.Server.BaseURL {
@@ -1656,6 +1697,8 @@ func (s *Server) setupRoutes() {
 			r.Delete("/{id}", s.maybeDeleteRateLimit(s.pasteHandler.DeletePaste))
 			r.Get("/{id}/raw", s.maybeReadRateLimit(s.pasteHandler.GetRawPaste))
 		})
+		r.Get("/pastes", s.maybeReadRateLimit(s.pasteHandler.ListPastes))
+		r.Post("/pastes", s.maybeRateLimit(s.pasteHandler.CreatePaste))
 
 		// microbin-style /pasta alias
 		r.Get("/pasta", s.maybeReadRateLimit(s.compatHandler.MicrobinList))
@@ -2939,15 +2982,14 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 
 	cfg := s.liveCfg()
 
-	// PART 15: "Server validates credentials on startup and before
-	// certificate requests" — non-fatal, warn-and-continue (config.Validate()
-	// pattern). A bad DNS-01 provider config must never abort startup.
-	if ssl.ParseChallenge(cfg.Server.TLS.LetsEncrypt.Challenge) == "dns-01" && cfg.Server.TLS.DNSProvider != "" {
+	// PART 15: invalid DNS-01 configuration is a startup error and must not
+	// silently fall back to another ACME challenge.
+	if ssl.ParseChallenge(cfg.Server.TLS.LetsEncrypt.Challenge) == "dns-01" {
 		creds, err := cfg.DecryptDNSCredentials()
 		if err != nil {
-			log.Printf("WARN: ssl: dns-01 provider %q: failed to decrypt credentials: %v", cfg.Server.TLS.DNSProvider, err)
-		} else if err := ssl.ValidateDNSProvider(cfg.Server.TLS.DNSProvider, creds); err != nil {
-			log.Printf("WARN: ssl: dns-01 provider %q failed startup validation: %v", cfg.Server.TLS.DNSProvider, err)
+			log.Printf("ERROR: ssl: dns-01 provider %q: failed to decrypt credentials", cfg.Server.TLS.LetsEncrypt.DNSProvider)
+		} else if err := ssl.ValidateDNSProvider(cfg.Server.TLS.LetsEncrypt.DNSProvider, creds); err != nil {
+			log.Printf("ERROR: ssl: dns-01 provider %q failed startup validation: %v", cfg.Server.TLS.LetsEncrypt.DNSProvider, err)
 		}
 	}
 
@@ -3025,7 +3067,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		fqdn := cfg.Server.FQDN
 		dnsCreds, err := cfg.DecryptDNSCredentials()
 		if err != nil {
-			log.Printf("WARN: ssl: failed to decrypt dns-01 credentials: %v", err)
+			log.Printf("ERROR: ssl: failed to decrypt DNS-01 credential values")
 			dnsCreds = map[string]string{}
 		}
 		sslMgr := ssl.NewManager(ssl.Config{
@@ -3036,15 +3078,19 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 				Enabled:         cfg.Server.TLS.LetsEncrypt.Enabled,
 				Email:           cfg.Server.TLS.LetsEncrypt.Email,
 				Challenge:       ssl.ParseChallenge(cfg.Server.TLS.LetsEncrypt.Challenge),
-				DNSProviderType: cfg.Server.TLS.DNSProvider,
+				DNSProviderType: cfg.Server.TLS.LetsEncrypt.DNSProvider,
 				DNSCredentials:  dnsCreds,
 				Staging:         cfg.Server.TLS.LetsEncrypt.Staging,
+				OnDNSValidated:  s.dnsValidatedCallback(),
 			},
 		})
 
 		domains := []string{fqdn}
 		tlsCfg, err := sslMgr.GetTLSConfig(domains)
 		if err != nil {
+			if ssl.ParseChallenge(cfg.Server.TLS.LetsEncrypt.Challenge) == "dns-01" {
+				return fmt.Errorf("ssl: dns-01 certificate request failed: %w", err)
+			}
 			log.Printf("ssl: TLS setup failed: %v — falling back to HTTP", err)
 			// Fall through to plain HTTP so the server still starts.
 		} else if tlsCfg != nil {
@@ -3108,7 +3154,7 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 	fqdn := cfg.Server.FQDN
 	dnsCreds, err := cfg.DecryptDNSCredentials()
 	if err != nil {
-		log.Printf("WARN: ssl: failed to decrypt dns-01 credentials: %v", err)
+		log.Printf("ERROR: ssl: failed to decrypt DNS-01 credential values")
 		dnsCreds = map[string]string{}
 	}
 	sslMgr := ssl.NewManager(ssl.Config{
@@ -3119,9 +3165,10 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 			Enabled:         cfg.Server.TLS.LetsEncrypt.Enabled,
 			Email:           cfg.Server.TLS.LetsEncrypt.Email,
 			Challenge:       ssl.ParseChallenge(cfg.Server.TLS.LetsEncrypt.Challenge),
-			DNSProviderType: cfg.Server.TLS.DNSProvider,
+			DNSProviderType: cfg.Server.TLS.LetsEncrypt.DNSProvider,
 			DNSCredentials:  dnsCreds,
 			Staging:         cfg.Server.TLS.LetsEncrypt.Staging,
+			OnDNSValidated:  s.dnsValidatedCallback(),
 		},
 	})
 
@@ -5229,24 +5276,33 @@ func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
 const CACHE_VERSION = %q;
 const CACHE_NAME = 'cairnbin-cache-' + CACHE_VERSION;
 const PRECACHE_ASSETS = [
-  '/',
-  '/create',
-  '/recent',
+  '/static/css/common.css?v=' + CACHE_VERSION,
+  '/static/css/components.css?v=' + CACHE_VERSION,
+  '/static/css/public.css?v=' + CACHE_VERSION,
+  '/static/js/app.js?v=' + CACHE_VERSION,
+  '/static/icons/icon-192.png?v=' + CACHE_VERSION,
+  '/static/icons/icon-512.png?v=' + CACHE_VERSION,
   '/offline.html',
-  '/static/css/common.css',
-  '/static/css/components.css',
-  '/static/css/public.css',
-  '/static/js/app.js',
-  '/static/icons/icon-192.png',
-  '/static/icons/icon-512.png'
 ];
 
-// INSTALL — pre-cache assets and activate immediately
+// INSTALL — pre-cache safe responses. An updated worker waits for the user;
+// a first install has no active worker to wait behind and activates by itself.
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting())
+      .then(async cache => {
+        await Promise.all(PRECACHE_ASSETS.map(async asset => {
+          try {
+            const response = await withTimeout(fetch(asset), NAV_TIMEOUT_MS);
+            if (response.ok && !response.redirected) {
+              await cache.put(asset, response);
+            }
+          } catch (_) {
+            // A failed precache is recoverable; navigation has its own fallback.
+          }
+        }));
+      })
+      .catch(() => {})
   );
 });
 
@@ -5270,6 +5326,43 @@ self.addEventListener('message', event => {
   }
 });
 
+// A navigation never waits on the network forever: its bounded wait rejects
+// after NAV_TIMEOUT_MS so the cache/offline fallbacks can render.
+const NAV_TIMEOUT_MS = 8000;
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(
+      value => { clearTimeout(timer); resolve(value); },
+      error => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
+async function cachedResponse(request) {
+  try {
+    const response = await caches.match(request);
+    if (response && response.ok && !response.redirected) return response;
+    if (response) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.delete(request);
+    }
+  } catch (_) {
+    // Cache failures fall through to network or the synthesized fallback.
+  }
+  return null;
+}
+
+async function cacheResponse(request, response) {
+  if (!response.ok || response.redirected) return;
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response.clone());
+  } catch (_) {
+    // Cache failures must never prevent the network response from reaching the page.
+  }
+}
+
 // FETCH — every response path MUST resolve to a real Response. A promise that
 // resolves to undefined — or rejects — makes the browser render net::ERR_FAILED
 // instead of a page. Every branch below therefore ends in a guaranteed Response.
@@ -5289,15 +5382,15 @@ self.addEventListener('fetch', event => {
   // page, never net::ERR_FAILED
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      withTimeout(fetch(request), NAV_TIMEOUT_MS)
         .then(response => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          if (response.redirected) throw new Error('redirected navigation');
+          event.waitUntil(cacheResponse(request, response));
           return response;
         })
         .catch(async () =>
-          (await caches.match(request))
-            || (await caches.match('/offline.html'))
+          (await cachedResponse(request))
+            || (await cachedResponse('/offline.html'))
             || offlineFallbackResponse()
         )
     );
@@ -5308,10 +5401,9 @@ self.addEventListener('fetch', event => {
   // subresource must never reject respondWith
   if (url.pathname.startsWith('/static/')) {
     event.respondWith(
-      caches.match(request)
+      cachedResponse(request)
         .then(cached => cached || fetch(request).then(response => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          event.waitUntil(cacheResponse(request, response));
           return response;
         }))
         .catch(() => new Response('', { status: 504, statusText: 'Gateway Timeout' }))
@@ -5323,7 +5415,7 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     fetch(request)
       .catch(async () =>
-        (await caches.match(request))
+        (await cachedResponse(request))
           || new Response('', { status: 504, statusText: 'Gateway Timeout' })
       )
   );

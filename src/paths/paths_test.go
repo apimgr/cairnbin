@@ -165,6 +165,30 @@ func TestEnsureDir(t *testing.T) {
 	}
 }
 
+func TestEnforcePrivatePathRepairsTree(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "private")
+	nested := filepath.Join(root, "nested")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(nested, "secret")
+	if err := os.WriteFile(file, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := paths.EnforcePrivatePath(root, false); err != nil {
+		t.Fatalf("EnforcePrivatePath: %v", err)
+	}
+	for path, want := range map[string]os.FileMode{root: 0o700, nested: 0o700, file: 0o600} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s mode = %04o, want %04o", path, got, want)
+		}
+	}
+}
+
 // ─── XDG / home-default path tests (non-root, non-container) ─────────────────
 
 // skipIfContainer skips the test when we are inside a Docker container because

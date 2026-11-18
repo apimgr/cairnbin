@@ -81,6 +81,10 @@ curl -q -LSsf -o /srv/cairnbin/docker-compose.yml https://raw.githubusercontent.
 cd /srv/cairnbin && docker compose up -d
 ```
 
+Compose uses zero-configuration defaults. Operators may override `IMAGE_TAG`,
+`HOST_BIND`, `HTTP_PORT`, `TERMBIN_PORT`, `CONFIG_PATH`, and `DATA_PATH` through
+their shell environment or a locally supplied `.env` file.
+
 ### Binary
 
 ```bash

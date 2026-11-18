@@ -240,6 +240,134 @@ func TestResolvePort_Container(t *testing.T) {
 	}
 }
 
+func TestPeekServerPortReadsOnlyPort(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	contents := "server:\n  port: 64777\n  address: invalid but ignored\ndatabase: [invalid-for-config]\n"
+	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := config.PeekServerPort(path); got != "64777" {
+		t.Fatalf("PeekServerPort() = %q, want %q", got, "64777")
+	}
+}
+
+func TestPeekServerPortMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	if err := os.WriteFile(path, []byte("server:\n  address: localhost\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := config.PeekServerPort(path); got != "" {
+		t.Fatalf("PeekServerPort() = %q, want empty", got)
+	}
+}
+
+func TestLoadEncryptsDNSCredentialsAtRest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	plain := "DO_AUTH_TOKEN: top-secret-token"
+	contents := "server:\n  ssl:\n    letsencrypt:\n      dns_credentials:\n        " + plain + "\n"
+	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	got, err := cfg.DecryptDNSCredentials()
+	if err != nil || got["DO_AUTH_TOKEN"] != "top-secret-token" {
+		t.Fatalf("DecryptDNSCredentials() = (%v, %v)", got, err)
+	}
+	stored, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stored), "top-secret-token") || !strings.Contains(string(stored), "enc:v1:") {
+		t.Fatalf("server.yml does not contain only encrypted DNS credentials")
+	}
+}
+
+func TestLoadEncryptsDNSCredentialsFromDropInDespiteOtherTypeError(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "server.yml")
+	dropInDir := filepath.Join(dir, "yaml.d")
+	if err := os.Mkdir(dropInDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	key := strings.Repeat("a", 64)
+	root := "server:\n  security:\n    encryption_key: " + key + "\n  token: test-token\n  port: [bad-type]\n"
+	if err := os.WriteFile(configPath, []byte(root), 0600); err != nil {
+		t.Fatal(err)
+	}
+	dropInPath := filepath.Join(dropInDir, "dns.yml")
+	if err := os.WriteFile(dropInPath, []byte("server:\n  ssl:\n    letsencrypt:\n      dns_credentials:\n        DO_AUTH_TOKEN: drop-in-secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := config.Load(configPath)
+	creds, err := cfg.DecryptDNSCredentials()
+	if err != nil || creds["DO_AUTH_TOKEN"] != "drop-in-secret" {
+		t.Fatalf("DecryptDNSCredentials() = (%v, %v)", creds, err)
+	}
+	stored, err := os.ReadFile(dropInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stored), "drop-in-secret") || !strings.Contains(string(stored), "enc:v1:") {
+		t.Fatal("drop-in credential was not rewritten as encrypted data")
+	}
+}
+
+func TestLoadMigratesLegacyTLSConfigKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	if err := os.WriteFile(path, []byte("server:\n  tls:\n    enabled: true\n    min_version: TLS1.3\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if !cfg.Server.TLS.Enabled || cfg.Server.TLS.MinVersion != "TLS1.3" {
+		t.Fatalf("legacy TLS values were lost: %+v", cfg.Server.TLS)
+	}
+	stored, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stored), "tls:") || !strings.Contains(string(stored), "ssl:") {
+		t.Fatal("legacy TLS config key was not migrated to ssl")
+	}
+}
+
+func TestLoadMigratesLegacyTLSDropInWithFieldPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "server.yml")
+	dropInDir := filepath.Join(dir, "yaml.d")
+	if err := os.Mkdir(dropInDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	root := "server:\n  security:\n    encryption_key: " + strings.Repeat("b", 64) + "\n  ssl:\n    enabled: false\n"
+	if err := os.WriteFile(path, []byte(root), 0600); err != nil {
+		t.Fatal(err)
+	}
+	dropInPath := filepath.Join(dropInDir, "legacy.yml")
+	legacy := "server:\n  tls:\n    enabled: true\n    letsencrypt:\n      dns_credentials:\n        DO_AUTH_TOKEN: legacy-secret\n"
+	if err := os.WriteFile(dropInPath, []byte(legacy), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if !cfg.Server.TLS.Enabled {
+		t.Fatal("later legacy drop-in did not override base SSL setting")
+	}
+	stored, err := os.ReadFile(dropInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stored), "legacy-secret") || !strings.Contains(string(stored), "enc:v1:") || !strings.Contains(string(stored), "ssl:") {
+		t.Fatal("legacy drop-in TLS credential was not migrated and encrypted in place")
+	}
+}
+
 // TestResolvePort_ContainerExplicitPort confirms that an explicit port (from a
 // --port flag or CAIRNBIN_PORT/PORT env) wins over the container default of 80.
 func TestResolvePort_ContainerExplicitPort(t *testing.T) {
