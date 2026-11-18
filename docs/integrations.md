@@ -101,7 +101,7 @@ curl -q -LSsf -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
 | `/api/swagger`, `/api/graphql`, `/api/healthz` | Unversioned aliases of the versioned `/api/v1/server/*` routes (served directly, never redirected) |
 | `/.well-known/llms.txt`, `/llms.txt` | AI-agent discovery document |
 | `/sitemap.xml`, `/robots.txt`, `/feed.xml`, `/rss.xml` | Search and syndication metadata |
-| `/manifest.json`, `/sw.js` | PWA metadata |
+| `/manifest.json`, `/sw.js` | PWA manifest and build-aware service worker; navigations have an 8-second offline fallback, and updates wait for user acceptance before reloading |
 | `9999/tcp` | termbin/fiche raw-TCP listener (`echo text \| nc host 9999`); disable with `server.termbin.enabled: false` or `TERMBIN_ENABLED=false` |
 
 ## External Identity

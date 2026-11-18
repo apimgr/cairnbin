@@ -24,7 +24,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Owner token — cryptographically random `tok_` value returned when a new owner is created, stored as a SHA-256 hash plus an encrypted recoverable copy, viewable masked by default at `/server/preferences/tokens`, and usable to list owned public and unlisted pastes with `scope=owned`
 - View count tracking with automatic background cleanup
 - Automatic cleanup of expired and burned pastes, scheduled backups, and security-data refreshes
-- Full web frontend (dark/light/auto theme, PWA, mobile-first)
+- Full web frontend (dark/light/auto theme, installable PWA with offline recovery and user-controlled updates, mobile-first)
 - CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
 - Server information at `/server/about`, `/server/contact`, `/server/help`, `/server/privacy`, and `/server/terms`; the MCP guide is at `/server/help/mcp` when enabled
