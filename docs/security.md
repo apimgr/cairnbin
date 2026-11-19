@@ -40,7 +40,7 @@
 ## Security Header Configuration
 
 - `web.headers`: `coop`, `coep`, `corp`, `origin_agent_cluster`, `cross_domain_policies`, `dns_prefetch_control`, `honor_sec_gpc`, `honor_dnt`, `clear_site_data.*`, and `nel.*` tune the cross-origin, privacy, and reporting headers; defaults are the broad-compatibility values
-- `web.permissions_policy` maps each Permissions-Policy feature to its allowlist (`"()"`, `"(self)"`, `"*"`); an empty value omits the feature
+- `Permissions-Policy` is fixed by the project's declared features and cannot be changed in deployment configuration
 - `web.csp` supports `*_src_extra` (append), `*_src_override` (replace), `reports_enabled`, and `reports_sample_rate` (0.0-1.0 fraction of CSP reports logged, default 1.0); `{request_nonce}` inside any `*_src_override` is replaced per response with a fresh nonce that is also rendered on server-side `<script>` tags
 - `Sec-GPC: 1` is honored as a privacy opt-out, suppresses non-essential cookies and tracking, and is recorded as `compliance.gpc_honored` in the audit log. `DNT: 1` is ignored unless `web.headers.honor_dnt` is enabled; honored DNT suppresses non-essential behavior without being reported as GPC.
 - Browser Network Error Logging reports are sent to `/api/v1/server/reports/nel`, sampled by `web.headers.nel.sample_rate`, and logged with sanitized fields; CSP and default reports use their own report endpoints.
