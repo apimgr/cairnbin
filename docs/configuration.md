@@ -66,6 +66,34 @@ server:
     port: 9999
     max_size: 32768
     timeout: "5s"
+  contact:
+    admin: {email: "admin@example.com"}
+    general: {email: ""}
+    abuse: {email: ""}
+    dpo: {email: ""}
+    security: {email: "security@example.com"}
+  pages:
+    contact:
+      enabled: true
+      captcha: simple
+      antispam:
+        honeypot: true
+        min_fill_seconds: 3
+        max_age_seconds: 43200
+        per_ip: 5
+        per_email: 3
+        global: 60
+        window: 1h
+        max_links: 10
+        reject_markup: true
+        blocked_words: []
+        blocked_email_domains: []
+        blocked_link_domains: []
+        strikes: 3
+        ban_hours: 24
+        review_min_seconds: 2
+        review_max_seconds: 900
+        duplicate_window_hours: 24
 
 database:
   driver: "sqlite"
