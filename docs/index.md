@@ -27,11 +27,11 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Full web frontend (dark/light/auto theme, installable PWA with offline recovery and user-controlled updates, mobile-first)
 - CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
-- Server information at `/server/about`, `/server/contact`, `/server/help`, `/server/privacy`, and `/server/terms`; the MCP guide is at `/server/help/mcp` when enabled
+- Server information at `/server/about`, `/server/contact`, `/server/help`, `/server/privacy`, and `/server/terms`; the MCP guide is at `/server/help/mcp`
 - Guest preferences at `/server/preferences`; owner-token management at `/server/preferences/tokens`
 - Security overview, policy, acknowledgment, and report status at `/server/security` and its subroutes
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only)
-- MCP tools through `/api/v1/server/mcp` when enabled
+- MCP tools through `/api/v1/server/mcp`
 - Sitemap, Atom, and RSS discovery feeds for public pages and recent public pastes
 - Internal-only Prometheus metrics and per-endpoint rate limiting
 - Compatibility routes for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, curl-upload services, and termbin/fiche

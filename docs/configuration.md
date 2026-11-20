@@ -106,9 +106,6 @@ web:
     # default "*" (any site may iframe embeds); restrict with origins,
     # e.g. "'self' https://example.com"
     embed_frame_ancestors: "*"
-  footer:
-    # branding HTML above the footer; "" = default, " " = none; sanitized (no scripts or style)
-    custom_html: ""
   reports:
     # max browser reports per minute per client IP, across all report types
     rate_limit_per_minute: 60
@@ -131,7 +128,7 @@ and `server.i2p.b32_address` are normally maintained by the server.
 | `server` | `port`, `address`, `fqdn`, `mode`, `lang`, `api_version`, `baseurl`, `user`, `group`, `pidfile`, `daemonize`, `token`, `data_dir` | Listener, branding inputs, service identity, operator token, and data location. |
 | `server.tokens` | `max_linked`, `cookie_max_age`, `idle_purge_days` | Owner-token limits and cleanup. |
 | `server.contact.{admin,security,abuse,general}` | `email`, `webhooks` | Per-role notification destinations; empty roles use the documented fallback chain. |
-| `server.pages.{about,privacy,contact,help,terms}` | `content`; `help.mcp`; `contact.enabled`, `contact.captcha`, `contact.captcha_site_key`, `contact.captcha_secret_key`, `contact.antispam.*`, `contact.success_message` | Operator-authored page content and contact form behavior. |
+| `server.pages.contact` | `enabled`, `captcha`, `captcha_site_key`, `captcha_secret_key`, `antispam.*`, `success_message` | Contact form behavior. Page content is read from `{config_dir}/html/`. |
 | `database` | `driver`, `url`, `token`, `pool.max_open`, `pool.max_idle`, `pool.max_lifetime`, `pool.max_idle_time` | SQLite or remote libSQL/Turso storage and connection pooling. SQLite is the local default. |
 | `paste` | `max_size`, `default_expiry`, `default_language`, `max_burn_after`, `allow_unlisted` | Paste size, expiry, language, burn-after-read, and visibility defaults. |
 | `server.cache` | `type`, `url`, `host`, `port`, `username`, `password`, `db`, `tls`, `tls_skip_verify`, `pool_size`, `min_idle`, `timeout`, `prefix`, `ttl` | In-memory or remote Redis/Valkey cache. `url` takes precedence over individual connection fields. |
@@ -142,7 +139,7 @@ and `server.i2p.b32_address` are normally maintained by the server.
 | `server.ssl` | `enabled`, `cert`, `key`, `min_version`, `letsencrypt.{enabled,email,challenge,staging,dns_provider,dns_credentials}` | HTTPS certificates and ACME. DNS credentials use a flat map of lego environment-variable names; plaintext values are atomically rewritten as `enc:v1:` ciphertext under `server.security.encryption_key`. |
 | `server.notifications.email` | `enabled`, `smtp.{host,port,username,password,tls}`, `from.{name,email}`, `reply_to`, `template_dir`, `events.{startup,shutdown,...}` | SMTP transport, sender identity, custom template directory, and per-event email switches. Startup and graceful-shutdown emails default off; TLS accepts `auto`, `starttls`, `tls`, or `none`. |
 | `server.notifications.disk_low` | `enabled`, `threshold_percent`, `check_interval`, `repeat` | Monitors data, log, and backup filesystems once per volume. Defaults: enabled, 85% used, every 5 minutes, repeat alerts every 24 hours while still above threshold; recovery is logged after usage falls 5 percentage points below threshold. |
-| `server.privacy` | `data.{sold,stored_on_server,sharing}`, `retention.{period,export_available,deletion_available}`, `consent.*`, `cookies.{essential,preferences,analytics}`, `third_party.services`, `content.*` | Data-disclosure, consent banner, cookie categories, third-party list, and privacy-page text. `data.sold` controls the CCPA opt-out control. |
+| `server.privacy` | `data.{sold,stored_on_server,sharing}`, `retention.{period,export_available,deletion_available}`, `consent.*`, `cookies.{essential,preferences,analytics}`, `third_party.services` | Data-disclosure and consent behavior. Privacy text is built in and may be extended from `{config_dir}/html/privacy.{html,md,txt}`. |
 | `server.tracking` | `type`, `id`, `url` | Optional analytics provider; empty or `none` disables tracking. |
 | `server.security` | `encryption_key`, `allowlist`, `blocked_ips`, `abuse_detection.{request_flood,auto_block_ip,auto_alert}`, `blocklists.{enabled,sources}`, `cve.*`, `trivy.*` | At-rest encryption key, IP controls, abuse response, and downloaded security data. |
 | `server.rate_limit` | `enabled`, `read.{requests,window}`, `write.{requests,window}`, `health.{requests,window}`, `global_burst` | Per-IP request limits by endpoint class. |
@@ -150,14 +147,13 @@ and `server.i2p.b32_address` are normally maintained by the server.
 | `server.trusted_proxies` | `additional` | Additional trusted proxy IPs/CIDRs beyond the built-in private ranges. |
 | `server.url_detection` | `learning`, `min_samples`, `sample_window`, `log_changes`, `live_reload` | Hostname learning behavior. |
 | `server.termbin` | `enabled`, `port`, `max_size`, `timeout` | Raw-TCP termbin/fiche listener; enabled by default on port 9999. |
-| `server.maintenance` | `self_healing.{enabled,retry_interval,max_attempts}`, `cleanup.{disk_threshold,log_retention_days,backup_keep_count}`, `notify.{on_enter,on_exit}` | Automatic recovery and cleanup after critical storage or disk problems. |
+| `server.maintenance` | `self_healing.{retry_interval,max_attempts}`, `cleanup.{disk_threshold,log_retention_days,backup_keep_count}`, `notify.{on_enter,on_exit}` | Automatic recovery and cleanup after critical storage or disk problems. |
 | `server.restore` | `max_archive_size`, `max_expanded_size`, `max_files`, `max_file_size`, `max_ratio` | Safety limits for backup restore extraction. |
 | `server.compliance` | `enabled`, `gdpr`, `ccpa`, `hipaa`, `soc2`, `pci_dss`, `iso27001`, `fedramp`, `lgpd`, `pipeda`, `appi`, `pdpa` | Compliance behavior switches; each standard is off unless enabled. |
-| `server.scheduler` | `timezone`, `catch_up_window`, `tasks.<task_id>.{enabled,schedule,retry_on_fail,retry_delay,max_retries,max_age,max_size,retention,renew_before}` | Built-in scheduler timezone, missed-run window, and task-specific options. |
-| `web` | `site_title`, `theme`, `robots.{allow,deny,ai_bots}`, `security.*`, `hsts.*`, `csp.*`, `reports.*`, `headers.*`, `llms.*`, `permissions_policy`, `footer.custom_html`, `announcements.*` | Browser theme, crawler policy, transport/security headers, discovery content, footer branding, and site banners. |
+| `server.scheduler` | `timezone`, `catch_up_window`, `tasks.<task_id>.{schedule,retry_on_fail,retry_delay,max_retries,max_age,max_size,retention,renew_before}` | Built-in scheduler timezone, missed-run window, and task-specific options. |
+| `web` | `site_title`, `theme`, `robots.{allow,deny,ai_bots}`, `security.*`, `hsts.*`, `csp.*`, `reports.*`, `headers.*`, `llms.*`, `announcements.*` | Browser theme, crawler policy, transport/security headers, discovery content, footer branding, and site banners. |
 | `server.cors` | `allowed_origins`, `allow_credentials`, `max_age` | Cross-origin access. Wildcard origins do not receive credentialed CORS. |
 | `server.healthz.root.enabled` | boolean | Opt-in root `/healthz` alias; `/server/healthz` remains canonical. |
-| `server.mcp.enabled` | boolean | Enables the MCP endpoint and its aliases; enabled by default. |
 | `server.compression` | `enabled`, `level`, `types` | Response compression and MIME types. |
 | `server.debug` | `pprof`, `log_queries`, `log_cache`, `log_bodies`, `max_body_log_size`, `block_profile_rate`, `mutex_profile_fraction`, `runtime_endpoints` | Debug-only profiling and diagnostics. These settings require debug mode. |
 
@@ -168,9 +164,9 @@ references.
 
 `server.cors.allowed_origins` defaults to `*`; configured origins are checked against the list. An explicit origin may receive `Access-Control-Allow-Credentials: true`; wildcard origins never do. Preflight responses list the exact supported content, authorization, CSRF, and fetch headers.
 
-`web.footer.custom_html` may use `{current_year}`, `{project_name}`, `{project_org}`, `{project_version}`, `{build_datetime}`, `{onion_address}` and `{i2p_address}`; the last two are empty unless Tor or I2P is running with a published address.
+Operator page content lives under `{config_dir}/html/`. See [Operator Content Files](../AI.md) for names, formats, sanitization, and reload behavior. `footer.html` may use the documented footer variables.
 
-`server.pages.{about,help,privacy,terms}.content` takes Markdown. For `about` and `help` it is appended to the page; for `privacy` and `terms` a non-empty value replaces the default body. `server.pages.help.mcp` adds project-specific Markdown after the base sections on `/server/help/mcp` and in its API mirror; the route is available only when `server.mcp.enabled` is true. `server.pages.contact` has `enabled`, `captcha`, `captcha_site_key`, `captcha_secret_key`, `success_message`, and an `antispam` tree. Antispam settings control the honeypot, signed form-token ages, per-IP/email/global accepted-submission limits and time window, link count, markup rejection, blocked words/domains, strikes and ban duration, and duplicate window. A zero or empty numeric rule disables that rule. The two captcha provider keys are required for `recaptcha` or `hcaptcha`; they are ignored by the built-in `simple` challenge. The secret key stays server-side. Antispam state is in memory and clears at restart.
+`server.pages.contact` configures the contact form. Its antispam settings control signed form tokens, rate limits, blocked content, strikes, and duplicate detection. Page content is file-based; contact and help behavior remain configuration-driven.
 
 Configuration may be split between `server.yml` and the optional `yaml.d/`
 directory beside it. The server loads `server.yml` first, then regular `*.yml`

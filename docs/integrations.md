@@ -77,12 +77,12 @@ AI clients (Claude, IDE agents, other MCP clients) can use the paste API as tool
 | `POST https://pste.us/api/v1/server/mcp` | Canonical endpoint |
 | `POST https://pste.us/api/mcp`, `POST https://pste.us/mcp` | Aliases, same handler |
 
-- Connection instructions, the live public tool list, and project usage notes are at `https://pste.us/server/help/mcp`; the JSON mirror is `GET /api/v1/server/help/mcp`. Both help routes return `404` when MCP is disabled.
+- Connection instructions, the live public tool list, and project usage notes are at `https://pste.us/server/help/mcp`; the JSON mirror is `GET /api/v1/server/help/mcp`. Both help routes are always available.
 - Authentication is the API's own `Authorization: Bearer tok_...` header. There is no MCP token. Create a linked token on `/server/preferences/tokens` for each MCP client so it can be revoked on its own.
 - Tools are generated from the API routes: `getApiV1Pastes`, `postApiV1Pastes`, `getApiV1PastesId`, `getApiV1PastesIdRaw`, `deleteApiV1PastesId`, `getApiV1ServerHealthz`, and `getApiV1ServerVersion`. Token management is never a tool.
 - `getApiV1Pastes` lists public pastes by default; pass `scope: "owned"` with an owner or linked Bearer token to list that owner's public and unlisted pastes.
 - An anonymous `postApiV1Pastes` call returns the `owner_token` in the tool result; store it to keep control of the paste.
-- `GET` and `DELETE` return `405`. Disable with `server.mcp.enabled: false` (every MCP route then returns `404`).
+- `GET` and `DELETE` return `405`. MCP is always available.
 
 ```bash
 curl -q -LSsf -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
@@ -95,7 +95,7 @@ curl -q -LSsf -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
 |----------|---------|
 | `/api/autodiscover` | Unversioned client bootstrap: server name, version, API version, base URL, feature flags and `cli_min_version` |
 | `/server/docs/swagger`, `/server/docs/graphql` | Swagger UI and GraphiQL |
-| `/server/help`, `/server/help/mcp` | General API help and the MCP connection guide (MCP guide is hidden when disabled) |
+| `/server/help`, `/server/help/mcp` | General API help and the MCP connection guide |
 | `/server/preferences`, `/server/preferences/tokens` | Guest preferences and owner-token management |
 | `/server/security`, `/server/security/policy`, `/server/security/thanks`, `/server/security/report/{tracking_id}` | Security overview, disclosure policy, report acknowledgment, and researcher status |
 | `/api/swagger`, `/api/graphql`, `/api/healthz` | Unversioned aliases of the versioned `/api/v1/server/*` routes (served directly, never redirected) |
@@ -114,7 +114,7 @@ None enabled: no Android App Links, Apple Universal Links, WebFinger, OpenID Pro
 
 ## Operator Notes
 
-- Everything above is on by default except the optional pieces: PGP publishing, the `/healthz` root alias, I2P, and operator notifications. MCP and metrics are enabled by default; MCP can be disabled with `server.mcp.enabled: false`. The termbin listener is enabled by default on TCP port `9999`.
+- Everything above is on by default except the optional pieces: PGP publishing, the `/healthz` root alias, I2P, and operator notifications. MCP and metrics are always enabled. The termbin listener is enabled by default on TCP port `9999`.
 - Nothing needs to be configured before use; each optional integration is switched on in `server.yml` and picked up by live reload (listen address and port need a restart).
 
 ## CLI Tool
