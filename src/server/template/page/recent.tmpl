@@ -1,106 +1,106 @@
-{{define "meta"}}
-    <title>{{t .Lang "recent.title"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{t .Lang "recent.description"}}">
+{{define "meta" -}}
+<title>{{t .Lang "recent.title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{t .Lang "recent.description"}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "recent.title"}}</h1>
-                    <p class="section-description">{{t .Lang "recent.description"}}</p>
-                </div>
+    <section class="search-section">
+      <div class="container container-sm">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "recent.title"}}</h1>
+          <p class="section-description">{{t .Lang "recent.description"}}</p>
+        </div>
 
-                <form method="get" action="{{.CurrentPath}}" class="filter-bar">
-                    <div class="form-group filter-bar-search">
-                        <label class="form-label sr-only" for="recent-search">{{t .Lang "recent.search_label"}}</label>
-                        <input type="text" id="recent-search" name="search" class="form-input" placeholder="{{t .Lang "recent.search_placeholder"}}" value="{{.Search}}">
-                    </div>
-                    <div class="form-group filter-bar-type">
-                        <label class="form-label sr-only" for="recent-type">{{t .Lang "recent.type_label"}}</label>
-                        <select id="recent-type" name="type" class="form-select">
-                            <option value="" {{if not .Type}}selected{{end}}>{{t .Lang "recent.type_all"}}</option>
-                            <option value="text" {{if eq .Type "text"}}selected{{end}}>{{t .Lang "recent.type_text"}}</option>
-                            <option value="image" {{if eq .Type "image"}}selected{{end}}>{{t .Lang "recent.type_image"}}</option>
-                            <option value="audio" {{if eq .Type "audio"}}selected{{end}}>{{t .Lang "recent.type_audio"}}</option>
-                            <option value="video" {{if eq .Type "video"}}selected{{end}}>{{t .Lang "recent.type_video"}}</option>
-                            <option value="file" {{if eq .Type "file"}}selected{{end}}>{{t .Lang "recent.type_file"}}</option>
-                        </select>
-                    </div>
-                    <div class="form-group filter-bar-sort">
-                        <label class="form-label sr-only" for="recent-sort">{{t .Lang "recent.sort_label"}}</label>
-                        <select id="recent-sort" name="sort" class="form-select">
-                            <option value="date" {{if eq .Sort "date"}}selected{{end}}>{{t .Lang "recent.sort_date"}}</option>
-                            <option value="name" {{if eq .Sort "name"}}selected{{end}}>{{t .Lang "recent.sort_name"}}</option>
-                            <option value="views" {{if eq .Sort "views"}}selected{{end}}>{{t .Lang "recent.sort_views"}}</option>
-                        </select>
-                    </div>
-                    <div class="form-group filter-bar-order">
-                        <label class="form-label sr-only" for="recent-order">{{t .Lang "recent.order_label"}}</label>
-                        <select id="recent-order" name="order" class="form-select">
-                            <option value="desc" {{if eq .Order "desc"}}selected{{end}}>{{t .Lang "recent.order_desc"}}</option>
-                            <option value="asc" {{if eq .Order "asc"}}selected{{end}}>{{t .Lang "recent.order_asc"}}</option>
-                        </select>
-                    </div>
-                    <div class="form-group filter-bar-limit">
-                        <label class="form-label sr-only" for="recent-limit">{{t .Lang "recent.limit_label"}}</label>
-                        <select id="recent-limit" name="limit" class="form-select">
-                            <option value="20" {{if eq .Limit 20}}selected{{end}}>20</option>
-                            <option value="50" {{if eq .Limit 50}}selected{{end}}>50</option>
-                            <option value="100" {{if eq .Limit 100}}selected{{end}}>100</option>
-                            <option value="250" {{if eq .Limit 250}}selected{{end}}>250</option>
-                        </select>
-                    </div>
-                    <div class="form-group filter-bar-actions">
-                        <button type="submit" class="btn btn-primary">{{t .Lang "recent.search_button"}}</button>
-                        {{if or .Search .Type (ne .Sort "date") (ne .Order "desc") (ne .Limit 20)}}
-                        <a href="{{.CurrentPath}}" class="btn btn-secondary">{{t .Lang "recent.clear_filters"}}</a>
-                        {{end}}
-                    </div>
-                </form>
+        <form method="get" action="{{.CurrentPath}}" class="filter-bar">
+          <div class="form-group filter-bar-search">
+            <label class="form-label sr-only" for="recent-search">{{t .Lang "recent.search_label"}}</label>
+            <input type="text" id="recent-search" name="search" class="form-input" placeholder="{{t .Lang "recent.search_placeholder"}}" value="{{.Search}}">
+          </div>
+          <div class="form-group filter-bar-type">
+            <label class="form-label sr-only" for="recent-type">{{t .Lang "recent.type_label"}}</label>
+            <select id="recent-type" name="type" class="form-select">
+              <option value="" {{if not .Type}}selected{{end}}>{{t .Lang "recent.type_all"}}</option>
+              <option value="text" {{if eq .Type "text"}}selected{{end}}>{{t .Lang "recent.type_text"}}</option>
+              <option value="image" {{if eq .Type "image"}}selected{{end}}>{{t .Lang "recent.type_image"}}</option>
+              <option value="audio" {{if eq .Type "audio"}}selected{{end}}>{{t .Lang "recent.type_audio"}}</option>
+              <option value="video" {{if eq .Type "video"}}selected{{end}}>{{t .Lang "recent.type_video"}}</option>
+              <option value="file" {{if eq .Type "file"}}selected{{end}}>{{t .Lang "recent.type_file"}}</option>
+            </select>
+          </div>
+          <div class="form-group filter-bar-sort">
+            <label class="form-label sr-only" for="recent-sort">{{t .Lang "recent.sort_label"}}</label>
+            <select id="recent-sort" name="sort" class="form-select">
+              <option value="date" {{if eq .Sort "date"}}selected{{end}}>{{t .Lang "recent.sort_date"}}</option>
+              <option value="name" {{if eq .Sort "name"}}selected{{end}}>{{t .Lang "recent.sort_name"}}</option>
+              <option value="views" {{if eq .Sort "views"}}selected{{end}}>{{t .Lang "recent.sort_views"}}</option>
+            </select>
+          </div>
+          <div class="form-group filter-bar-order">
+            <label class="form-label sr-only" for="recent-order">{{t .Lang "recent.order_label"}}</label>
+            <select id="recent-order" name="order" class="form-select">
+              <option value="desc" {{if eq .Order "desc"}}selected{{end}}>{{t .Lang "recent.order_desc"}}</option>
+              <option value="asc" {{if eq .Order "asc"}}selected{{end}}>{{t .Lang "recent.order_asc"}}</option>
+            </select>
+          </div>
+          <div class="form-group filter-bar-limit">
+            <label class="form-label sr-only" for="recent-limit">{{t .Lang "recent.limit_label"}}</label>
+            <select id="recent-limit" name="limit" class="form-select">
+              <option value="20" {{if eq .Limit 20}}selected{{end}}>20</option>
+              <option value="50" {{if eq .Limit 50}}selected{{end}}>50</option>
+              <option value="100" {{if eq .Limit 100}}selected{{end}}>100</option>
+              <option value="250" {{if eq .Limit 250}}selected{{end}}>250</option>
+            </select>
+          </div>
+          <div class="form-group filter-bar-actions">
+            <button type="submit" class="btn btn-primary">{{t .Lang "recent.search_button"}}</button>
+            {{if or .Search .Type (ne .Sort "date") (ne .Order "desc") (ne .Limit 20)}}
+            <a href="{{.CurrentPath}}" class="btn btn-secondary">{{t .Lang "recent.clear_filters"}}</a>
+            {{end}}
+          </div>
+        </form>
 
-                {{if .Pastes}}
-                <div class="pastes-list">
-                    {{range .Pastes}}
-                    <div class="paste-item">
-                        <a href="{{$.AssetPrefix}}/{{.ID}}" class="paste-title">{{.Title}}</a>
-                        <div class="paste-item-meta">
-                            <span class="language">{{if .ContentType}}{{.ContentType}}{{else}}{{.Language}}{{end}}</span>
-                            <span>{{.Views}} {{t $.Lang "recent.views"}}</span>
-                            <span>{{fmtDate .CreatedAt}}</span>
-                        </div>
-                    </div>
-                    {{end}}
-                </div>
-
-                <nav class="pagination" aria-label="{{t .Lang "recent.title"}}">
-                    {{if .HasPrev}}
-                    <a class="btn btn-secondary" href="{{.CurrentPath}}?page={{.PrevPage}}&amp;limit={{.Limit}}&amp;search={{.Search | urlquery}}&amp;type={{.Type | urlquery}}&amp;sort={{.Sort | urlquery}}&amp;order={{.Order | urlquery}}">{{t .Lang "recent.previous"}}</a>
-                    {{else}}
-                    <span class="btn btn-secondary" aria-disabled="true">{{t .Lang "recent.previous"}}</span>
-                    {{end}}
-                    <span class="pagination-info">{{tf .Lang "common.page_x_of_y" "current" .Page "total" .Pages}}</span>
-                    {{if .HasNext}}
-                    <a class="btn btn-secondary" href="{{.CurrentPath}}?page={{.NextPage}}&amp;limit={{.Limit}}&amp;search={{.Search | urlquery}}&amp;type={{.Type | urlquery}}&amp;sort={{.Sort | urlquery}}&amp;order={{.Order | urlquery}}">{{t .Lang "recent.next"}}</a>
-                    {{else}}
-                    <span class="btn btn-secondary" aria-disabled="true">{{t .Lang "recent.next"}}</span>
-                    {{end}}
-                </nav>
-                {{else if or .Search .Type}}
-                <div class="empty-state">
-                    <div class="empty-state-icon" aria-hidden="true">🔍</div>
-                    <h3 class="empty-state-title">{{t .Lang "recent.no_results_title"}}</h3>
-                    <p class="empty-state-message">{{t .Lang "recent.no_results_desc"}}</p>
-                    <a href="{{.CurrentPath}}" class="btn btn-primary">{{t .Lang "recent.clear_filters"}}</a>
-                </div>
-                {{else}}
-                <div class="empty-state">
-                    <div class="empty-state-icon" aria-hidden="true">📋</div>
-                    <h3 class="empty-state-title">{{t .Lang "recent.empty_title"}}</h3>
-                    <p class="empty-state-message">{{t .Lang "recent.empty_desc"}}</p>
-                    <a href="{{.AssetPrefix}}/create" class="btn btn-primary">{{t .Lang "recent.create_paste"}}</a>
-                </div>
-                {{end}}
+        {{if .Pastes}}
+        <div class="pastes-list">
+          {{range .Pastes}}
+          <div class="paste-item">
+            <a href="{{$.AssetPrefix}}/{{.ID}}" class="paste-title">{{.Title}}</a>
+            <div class="paste-item-meta">
+              <span class="language">{{if .ContentType}}{{.ContentType}}{{else}}{{.Language}}{{end}}</span>
+              <span>{{.Views}} {{t $.Lang "recent.views"}}</span>
+              <span>{{fmtDate .CreatedAt}}</span>
             </div>
-        </section>
+          </div>
+          {{end}}
+        </div>
+
+        <nav class="pagination" aria-label="{{t .Lang "recent.title"}}">
+          {{if .HasPrev}}
+          <a class="btn btn-secondary" href="{{.CurrentPath}}?page={{.PrevPage}}&amp;limit={{.Limit}}&amp;search={{.Search | urlquery}}&amp;type={{.Type | urlquery}}&amp;sort={{.Sort | urlquery}}&amp;order={{.Order | urlquery}}">{{t .Lang "recent.previous"}}</a>
+          {{else}}
+          <span class="btn btn-secondary" aria-disabled="true">{{t .Lang "recent.previous"}}</span>
+          {{end}}
+          <span class="pagination-info">{{tf .Lang "common.page_x_of_y" "current" .Page "total" .Pages}}</span>
+          {{if .HasNext}}
+          <a class="btn btn-secondary" href="{{.CurrentPath}}?page={{.NextPage}}&amp;limit={{.Limit}}&amp;search={{.Search | urlquery}}&amp;type={{.Type | urlquery}}&amp;sort={{.Sort | urlquery}}&amp;order={{.Order | urlquery}}">{{t .Lang "recent.next"}}</a>
+          {{else}}
+          <span class="btn btn-secondary" aria-disabled="true">{{t .Lang "recent.next"}}</span>
+          {{end}}
+        </nav>
+        {{else if or .Search .Type}}
+        <div class="empty-state">
+          <div class="empty-state-icon" aria-hidden="true">🔍</div>
+          <h3 class="empty-state-title">{{t .Lang "recent.no_results_title"}}</h3>
+          <p class="empty-state-message">{{t .Lang "recent.no_results_desc"}}</p>
+          <a href="{{.CurrentPath}}" class="btn btn-primary">{{t .Lang "recent.clear_filters"}}</a>
+        </div>
+        {{else}}
+        <div class="empty-state">
+          <div class="empty-state-icon" aria-hidden="true">📋</div>
+          <h3 class="empty-state-title">{{t .Lang "recent.empty_title"}}</h3>
+          <p class="empty-state-message">{{t .Lang "recent.empty_desc"}}</p>
+          <a href="{{.AssetPrefix}}/create" class="btn btn-primary">{{t .Lang "recent.create_paste"}}</a>
+        </div>
+        {{end}}
+      </div>
+    </section>
 {{end}}

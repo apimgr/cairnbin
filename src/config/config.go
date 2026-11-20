@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	crand "crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -146,7 +147,7 @@ type ServerConfig struct {
 	// from the legacy web.healthz location.
 	Healthz HealthzConfig `yaml:"healthz"`
 	// MCP controls the Model Context Protocol endpoint (PART 11 "MCP Endpoint").
-	MCP MCPConfig `yaml:"mcp"`
+	MCP MCPConfig `yaml:"-"`
 	// RateLimit controls per-IP request throttling (PART 12 "Rate Limiting").
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 	// Compression controls response compression (PART 12).
@@ -191,11 +192,14 @@ type ContactConfig struct {
 	// General receives /server/contact form submissions. Public — shown as the
 	// footer "Contact us" address. Empty → falls back to admin.
 	General ContactRole `yaml:"general"`
+	// DPO receives privacy requests. Empty → falls back to general, then admin.
+	DPO ContactRole `yaml:"dpo"`
 }
 
 // ContactRole is a single notification recipient: an email address and a map of
 // named webhook transports (telegram, discord, slack, generic, ...) (PART 12).
 type ContactRole struct {
+	Name     string            `yaml:"name"`
 	Email    string            `yaml:"email"`
 	Webhooks map[string]string `yaml:"webhooks"`
 }
@@ -203,11 +207,11 @@ type ContactRole struct {
 // PagesConfig holds operator-customizable content for the static /server pages
 // (PART 31). Empty content fields fall back to the built-in default templates.
 type PagesConfig struct {
-	About   PageContentConfig `yaml:"about"`
-	Privacy PageContentConfig `yaml:"privacy"`
+	About   PageContentConfig `yaml:"-"`
+	Privacy PageContentConfig `yaml:"-"`
 	Contact ContactPageConfig `yaml:"contact"`
 	Help    PageContentConfig `yaml:"help"`
-	Terms   PageContentConfig `yaml:"terms"`
+	Terms   PageContentConfig `yaml:"-"`
 }
 
 // PageContentConfig is a single static page's optional Markdown content override.
@@ -226,8 +230,31 @@ type ContactPageConfig struct {
 	Captcha          string `yaml:"captcha"`
 	CaptchaSiteKey   string `yaml:"captcha_site_key"`
 	CaptchaSecretKey string `yaml:"captcha_secret_key"`
+	// Antispam applies stateless form validation and in-memory abuse limits.
+	Antispam ContactAntispamConfig `yaml:"antispam"`
 	// SuccessMessage is shown after a successful submission.
 	SuccessMessage string `yaml:"success_message"`
+}
+
+// ContactAntispamConfig controls the server-side contact-form layers (PART 16).
+type ContactAntispamConfig struct {
+	Honeypot             bool     `yaml:"honeypot"`
+	MinFillSeconds       int      `yaml:"min_fill_seconds"`
+	MaxAgeSeconds        int      `yaml:"max_age_seconds"`
+	PerIP                int      `yaml:"per_ip"`
+	PerEmail             int      `yaml:"per_email"`
+	Global               int      `yaml:"global"`
+	Window               string   `yaml:"window"`
+	MaxLinks             int      `yaml:"max_links"`
+	RejectMarkup         bool     `yaml:"reject_markup"`
+	BlockedWords         []string `yaml:"blocked_words"`
+	BlockedEmailDomains  []string `yaml:"blocked_email_domains"`
+	BlockedLinkDomains   []string `yaml:"blocked_link_domains"`
+	Strikes              int      `yaml:"strikes"`
+	BanHours             int      `yaml:"ban_hours"`
+	DuplicateWindowHours int      `yaml:"duplicate_window_hours"`
+	ReviewMinSeconds     int      `yaml:"review_min_seconds"`
+	ReviewMaxSeconds     int      `yaml:"review_max_seconds"`
 }
 
 // PrivacyConfig holds server-wide privacy, cookie-consent, and data-handling
@@ -471,7 +498,7 @@ type MaintenanceConfig struct {
 // MaintenanceSelfHealingConfig controls the self-healing retry loop (PART 20).
 type MaintenanceSelfHealingConfig struct {
 	// Enabled gates the background retry loop. Default true.
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `yaml:"-"`
 	// RetryInterval is the delay between self-healing attempts. Default "30s".
 	RetryInterval string `yaml:"retry_interval"`
 	// MaxAttempts caps retries; 0 means unlimited (keep trying forever). Default 0.
@@ -751,15 +778,22 @@ type MetricsConfig struct {
 // server/error/debug: text/json, app: logfmt/json, auth: syslog/json,
 // security: fail2ban/syslog/cef/json/text, audit: json only).
 type LoggingConfig struct {
-	Level    string          `yaml:"level"`
-	Access   AccessLogConfig `yaml:"access"`
-	Server   LogFileConfig   `yaml:"server"`
-	Error    LogFileConfig   `yaml:"error"`
-	App      LogFileConfig   `yaml:"app"`
-	Auth     LogFileConfig   `yaml:"auth"`
-	Audit    AuditConfig     `yaml:"audit"`
-	Security LogFileConfig   `yaml:"security"`
-	Debug    DebugLogConfig  `yaml:"debug"`
+	Level    string            `yaml:"level"`
+	Defaults LogDefaultsConfig `yaml:"defaults"`
+	Access   AccessLogConfig   `yaml:"access"`
+	Server   LogFileConfig     `yaml:"server"`
+	Error    LogFileConfig     `yaml:"error"`
+	App      LogFileConfig     `yaml:"app"`
+	Auth     LogFileConfig     `yaml:"auth"`
+	Audit    AuditConfig       `yaml:"audit"`
+	Security LogFileConfig     `yaml:"security"`
+	Debug    DebugLogConfig    `yaml:"debug"`
+}
+
+type LogDefaultsConfig struct {
+	Custom string `yaml:"custom"`
+	Rotate string `yaml:"rotate"`
+	Keep   string `yaml:"keep"`
 }
 
 // AccessLogConfig configures access.log (server.logs.access). LogHealthChecks
@@ -773,7 +807,7 @@ type AccessLogConfig struct {
 	Custom          string `yaml:"custom"`
 	Rotate          string `yaml:"rotate"`
 	Keep            string `yaml:"keep"`
-	LogHealthChecks bool   `yaml:"log_health_checks"`
+	LogHealthChecks bool   `yaml:"-"`
 }
 
 // LogFileConfig configures one server-owned log file (server.logs.*).
@@ -890,7 +924,7 @@ type RateLimitEndpoint struct {
 // Endpoint classes: Read (GET/HEAD), Write (POST/PUT/PATCH/DELETE), Health (status endpoints).
 // GlobalBurst is the absolute ceiling across all classes combined.
 type RateLimitConfig struct {
-	Enabled     bool              `yaml:"enabled"`
+	Enabled     bool              `yaml:"-"`
 	Read        RateLimitEndpoint `yaml:"read"`
 	Write       RateLimitEndpoint `yaml:"write"`
 	Health      RateLimitEndpoint `yaml:"health"`
@@ -899,9 +933,10 @@ type RateLimitConfig struct {
 
 // WebConfig holds web-UI settings.
 type WebConfig struct {
-	SiteTitle string `yaml:"site_title"`
+	SiteTitle string `yaml:"-"`
 	// Theme is the default site theme: "dark", "light", or "auto".
-	Theme    string         `yaml:"theme"`
+	Theme    string         `yaml:"-"`
+	UI       WebUIConfig    `yaml:"ui"`
 	Robots   RobotsConfig   `yaml:"robots"`
 	Security SecurityConfig `yaml:"security"`
 	HSTS     HSTSConfig     `yaml:"hsts"`
@@ -912,14 +947,16 @@ type WebConfig struct {
 	Headers HeadersConfig `yaml:"headers"`
 	// LLMs controls the /.well-known/llms.txt AI-discovery file.
 	LLMs LLMsConfig `yaml:"llms"`
-	// PermissionsPolicy maps each Permissions-Policy feature to its allowlist
-	// ("()", "(self)", "(self https://x)", "*"); an empty value omits the feature.
-	PermissionsPolicy map[string]string `yaml:"permissions_policy"`
 	// Footer controls operator footer branding (PART 16).
-	Footer FooterConfig `yaml:"footer"`
+	Footer FooterConfig `yaml:"-"`
 	// Announcements controls the server-rendered site banner (PART 16 → Site
 	// Banner, PART 22 → Announcements).
 	Announcements AnnouncementsConfig `yaml:"announcements"`
+}
+
+type WebUIConfig struct {
+	Theme  string `yaml:"theme"`
+	Accent string `yaml:"accent"`
 }
 
 // AnnouncementsConfig holds operator-configured site-wide announcement
@@ -987,7 +1024,7 @@ type CompressionConfig struct {
 type MCPConfig struct {
 	// Enabled serves /api/{api_version}/server/mcp (plus /api/mcp and /mcp).
 	// Default true; when false every MCP route answers 404.
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `yaml:"-"`
 }
 
 // HealthzConfig controls the optional /healthz root alias (PART 13).
@@ -1175,8 +1212,16 @@ type CSRFConfig struct {
 
 // NotificationsConfig holds email notification settings.
 type NotificationsConfig struct {
+	WebUI   ToastConfig   `yaml:"webui"`
 	Email   EmailConfig   `yaml:"email"`
 	DiskLow DiskLowConfig `yaml:"disk_low"`
+}
+
+// ToastConfig controls visitor-facing WebUI toast notifications.
+type ToastConfig struct {
+	Position        string `yaml:"position"`
+	Duration        int    `yaml:"duration"`
+	WarningDuration int    `yaml:"warning_duration"`
 }
 
 // DiskLowConfig controls periodic low-disk alerts for the server's data,
@@ -1362,8 +1407,9 @@ func (d DebugConfig) MaxBodyLogBytes() int {
 type ServerSecurityConfig struct {
 	// EncryptionKey is the 32-byte AES-256-GCM key (hex-encoded) used for at-rest
 	// encryption of sensitive server data (DNS credentials, security reports, etc.).
-	// Auto-generated on first run; stored in server.yml; included in every backup.
-	EncryptionKey string `yaml:"encryption_key"`
+	// Auto-generated on first run; stored in secrets.yml; included in every backup.
+	EncryptionKey        string `yaml:"encryption_key"`
+	EncryptionKeyVersion string `yaml:"encryption_key_version"`
 	// Allowlist is a list of IP addresses or CIDR ranges that bypass blocklist,
 	// rate limiting, and geoip checks. Auth checks are never bypassed.
 	// Single IPs are automatically expanded to /32 (IPv4) or /128 (IPv6).
@@ -1501,8 +1547,15 @@ type BrandingConfig struct {
 	// URL is re-fetched (PART 16 Image Scaling: "configurable, default:
 	// daily"). Accepts a Go duration string (e.g. "24h", "12h"); empty or
 	// invalid falls back to the 24h default.
-	ImageRefreshInterval string         `yaml:"image_refresh_interval"`
-	Links                []BrandingLink `yaml:"links"`
+	ImageRefreshInterval string                     `yaml:"image_refresh_interval"`
+	Links                []BrandingLink             `yaml:"links"`
+	Content              map[string]BrandingContent `yaml:"content"`
+}
+
+// BrandingContent is one sanitized, optional operator-authored page fragment.
+type BrandingContent struct {
+	Format string      `yaml:"format"`
+	Body   interface{} `yaml:"body"`
 }
 
 // DefaultImageRefreshInterval is the PART 16 Image Scaling default cadence for
@@ -1597,13 +1650,31 @@ func (b BrandingConfig) EffectiveLinks() []BrandingLink {
 
 // SEOConfig holds search-engine metadata (PART 12/16).
 type SEOConfig struct {
-	Keywords      []string              `yaml:"keywords"`
-	Author        string                `yaml:"author"`
-	OGImage       string                `yaml:"og_image"`
-	TwitterHandle string                `yaml:"twitter_handle"`
-	Verification  SEOVerificationConfig `yaml:"verification"`
-	Sitemap       SitemapConfig         `yaml:"sitemap"`
-	Feed          FeedConfig            `yaml:"feed"`
+	Keywords       []string              `yaml:"keywords"`
+	Author         string                `yaml:"author"`
+	OGImage        string                `yaml:"og_image"`
+	TwitterHandle  string                `yaml:"twitter_handle"`
+	TitleSeparator string                `yaml:"title_separator"`
+	MetaTags       map[string]string     `yaml:"meta_tags"`
+	Canonical      string                `yaml:"canonical"`
+	NoIndex        bool                  `yaml:"noindex"`
+	OpenGraph      SEOOpenGraphConfig    `yaml:"opengraph"`
+	Twitter        SEOTwitterConfig      `yaml:"twitter"`
+	Verification   SEOVerificationConfig `yaml:"verification"`
+	Sitemap        SitemapConfig         `yaml:"sitemap"`
+	Feed           FeedConfig            `yaml:"feed"`
+}
+
+type SEOOpenGraphConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Type     string `yaml:"type"`
+	SiteName string `yaml:"site_name"`
+}
+
+type SEOTwitterConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Card    string `yaml:"card"`
+	Creator string `yaml:"creator"`
 }
 
 // SitemapConfig controls /sitemap.xml generation (PART 16 "Sitemap Configuration").
@@ -1633,6 +1704,42 @@ func validateSitemapConfig(c *SitemapConfig) {
 	if c.MaxURLs <= 0 || c.MaxURLs > 50000 {
 		log.Printf("[config] WARNING: invalid server.seo.sitemap.max_urls %d, using default 50000", c.MaxURLs)
 		c.MaxURLs = 50000
+	}
+}
+
+var seoMetaNamePattern = regexp.MustCompile(`^[a-z0-9:_.-]+$`)
+
+func validateSEOConfig(c *SEOConfig, defaults SEOConfig) {
+	if len([]rune(c.TitleSeparator)) > 8 {
+		log.Printf("[config] WARNING: invalid server.seo.title_separator; using default")
+		c.TitleSeparator = defaults.TitleSeparator
+	}
+	if c.TitleSeparator == "" {
+		c.TitleSeparator = defaults.TitleSeparator
+	}
+	if len(c.MetaTags) > 20 {
+		log.Printf("[config] WARNING: invalid server.seo.meta_tags with more than 20 entries; using default")
+		c.MetaTags = defaults.MetaTags
+	}
+	for name := range c.MetaTags {
+		if !seoMetaNamePattern.MatchString(name) || slices.Contains([]string{"description", "keywords", "author", "robots", "viewport"}, name) {
+			log.Printf("[config] WARNING: invalid server.seo.meta_tags.%s; ignoring entry", name)
+			delete(c.MetaTags, name)
+		}
+	}
+	if c.OpenGraph.Type == "" {
+		c.OpenGraph.Type = defaults.OpenGraph.Type
+	}
+	if c.Twitter.Card != "summary" && c.Twitter.Card != "summary_large_image" {
+		log.Printf("[config] WARNING: invalid server.seo.twitter.card %q; using default", c.Twitter.Card)
+		c.Twitter.Card = defaults.Twitter.Card
+	}
+	if c.Canonical != "" {
+		u, err := url.Parse(c.Canonical)
+		if err != nil || u.Scheme != "https" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+			log.Printf("[config] WARNING: invalid server.seo.canonical; using request origin")
+			c.Canonical = ""
+		}
 	}
 }
 
@@ -1736,7 +1843,7 @@ type SchedulerConfig struct {
 
 // SchedulerTask holds the settings for a single scheduled task (PART 12/18).
 type SchedulerTask struct {
-	Enabled     *bool  `yaml:"enabled"`
+	Enabled     *bool  `yaml:"-"`
 	Schedule    string `yaml:"schedule"`
 	RetryOnFail *bool  `yaml:"retry_on_fail"`
 	RetryDelay  string `yaml:"retry_delay"`
@@ -1809,7 +1916,8 @@ func DefaultConfig() *Config {
 			},
 			Security: ServerSecurityConfig{
 				// auto-generated on first run
-				EncryptionKey: "",
+				EncryptionKey:        "",
+				EncryptionKeyVersion: "v1",
 				AbuseDetection: AbuseDetectionConfig{
 					RequestFlood: RequestFloodConfig{Multiplier: 10, BlockDuration: "1h"},
 					AutoBlockIP:  true,
@@ -1861,9 +1969,13 @@ func DefaultConfig() *Config {
 				ExemptPaths: []string{},
 			},
 			SEO: SEOConfig{
-				Keywords: []string{},
-				Sitemap:  SitemapConfig{MaxURLs: 50000},
-				Feed:     FeedConfig{MaxItems: 50, Title: "Cairnbin"},
+				Keywords:       []string{},
+				TitleSeparator: " - ",
+				MetaTags:       map[string]string{},
+				OpenGraph:      SEOOpenGraphConfig{Enabled: true, Type: "website"},
+				Twitter:        SEOTwitterConfig{Enabled: true, Card: "summary_large_image"},
+				Sitemap:        SitemapConfig{MaxURLs: 50000},
+				Feed:           FeedConfig{MaxItems: 50, Title: "Cairnbin"},
 			},
 			PIDFile:   true,
 			Daemonize: false,
@@ -1975,7 +2087,8 @@ func DefaultConfig() *Config {
 				BootstrapTimeout: "5m",
 			},
 			Logging: LoggingConfig{
-				Level: "warn",
+				Level:    "warn",
+				Defaults: LogDefaultsConfig{Rotate: "weekly,50MB", Keep: "none"},
 				Access: AccessLogConfig{
 					Filename:        "access.log",
 					Format:          "apache",
@@ -2042,6 +2155,7 @@ func DefaultConfig() *Config {
 				},
 			},
 			Notifications: NotificationsConfig{
+				WebUI: ToastConfig{Position: "top-right", Duration: 3, WarningDuration: 5},
 				DiskLow: DiskLowConfig{
 					Enabled:          true,
 					ThresholdPercent: 85,
@@ -2149,6 +2263,7 @@ func DefaultConfig() *Config {
 				Security: ContactRole{Email: "security@{fqdn}", Webhooks: map[string]string{}},
 				Abuse:    ContactRole{Email: "", Webhooks: map[string]string{}},
 				General:  ContactRole{Email: "", Webhooks: map[string]string{}},
+				DPO:      ContactRole{Email: "", Webhooks: map[string]string{}},
 			},
 			Pages: PagesConfig{
 				Help: PageContentConfig{
@@ -2168,8 +2283,14 @@ func DefaultConfig() *Config {
 						"cairnbin exposes no additional MCP resources or prompts.",
 				},
 				Contact: ContactPageConfig{
-					Enabled:        true,
-					Captcha:        "simple",
+					Enabled: true,
+					Captcha: "simple",
+					Antispam: ContactAntispamConfig{
+						Honeypot: true, MinFillSeconds: 3, MaxAgeSeconds: 43200,
+						PerIP: 5, PerEmail: 3, Global: 60, Window: "1h", MaxLinks: 10,
+						RejectMarkup: true, Strikes: 3, BanHours: 24, DuplicateWindowHours: 24,
+						ReviewMinSeconds: 2, ReviewMaxSeconds: 900,
+					},
 					SuccessMessage: "Thank you for your message. We'll respond soon.",
 				},
 			},
@@ -2274,6 +2395,7 @@ func DefaultConfig() *Config {
 		Web: WebConfig{
 			SiteTitle: "Cairnbin",
 			Theme:     "dark",
+			UI:        WebUIConfig{Theme: "dark"},
 			Robots: RobotsConfig{
 				Allow:  []string{"/", "/api"},
 				Deny:   []string{},
@@ -2316,7 +2438,6 @@ func DefaultConfig() *Config {
 					SampleRate:        1.0,
 				},
 			},
-			PermissionsPolicy: DefaultPermissionsPolicy(),
 			Announcements: AnnouncementsConfig{
 				Enabled:  true,
 				Messages: []AnnouncementMessage{},
@@ -2338,15 +2459,24 @@ func Load(path string) (*Config, error) {
 	}
 	missing := os.IsNotExist(statErr)
 	if missing {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return cfg, err
 		}
 		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
 			return cfg, err
 		}
 	}
+	if err := enforceConfigPrivatePaths(path); err != nil {
+		return cfg, err
+	}
 	if err := migrateLegacyTLSFiles(path); err != nil {
 		return cfg, err
+	}
+	if err := migrateRuntimeSecrets(path); err != nil {
+		return cfg, err
+	}
+	if err := migrateAreaFiles(path); err != nil {
+		log.Printf("[config] area migration could not complete: %v", err)
 	}
 	fieldSources, decodeErr := decodeConfigFiles(path, cfg)
 	if decodeErr != nil {
@@ -2381,21 +2511,18 @@ func Load(path string) (*Config, error) {
 		if genErr := cfg.ensureServerToken(); genErr != nil {
 			log.Printf("config: warning: could not generate server token: %v", genErr)
 		} else {
-			log.Printf("config: generated server.token — copy it from %s", path)
+			log.Printf("config: generated server.token — copy it from %s", filepath.Join(filepath.Dir(path), "secrets.yml"))
 		}
 		// Write canonical defaults to disk. Never bake runtime env-var overrides
 		// (MODE, DEBUG, etc.) into the persisted config — env vars are runtime-only.
 		// Copy only the generated secrets so they survive the next startup.
-		saveCfg := DefaultConfig()
+		saveCfg := *cfg
+		saveCfg.FirstRun = true
 		saveCfg.Server.FQDN = cfg.ResolveFQDN()
-		if !cfg.IsDropInOverride("server.security.encryption_key") {
-			saveCfg.Server.Security.EncryptionKey = cfg.Server.Security.EncryptionKey
-		}
-		if !cfg.IsDropInOverride("server.token") {
-			saveCfg.Server.Token = cfg.Server.Token
-		}
-		if saveErr := Save(path, saveCfg); saveErr != nil {
+		if saveErr := Save(path, &saveCfg); saveErr != nil {
 			log.Printf("config: warning: could not persist generated secrets to %s: %v", path, saveErr)
+		} else if migrationErr := migrateAreaFiles(path); migrationErr != nil {
+			log.Printf("[config] area migration could not complete: %v", migrationErr)
 		}
 		cfg.FirstRun = true
 		cfg.fieldSources = fieldSources
@@ -2417,7 +2544,7 @@ func Load(path string) (*Config, error) {
 
 	// Generate and persist encryption key if missing (upgrade path for older configs).
 	needSave := false
-	if cfg.Server.Security.EncryptionKey == "" && !cfg.IsDropInOverride("server.security.encryption_key") {
+	if cfg.Server.Security.EncryptionKey == "" {
 		if genErr := cfg.ensureEncryptionKey(); genErr != nil {
 			log.Printf("config: warning: could not generate encryption key: %v", genErr)
 		} else {
@@ -2426,12 +2553,12 @@ func Load(path string) (*Config, error) {
 	}
 
 	// Generate and persist server.token if missing (upgrade path for older configs).
-	if cfg.Server.Token == "" && !cfg.IsDropInOverride("server.token") {
+	if cfg.Server.Token == "" {
 		if genErr := cfg.ensureServerToken(); genErr != nil {
 			log.Printf("config: warning: could not generate server token: %v", genErr)
 		} else {
 			needSave = true
-			log.Printf("config: generated server.token — copy it from %s", path)
+			log.Printf("config: generated server.token — copy it from %s", filepath.Join(filepath.Dir(path), "secrets.yml"))
 		}
 	}
 
@@ -2477,7 +2604,7 @@ func ReadLanguage(path string) (string, error) {
 		return "", err
 	}
 	cfg := DefaultConfig()
-	if _, err := decodeConfigFiles(path, cfg); err != nil {
+	if _, err := decodeConfigFiles(path, cfg, false); err != nil {
 		return "", err
 	}
 	return cfg.Server.Lang, nil
@@ -2494,6 +2621,12 @@ func (c *Config) ensureEncryptionKey() error {
 		return err
 	}
 	c.Server.Security.EncryptionKey = fmt.Sprintf("%x", key)
+	c.Server.Security.EncryptionKeyVersion = "v1"
+	if c.fieldSources == nil {
+		c.fieldSources = make(map[string]string)
+	}
+	c.fieldSources["server.security.encryption_key"] = "generated"
+	c.fieldSources["server.security.encryption_key_version"] = "generated"
 	return nil
 }
 
@@ -2515,6 +2648,10 @@ func (c *Config) ensureServerToken() error {
 		b[i] = tokenCharset[int(v)%len(tokenCharset)]
 	}
 	c.Server.Token = "tok_" + string(b)
+	if c.fieldSources == nil {
+		c.fieldSources = make(map[string]string)
+	}
+	c.fieldSources["server.token"] = "generated"
 	return nil
 }
 
@@ -2833,6 +2970,21 @@ func (c *Config) GeneralEmail() string {
 	return c.AdminEmail()
 }
 
+func (c *Config) DPOEmail() string {
+	if e := c.expandFQDN(c.Server.Contact.DPO.Email); e != "" {
+		return e
+	}
+	return c.GeneralEmail()
+}
+
+// DPOEmailPublic returns only explicitly configured DPO or general addresses.
+func (c *Config) DPOEmailPublic() string {
+	if e := c.expandFQDN(c.Server.Contact.DPO.Email); e != "" {
+		return e
+	}
+	return c.GeneralEmailPublic()
+}
+
 // GeneralEmailPublic returns the /server/contact address ONLY when the operator
 // explicitly set server.contact.general.email; otherwise it returns "" (PART 12).
 // Unlike GeneralEmail it never falls back to the admin address, because the admin
@@ -2885,6 +3037,10 @@ func (c *Config) ContactWebhook(role, transport string) string {
 		}
 	case "general":
 		v = pick(c.Server.Contact.General)
+	case "dpo":
+		if v = pick(c.Server.Contact.DPO); v == "" {
+			v = pick(c.Server.Contact.General)
+		}
 	default:
 		v = pick(c.Server.Contact.Admin)
 	}
@@ -2907,7 +3063,7 @@ type WebhookTarget struct {
 }
 
 // contactRole returns the ContactRole for a role name
-// (admin/security/abuse/general), defaulting to admin for any unknown name.
+// (admin/security/abuse/general/dpo), defaulting to admin for any unknown name.
 func (c *Config) contactRole(role string) ContactRole {
 	switch role {
 	case "security":
@@ -2916,6 +3072,8 @@ func (c *Config) contactRole(role string) ContactRole {
 		return c.Server.Contact.Abuse
 	case "general":
 		return c.Server.Contact.General
+	case "dpo":
+		return c.Server.Contact.DPO
 	default:
 		return c.Server.Contact.Admin
 	}
@@ -2960,7 +3118,7 @@ func (c *Config) WebhookTargets(role string) []WebhookTarget {
 	add(c.contactRole(role))
 	// Abuse resolves abuse → general → admin, so enumerate general's transports
 	// too before the shared admin fallback (PART 12).
-	if role == "abuse" {
+	if role == "abuse" || role == "dpo" {
 		add(c.Server.Contact.General)
 	}
 	add(c.Server.Contact.Admin)
@@ -2972,8 +3130,16 @@ func (c *Config) WebhookTargets(role string) []WebhookTarget {
 // `<name>_secret`. Reports whether any secret was generated (PART 17).
 func (c *Config) ensureWebhookSecrets() (bool, error) {
 	generated := false
-	roles := []*ContactRole{&c.Server.Contact.Admin, &c.Server.Contact.Security, &c.Server.Contact.Abuse, &c.Server.Contact.General}
-	for _, r := range roles {
+	roles := []struct {
+		name string
+		role *ContactRole
+	}{
+		{"admin", &c.Server.Contact.Admin}, {"security", &c.Server.Contact.Security},
+		{"abuse", &c.Server.Contact.Abuse}, {"general", &c.Server.Contact.General},
+		{"dpo", &c.Server.Contact.DPO},
+	}
+	for _, item := range roles {
+		r := item.role
 		if r.Webhooks == nil {
 			continue
 		}
@@ -2993,6 +3159,10 @@ func (c *Config) ensureWebhookSecrets() (bool, error) {
 				return generated, err
 			}
 			r.Webhooks[key] = fmt.Sprintf("%x", b)
+			if c.fieldSources == nil {
+				c.fieldSources = make(map[string]string)
+			}
+			c.fieldSources["server.contact."+item.name+".webhooks."+key] = "generated"
 			generated = true
 		}
 	}
@@ -3061,6 +3231,7 @@ func (c *Config) loadEnv() {
 	// APPLICATION_NAME is the AI.md-canonical application title (AI.md 7579); SITE_TITLE is an alias.
 	if v := os.Getenv("SITE_TITLE"); v != "" {
 		c.Web.SiteTitle = v
+		c.Server.Branding.Title = v
 	}
 	if v := os.Getenv("APPLICATION_NAME"); v != "" {
 		c.Server.Branding.Title = v
@@ -3070,6 +3241,7 @@ func (c *Config) loadEnv() {
 		c.Server.Branding.Tagline = v
 	}
 	if v := os.Getenv("THEME"); v != "" {
+		c.Web.UI.Theme = v
 		c.Web.Theme = v
 	}
 	// MAX_SIZE accepts a human-readable size ("100kb", "20mb", "1gb", "1tb", or
@@ -3187,6 +3359,10 @@ func validateLogFile(name string, c *LogFileConfig, def LogFileConfig, formats .
 // must always start with sane defaults even if the config file is malformed (PART 12).
 func Validate(cfg *Config) {
 	d := DefaultConfig()
+	cfg.Server.RateLimit.Enabled = true
+	cfg.Server.MCP.Enabled = true
+	cfg.Server.Maintenance.SelfHealing.Enabled = true
+	validateToastConfig(&cfg.Server.Notifications.WebUI, d.Server.Notifications.WebUI)
 	if cfg.Server.Tokens.MaxLinked <= 0 {
 		log.Printf("[config] WARNING: invalid server.tokens.max_linked %d, using default %d", cfg.Server.Tokens.MaxLinked, d.Server.Tokens.MaxLinked)
 		cfg.Server.Tokens.MaxLinked = d.Server.Tokens.MaxLinked
@@ -3208,11 +3384,9 @@ func Validate(cfg *Config) {
 		log.Printf("[config] WARNING: invalid web.csp.reports_sample_rate %v, using default 1.0", cfg.Web.CSP.ReportsSampleRate)
 		cfg.Web.CSP.ReportsSampleRate = 1.0
 	}
-	if cfg.Web.PermissionsPolicy == nil {
-		cfg.Web.PermissionsPolicy = DefaultPermissionsPolicy()
-	}
 	validateSitemapConfig(&cfg.Server.SEO.Sitemap)
 	validateFeedConfig(&cfg.Server.SEO.Feed)
+	validateSEOConfig(&cfg.Server.SEO, d.Server.SEO)
 	validateUpdate(&cfg.Server.Update)
 	validateI18n(&cfg.Server.I18n)
 	validateBackupRetention(&cfg.Server.Backup.Retention)
@@ -3333,14 +3507,51 @@ func Validate(cfg *Config) {
 	if cfg.Server.Pages.Contact.SuccessMessage == "" {
 		cfg.Server.Pages.Contact.SuccessMessage = d.Server.Pages.Contact.SuccessMessage
 	}
+	contactSpam := &cfg.Server.Pages.Contact.Antispam
+	defaultContactSpam := d.Server.Pages.Contact.Antispam
+	if _, err := time.ParseDuration(contactSpam.Window); contactSpam.Window != "" && err != nil {
+		contactSpam.Window = defaultContactSpam.Window
+	}
+	if contactSpam.MinFillSeconds < 0 {
+		contactSpam.MinFillSeconds = defaultContactSpam.MinFillSeconds
+	}
+	if contactSpam.MaxAgeSeconds < 0 || (contactSpam.MaxAgeSeconds > 0 && contactSpam.MinFillSeconds > 0 && contactSpam.MaxAgeSeconds <= contactSpam.MinFillSeconds) {
+		contactSpam.MaxAgeSeconds = defaultContactSpam.MaxAgeSeconds
+	}
+	for _, pair := range []struct {
+		value *int
+		def   int
+	}{
+		{&contactSpam.PerIP, defaultContactSpam.PerIP},
+		{&contactSpam.PerEmail, defaultContactSpam.PerEmail},
+		{&contactSpam.Global, defaultContactSpam.Global},
+		{&contactSpam.MaxLinks, defaultContactSpam.MaxLinks},
+		{&contactSpam.Strikes, defaultContactSpam.Strikes},
+		{&contactSpam.BanHours, defaultContactSpam.BanHours},
+		{&contactSpam.DuplicateWindowHours, defaultContactSpam.DuplicateWindowHours},
+		{&contactSpam.ReviewMinSeconds, defaultContactSpam.ReviewMinSeconds},
+		{&contactSpam.ReviewMaxSeconds, defaultContactSpam.ReviewMaxSeconds},
+	} {
+		if *pair.value < 0 {
+			*pair.value = pair.def
+		}
+	}
+	if contactSpam.ReviewMaxSeconds > 0 && contactSpam.ReviewMinSeconds > contactSpam.ReviewMaxSeconds {
+		contactSpam.ReviewMaxSeconds = defaultContactSpam.ReviewMaxSeconds
+	}
 
-	// Web theme must be one of the valid values.
-	switch cfg.Web.Theme {
+	// Branding and the default theme live in the branding area file.
+	if cfg.Web.UI.Theme == "" {
+		cfg.Web.UI.Theme = d.Web.UI.Theme
+	}
+	switch cfg.Web.UI.Theme {
 	case "dark", "light", "auto":
 	default:
-		log.Printf("[config] WARNING: invalid web.theme %q, using default \"dark\"", cfg.Web.Theme)
-		cfg.Web.Theme = "dark"
+		log.Printf("[config] WARNING: invalid web.ui.theme %q, using default \"dark\"", cfg.Web.UI.Theme)
+		cfg.Web.UI.Theme = d.Web.UI.Theme
 	}
+	cfg.Web.Theme = cfg.Web.UI.Theme
+	cfg.Web.SiteTitle = cfg.Server.Branding.EffectiveTitle()
 
 	// Announcement type must be one of the valid values (AI.md 22527); an
 	// entry with a blank/missing ID cannot be dismissed or matched against the
@@ -3419,6 +3630,55 @@ func Validate(cfg *Config) {
 		log.Printf("[config] WARNING: invalid logging.level %q, using default \"warn\"",
 			cfg.Server.Logging.Level)
 		cfg.Server.Logging.Level = "warn"
+	}
+	if cfg.Server.Logging.Defaults.Rotate == "" {
+		cfg.Server.Logging.Defaults.Rotate = d.Server.Logging.Defaults.Rotate
+	}
+	if cfg.Server.Logging.Defaults.Keep == "" {
+		cfg.Server.Logging.Defaults.Keep = d.Server.Logging.Defaults.Keep
+	}
+	logDefaults := cfg.Server.Logging.Defaults
+	for path, file := range map[string]*LogFileConfig{
+		"server.logs.access":   (*LogFileConfig)(nil),
+		"server.logs.server":   &cfg.Server.Logging.Server,
+		"server.logs.error":    &cfg.Server.Logging.Error,
+		"server.logs.app":      &cfg.Server.Logging.App,
+		"server.logs.auth":     &cfg.Server.Logging.Auth,
+		"server.logs.security": &cfg.Server.Logging.Security,
+	} {
+		if path == "server.logs.access" {
+			if cfg.SourceFile(path+".custom") == "" {
+				cfg.Server.Logging.Access.Custom = logDefaults.Custom
+			}
+			if cfg.SourceFile(path+".rotate") == "" {
+				cfg.Server.Logging.Access.Rotate = logDefaults.Rotate
+			}
+			if cfg.SourceFile(path+".keep") == "" {
+				cfg.Server.Logging.Access.Keep = logDefaults.Keep
+			}
+			continue
+		}
+		if file == nil {
+			continue
+		}
+		if cfg.SourceFile(path+".custom") == "" {
+			file.Custom = logDefaults.Custom
+		}
+		if cfg.SourceFile(path+".rotate") == "" {
+			file.Rotate = logDefaults.Rotate
+		}
+		if cfg.SourceFile(path+".keep") == "" {
+			file.Keep = logDefaults.Keep
+		}
+	}
+	if cfg.SourceFile("server.logs.debug.custom") == "" {
+		cfg.Server.Logging.Debug.Custom = logDefaults.Custom
+	}
+	if cfg.SourceFile("server.logs.debug.rotate") == "" {
+		cfg.Server.Logging.Debug.Rotate = logDefaults.Rotate
+	}
+	if cfg.SourceFile("server.logs.debug.keep") == "" {
+		cfg.Server.Logging.Debug.Keep = logDefaults.Keep
 	}
 
 	// Per-file log settings: blank filename/format/rotate/keep fall back to
@@ -3515,6 +3775,23 @@ func Validate(cfg *Config) {
 	}
 }
 
+func validateToastConfig(c *ToastConfig, defaults ToastConfig) {
+	switch c.Position {
+	case "top-right", "top-left", "bottom-right", "bottom-left":
+	default:
+		log.Printf("[config] WARNING: invalid server.notifications.webui.position %q, using default %q", c.Position, defaults.Position)
+		c.Position = defaults.Position
+	}
+	if c.Duration < 0 || c.Duration > 3600 {
+		log.Printf("[config] WARNING: invalid server.notifications.webui.duration %d, using default %d", c.Duration, defaults.Duration)
+		c.Duration = defaults.Duration
+	}
+	if c.WarningDuration < 0 || c.WarningDuration > 3600 {
+		log.Printf("[config] WARNING: invalid server.notifications.webui.warning_duration %d, using default %d", c.WarningDuration, defaults.WarningDuration)
+		c.WarningDuration = defaults.WarningDuration
+	}
+}
+
 func ownerCookieMaxAge(value string) (time.Duration, bool) {
 	if strings.HasSuffix(value, "y") || strings.HasSuffix(value, "d") {
 		unit := value[len(value)-1]
@@ -3594,15 +3871,81 @@ func ValidateTracking(cfg *TrackingConfig) error {
 	return nil
 }
 
-// Save writes config to path atomically. The config file holds the AES-256-GCM
-// encryption key and operator token, so a crash mid-write must never leave a
-// truncated or corrupt file: the data is written to a temp file in the same
-// directory and renamed into place (rename is atomic on the same filesystem).
+// Save writes configuration atomically and stores generated runtime credentials
+// in the adjacent secrets.yml file.
 func Save(path string, cfg *Config) error {
-	data, err := yaml.Marshal(cfg)
+	if _, err := cfg.ensureWebhookSecrets(); err != nil {
+		return fmt.Errorf("generate webhook secrets: %w", err)
+	}
+	if err := persistGeneratedSecrets(path, cfg); err != nil {
+		return err
+	}
+	saveCfg := *cfg
+	saveCfg.Server = cfg.Server
+	saveCfg.Database = cfg.Database
+	if cfg.Web.SiteTitle != "" {
+		saveCfg.Server.Branding.Title = cfg.Web.SiteTitle
+	}
+	if cfg.Web.Theme != "" {
+		saveCfg.Web.UI.Theme = cfg.Web.Theme
+	}
+	// First-run persistence stores file defaults, not the MODE runtime override.
+	if cfg.FirstRun {
+		saveCfg.Server.Mode = DefaultConfig().Server.Mode
+	}
+	saveCfg.Server.Token = ""
+	saveCfg.Server.Security.EncryptionKey = ""
+	saveCfg.Server.Security.EncryptionKeyVersion = ""
+	if inheritedSecret(cfg, "server.cache.password") {
+		saveCfg.Server.Cache.Password = ""
+	}
+	if inheritedSecret(cfg, "database.token") {
+		saveCfg.Database.Token = ""
+	}
+	if inheritedSecret(cfg, "server.notifications.email.smtp.password") {
+		saveCfg.Server.Notifications.Email.SMTP.Password = ""
+	}
+	if inheritedSecret(cfg, "server.pages.contact.captcha_secret_key") {
+		saveCfg.Server.Pages.Contact.CaptchaSecretKey = ""
+	}
+	if inheritedSecret(cfg, "server.metrics.auth.tokens.prometheus") {
+		saveCfg.Server.Metrics.Auth.Tokens.Prometheus = ""
+	}
+	if inheritedSecret(cfg, "server.metrics.auth.tokens.grafana") {
+		saveCfg.Server.Metrics.Auth.Tokens.Grafana = ""
+	}
+	if inheritedSecret(cfg, "server.metrics.auth.tokens.loki") {
+		saveCfg.Server.Metrics.Auth.Tokens.Loki = ""
+	}
+	if inheritedSecret(cfg, "server.metrics.token") {
+		saveCfg.Server.Metrics.Token = ""
+	}
+	if len(cfg.Server.TLS.LetsEncrypt.DNSCredentials) != 0 {
+		saveCfg.Server.TLS.LetsEncrypt.DNSCredentials = make(map[string]string)
+		for name, value := range cfg.Server.TLS.LetsEncrypt.DNSCredentials {
+			field := "server.ssl.letsencrypt.dns_credentials." + name
+			if !inheritedSecret(cfg, field) {
+				saveCfg.Server.TLS.LetsEncrypt.DNSCredentials[name] = value
+			}
+		}
+	}
+	stripInheritedWebhookSecrets(cfg, &saveCfg.Server.Contact)
+	data, err := marshalYAML2(&saveCfg)
 	if err != nil {
 		return err
 	}
+	var savedDocument yaml.Node
+	if err := yaml.Unmarshal(data, &savedDocument); err != nil {
+		return err
+	}
+	for _, path := range configSecretPaths() {
+		deleteYAMLPath(savedDocument.Content[0], path)
+	}
+	data, err = marshalYAML2(&savedDocument)
+	if err != nil {
+		return err
+	}
+	data = append([]byte(serverYAMLHeader), data...)
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".server.yml.*.tmp")
 	if err != nil {
@@ -3628,58 +3971,256 @@ func Save(path string, cfg *Config) error {
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("renaming temp config: %w", err)
 	}
-	return nil
+	return migrateAreaFilesWithPrecedence(path, true)
+}
+
+func inheritedSecret(cfg *Config, key string) bool {
+	source := cfg.SourceFile(key)
+	return source != "" && source != cfg.configPath
+}
+
+func stripInheritedWebhookSecrets(cfg *Config, contact *ContactConfig) {
+	roles := map[string]*ContactRole{
+		"admin": &contact.Admin, "security": &contact.Security, "abuse": &contact.Abuse,
+		"general": &contact.General, "dpo": &contact.DPO,
+	}
+	for role, configRole := range roles {
+		cloned := make(map[string]string, len(configRole.Webhooks))
+		for key, value := range configRole.Webhooks {
+			field := "server.contact." + role + ".webhooks." + key
+			if !inheritedSecret(cfg, field) {
+				cloned[key] = value
+			}
+		}
+		configRole.Webhooks = cloned
+	}
 }
 
 // persistGeneratedSecrets persists generated values in the canonical config
 // file; drop-ins remain independent inputs and continue to win on reload.
-func persistGeneratedSecrets(path string, cfg *Config) error {
-	data, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return err
+func persistGeneratedSecrets(configPath string, cfg *Config) error {
+	values := map[string]string{}
+	for _, key := range []string{"server.token", "server.security.encryption_key", "server.security.encryption_key_version"} {
+		source := cfg.SourceFile(key)
+		if source == "" || source == "generated" {
+			value := cfg.Server.Token
+			if key == "server.security.encryption_key" {
+				value = cfg.Server.Security.EncryptionKey
+			} else if key == "server.security.encryption_key_version" {
+				value = cfg.Server.Security.EncryptionKeyVersion
+			}
+			if value != "" && (key != "server.security.encryption_key_version" || cfg.Server.Security.EncryptionKey != "") {
+				values[key] = value
+			}
+		}
 	}
-	var root yaml.Node
-	if len(data) == 0 {
-		root = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
-	} else if err := yaml.Unmarshal(data, &root); err != nil {
-		return err
-	}
-	if len(root.Content) == 0 {
-		root.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
-	}
-	values := make(map[string]string)
-	if !cfg.IsDropInOverride("server.token") {
-		values["server.token"] = cfg.Server.Token
-	}
-	if !cfg.IsDropInOverride("server.security.encryption_key") {
-		values["server.security.encryption_key"] = cfg.Server.Security.EncryptionKey
-	}
-	roles := map[string]ContactRole{"admin": cfg.Server.Contact.Admin, "security": cfg.Server.Contact.Security, "abuse": cfg.Server.Contact.Abuse, "general": cfg.Server.Contact.General}
+	roles := map[string]ContactRole{"admin": cfg.Server.Contact.Admin, "security": cfg.Server.Contact.Security, "abuse": cfg.Server.Contact.Abuse, "general": cfg.Server.Contact.General, "dpo": cfg.Server.Contact.DPO}
 	for role, contact := range roles {
 		for key, value := range contact.Webhooks {
 			field := "server.contact." + role + ".webhooks." + key
-			if strings.HasSuffix(key, webhookSecretSuffix) && !cfg.IsDropInOverride(field) {
+			if value != "" {
 				values[field] = value
 			}
 		}
 	}
-	for path, value := range values {
-		if value == "" {
-			continue
+	if len(values) == 0 {
+		return nil
+	}
+	secretsPath := filepath.Join(filepath.Dir(configPath), "secrets.yml")
+	data, err := os.ReadFile(secretsPath)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	root := yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	if len(data) > 0 {
+		if err := yaml.Unmarshal(data, &root); err != nil {
+			return err
 		}
-		if err := setYAMLScalarPath(root.Content[0], strings.Split(path, "."), value); err != nil {
+		if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+			return fmt.Errorf("secrets file is not a mapping")
+		}
+	}
+	for key, value := range values {
+		if err := setYAMLScalarPath(root.Content[0], strings.Split(key, "."), value); err != nil {
 			return err
 		}
 	}
-	migrateLegacyTLSNode(root.Content[0])
-	encoded, err := yaml.Marshal(&root)
+	encoded, err := marshalYAML2(&root)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	return writePrivateYAML(secretsPath, encoded, ".secrets.yml-*")
+}
+
+func migrateRuntimeSecrets(configPath string) error {
+	serverData, err := os.ReadFile(configPath)
+	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".server.yml-*")
+	secretsPath := filepath.Join(filepath.Dir(configPath), "secrets.yml")
+	secretData, err := os.ReadFile(secretsPath)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	secretsDoc := yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	if len(secretData) > 0 {
+		if err := yaml.Unmarshal(secretData, &secretsDoc); err != nil {
+			return err
+		}
+		if len(secretsDoc.Content) == 0 || secretsDoc.Content[0].Kind != yaml.MappingNode {
+			return fmt.Errorf("secrets file is not a mapping")
+		}
+	}
+	originalSecrets := cloneYAMLNode(secretsDoc.Content[0])
+	sources := []yamlConfigSource{{path: configPath, data: serverData}}
+	dropIns, err := readYAMLDropIns(configPath)
+	if err != nil {
+		return err
+	}
+	sources = append(sources, dropIns...)
+	secretPaths := configSecretPaths()
+	secretChanged := false
+	type changedSource struct {
+		path   string
+		before []byte
+		doc    yaml.Node
+	}
+	changedSources := make([]changedSource, 0)
+	for _, source := range sources {
+		var doc yaml.Node
+		if err := yaml.Unmarshal(source.data, &doc); err != nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+			continue
+		}
+		changed := false
+		for _, key := range secretPaths {
+			value := yamlPathValue(doc.Content[0], key)
+			if value == nil || value.Kind == yaml.ScalarNode && value.Value == "" {
+				continue
+			}
+			if yamlPathValue(originalSecrets, key) == nil {
+				if err := setYAMLNodePath(secretsDoc.Content[0], key, cloneYAMLNode(value)); err != nil {
+					return err
+				}
+				secretChanged = true
+			}
+			deleteYAMLPath(doc.Content[0], key)
+			changed = true
+		}
+		if changed {
+			changedSources = append(changedSources, changedSource{path: source.path, before: source.data, doc: doc})
+		}
+	}
+	if yamlPathValue(secretsDoc.Content[0], []string{"server", "security", "encryption_key"}) != nil && yamlPathValue(secretsDoc.Content[0], []string{"server", "security", "encryption_key_version"}) == nil {
+		if err := setYAMLScalarPath(secretsDoc.Content[0], []string{"server", "security", "encryption_key_version"}, "v1"); err != nil {
+			return err
+		}
+		secretChanged = true
+	}
+	if len(changedSources) == 0 && !secretChanged {
+		return nil
+	}
+	if secretChanged {
+		secretBytes, err := marshalYAML2(&secretsDoc)
+		if err != nil {
+			return err
+		}
+		if err := writePrivateYAML(secretsPath, secretBytes, ".secrets.yml-*"); err != nil {
+			return err
+		}
+	}
+	for _, source := range changedSources {
+		encoded, err := marshalYAML2(&source.doc)
+		if err != nil {
+			return err
+		}
+		if source.path == configPath {
+			if err := writePrivateYAML(configPath+".bak", source.before, ".server.yml.bak-*"); err != nil {
+				return err
+			}
+			encoded = append([]byte(serverYAMLHeader), encoded...)
+		} else if err := writePrivateYAML(source.path+".bak", source.before, ".secret-source.bak-*"); err != nil {
+			return err
+		}
+		if err := writePrivateYAML(source.path, encoded, ".secret-source-*"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func configSecretPaths() [][]string {
+	paths := [][]string{
+		{"server", "token"}, {"server", "security", "encryption_key"}, {"server", "security", "encryption_key_version"},
+		{"server", "notifications", "email", "smtp", "password"}, {"server", "cache", "password"},
+		{"database", "token"}, {"server", "database", "token"}, {"server", "pages", "contact", "captcha_secret_key"},
+		{"server", "ssl", "letsencrypt", "dns_credentials"}, {"data", "cve", "api_key"},
+		{"server", "backup", "encryption_password"}, {"server", "metrics", "auth", "tokens"},
+	}
+	for _, role := range []string{"admin", "security", "abuse", "general", "dpo"} {
+		paths = append(paths, []string{"server", "contact", role, "webhooks"})
+	}
+	return paths
+}
+
+func setYAMLNodePath(node *yaml.Node, path []string, value *yaml.Node) error {
+	if len(path) == 0 {
+		return nil
+	}
+	if len(path) == 1 {
+		index := mappingValueIndex(node, path[0])
+		if index >= 0 {
+			node.Content[index] = value
+		} else {
+			node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: path[0]}, value)
+		}
+		return nil
+	}
+	index := mappingValueIndex(node, path[0])
+	if index < 0 {
+		child := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: path[0]}, child)
+		index = len(node.Content) - 1
+	}
+	return setYAMLNodePath(node.Content[index], path[1:], value)
+}
+
+func yamlPathValue(node *yaml.Node, path []string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode || len(path) == 0 {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == path[0] {
+			if len(path) == 1 {
+				return node.Content[i+1]
+			}
+			return yamlPathValue(node.Content[i+1], path[1:])
+		}
+	}
+	return nil
+}
+
+func deleteYAMLPath(node *yaml.Node, path []string) {
+	if node == nil || node.Kind != yaml.MappingNode || len(path) == 0 {
+		return
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value != path[0] {
+			continue
+		}
+		if len(path) == 1 {
+			node.Content = append(node.Content[:i], node.Content[i+2:]...)
+		} else {
+			deleteYAMLPath(node.Content[i+1], path[1:])
+		}
+		return
+	}
+}
+
+func writePrivateYAML(path string, data []byte, pattern string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), pattern)
 	if err != nil {
 		return err
 	}
@@ -3689,7 +4230,7 @@ func persistGeneratedSecrets(path string, cfg *Config) error {
 		_ = tmp.Close()
 		return err
 	}
-	if _, err := tmp.Write(encoded); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return err
 	}
@@ -3701,6 +4242,19 @@ func persistGeneratedSecrets(path string, cfg *Config) error {
 		return err
 	}
 	return os.Rename(tmpPath, path)
+}
+
+func marshalYAML2(value interface{}) ([]byte, error) {
+	var out bytes.Buffer
+	encoder := yaml.NewEncoder(&out)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
 
 func persistDNSCredential(path, name, encrypted string) error {
@@ -4333,6 +4887,7 @@ func migrateLegacyKeys(data []byte) []byte {
 		return data
 	}
 	changed := migrateWebSecurityKeys(doc)
+	changed = removeLegacyRateLimitEnabled(doc) || changed
 	for _, key := range legacyKeyMoves {
 		val, ok := doc[key]
 		if !ok {
@@ -4357,6 +4912,23 @@ func migrateLegacyKeys(data []byte) []byte {
 		return data
 	}
 	return out
+}
+
+func removeLegacyRateLimitEnabled(doc map[string]any) bool {
+	changed := false
+	remove := func(value any) {
+		if limits, ok := value.(map[string]any); ok {
+			if _, exists := limits["enabled"]; exists {
+				delete(limits, "enabled")
+				changed = true
+			}
+		}
+	}
+	if server, ok := doc["server"].(map[string]any); ok {
+		remove(server["rate_limit"])
+	}
+	remove(doc["rate_limit"])
+	return changed
 }
 
 // legacyWebSecurityMoves lists the web.security keys that AI.md PART 11 places

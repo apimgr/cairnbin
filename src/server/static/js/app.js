@@ -73,10 +73,20 @@ function getToastContainer() {
     return container;
 }
 
-// Auto-dismiss durations per toast type (PART 16 Toast Behavior Rules):
-// success/info 3s, warning 5s, error never auto-dismisses (0 = stays until
-// clicked/closed).
-const TOAST_DURATIONS = { success: 3000, info: 3000, warning: 5000, error: 0 };
+// Auto-dismiss durations are rendered from server.notifications.webui.
+function configuredToastDuration(attribute, fallback) {
+    var container = document.getElementById('toast-container');
+    if (!container || container.dataset[attribute] === undefined) return fallback;
+    var seconds = Number(container.dataset[attribute]);
+    return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : fallback;
+}
+
+const TOAST_DURATIONS = {
+    success: configuredToastDuration('duration', 3000),
+    info: configuredToastDuration('duration', 3000),
+    warning: configuredToastDuration('warningDuration', 5000),
+    error: 0
+};
 const TOAST_ICONS = { success: '✓', error: '✗', warning: '⚠', info: 'ℹ' };
 const TOAST_MAX_VISIBLE = 5;
 
@@ -106,15 +116,26 @@ function armToastTimer(toast, duration) {
     toast.__toastRemaining = duration;
     toast.__toastStart = Date.now();
     toast.__toastTimer = setTimeout(function () { dismissToast(toast); }, duration);
+    updateToastProgress(toast);
 }
 
-// pauseToastTimer stops the countdown on hover; the progress bar itself
-// pauses via the pure-CSS `.toast:hover .toast-progress` rule.
+// updateToastProgress keeps the native progress element synchronized with the
+// same timer used for auto-dismiss, including the remaining time after hover.
+function updateToastProgress(toast) {
+    if (!toast.__toastProgress || !toast.__toastTimer) return;
+    var remaining = Math.max(0, toast.__toastRemaining - (Date.now() - toast.__toastStart));
+    toast.__toastProgress.value = remaining;
+    toast.__toastProgressFrame = requestAnimationFrame(function () { updateToastProgress(toast); });
+}
+
+// pauseToastTimer stops the countdown and progress update loop on hover.
 function pauseToastTimer(toast) {
     if (!toast.__toastTimer) return;
     clearTimeout(toast.__toastTimer);
     toast.__toastTimer = null;
     toast.__toastRemaining -= Date.now() - toast.__toastStart;
+    if (toast.__toastProgressFrame) cancelAnimationFrame(toast.__toastProgressFrame);
+    if (toast.__toastProgress) toast.__toastProgress.value = Math.max(0, toast.__toastRemaining);
 }
 
 // resumeToastTimer restarts the countdown with the time remaining when hover ends.
@@ -122,12 +143,14 @@ function resumeToastTimer(toast) {
     if (toast.__toastTimer || toast.__toastRemaining == null) return;
     toast.__toastStart = Date.now();
     toast.__toastTimer = setTimeout(function () { dismissToast(toast); }, Math.max(toast.__toastRemaining, 0));
+    updateToastProgress(toast);
 }
 
 // dismissToast plays the fade-out animation, removes the toast, then
 // promotes the next queued toast (if any) into its place.
 function dismissToast(toast) {
     if (toast.__toastTimer) clearTimeout(toast.__toastTimer);
+    if (toast.__toastProgressFrame) cancelAnimationFrame(toast.__toastProgressFrame);
     if (toast.classList.contains('toast-dismissing')) return;
     toast.classList.add('toast-dismissing');
     toast.addEventListener('animationend', function onEnd() {
@@ -173,9 +196,12 @@ function showToast(message, type, requestedDuration) {
     if (duration === undefined || !Number.isFinite(duration) || duration < 0) duration = TOAST_DURATIONS.info;
     toast.__toastDuration = duration;
     if (duration > 0) {
-        var progress = document.createElement('div');
+        var progress = document.createElement('progress');
         progress.className = 'toast-progress';
-        progress.style.animationDuration = duration + 'ms';
+        progress.max = duration;
+        progress.value = duration;
+        progress.setAttribute('aria-hidden', 'true');
+        toast.__toastProgress = progress;
         toast.appendChild(progress);
         toast.addEventListener('mouseenter', function () { pauseToastTimer(toast); });
         toast.addEventListener('mouseleave', function () { resumeToastTimer(toast); });
@@ -599,7 +625,6 @@ document.addEventListener('DOMContentLoaded', () => {
         form.addEventListener('submit', () => {
             if (btn.disabled) return;
 
-            btn.style.minWidth = btn.offsetWidth + 'px';
             btn.disabled = true;
             btn.textContent = btn.dataset.loadingText || btn.textContent;
         });

@@ -232,6 +232,16 @@ var (
 		[]string{"limit"},
 	)
 
+	// ContactBlockedTotal counts contact-form antispam rejections by fixed reason.
+	ContactBlockedTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "contact_blocked_total",
+			Help:      "Contact form submissions rejected or silently dropped by antispam.",
+		},
+		[]string{"reason"},
+	)
+
 	// Project-specific: paste metrics
 	PastesCreatedTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: ns,

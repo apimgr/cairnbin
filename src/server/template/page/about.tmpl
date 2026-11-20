@@ -1,44 +1,44 @@
-{{define "meta"}}
-    <title>{{t .Lang "about.title"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{tf .Lang "about.meta_description" "title" .SiteTitle}}">
+{{define "meta" -}}
+<title>{{t .Lang "about.title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{tf .Lang "about.meta_description" "title" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "about.title"}} {{.SiteTitle}}</h1>
-                </div>
+    <section class="search-section">
+      <div class="container container-sm">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "about.title"}} {{.SiteTitle}}</h1>
+        </div>
 
-                <div class="paste-view page-view">
-                    <p class="lead">{{.Tagline}}</p>
+        <div class="paste-view page-view">
+          <p class="lead">{{.Tagline}}</p>
 
-                    <h2>{{tf .Lang "about.what_is" "title" .SiteTitle}}</h2>
-                    <p>{{.Description}}</p>
+          <h2>{{tf .Lang "about.what_is" "title" .SiteTitle}}</h2>
+          <p>{{.Description}}</p>
 
-                    <h2 class="section-mt">{{t .Lang "about.features"}}</h2>
-                    <ul class="feature-list">
-                        {{range .Features}}<li>{{.}}</li>
-                        {{end}}
-                    </ul>
+          <h2 class="section-mt">{{t .Lang "about.features"}}</h2>
+          <ul class="feature-list">
+            {{range .Features}}<li>{{.}}</li>
+            {{end}}
+          </ul>
 
-                    <h2 class="section-mt">{{t .Lang "about.version"}}</h2>
-                    <p class="long-string">{{.Version}} ({{.BuildDate}})</p>
+          <h2 class="section-mt">{{t .Lang "about.version"}}</h2>
+          <p class="long-string">{{.Version}} ({{.BuildDate}})</p>
 
-                    <h2 class="section-mt">{{t .Lang "about.source"}}</h2>
-                    <p class="about-links">
-                        {{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Label}}</a>
-                        {{end}}
-                    </p>
-                    <p>{{t .Lang "about.license_note"}}</p>
+          <h2 class="section-mt">{{t .Lang "about.source"}}</h2>
+          <p class="about-links">
+            {{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Label}}</a>
+            {{end}}
+          </p>
+          <p>{{t .Lang "about.license_note"}}</p>
 
-                    {{if .GeoIPEnabled}}
-                    <h2 class="section-mt">{{t .Lang "about.attribution"}}</h2>
-                    <p><a href="https://db-ip.com/" target="_blank" rel="noopener">{{t .Lang "about.attribution_geoip"}}</a></p>
-                    <p>{{t .Lang "about.attribution_nro"}}</p>
-                    {{end}}
-                    {{if .PageContent}}<div class="markdown-content">{{.PageContent}}</div>{{end}}
-                </div>
-            </div>
-        </section>
+          {{if .GeoIPEnabled}}
+          <h2 class="section-mt">{{t .Lang "about.attribution"}}</h2>
+          <p><a href="https://db-ip.com/" target="_blank" rel="noopener">{{t .Lang "about.attribution_geoip"}}</a></p>
+          <p>{{t .Lang "about.attribution_nro"}}</p>
+          {{end}}
+          {{if .OperatorAboutHTML}}<div class="markdown-content">{{.OperatorAboutHTML}}</div>{{end}}
+        </div>
+      </div>
+    </section>
 {{end}}

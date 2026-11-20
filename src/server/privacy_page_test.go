@@ -3,6 +3,8 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -143,8 +145,18 @@ func TestPrivacyPageLocalizesDefaultMarkdownAndPreservesOperatorOverride(t *test
 		t.Error("Spanish privacy page did not render translated default data collection content")
 	}
 
-	cfg.Server.Privacy.Content.DataCollection = "**Operator-authored disclosure**"
 	s = newMinimalServer(cfg)
+	base := filepath.Join(os.TempDir(), "apimgr")
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configDir, err := os.MkdirTemp(base, "cairnbin-privacy-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.configDir = configDir
+	t.Cleanup(func() { _ = os.RemoveAll(s.configDir) })
+	writeOperatorPage(t, s, "privacy.md", "**Operator-authored disclosure**")
 	s.templates, _ = s.buildTemplates()
 	r = httptest.NewRequest(http.MethodGet, "http://example.com/server/privacy?lang=es", nil)
 	w = httptest.NewRecorder()

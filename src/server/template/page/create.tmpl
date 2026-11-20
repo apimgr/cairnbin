@@ -1,194 +1,194 @@
-{{define "meta"}}
-    <title>{{t .Lang "paste.create_new"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{t .Lang "pagemeta.create_description"}}">
+{{define "meta" -}}
+<title>{{t .Lang "paste.create_new"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{t .Lang "pagemeta.create_description"}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "paste.create_new"}}</h1>
-                    <p class="section-description">{{t .Lang "paste.create_desc"}}</p>
-                </div>
+    <section class="search-section">
+      <div class="container container-sm">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "paste.create_new"}}</h1>
+          <p class="section-description">{{t .Lang "paste.create_desc"}}</p>
+        </div>
 
-                {{if .Error}}
-                <div class="alert alert-error" role="alert">
-                    <p>{{t .Lang "paste.create_error"}}: {{.Error}}</p>
-                </div>
-                {{end}}
+        {{if .Error}}
+        <div class="alert alert-error" role="alert">
+          <p>{{t .Lang "paste.create_error"}}: {{.Error}}</p>
+        </div>
+        {{end}}
 
-                {{if .Created}}
-                <div class="result" role="status">
-                    <div class="success">
-                        <h3>{{t .Lang "paste.created_title"}}</h3>
-                        <p>{{t .Lang "paste.view_label"}}: <a href="{{.Created.Link}}" class="long-string">{{.Created.Link}}</a></p>
-                        <p>{{t .Lang "paste.raw_label"}}: <a href="{{.RawLink}}" class="long-string">{{.RawLink}}</a></p>
-                        <p>{{t .Lang "paste.download_label"}}: <a href="{{.DownloadLink}}" class="long-string">{{.DownloadLink}}</a></p>
-                        <div class="alert alert-warning mt-3">
-                            <p class="mb-2">{{t .Lang "paste.owner_token_warning"}}</p>
-                            <code class="copy-value" id="created-token">{{.Created.OwnerToken}}</code>
-                            <button
-                                type="button"
-                                data-copy-target="created-token"
-                                data-copied-label="{{t .Lang "js.copied"}}"
-                                aria-live="polite"
-                                class="btn btn-secondary d-block mt-2"
-                            >{{t .Lang "paste.copy_token"}}</button>
-                        </div>
-                        <div class="form-actions mt-4">
-                            <a href="{{.Created.Link}}" class="btn btn-primary">{{t .Lang "paste.view_paste"}}</a>
-                        </div>
-                    </div>
-                </div>
-                {{end}}
-
-                <form id="paste-form" class="paste-form" action="{{.AssetPrefix}}/pastes" method="POST" enctype="multipart/form-data">
-                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="title" class="form-label">{{t .Lang "paste.title_optional"}}</label>
-                            <input
-                                type="text"
-                                id="title"
-                                name="title"
-                                class="form-input"
-                                placeholder="{{t .Lang "paste.title_placeholder"}}"
-                                aria-describedby="title-error"
-                                aria-invalid="false"
-                            >
-                            <span id="title-error" class="field-error" role="alert" hidden></span>
-                        </div>
-                        <div class="form-group" id="language-group">
-                            <label for="language" class="form-label">{{t .Lang "paste.language_label"}}</label>
-                            <select id="language" name="language" class="form-input"
-                                    aria-describedby="language-error" aria-invalid="false">
-                                <option value="text">{{t .Lang "create.plain_text"}}</option>
-                                <option value="bash">Bash</option>
-                                <option value="c">C</option>
-                                <option value="cpp">C++</option>
-                                <option value="csharp">C#</option>
-                                <option value="css">CSS</option>
-                                <option value="go">Go</option>
-                                <option value="html">HTML</option>
-                                <option value="java">Java</option>
-                                <option value="javascript">JavaScript</option>
-                                <option value="json">JSON</option>
-                                <option value="kotlin">Kotlin</option>
-                                <option value="markdown">Markdown</option>
-                                <option value="php">PHP</option>
-                                <option value="powershell">PowerShell</option>
-                                <option value="python">Python</option>
-                                <option value="ruby">Ruby</option>
-                                <option value="rust">Rust</option>
-                                <option value="sql">SQL</option>
-                                <option value="swift">Swift</option>
-                                <option value="toml">TOML</option>
-                                <option value="typescript">TypeScript</option>
-                                <option value="xml">XML</option>
-                                <option value="yaml">YAML</option>
-                            </select>
-                            <span id="language-error" class="field-error" role="alert" hidden></span>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="expires" class="form-label">{{t .Lang "paste.expires_label"}}</label>
-                            <select id="expires" name="expires_in" class="form-input"
-                                    aria-describedby="expires-error" aria-invalid="false">
-                                <option value="never">{{t .Lang "paste.expiry_never"}}</option>
-                                <option value="1h">{{t .Lang "paste.expiry_1h"}}</option>
-                                <option value="1d">{{t .Lang "paste.expiry_1d"}}</option>
-                                <option value="1w">{{t .Lang "paste.expiry_1w"}}</option>
-                                <option value="1m">{{t .Lang "paste.expiry_1m"}}</option>
-                                <option value="3m">{{t .Lang "paste.expiry_3m"}}</option>
-                                <option value="6m">{{t .Lang "paste.expiry_6m"}}</option>
-                                <option value="18m">{{t .Lang "paste.expiry_18m"}}</option>
-                                <option value="1y">{{t .Lang "paste.expiry_1y"}}</option>
-                                <option value="2y">{{t .Lang "paste.expiry_2y"}}</option>
-                            </select>
-                            <span id="expires-error" class="field-error" role="alert" hidden></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="visibility" class="form-label">{{t .Lang "paste.visibility_label"}}</label>
-                            <select id="visibility" name="visibility" class="form-input"
-                                    aria-describedby="visibility-error" aria-invalid="false">
-                                <option value="0">{{t .Lang "paste.visibility_public"}}</option>
-                                <option value="1">{{t .Lang "paste.visibility_unlisted"}}</option>
-                            </select>
-                            <span id="visibility-error" class="field-error" role="alert" hidden></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="burn_after" class="form-label">{{t .Lang "paste.burn_after_label"}}</label>
-                            <input
-                                type="number"
-                                id="burn_after"
-                                name="burn_after"
-                                class="form-input"
-                                value="0"
-                                min="0"
-                                max="9999"
-                                placeholder="0"
-                                aria-describedby="burn_after-error"
-                                aria-invalid="false"
-                            >
-                            <span id="burn_after-error" class="field-error" role="alert" hidden></span>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="owner_token" class="form-label">{{t .Lang "paste.owner_token_label"}}</label>
-                        <input
-                            type="text"
-                            id="owner_token"
-                            name="owner_token"
-                            class="form-input"
-                            placeholder="{{t .Lang "paste.owner_token_placeholder"}}"
-                            autocomplete="off"
-                            spellcheck="false"
-                            aria-describedby="owner_token-error"
-                            aria-invalid="false"
-                        >
-                        <small class="form-hint">{{t .Lang "paste.owner_token_hint"}}</small>
-                        <span id="owner_token-error" class="field-error" role="alert" hidden></span>
-                        <button
-                            type="button"
-                            data-action="forget-token"
-                            class="btn btn-secondary mt-2"
-                        >{{t .Lang "paste.forget_token"}}</button>
-                    </div>
-                    <div class="form-group">
-                        <label for="content" class="form-label" id="content-label">{{t .Lang "paste.content_label"}}</label>
-                        <textarea
-                            id="content"
-                            name="content"
-                            class="form-input"
-                            rows="20"
-                            placeholder="{{t .Lang "paste.content_placeholder"}}"
-                            aria-describedby="content-max-size-hint content-error"
-                            aria-invalid="false"
-                        ></textarea>
-                        <small id="content-max-size-hint" class="form-hint">{{tf .Lang "paste.max_size_hint" "size" .MaxPasteSize}}</small>
-                        <span id="content-error" class="field-error" role="alert" hidden></span>
-                    </div>
-                    <div class="form-group">
-                        <label for="file-upload" class="form-label">{{t .Lang "paste.file_upload_label"}}</label>
-                        <input
-                            type="file"
-                            id="file-upload"
-                            name="files"
-                            class="form-input"
-                            aria-describedby="file-upload-hint file-upload-error"
-                            aria-invalid="false"
-                        >
-                        <small id="file-upload-hint" class="form-hint">{{t .Lang "paste.file_upload_hint"}}</small>
-                        <span id="file-upload-error" class="field-error" role="alert" hidden></span>
-                    </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary btn-lg" data-action="submit-loading" data-loading-text="{{t .Lang "js.creating"}}">
-                            <span class="btn-icon">📝</span>
-                            {{t .Lang "paste.create_btn"}}
-                        </button>
-                    </div>
-                </form>
+        {{if .Created}}
+        <div class="result" role="status">
+          <div class="success">
+            <h3>{{t .Lang "paste.created_title"}}</h3>
+            <p>{{t .Lang "paste.view_label"}}: <a href="{{.Created.Link}}" class="long-string">{{.Created.Link}}</a></p>
+            <p>{{t .Lang "paste.raw_label"}}: <a href="{{.RawLink}}" class="long-string">{{.RawLink}}</a></p>
+            <p>{{t .Lang "paste.download_label"}}: <a href="{{.DownloadLink}}" class="long-string">{{.DownloadLink}}</a></p>
+            <div class="alert alert-warning mt-3">
+              <p class="mb-2">{{t .Lang "paste.owner_token_warning"}}</p>
+              <code class="copy-value" id="created-token">{{.Created.OwnerToken}}</code>
+              <button
+                type="button"
+                data-copy-target="created-token"
+                data-copied-label="{{t .Lang "js.copied"}}"
+                aria-live="polite"
+                class="btn btn-secondary d-block mt-2"
+              >{{t .Lang "paste.copy_token"}}</button>
             </div>
-        </section>
+            <div class="form-actions mt-4">
+              <a href="{{.Created.Link}}" class="btn btn-primary">{{t .Lang "paste.view_paste"}}</a>
+            </div>
+          </div>
+        </div>
+        {{end}}
+
+        <form id="paste-form" class="paste-form" action="{{.AssetPrefix}}/pastes" method="POST" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="title" class="form-label">{{t .Lang "paste.title_optional"}}</label>
+              <input
+                type="text"
+                id="title"
+                name="title"
+                class="form-input"
+                placeholder="{{t .Lang "paste.title_placeholder"}}"
+                aria-describedby="title-error"
+                aria-invalid="false"
+              >
+              <span id="title-error" class="field-error" role="alert" hidden></span>
+            </div>
+            <div class="form-group" id="language-group">
+              <label for="language" class="form-label">{{t .Lang "paste.language_label"}}</label>
+              <select id="language" name="language" class="form-input"
+                  aria-describedby="language-error" aria-invalid="false">
+                <option value="text">{{t .Lang "create.plain_text"}}</option>
+                <option value="bash">Bash</option>
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="csharp">C#</option>
+                <option value="css">CSS</option>
+                <option value="go">Go</option>
+                <option value="html">HTML</option>
+                <option value="java">Java</option>
+                <option value="javascript">JavaScript</option>
+                <option value="json">JSON</option>
+                <option value="kotlin">Kotlin</option>
+                <option value="markdown">Markdown</option>
+                <option value="php">PHP</option>
+                <option value="powershell">PowerShell</option>
+                <option value="python">Python</option>
+                <option value="ruby">Ruby</option>
+                <option value="rust">Rust</option>
+                <option value="sql">SQL</option>
+                <option value="swift">Swift</option>
+                <option value="toml">TOML</option>
+                <option value="typescript">TypeScript</option>
+                <option value="xml">XML</option>
+                <option value="yaml">YAML</option>
+              </select>
+              <span id="language-error" class="field-error" role="alert" hidden></span>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="expires" class="form-label">{{t .Lang "paste.expires_label"}}</label>
+              <select id="expires" name="expires_in" class="form-input"
+                  aria-describedby="expires-error" aria-invalid="false">
+                <option value="never">{{t .Lang "paste.expiry_never"}}</option>
+                <option value="1h">{{t .Lang "paste.expiry_1h"}}</option>
+                <option value="1d">{{t .Lang "paste.expiry_1d"}}</option>
+                <option value="1w">{{t .Lang "paste.expiry_1w"}}</option>
+                <option value="1m">{{t .Lang "paste.expiry_1m"}}</option>
+                <option value="3m">{{t .Lang "paste.expiry_3m"}}</option>
+                <option value="6m">{{t .Lang "paste.expiry_6m"}}</option>
+                <option value="18m">{{t .Lang "paste.expiry_18m"}}</option>
+                <option value="1y">{{t .Lang "paste.expiry_1y"}}</option>
+                <option value="2y">{{t .Lang "paste.expiry_2y"}}</option>
+              </select>
+              <span id="expires-error" class="field-error" role="alert" hidden></span>
+            </div>
+            <div class="form-group">
+              <label for="visibility" class="form-label">{{t .Lang "paste.visibility_label"}}</label>
+              <select id="visibility" name="visibility" class="form-input"
+                  aria-describedby="visibility-error" aria-invalid="false">
+                <option value="0">{{t .Lang "paste.visibility_public"}}</option>
+                <option value="1">{{t .Lang "paste.visibility_unlisted"}}</option>
+              </select>
+              <span id="visibility-error" class="field-error" role="alert" hidden></span>
+            </div>
+            <div class="form-group">
+              <label for="burn_after" class="form-label">{{t .Lang "paste.burn_after_label"}}</label>
+              <input
+                type="number"
+                id="burn_after"
+                name="burn_after"
+                class="form-input"
+                value="0"
+                min="0"
+                max="9999"
+                placeholder="0"
+                aria-describedby="burn_after-error"
+                aria-invalid="false"
+              >
+              <span id="burn_after-error" class="field-error" role="alert" hidden></span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="owner_token" class="form-label">{{t .Lang "paste.owner_token_label"}}</label>
+            <input
+              type="text"
+              id="owner_token"
+              name="owner_token"
+              class="form-input"
+              placeholder="{{t .Lang "paste.owner_token_placeholder"}}"
+              autocomplete="off"
+              spellcheck="false"
+              aria-describedby="owner_token-error"
+              aria-invalid="false"
+            >
+            <small class="form-hint">{{t .Lang "paste.owner_token_hint"}}</small>
+            <span id="owner_token-error" class="field-error" role="alert" hidden></span>
+            <button
+              type="button"
+              data-action="forget-token"
+              class="btn btn-secondary mt-2"
+            >{{t .Lang "paste.forget_token"}}</button>
+          </div>
+          <div class="form-group">
+            <label for="content" class="form-label" id="content-label">{{t .Lang "paste.content_label"}}</label>
+            <textarea
+              id="content"
+              name="content"
+              class="form-input"
+              rows="20"
+              placeholder="{{t .Lang "paste.content_placeholder"}}"
+              aria-describedby="content-max-size-hint content-error"
+              aria-invalid="false"
+            ></textarea>
+            <small id="content-max-size-hint" class="form-hint">{{tf .Lang "paste.max_size_hint" "size" .MaxPasteSize}}</small>
+            <span id="content-error" class="field-error" role="alert" hidden></span>
+          </div>
+          <div class="form-group">
+            <label for="file-upload" class="form-label">{{t .Lang "paste.file_upload_label"}}</label>
+            <input
+              type="file"
+              id="file-upload"
+              name="files"
+              class="form-input"
+              aria-describedby="file-upload-hint file-upload-error"
+              aria-invalid="false"
+            >
+            <small id="file-upload-hint" class="form-hint">{{t .Lang "paste.file_upload_hint"}}</small>
+            <span id="file-upload-error" class="field-error" role="alert" hidden></span>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg" data-action="submit-loading" data-loading-text="{{t .Lang "js.creating"}}">
+              <span class="btn-icon">📝</span>
+              {{t .Lang "paste.create_btn"}}
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
 {{end}}

@@ -1,62 +1,62 @@
-{{define "meta"}}
-    <title>{{t .Lang "security.policy_title"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{tf .Lang "security.policy_meta_description" "site" .SiteTitle}}">
+{{define "meta" -}}
+<title>{{t .Lang "security.policy_title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{tf .Lang "security.policy_meta_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "security.policy_title"}}</h1>
-                    <p class="section-subtitle">{{tf .Lang "security.policy_subtitle" "site" .SiteTitle}}</p>
-                </div>
+    <section class="search-section">
+      <div class="container container-sm">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "security.policy_title"}}</h1>
+          <p class="section-subtitle">{{tf .Lang "security.policy_subtitle" "site" .SiteTitle}}</p>
+        </div>
 
-                <div class="paste-view page-view">
-                    <h2>{{t .Lang "security.reporting_vuln"}}</h2>
-                    <p>{{t .Lang "security.reporting_text"}}</p>
-                    <p><a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a></p>
-                    {{if .SecurityEmail}}
-                    <p>
-                        {{t .Lang "security.email_directly"}}
-                        <a href="mailto:{{.SecurityEmail}}" class="long-string">{{.SecurityEmail}}</a>
-                    </p>
-                    {{end}}
-                    {{if .HasPGPKey}}
-                    <p>
-                        {{t .Lang "security.pgp_available"}}
-                        <a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">/.well-known/pgp-key.asc</a>
-                    </p>
-                    {{end}}
+        <div class="paste-view page-view">
+          <h2>{{t .Lang "security.reporting_vuln"}}</h2>
+          <p>{{t .Lang "security.reporting_text"}}</p>
+          <p><a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a></p>
+          {{if .SecurityEmail}}
+          <p>
+            {{t .Lang "security.email_directly"}}
+            <a href="mailto:{{.SecurityEmail}}" class="long-string">{{.SecurityEmail}}</a>
+          </p>
+          {{end}}
+          {{if .HasPGPKey}}
+          <p>
+            {{t .Lang "security.pgp_available"}}
+            <a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">/.well-known/pgp-key.asc</a>
+          </p>
+          {{end}}
 
-                    <h2 class="section-mt">{{t .Lang "security.disclosure_window"}}</h2>
-                    <p>{{tf .Lang "security.disclosure_window_text" "days" .DisclosureDays}}</p>
+          <h2 class="section-mt">{{t .Lang "security.disclosure_window"}}</h2>
+          <p>{{tf .Lang "security.disclosure_window_text" "days" .DisclosureDays}}</p>
 
-                    <h2 class="section-mt">{{t .Lang "security.in_scope"}}</h2>
-                    <ul class="feature-list">
-                        <li>{{t .Lang "security.in_scope_1"}}</li>
-                        <li>{{t .Lang "security.in_scope_2"}} (<code>cairnbin</code>, <code>cairnbin-cli</code>)</li>
-                        <li>{{t .Lang "security.in_scope_3"}}</li>
-                        <li>{{t .Lang "security.in_scope_4"}}</li>
-                    </ul>
+          <h2 class="section-mt">{{t .Lang "security.in_scope"}}</h2>
+          <ul class="feature-list">
+            <li>{{t .Lang "security.in_scope_1"}}</li>
+            <li>{{t .Lang "security.in_scope_2"}} (<code>cairnbin</code>, <code>cairnbin-cli</code>)</li>
+            <li>{{t .Lang "security.in_scope_3"}}</li>
+            <li>{{t .Lang "security.in_scope_4"}}</li>
+          </ul>
 
-                    <h2 class="section-mt">{{t .Lang "security.out_of_scope"}}</h2>
-                    <ul class="feature-list">
-                        <li>{{t .Lang "security.out_scope_1"}}</li>
-                        <li>{{t .Lang "security.out_scope_2"}}</li>
-                        <li>{{t .Lang "security.out_scope_3"}}</li>
-                        <li>{{t .Lang "security.out_scope_4"}}</li>
-                        <li>{{t .Lang "security.out_scope_5"}}</li>
-                    </ul>
+          <h2 class="section-mt">{{t .Lang "security.out_of_scope"}}</h2>
+          <ul class="feature-list">
+            <li>{{t .Lang "security.out_scope_1"}}</li>
+            <li>{{t .Lang "security.out_scope_2"}}</li>
+            <li>{{t .Lang "security.out_scope_3"}}</li>
+            <li>{{t .Lang "security.out_scope_4"}}</li>
+            <li>{{t .Lang "security.out_scope_5"}}</li>
+          </ul>
 
-                    <h2 class="section-mt">{{t .Lang "security.safe_harbor"}}</h2>
-                    <p>{{t .Lang "security.safe_harbor_text"}}</p>
+          <h2 class="section-mt">{{t .Lang "security.safe_harbor"}}</h2>
+          <p>{{t .Lang "security.safe_harbor_text"}}</p>
 
-                    <h2 class="section-mt">{{t .Lang "security.link_thanks"}}</h2>
-                    <p>
-                        {{t .Lang "security.acknowledgments_text"}}
-                        <a href="{{.AssetPrefix}}/server/security/thanks">{{t .Lang "security.link_thanks"}}</a>
-                    </p>
-                </div>
-            </div>
-        </section>
+          <h2 class="section-mt">{{t .Lang "security.link_thanks"}}</h2>
+          <p>
+            {{t .Lang "security.acknowledgments_text"}}
+            <a href="{{.AssetPrefix}}/server/security/thanks">{{t .Lang "security.link_thanks"}}</a>
+          </p>
+        </div>
+      </div>
+    </section>
 {{end}}

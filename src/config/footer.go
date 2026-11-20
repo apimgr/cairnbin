@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"log"
+	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 )
@@ -29,7 +30,7 @@ func footerPolicy() *bluemonday.Policy {
 // input and a single space (the "disable branding" sentinel) pass through
 // unchanged; all other input is stripped down to the safe policy above.
 func SanitizeFooterHTML(html string) string {
-	if html == "" || html == " " {
+	if strings.TrimSpace(html) == "" {
 		return html
 	}
 	return footerPolicy().Sanitize(html)
@@ -40,7 +41,7 @@ func SanitizeFooterHTML(html string) string {
 // row is emitted.
 func (c *Config) FooterCustomHTML() string {
 	raw := c.Web.Footer.CustomHTML
-	if raw == " " {
+	if strings.TrimSpace(raw) == "" {
 		return ""
 	}
 	return SanitizeFooterHTML(raw)
@@ -53,11 +54,11 @@ func (c *Config) FooterCustomHTML() string {
 func ValidateFooterHTML(html string) (string, error) {
 	sanitized := SanitizeFooterHTML(html)
 
-	if len(html) > 0 && html != " " && len(sanitized) == 0 {
+	if strings.TrimSpace(html) != "" && len(sanitized) == 0 {
 		return "", errors.New("custom HTML contained only disallowed elements")
 	}
 
-	if html != sanitized && html != "" && html != " " {
+	if html != sanitized && strings.TrimSpace(html) != "" {
 		log.Printf("[config] WARNING: web.footer.custom_html was sanitized: removed potentially dangerous content")
 	}
 
@@ -70,7 +71,7 @@ func ValidateFooterHTML(html string) (string, error) {
 // sanitized output that actually renders, and a warning if the sanitizer
 // modified it.
 func LogFooterSanitizationPreview(html string) {
-	if html == "" || html == " " {
+	if strings.TrimSpace(html) == "" {
 		return
 	}
 	sanitized := SanitizeFooterHTML(html)

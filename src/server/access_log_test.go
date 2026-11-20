@@ -103,10 +103,9 @@ func TestAccessLogMiddleware_NeverSuppressesFailedHealthz(t *testing.T) {
 	}
 }
 
-// TestAccessLogMiddleware_LogHealthChecksOverride verifies
-// server.logs.access.log_health_checks: true forces logging of successful
-// health checks.
-func TestAccessLogMiddleware_LogHealthChecksOverride(t *testing.T) {
+// TestAccessLogMiddleware_AlwaysSuppressesSuccessfulHealthz verifies the
+// suppression cannot be disabled by configuration.
+func TestAccessLogMiddleware_AlwaysSuppressesSuccessfulHealthz(t *testing.T) {
 	s, dir := newAccessLogTestServer(t, true)
 	h := s.accessLogMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -114,8 +113,8 @@ func TestAccessLogMiddleware_LogHealthChecksOverride(t *testing.T) {
 	r := httptest.NewRequest("GET", "/healthz", nil)
 	h.ServeHTTP(httptest.NewRecorder(), r)
 
-	if out := readAccessLog(t, dir); out == "" {
-		t.Error("expected healthz request to be logged when log_health_checks is true, got nothing")
+	if out := readAccessLog(t, dir); out != "" {
+		t.Errorf("successful healthz request must always be suppressed, got %q", out)
 	}
 }
 

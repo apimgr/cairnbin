@@ -7,10 +7,6 @@ import (
 
 func (s *Server) handleHelpMCP(w http.ResponseWriter, r *http.Request) {
 	cfg := s.liveCfg()
-	if !cfg.Server.MCP.Enabled {
-		http.NotFound(w, r)
-		return
-	}
 	base := strings.TrimRight(s.baseURL(r), "/")
 	version := s.apiVersion()
 	url := base + "/api/" + version + "/server/mcp"

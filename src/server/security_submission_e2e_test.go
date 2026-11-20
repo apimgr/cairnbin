@@ -8,8 +8,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apimgr/cairnbin/src/config"
 	"github.com/apimgr/cairnbin/src/database"
@@ -42,6 +44,9 @@ func newSecurityReportTestServer(t *testing.T) *Server {
 	cfg.Server.Security.EncryptionKey = securityReportTestKey
 	cfg.Server.Pages.Contact.Enabled = true
 	cfg.Server.Pages.Contact.Captcha = "simple"
+	cfg.Server.Pages.Contact.Antispam = config.ContactAntispamConfig{
+		MinFillSeconds: 0, MaxAgeSeconds: 43200, Window: "1h", DuplicateWindowHours: 0,
+	}
 
 	s := &Server{
 		cfg:           cfg,
@@ -67,11 +72,16 @@ func securityReportForm() url.Values {
 	return url.Values{
 		"name":              {"Ada Researcher"},
 		"email":             {"ada@example.com"},
+		"researcher_gpg":    {""},
 		"component":         {"api"},
+		"component_other":   {""},
+		"endpoint":          {""},
 		"severity":          {"High"},
 		"summary":           {"Stored XSS in paste rendering"},
 		"steps":             {"1. Do X\n2. Do Y\n3. Observe Z"},
 		"impact":            {"An attacker can run script in a paste viewer's browser."},
+		"suggested_fix":     {""},
+		"disclosure_days":   {"90"},
 		"credit_preference": {"name"},
 		"credit_name":       {"Ada Researcher"},
 		"agreement":         {"yes"},
@@ -81,6 +91,11 @@ func securityReportForm() url.Values {
 // postSecurityReport drives a POST through the real contact dispatcher with the
 // security_id in the query string and JSON content negotiation.
 func postSecurityReport(s *Server, form url.Values) *httptest.ResponseRecorder {
+	form.Set("form_token", s.issueContactFormToken(time.Now().Add(-5*time.Second), contactAntispam(s.cfg)))
+	form.Set("website", "")
+	form.Set("csrf_token", "test-csrf-token")
+	form.Set("type", "security")
+	form.Set("security_id", s.currentSecurityID())
 	if form.Get("captcha_token") == "" {
 		challenge, err := s.generateSimpleCaptcha()
 		if err != nil {
@@ -97,9 +112,33 @@ func postSecurityReport(s *Server, form url.Values) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Origin", "http://example.com")
 	rec := httptest.NewRecorder()
 	s.handleContactPost(rec, req)
-	return rec
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "contact-review-panel") {
+		return rec
+	}
+	getValue := func(field string) string {
+		pattern := regexp.MustCompile(`name="` + regexp.QuoteMeta(field) + `" value="([^"]*)"`)
+		match := pattern.FindStringSubmatch(rec.Body.String())
+		if len(match) != 2 {
+			return ""
+		}
+		return match[1]
+	}
+	form.Set("form_token", getValue("form_token"))
+	form.Set("review_token", getValue("review_token"))
+	form.Set("step", "confirm")
+	form.Set("confirmed", "1")
+	form.Del("captcha_token")
+	form.Del("captcha")
+	confirmReq := httptest.NewRequest(http.MethodPost, target, strings.NewReader(form.Encode()))
+	confirmReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	confirmReq.Header.Set("Accept", "application/json")
+	confirmReq.Header.Set("Origin", "http://example.com")
+	confirmRec := httptest.NewRecorder()
+	s.handleContactPost(confirmRec, confirmReq)
+	return confirmRec
 }
 
 // TestSecurityReportSubmissionEndToEnd exercises the full coordinated-disclosure

@@ -1,34 +1,34 @@
-{{define "meta"}}
-    <title>{{t .Lang "qr.title"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{t .Lang "pagemeta.qr_description"}}">
+{{define "meta" -}}
+<title>{{t .Lang "qr.title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{t .Lang "pagemeta.qr_description"}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm page-centered">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "qr.title"}}</h1>
-                    <p class="section-description">{{tf .Lang "qr.scan_to_open" "id" .ID}}</p>
-                </div>
+    <section class="search-section">
+      <div class="container container-sm page-centered">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "qr.title"}}</h1>
+          <p class="section-description">{{tf .Lang "qr.scan_to_open" "id" .ID}}</p>
+        </div>
 
-                <div class="paste-view qr-container">
-                    <img
-                        class="qr-image"
-                        src="{{.AssetPrefix}}/qr/{{.ID}}/image"
-                        alt="{{tf .Lang "qr.image_alt" "link" .Link}}"
-                        width="300"
-                        height="300"
-                    >
-                    <p class="qr-link-text">{{.Link}}</p>
-                    <div class="form-actions qr-actions">
-                        <a href="{{.AssetPrefix}}/{{.ID}}" class="btn btn-primary">{{t .Lang "qr.view_paste"}}</a>
-                        <a
-                            href="{{.AssetPrefix}}/qr/{{.ID}}/image?download=1"
-                            class="btn btn-secondary"
-                            download="paste-{{.ID}}-qr.png"
-                        >{{t .Lang "qr.download_qr"}}</a>
-                    </div>
-                </div>
-            </div>
-        </section>
+        <div class="paste-view qr-container">
+          <img
+            class="qr-image"
+            src="{{.AssetPrefix}}/qr/{{.ID}}/image"
+            alt="{{tf .Lang "qr.image_alt" "link" .Link}}"
+            width="300"
+            height="300"
+          >
+          <p class="qr-link-text">{{.Link}}</p>
+          <div class="form-actions qr-actions">
+            <a href="{{.AssetPrefix}}/{{.ID}}" class="btn btn-primary">{{t .Lang "qr.view_paste"}}</a>
+            <a
+              href="{{.AssetPrefix}}/qr/{{.ID}}/image?download=1"
+              class="btn btn-secondary"
+              download="paste-{{.ID}}-qr.png"
+            >{{t .Lang "qr.download_qr"}}</a>
+          </div>
+        </div>
+      </div>
+    </section>
 {{end}}

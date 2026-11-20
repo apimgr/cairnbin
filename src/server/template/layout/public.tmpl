@@ -2,17 +2,17 @@
 <!DOCTYPE html>
 <html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {{block "meta" .}}<title>{{.SiteTitle}}</title>{{end}}
-    {{template "headAssets" .}}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {{block "meta" .}}<title>{{.SiteTitle}}</title>{{end}}
+{{template "headAssets" .}}
 </head>
 <body>
-    {{template "header" .}}
-    <main id="main-content">{{block "content" .}}{{end}}</main>
-    {{template "navdrawer" .}}
-    {{template "footer" .}}
-    {{template "scripts" .}}
+{{template "header" .}}
+  <main id="main-content">{{block "content" .}}{{end}}</main>
+{{template "navdrawer" .}}
+{{template "footer" .}}
+{{template "scripts" .}}
 </body>
 </html>
 {{end}}

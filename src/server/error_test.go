@@ -90,6 +90,18 @@ func TestRenderErrorPageHTML(t *testing.T) {
 			t.Errorf("html body missing %q", want)
 		}
 	}
+	for _, want := range []string{
+		"\n  <meta charset=\"UTF-8\">",
+		"\n  <title>404 Not Found",
+		"\n  <a href=\"#main-content\"",
+		"\n  <main id=\"main-content\">",
+		"\n    <div class=\"error-page\">",
+		"\n      <h1 class=\"error-code\">",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("HTML must retain two-space nesting %q", want)
+		}
+	}
 }
 
 func TestRenderErrorPageDefaultMessage(t *testing.T) {
@@ -116,8 +128,11 @@ func TestRenderErrorPageNoTemplatesFallback(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status: got %d, want 404", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "boom") {
-		t.Errorf("fallback body missing message: %s", rec.Body.String())
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Errorf("browser fallback content-type = %q, want HTML", ct)
+	}
+	if !strings.Contains(rec.Body.String(), "<!DOCTYPE html>") || strings.Contains(rec.Body.String(), `"ok":false`) {
+		t.Errorf("browser fallback should be minimal HTML: %s", rec.Body.String())
 	}
 }
 

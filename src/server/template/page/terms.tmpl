@@ -1,40 +1,40 @@
-{{define "meta"}}
-    <title>{{t .Lang "terms.title"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{tf .Lang "terms.meta_description" "site" .SiteTitle}}">
+{{define "meta" -}}
+<title>{{t .Lang "terms.title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{tf .Lang "terms.meta_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "terms.title"}}</h1>
-                </div>
+    <section class="search-section">
+      <div class="container container-sm">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "terms.title"}}</h1>
+        </div>
 
-                <div class="paste-view page-view">
-                    {{if .PageContent}}<div class="markdown-content">{{.PageContent}}</div>{{else}}
-                    <h2>{{t .Lang "terms.acceptance"}}</h2>
-                    <p>{{t .Lang "terms.acceptance_text"}}</p>
+        <div class="paste-view page-view">
+          {{if .OperatorTermsHTML}}<div class="markdown-content">{{.OperatorTermsHTML}}</div>{{else}}
+          <h2>{{t .Lang "terms.acceptance"}}</h2>
+          <p>{{t .Lang "terms.acceptance_text"}}</p>
 
-                    <h2 class="section-mt">{{t .Lang "terms.acceptable_use"}}</h2>
-                    <p>{{t .Lang "terms.use_intro"}}</p>
-                    <ul class="feature-list">
-                        <li>{{t .Lang "terms.use_illegal"}}</li>
-                        <li>{{t .Lang "terms.use_malware"}}</li>
-                        <li>{{t .Lang "terms.use_credentials"}}</li>
-                        <li>{{t .Lang "terms.use_spam"}}</li>
-                    </ul>
-                    <p>{{t .Lang "terms.use_note"}}</p>
+          <h2 class="section-mt">{{t .Lang "terms.acceptable_use"}}</h2>
+          <p>{{t .Lang "terms.use_intro"}}</p>
+          <ul class="feature-list">
+            <li>{{t .Lang "terms.use_illegal"}}</li>
+            <li>{{t .Lang "terms.use_malware"}}</li>
+            <li>{{t .Lang "terms.use_credentials"}}</li>
+            <li>{{t .Lang "terms.use_spam"}}</li>
+          </ul>
+          <p>{{t .Lang "terms.use_note"}}</p>
 
-                    <h2 class="section-mt">{{t .Lang "terms.liability"}}</h2>
-                    <p>{{t .Lang "terms.liability_text"}}</p>
+          <h2 class="section-mt">{{t .Lang "terms.liability"}}</h2>
+          <p>{{t .Lang "terms.liability_text"}}</p>
 
-                    <h2 class="section-mt">{{t .Lang "terms.changes"}}</h2>
-                    <p>{{t .Lang "terms.changes_text"}}</p>
+          <h2 class="section-mt">{{t .Lang "terms.changes"}}</h2>
+          <p>{{t .Lang "terms.changes_text"}}</p>
 
-                    <h2 class="section-mt">{{t .Lang "terms.governing_law"}}</h2>
-                    <p>{{t .Lang "terms.governing_law_text"}}</p>
-                    {{end}}
-                </div>
-            </div>
-        </section>
+          <h2 class="section-mt">{{t .Lang "terms.governing_law"}}</h2>
+          <p>{{t .Lang "terms.governing_law_text"}}</p>
+          {{end}}
+        </div>
+      </div>
+    </section>
 {{end}}

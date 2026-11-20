@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/config"
@@ -16,10 +19,23 @@ import (
 
 func pagesServer(t *testing.T) *Server {
 	t.Helper()
-	cfg := &config.Config{}
+	cfg := config.DefaultConfig()
 	cfg.Web.SiteTitle = "Test Paste"
 	cfg.Web.Theme = "dark"
+	cfg.Server.Pages.Contact.Antispam = config.DefaultConfig().Server.Pages.Contact.Antispam
+	cfg.Server.Branding.Content = make(map[string]config.BrandingContent)
 	s := newMinimalServer(cfg)
+	base := filepath.Join(os.TempDir(), "apimgr")
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configDir, err := os.MkdirTemp(base, "cairnbin-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(configDir) })
+	s.configDir = configDir
+	s.installSecret = []byte("pages-api-test-installation-secret")
 	tmpl, err := s.buildTemplates()
 	if err != nil {
 		t.Fatalf("build templates: %v", err)
@@ -30,8 +46,8 @@ func pagesServer(t *testing.T) *Server {
 
 func TestPageContentOverride(t *testing.T) {
 	s := pagesServer(t)
-	s.cfg.Server.Pages.Terms.Content = "# Custom Terms Marker"
-	s.cfg.Server.Pages.About.Content = "Extra about marker"
+	writeOperatorPage(t, s, "terms.md", "# Custom Terms Marker")
+	writeOperatorPage(t, s, "about.md", "Extra about marker")
 
 	get := func(h http.HandlerFunc) string {
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -42,11 +58,70 @@ func TestPageContentOverride(t *testing.T) {
 	}
 	terms := get(s.handleTerms)
 	if !strings.Contains(terms, "Custom Terms Marker") || strings.Contains(terms, "Acceptable use") {
-		t.Error("terms content must replace the default body")
+		t.Error("terms file must replace the default body")
 	}
 	about := get(s.handleAbout)
 	if !strings.Contains(about, "Extra about marker") || !strings.Contains(about, "Test Paste") {
-		t.Error("about content must be appended to the default body")
+		t.Error("about file must be appended to the default body")
+	}
+}
+
+func writeOperatorPage(t *testing.T, s *Server, name, content string) {
+	t.Helper()
+	base := strings.TrimSuffix(name, filepath.Ext(name))
+	format := map[string]string{".md": "md", ".html": "html", ".txt": "txt"}[filepath.Ext(name)]
+	if format == "" {
+		t.Fatalf("unsupported operator content extension %q", name)
+	}
+	if s.cfg.Server.Branding.Content == nil {
+		s.cfg.Server.Branding.Content = make(map[string]config.BrandingContent)
+	}
+	if s.cfg.Server.Branding.Content == nil {
+		s.cfg.Server.Branding.Content = make(map[string]config.BrandingContent)
+	}
+	s.cfg.Server.Branding.Content[base] = config.BrandingContent{Format: format, Body: content}
+}
+
+func TestSecurityAndDPOPageAPIs(t *testing.T) {
+	s := pagesServer(t)
+	s.cfg.Server.Pages.Contact.Enabled = true
+	for name, handler := range map[string]http.HandlerFunc{
+		"dpo": s.handleDPOAPI, "security": s.handleSecurityAPI,
+		"security policy": s.handleSecurityPolicyAPI,
+	} {
+		w := httptest.NewRecorder()
+		handler(w, httptest.NewRequest(http.MethodGet, "/", nil))
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"ok": true`) {
+			t.Errorf("%s API: status=%d body=%q", name, w.Code, w.Body.String())
+		}
+	}
+	w := httptest.NewRecorder()
+	s.handleSecurityThanksAPI(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("security thanks without a database: status=%d, want 500", w.Code)
+	}
+	w = httptest.NewRecorder()
+	s.handleSecurityAPI(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	var response struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := response.Data["report_url"]; !ok {
+		t.Error("enabled report form omitted report_url")
+	}
+	s.cfg.Server.Pages.Contact.Enabled = false
+	w = httptest.NewRecorder()
+	s.handleSecurityAPI(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	response = struct {
+		Data map[string]interface{} `json:"data"`
+	}{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := response.Data["report_url"]; ok {
+		t.Error("disabled report form exposed report_url")
 	}
 }
 
@@ -64,6 +139,20 @@ func TestServerPagesAPI(t *testing.T) {
 		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"ok": true`) {
 			t.Errorf("%s: status=%d body=%q", name, w.Code, w.Body.String())
 		}
+	}
+	terms := httptest.NewRecorder()
+	s.handleTermsAPI(terms, httptest.NewRequest(http.MethodGet, "/", nil))
+	var termsResponse struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(terms.Body.Bytes(), &termsResponse); err != nil {
+		t.Fatalf("decode terms API response: %v", err)
+	}
+	if content, _ := termsResponse.Data["content"].(string); !strings.HasPrefix(content, "## Acceptance") {
+		t.Errorf("terms API built-in content = %q, want Markdown fallback", content)
+	}
+	if termsResponse.Data["format"] != "markdown" {
+		t.Errorf("terms API format = %v, want markdown", termsResponse.Data["format"])
 	}
 
 	post := func(body string) *httptest.ResponseRecorder {
@@ -84,12 +173,25 @@ func TestServerPagesAPI(t *testing.T) {
 	parts := strings.Fields(challenge.Question)
 	a, _ := strconv.Atoi(parts[2])
 	b, _ := strconv.Atoi(strings.TrimSuffix(parts[4], "?"))
-	full := fmt.Sprintf(`{"name":"a","email":"a@example.com","subject":"s","message":"m","captcha_token":%q,"captcha":%q}`, challenge.Token, strconv.Itoa(a+b))
-	if w := post(full); w.Code != http.StatusServiceUnavailable {
-		t.Errorf("no delivery channel status=%d, want 503", w.Code)
+	formToken := s.issueContactFormToken(time.Now().Add(-5*time.Second), contactAntispam(s.cfg))
+	full := fmt.Sprintf(`{"type":"privacy","reported_url":"","reason":"","copyrighted_work":"","good_faith":false,"accuracy":false,"signature":"","request_kind":"access","name":"a","email":"a@example.com","subject":"s","message":"m","form_token":%q,"website":"","captcha_id":%q,"captcha_answer":%q}`, formToken, challenge.Token, strconv.Itoa(a+b))
+	if w := post(full); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"review_token"`) {
+		t.Errorf("first contact call should return a review without delivery: %d %q", w.Code, w.Body.String())
+	} else {
+		var response struct {
+			Data struct {
+				FormToken string                 `json:"form_token"`
+				Captcha   map[string]interface{} `json:"captcha"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || response.Data.FormToken == "" || response.Data.Captcha["captcha_id"] == "" {
+			t.Errorf("review response omitted refresh token or captcha: %s", w.Body.String())
+		}
 	}
 	localized := httptest.NewRecorder()
-	localizedReq := httptest.NewRequest(http.MethodPost, "/?lang=es", strings.NewReader(`{"name":"a","email":"invalid","subject":"s","message":"m"}`))
+	localizedToken := s.issueContactFormToken(time.Now().Add(-5*time.Second), contactAntispam(s.cfg))
+	localizedPayload := fmt.Sprintf(`{"type":"privacy","reported_url":"","reason":"","copyrighted_work":"","good_faith":false,"accuracy":false,"signature":"","request_kind":"access","name":"a","email":"invalid","subject":"s","message":"m","form_token":%q,"website":""}`, localizedToken)
+	localizedReq := httptest.NewRequest(http.MethodPost, "/?lang=es", strings.NewReader(localizedPayload))
 	s.handleContactAPI(localized, localizedReq)
 	var localizedBody map[string]interface{}
 	if err := json.Unmarshal(localized.Body.Bytes(), &localizedBody); err != nil {
@@ -101,6 +203,19 @@ func TestServerPagesAPI(t *testing.T) {
 	s.cfg.Server.Pages.Contact.Enabled = false
 	if w := post(full); w.Code != http.StatusNotFound {
 		t.Errorf("disabled status=%d, want 404", w.Code)
+	}
+}
+
+func TestNoIndexHeaderCoversNonTemplateResponses(t *testing.T) {
+	s := pagesServer(t)
+	s.cfg.Server.SEO.NoIndex = true
+	handler := s.seoIndexMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/server/healthz", nil))
+	if got := w.Header().Get("X-Robots-Tag"); got != "noindex, nofollow" {
+		t.Fatalf("X-Robots-Tag = %q", got)
 	}
 }
 
@@ -123,6 +238,7 @@ func TestContactAPIGetFormDefinition(t *testing.T) {
 				MaxLength *int   `json:"max_length"`
 			} `json:"fields"`
 			Captcha     map[string]interface{} `json:"captcha"`
+			FormToken   string                 `json:"form_token"`
 			SecurityURL string                 `json:"security_url"`
 			AbuseEmail  string                 `json:"abuse_email"`
 		} `json:"data"`
@@ -130,16 +246,25 @@ func TestContactAPIGetFormDefinition(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode GET contact: %v", err)
 	}
-	if !response.OK || len(response.Data.Fields) != 5 {
+	if !response.OK || len(response.Data.Fields) < 14 || response.Data.FormToken == "" {
 		t.Fatalf("unexpected contact form definition: %s", w.Body.String())
 	}
-	if response.Data.Fields[0].Name != "name" || response.Data.Fields[0].MaxLength == nil || *response.Data.Fields[0].MaxLength != 100 {
-		t.Errorf("unexpected first field descriptor: %+v", response.Data.Fields[0])
+	fields := make(map[string]struct {
+		Name      string `json:"name"`
+		Type      string `json:"type"`
+		Required  bool   `json:"required"`
+		MaxLength *int   `json:"max_length"`
+	})
+	for _, field := range response.Data.Fields {
+		fields[field.Name] = field
 	}
-	if response.Data.Fields[4].Name != "captcha" || response.Data.Fields[4].MaxLength != nil {
-		t.Errorf("captcha should have null max_length: %+v", response.Data.Fields[4])
+	if field := fields["name"]; field.MaxLength == nil || *field.MaxLength != 100 {
+		t.Errorf("unexpected name field descriptor: %+v", field)
 	}
-	if response.Data.Captcha["provider"] != "simple" || response.Data.Captcha["question"] == "" || response.Data.Captcha["challenge_id"] == "" {
+	if field := fields["captcha"]; field.MaxLength != nil {
+		t.Errorf("captcha should have null max_length: %+v", field)
+	}
+	if response.Data.Captcha["provider"] != "simple" || response.Data.Captcha["question"] == "" || response.Data.Captcha["captcha_id"] == "" {
 		t.Errorf("missing simple captcha challenge descriptor: %#v", response.Data.Captcha)
 	}
 	if _, exists := response.Data.Captcha["recipient"]; exists || strings.Contains(w.Body.String(), "admin@example.com") {
@@ -159,16 +284,21 @@ func TestContactAPIMaxLengthsCountUnicodeRunes(t *testing.T) {
 	s.cfg.Server.Pages.Contact.Enabled = true
 	s.cfg.Server.Pages.Contact.Captcha = "none"
 	// Trimming precedes length validation; a multi-byte character counts once.
-	body := `{"name":" ` + strings.Repeat("界", 101) + ` ","email":"a@example.com","subject":"s","message":"m"}`
+	formToken := s.issueContactFormToken(time.Now().Add(-5*time.Second), contactAntispam(s.cfg))
+	body := fmt.Sprintf(`{"type":"privacy","reported_url":"","reason":"","copyrighted_work":"","good_faith":false,"accuracy":false,"signature":"","request_kind":"access","name":" %s ","email":"a@example.com","subject":"s","message":"m","form_token":%q,"website":""}`, strings.Repeat("界", 101), formToken)
 	w := httptest.NewRecorder()
 	s.handleContactAPI(w, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body)))
 	var response map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode validation response: %v", err)
 	}
-	details, _ := response["details"].(map[string]interface{})
+	data, _ := response["data"].(map[string]interface{})
+	details, _ := data["details"].(map[string]interface{})
 	if w.Code != http.StatusBadRequest || response["error"] != "VALIDATION_FAILED" || details["field"] != "name" || details["max_length"] != float64(100) {
 		t.Errorf("unexpected max-length response: status=%d body=%s", w.Code, w.Body.String())
+	}
+	if data["form_token"] == "" || data["captcha"] == nil {
+		t.Errorf("max-length rejection omitted form token/captcha refresh: %s", w.Body.String())
 	}
 }
 

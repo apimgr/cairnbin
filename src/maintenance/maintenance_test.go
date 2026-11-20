@@ -326,6 +326,36 @@ func TestRestoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestBackupRestoresSecretsAndOperatorHTML(t *testing.T) {
+	cfgDir, dataDir, bkpDir := makeTestDirs(t)
+	if err := os.WriteFile(filepath.Join(cfgDir, "secrets.yml"), []byte("server:\n  token: secret-value\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	htmlDir := filepath.Join(cfgDir, "html")
+	if err := os.MkdirAll(htmlDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(htmlDir, "about.md"), []byte("Operator page"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.Backup(maintenance.BackupOptions{ConfigDir: cfgDir, DataDir: dataDir, BackupDir: bkpDir, AppVersion: "v1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(bkpDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("backup entries: %v, error: %v", entries, err)
+	}
+	restoredConfig, restoredData := t.TempDir(), t.TempDir()
+	if err := maintenance.Restore(filepath.Join(bkpDir, entries[0].Name()), restoredConfig, restoredData, ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(restoredConfig, "secrets.yml"), filepath.Join(restoredConfig, "html", "about.md")} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("restored backup is missing %s: %v", path, err)
+		}
+	}
+}
+
 // ─── SetMode ─────────────────────────────────────────────────────────────────
 
 func TestSetMode(t *testing.T) {

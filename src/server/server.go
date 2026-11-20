@@ -242,6 +242,8 @@ type Server struct {
 	strictLimiter      *rateLimiter
 	captchaMu          sync.Mutex
 	captchaChallenges  map[string]simpleCaptchaState
+	contactSpamMu      sync.Mutex
+	contactSpam        *contactSpamState
 	restoreFailLimiter *rateLimiter
 	version            string
 	commitID           string
@@ -580,7 +582,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		ServerName:    cfg.Web.SiteTitle,
 		ServerVersion: version,
 		Dispatch:      s.router,
-		Enabled:       func() bool { return s.liveCfg().Server.MCP.Enabled },
+		Enabled:       func() bool { return true },
 		OriginAllowed: s.mcpOriginAllowed,
 	})
 	s.graphqlHandler = graphql.New(db, cfg.Web.SiteTitle)
@@ -1409,6 +1411,7 @@ func (s *Server) setupRoutes() {
 	r.Use(s.realIPMiddleware)
 	r.Use(s.domainObserveMiddleware)
 	r.Use(s.recoverer)
+	r.Use(s.seoIndexMiddleware)
 	r.Use(middleware.CleanPath)
 	r.Use(s.noTrailingSlash)
 	r.Use(s.requestIDMiddleware)
@@ -1416,6 +1419,7 @@ func (s *Server) setupRoutes() {
 	r.Use(s.pathSecurityMiddleware)
 	r.Use(s.securityHeadersMiddleware)
 	r.Use(s.secFetchMiddleware)
+	r.Use(s.contactBodyLimitMiddleware)
 	r.Use(s.csrfMiddleware)
 	r.Use(s.corsMiddleware)
 	// Subdomain compat-target route gating (not part of the numbered PART 5/12
@@ -1717,9 +1721,13 @@ func (s *Server) setupRoutes() {
 		r.Get("/server/version", s.handleVersion)
 		r.Get("/server/about", s.handleAboutAPI)
 		r.Get("/server/privacy", s.handlePrivacyAPI)
+		r.Get("/server/dpo", s.handleDPOAPI)
 		r.Get("/server/help", s.handleHelpAPI)
 		r.Get("/server/help/mcp", s.handleHelpMCP)
 		r.Get("/server/terms", s.handleTermsAPI)
+		r.Get("/server/security", s.handleSecurityAPI)
+		r.Get("/server/security/policy", s.handleSecurityPolicyAPI)
+		r.Get("/server/security/thanks", s.handleSecurityThanksAPI)
 		r.Get("/server/contact", s.maybeReadRateLimit(s.handleContactAPIGet))
 		r.Post("/server/contact", s.maybeStrictRateLimit(s.handleContactAPI))
 		r.Get("/server/auth/check", s.maybeStrictRateLimit(s.handleAuthCheck))
@@ -1842,6 +1850,15 @@ func (s *Server) setupRoutes() {
 
 	// ── Paste view — catch-all (must be last) ────────────────────────────────
 	r.Get("/{id}", s.maybeReadRateLimit(s.handleViewPaste))
+}
+
+func (s *Server) seoIndexMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.liveCfg().Server.SEO.NoIndex {
+			w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -2050,13 +2067,9 @@ func (s *Server) resolveCORSOrigin(r *http.Request) (origin string, allowCredent
 	return "*", false, false
 }
 
-// buildPermissionsPolicy joins the web.permissions_policy feature map into the
-// Permissions-Policy header value (PART 11 generation rule): features sorted for
-// a stable header, empty values skipped so the browser default applies.
-func buildPermissionsPolicy(features map[string]string) string {
-	if features == nil {
-		features = config.DefaultPermissionsPolicy()
-	}
+// buildPermissionsPolicy emits the project's fixed Permissions-Policy.
+func buildPermissionsPolicy() string {
+	features := config.DefaultPermissionsPolicy()
 	names := make([]string, 0, len(features))
 	for name, value := range features {
 		if strings.TrimSpace(value) != "" {
@@ -2361,7 +2374,7 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Permissions-Policy.
-		h.Set("Permissions-Policy", buildPermissionsPolicy(cfg.Web.PermissionsPolicy))
+		h.Set("Permissions-Policy", buildPermissionsPolicy())
 
 		// Strict-Transport-Security — only when TLS is active (RFC 6797).
 		overlay := s.isOverlayRequest(r)
@@ -4508,18 +4521,16 @@ func (s *Server) aboutPageData(r *http.Request) map[string]interface{} {
 	data["Features"] = features
 	data["Links"] = b.EffectiveLinks()
 	data["GeoIPEnabled"] = s.liveCfg().Server.GeoIP.Enabled
-	data["PageContent"] = pageContentHTML(s.liveCfg().Server.Pages.About.Content)
 	return data
 }
 
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
-		"SiteTitle":  s.liveCfg().Web.SiteTitle,
-		"Theme":      s.liveCfg().Web.Theme,
-		"BaseURL":    s.baseURL(r),
-		"MCPEnabled": s.liveCfg().Server.MCP.Enabled,
+		"SiteTitle": s.liveCfg().Web.SiteTitle,
+		"Theme":     s.liveCfg().Web.Theme,
+		"BaseURL":   s.baseURL(r),
 	}
-	data["PageContent"] = pageContentHTML(s.liveCfg().Server.Pages.Help.Content)
+	data["PageContent"] = renderMarkdown(s.liveCfg().Server.Pages.Help.Content)
 	s.injectTermbinData(r, data)
 	if detectClientType(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -4540,17 +4551,18 @@ func (s *Server) contactData(r *http.Request) map[string]interface{} {
 	cfg := s.liveCfg()
 	pc := cfg.Server.Pages.Contact
 	data := map[string]interface{}{
-		"SiteTitle":      cfg.Web.SiteTitle,
-		"Theme":          cfg.Web.Theme,
-		"Contact":        s.publicContactEmail(r),
-		"Abuse":          s.publicAbuseEmail(r),
-		"BaseURL":        s.baseURL(r),
-		"FormEnabled":    pc.Enabled,
-		"CaptchaType":    s.contactCaptchaProvider(r),
-		"CaptchaSiteKey": pc.CaptchaSiteKey,
-		"CaptchaScript":  map[string]string{"recaptcha": "https://www.google.com/recaptcha/api.js", "hcaptcha": "https://js.hcaptcha.com/1/api.js"}[s.contactCaptchaProvider(r)],
+		"SiteTitle":        cfg.Web.SiteTitle,
+		"Theme":            cfg.Web.Theme,
+		"Contact":          s.publicContactEmail(r),
+		"Abuse":            s.publicAbuseEmail(r),
+		"BaseURL":          s.baseURL(r),
+		"FormEnabled":      pc.Enabled,
+		"CaptchaType":      s.contactCaptchaProvider(r),
+		"CaptchaSiteKey":   pc.CaptchaSiteKey,
+		"CaptchaScript":    map[string]string{"recaptcha": "https://www.google.com/recaptcha/api.js", "hcaptcha": "https://js.hcaptcha.com/1/api.js"}[s.contactCaptchaProvider(r)],
+		"ContactFormToken": s.issueContactFormToken(time.Now(), contactAntispam(cfg)),
 	}
-	if pc.Enabled && s.contactCaptchaProvider(r) == "simple" {
+	if pc.Enabled {
 		if cap, err := s.generateSimpleCaptcha(); err == nil {
 			data["CaptchaQuestion"] = cap.Question
 			data["CaptchaToken"] = cap.Token
@@ -4570,6 +4582,11 @@ func (s *Server) contactData(r *http.Request) map[string]interface{} {
 }
 
 func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	if !s.liveCfg().Server.Pages.Contact.Enabled {
+		s.renderErrorPage(w, r, http.StatusNotFound, "The requested resource was not found.")
+		return
+	}
 	data := s.contactData(r)
 	if detectClientType(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -4591,6 +4608,7 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 // contact recipient (falling back to admin) and re-renders the page with a
 // success or error banner (PART 31, AI.md /server/contact).
 func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 	cfg := s.liveCfg()
 	pc := cfg.Server.Pages.Contact
 
@@ -4602,10 +4620,62 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 		s.renderTemplate(w, r, "contact.html", data)
 		return
 	}
+	if !s.validContactOrigin(r) {
+		s.recordContactBlock(contactAntispam(cfg), r, "origin", true, time.Now())
+		data["ContactError"] = "Please submit the form from this site."
+		w.WriteHeader(http.StatusBadRequest)
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, contactBodyLimit)
 	if err := r.ParseForm(); err != nil {
+		s.recordContactBlock(contactAntispam(cfg), r, "shape", false, time.Now())
 		data["ContactError"] = "Invalid form submission."
 		w.WriteHeader(http.StatusBadRequest)
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
+	fields, singleValues := contactFieldValues(r.PostForm)
+	for _, key := range []string{"good_faith", "accuracy"} {
+		if _, ok := fields[key]; !ok {
+			fields[key] = "0"
+		}
+	}
+	step := strings.TrimSpace(r.PostFormValue("step"))
+	if step == "" {
+		step = "submit"
+	}
+	if step != "submit" && step != "confirm" && step != "edit" {
+		s.recordContactBlock(contactAntispam(cfg), r, "review", true, time.Now())
+		data["ContactError"] = "Please read the details and confirm."
+		w.WriteHeader(http.StatusBadRequest)
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
+	if step == "edit" {
+		data["ContactFormToken"] = s.issueContactFormToken(time.Now(), contactAntispam(cfg))
+		data["FormName"] = fields["name"]
+		data["FormEmail"] = fields["email"]
+		data["FormSubject"] = fields["subject"]
+		data["FormMessage"] = fields["message"]
+		data["FormGPG"] = fields["researcher_gpg"]
+		data["FormComponentOther"] = fields["component_other"]
+		data["FormEndpoint"] = fields["endpoint"]
+		data["FormSummary"] = fields["summary"]
+		data["FormSteps"] = fields["steps"]
+		data["FormImpact"] = fields["impact"]
+		data["FormSuggestedFix"] = fields["suggested_fix"]
+		data["FormCreditName"] = fields["credit_name"]
+		data["FormType"] = fields["type"]
+		data["FormReportedURL"] = fields["reported_url"]
+		data["FormReason"] = fields["reason"]
+		data["FormCopyrightedWork"] = fields["copyrighted_work"]
+		data["FormGoodFaith"] = config.IsTruthy(fields["good_faith"])
+		data["FormAccuracy"] = config.IsTruthy(fields["accuracy"])
+		data["FormSignature"] = fields["signature"]
+		data["FormRequestKind"] = fields["request_kind"]
+		data["SecurityMode"] = strings.TrimSpace(fields["security_id"]) != ""
 		s.renderTemplate(w, r, "contact.html", data)
 		return
 	}
@@ -4621,7 +4691,87 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 	}
 	if suppliedSecID != "" {
 		if s.validSecurityID(suppliedSecID) {
-			s.handleSecurityReport(w, r, cfg)
+			if !singleValues || securityContactShapeError(fields) != "" {
+				s.recordContactBlock(contactAntispam(cfg), r, "shape", false, time.Now())
+				data["ContactError"] = "Invalid form submission."
+				w.WriteHeader(http.StatusBadRequest)
+				s.renderTemplate(w, r, "contact.html", data)
+				return
+			}
+			guard := s.contactFormGuard(r, cfg, fields, time.Now())
+			if guard == "honeypot" {
+				data["SecurityMode"] = true
+				data["SecurityID"] = suppliedSecID
+				s.setContactReview(data, fields, "d", time.Now())
+				s.renderTemplate(w, r, "contact.html", data)
+				return
+			}
+			if guard != "" {
+				if guard == "banned" {
+					w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(contactAntispam(cfg))))
+					w.WriteHeader(http.StatusTooManyRequests)
+					data["ContactError"] = "Please try again later."
+				} else {
+					w.WriteHeader(http.StatusBadRequest)
+					data["ContactError"] = "Please wait a moment and submit again."
+				}
+				s.renderTemplate(w, r, "contact.html", data)
+				return
+			}
+			a := contactAntispam(cfg)
+			now := time.Now()
+			if step == "submit" {
+				response := r.PostFormValue("g-recaptcha-response")
+				if response == "" {
+					response = r.PostFormValue("h-captcha-response")
+				}
+				captchaID := r.PostFormValue("captcha_id")
+				if captchaID == "" {
+					captchaID = r.PostFormValue("captcha_token")
+				}
+				captchaAnswer := r.PostFormValue("captcha_answer")
+				if captchaAnswer == "" {
+					captchaAnswer = r.PostFormValue("captcha")
+				}
+				if !s.verifyContactCaptcha(r, captchaID, captchaAnswer, response) {
+					s.recordContactBlock(a, r, "captcha", true, now)
+					data["ContactError"] = "Captcha answer was incorrect. Please try again."
+					w.WriteHeader(http.StatusBadRequest)
+					s.renderTemplate(w, r, "contact.html", data)
+					return
+				}
+				if reason := s.checkContactSubmission(a, r, fields["email"], now, false); reason != "" {
+					s.recordContactBlock(a, r, reason, false, now)
+					w.Header().Set("Retry-After", strconv.Itoa(contactRetryAfter(a)))
+					w.WriteHeader(http.StatusTooManyRequests)
+					data["ContactError"] = "Please try again later."
+					s.renderTemplate(w, r, "contact.html", data)
+					return
+				}
+				data["SecurityMode"] = true
+				data["SecurityID"] = suppliedSecID
+				s.setContactReview(data, fields, "", now)
+				s.renderTemplate(w, r, "contact.html", data)
+				return
+			}
+			valid, flags := s.contactReviewConfirmed(r, fields, now, a)
+			if !valid {
+				s.recordContactBlock(a, r, "review", true, now)
+				data["ContactError"] = "Please read the details and confirm."
+				w.WriteHeader(http.StatusBadRequest)
+				s.renderTemplate(w, r, "contact.html", data)
+				return
+			}
+			if flags == "d" {
+				trackingID, err := randomHex(8)
+				if err != nil {
+					trackingID = "0000000000000000"
+				}
+				data["ContactSuccess"] = fmt.Sprintf("Thank you — your security report was received and encrypted. Your tracking ID is sec_%s. An acknowledgment email may be sent with your private status link.", trackingID)
+				s.renderTemplate(w, r, "contact.html", data)
+				return
+			}
+			s.handleSecurityReport(w, markContactCaptchaVerified(r), cfg)
 			return
 		}
 		s.securityLog("security.security_id_invalid",
@@ -4632,7 +4782,14 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 			Result:   audit.ResultFailure,
 		})
 	}
-
+	requiredFields, allowedFields := standardContactFields()
+	if !singleValues || contactShapeError(fields, requiredFields, allowedFields) != "" {
+		s.recordContactBlock(contactAntispam(cfg), r, "shape", false, time.Now())
+		data["ContactError"] = "Invalid form submission."
+		w.WriteHeader(http.StatusBadRequest)
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
 	name := strings.TrimSpace(r.PostFormValue("name"))
 	fromEmail := strings.TrimSpace(r.PostFormValue("email"))
 	subject := strings.TrimSpace(r.PostFormValue("subject"))
@@ -4643,8 +4800,17 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 	data["FormEmail"] = fromEmail
 	data["FormSubject"] = subject
 	data["FormMessage"] = message
+	data["FormType"] = fields["type"]
+	data["FormReportedURL"] = fields["reported_url"]
+	data["FormReason"] = fields["reason"]
+	data["FormCopyrightedWork"] = fields["copyrighted_work"]
+	data["FormGoodFaith"] = config.IsTruthy(fields["good_faith"])
+	data["FormAccuracy"] = config.IsTruthy(fields["accuracy"])
+	data["FormSignature"] = fields["signature"]
+	data["FormRequestKind"] = fields["request_kind"]
 
 	if name == "" || fromEmail == "" || subject == "" || message == "" {
+		s.recordContactBlock(contactAntispam(cfg), r, "shape", false, time.Now())
 		data["ContactError"] = "All fields are required."
 		w.WriteHeader(http.StatusBadRequest)
 		s.renderTemplate(w, r, "contact.html", data)
@@ -4653,15 +4819,31 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 	for field, limit := range map[string]int{"name": 100, "email": 254, "subject": 200, "message": 5000} {
 		value := map[string]string{"name": name, "email": fromEmail, "subject": subject, "message": message}[field]
 		if utf8.RuneCountInString(value) > limit {
+			s.recordContactBlock(contactAntispam(cfg), r, "shape", false, time.Now())
 			data["ContactError"] = fmt.Sprintf("%s must be at most %d characters.", strings.ToUpper(field[:1])+field[1:], limit)
 			w.WriteHeader(http.StatusBadRequest)
 			s.renderTemplate(w, r, "contact.html", data)
 			return
 		}
 	}
-	if !strings.Contains(fromEmail, "@") || strings.ContainsAny(fromEmail, " \t\r\n") {
+	if !validContactEmail(fromEmail) {
+		s.recordContactBlock(contactAntispam(cfg), r, "shape", false, time.Now())
 		data["ContactError"] = "Please enter a valid email address."
 		w.WriteHeader(http.StatusBadRequest)
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
+	guard := s.contactFormGuard(r, cfg, fields, time.Now())
+	honeypot := guard == "honeypot"
+	if guard != "" && !honeypot {
+		if guard == "banned" {
+			w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(contactAntispam(cfg))))
+			w.WriteHeader(http.StatusTooManyRequests)
+			data["ContactError"] = "Please try again later."
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			data["ContactError"] = "Please wait a moment and submit again."
+		}
 		s.renderTemplate(w, r, "contact.html", data)
 		return
 	}
@@ -4670,14 +4852,118 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 	if response == "" {
 		response = r.PostFormValue("h-captcha-response")
 	}
-	if !s.verifyContactCaptcha(r, r.PostFormValue("captcha_token"), r.PostFormValue("captcha"), response) {
+	captchaID := r.PostFormValue("captcha_id")
+	if captchaID == "" {
+		captchaID = r.PostFormValue("captcha_token")
+	}
+	captchaAnswer := r.PostFormValue("captcha_answer")
+	if captchaAnswer == "" {
+		captchaAnswer = r.PostFormValue("captcha")
+	}
+	if step == "submit" && !honeypot && !s.verifyContactCaptcha(r, captchaID, captchaAnswer, response) {
+		banned := s.recordContactBlock(contactAntispam(cfg), r, "captcha", true, time.Now())
+		if banned {
+			w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(contactAntispam(cfg))))
+			w.WriteHeader(http.StatusTooManyRequests)
+			data["ContactError"] = "Please try again later."
+			s.renderTemplate(w, r, "contact.html", data)
+			return
+		}
 		data["ContactError"] = "Captcha answer was incorrect. Please try again."
 		w.WriteHeader(http.StatusBadRequest)
 		s.renderTemplate(w, r, "contact.html", data)
 		return
 	}
+	a := contactAntispam(cfg)
+	now := time.Now()
+	if step == "submit" && !honeypot {
+		if reason := contactContentReason(a, name, fromEmail, subject, message); reason != "" {
+			banned := s.recordContactBlock(a, r, reason, true, time.Now())
+			if banned {
+				w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(a)))
+				w.WriteHeader(http.StatusTooManyRequests)
+				data["ContactError"] = "Please try again later."
+			} else {
+				w.WriteHeader(http.StatusBadRequest)
+				data["ContactError"] = "Your message could not be sent."
+			}
+			s.renderTemplate(w, r, "contact.html", data)
+			return
+		}
+		if reason := s.reportContentReason(cfg, r, fields); reason != "" {
+			banned := s.recordContactBlock(a, r, reason, true, now)
+			if banned {
+				w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(a)))
+				w.WriteHeader(http.StatusTooManyRequests)
+				data["ContactError"] = "Please try again later."
+			} else {
+				w.WriteHeader(http.StatusBadRequest)
+				data["ContactError"] = "Your message could not be sent."
+			}
+			s.renderTemplate(w, r, "contact.html", data)
+			return
+		}
+	}
+	if step == "submit" {
+		if !honeypot {
+			if reason := s.checkContactSubmission(a, r, fromEmail, now, false); reason != "" {
+				s.recordContactBlock(a, r, reason, false, now)
+				w.Header().Set("Retry-After", strconv.Itoa(contactRetryAfter(a)))
+				w.WriteHeader(http.StatusTooManyRequests)
+				data["ContactError"] = "Please try again later."
+				s.renderTemplate(w, r, "contact.html", data)
+				return
+			}
+		}
+		flags := ""
+		if honeypot {
+			flags = "d"
+		}
+		s.setContactReview(data, fields, flags, now)
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
+	validReview, reviewFlags := s.contactReviewConfirmed(r, fields, now, a)
+	if !validReview {
+		banned := s.recordContactBlock(a, r, "review", true, now)
+		if banned {
+			w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(a)))
+			w.WriteHeader(http.StatusTooManyRequests)
+			data["ContactError"] = "Please try again later."
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			data["ContactError"] = "Please read the details and confirm."
+		}
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
+	if reviewFlags == "d" {
+		data["ContactSuccess"] = pc.SuccessMessage
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
+	if s.contactDuplicate(a, fromEmail, subject, message, now) {
+		banned := s.recordContactBlock(a, r, "duplicate", true, now)
+		if banned {
+			w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(a)))
+			w.WriteHeader(http.StatusTooManyRequests)
+			data["ContactError"] = "Please try again later."
+		} else {
+			data["ContactSuccess"] = pc.SuccessMessage
+		}
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
+	if reason := s.allowContactSubmission(a, r, fromEmail, now); reason != "" {
+		s.recordContactBlock(a, r, reason, false, now)
+		w.Header().Set("Retry-After", strconv.Itoa(contactRetryAfter(a)))
+		w.WriteHeader(http.StatusTooManyRequests)
+		data["ContactError"] = "Please try again later."
+		s.renderTemplate(w, r, "contact.html", data)
+		return
+	}
 
-	if status, msg := s.deliverContact(r, cfg, name, fromEmail, subject, message); status != http.StatusOK {
+	if status, msg := s.deliverReportContact(r, cfg, fields); status != http.StatusOK {
 		data["ContactError"] = msg
 		w.WriteHeader(status)
 		s.renderTemplate(w, r, "contact.html", data)
@@ -4693,40 +4979,43 @@ func (s *Server) handleContactPost(w http.ResponseWriter, r *http.Request) {
 	s.renderTemplate(w, r, "contact.html", data)
 }
 
-// deliverContact sends a validated contact-form message through every
-// configured channel (general webhook, then SMTP to the general recipient). It
-// returns http.StatusOK on success, otherwise the failure status and a
-// user-facing message. Shared by the web form and the JSON API.
-func (s *Server) deliverContact(r *http.Request, cfg *config.Config, name, fromEmail, subject, message string) (int, string) {
-	to := strings.TrimSpace(cfg.GeneralEmail())
+func (s *Server) deliverReportContact(r *http.Request, cfg *config.Config, fields map[string]string) (int, string) {
+	typeName := fields["type"]
+	role := "abuse"
+	to := strings.TrimSpace(cfg.AbuseEmail())
+	if typeName == "privacy" {
+		role = "dpo"
+		to = strings.TrimSpace(cfg.DPOEmail())
+	}
+	name := strings.TrimSpace(fields["name"])
+	from := strings.TrimSpace(fields["email"])
+	subject := strings.TrimSpace(fields["subject"])
+	body := strings.Join([]string{
+		"Name: " + name,
+		"Type: " + typeName,
+		"Subject: " + subject,
+		"Message: " + strings.TrimSpace(fields["message"]),
+		"Reported URL: " + strings.TrimSpace(fields["reported_url"]),
+		"Reason: " + strings.TrimSpace(fields["reason"]),
+		"Copyrighted work: " + strings.TrimSpace(fields["copyrighted_work"]),
+		"Good faith: " + fields["good_faith"],
+		"Accuracy: " + fields["accuracy"],
+		"Signature: " + strings.TrimSpace(fields["signature"]),
+		"Privacy request: " + strings.TrimSpace(fields["request_kind"]),
+	}, "\n\n")
 	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, s.baseURL(r), cfg.Server.FQDN, cfg.Server.Lang)
 	emailReady := to != "" && m.Enabled()
-	webhookTargets := cfg.WebhookTargets("general")
-
-	// The form is available if any delivery channel is configured (PART 17): an
-	// SMTP recipient or at least one general-role webhook.
+	webhookTargets := cfg.WebhookTargets(role)
 	if !emailReady && len(webhookTargets) == 0 {
-		return http.StatusServiceUnavailable, "The contact form is currently unavailable. Please try again later."
+		return http.StatusServiceUnavailable, "The report form is currently unavailable. Please try again later."
 	}
-
-	// General webhook — spam-filtered sender details and message (PART 17).
-	s.notifyRole(cfg, "general", "general.contact_submitted",
-		"Contact form: "+subject,
-		"From: "+name+" <"+fromEmail+">\n\n"+message,
-		"info")
-
+	s.notifyRole(cfg, role, role+".report_submitted", "["+cfg.Web.SiteTitle+" contact] "+typeName+": "+subject, body, "info")
 	if emailReady {
-		if err := m.Send(to, "contact", map[string]string{
-			"name":    name,
-			"email":   fromEmail,
-			"subject": subject,
-			"message": message,
-		}); err != nil {
+		if err := m.SendRawMessageWithReplyTo(to, "["+cfg.Web.SiteTitle+" contact] "+typeName+": "+subject, body, from); err != nil {
 			log.Printf("contact: send failed: %v", err)
-			return http.StatusBadGateway, "Failed to send your message. Please try again later."
+			return http.StatusBadGateway, "Failed to send your report. Please try again later."
 		}
 	}
-
 	return http.StatusOK, ""
 }
 
@@ -4751,6 +5040,7 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 func (s *Server) privacyPageData(r *http.Request) map[string]interface{} {
 	cfg := s.liveCfg()
 	privacy := cfg.Server.Privacy
+	privacy.Content = config.DefaultConfig().Server.Privacy.Content
 	tracking := cfg.Server.Tracking
 	ccpaOptedOut := false
 	if cookie, err := r.Cookie("ccpa_opt_out"); err == nil && cookie.Value == "true" {
@@ -4761,7 +5051,6 @@ func (s *Server) privacyPageData(r *http.Request) map[string]interface{} {
 	data["Tracking"] = &tracking
 	data["CCPAOptedOut"] = ccpaOptedOut
 	data["ThirdPartyServices"] = cfg.EffectiveThirdParty()
-	data["PageContent"] = pageContentHTML(cfg.Server.Pages.Privacy.Content)
 	return data
 }
 
@@ -5208,7 +5497,6 @@ func (s *Server) resetPreferences(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
 	data := s.pageData()
-	data["PageContent"] = pageContentHTML(s.liveCfg().Server.Pages.Terms.Content)
 	if detectClientType(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		html, err := s.renderTemplateToString(r, "terms.html", data)
@@ -5723,6 +6011,21 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	data["Theme"] = theme
 	data["ThemeColor"] = themeColorFor(theme)
 	data["APIBase"] = "/api/" + s.apiVersion()
+	toastConfig := s.liveCfg().Server.Notifications.WebUI
+	data["ToastPosition"] = toastConfig.Position
+	data["ToastDuration"] = toastConfig.Duration
+	data["ToastWarningDuration"] = toastConfig.WarningDuration
+	titleSeparator := s.liveCfg().Server.SEO.TitleSeparator
+	if len([]rune(titleSeparator)) > 8 {
+		titleSeparator = " - "
+	}
+	if titleSeparator == "" {
+		titleSeparator = " - "
+	}
+	data["TitleSeparator"] = titleSeparator
+	if s.liveCfg().Server.SEO.NoIndex {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	}
 	// Inject the next mode in the cycle so the no-JS toggle form can advance it (AI.md 21588)
 	data["NextTheme"] = nextTheme(theme)
 	// Inject whether the visitor already has a recorded cookie_consent choice so
@@ -5761,7 +6064,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 		data["MaxPasteSize"] = s.maxPasteSizeDisplay(lang)
 	}
 	// Inject sanitized operator footer branding rendered above the default footer (PART 16)
-	s.injectFooterData(data)
+	s.injectFooterData(r, data)
 	// Inject Tor hidden-service status so footers/help can show the "Tor Support"
 	// link and onion address only when the service is enabled and running (PART 31)
 	s.injectTorData(data)
@@ -5853,7 +6156,7 @@ func (s *Server) renderTemplateToString(r *http.Request, name string, data map[s
 	if _, ok := data["SEOMeta"]; !ok {
 		data["SEOMeta"] = s.seoMetaTags(r)
 	}
-	s.injectFooterData(data)
+	s.injectFooterData(r, data)
 	s.injectTorData(data)
 	s.injectI2PData(data)
 	s.injectOwnerTokenData(r, data)
@@ -5876,9 +6179,8 @@ func (s *Server) pageData() map[string]interface{} {
 // operator-supplied config content already stripped by bluemonday, so wrapping
 // it as template.HTML is safe; it is never user-submitted content. An empty
 // result (default or disabled branding) drops the branding row entirely.
-func (s *Server) injectFooterData(data map[string]interface{}) {
-	html := s.liveCfg().FooterCustomHTML()
-	data["FooterCustomHTML"] = template.HTML(s.expandFooterVars(html))
+func (s *Server) injectFooterData(r *http.Request, data map[string]interface{}) {
+	s.injectOperatorHTML(r, data)
 }
 
 // Project identity used by the footer variables; fixed regardless of binary rename.
@@ -6080,15 +6382,9 @@ func (s *Server) renderErrorPage(w http.ResponseWriter, r *http.Request, status 
 	data["Message"] = message
 	tmpl := s.templates["error.html"]
 	if tmpl == nil {
-		// Degraded bootstrap state: error.html failed to parse, so the themed
-		// page cannot be rendered. Fall back to the canonical JSON envelope so
-		// this path still never emits a bare unstyled text error page. Nothing
-		// has been written to w yet, so the status is still unset here.
-		httputil.WriteJSON(w, status, map[string]any{
-			"ok":      false,
-			"error":   errorCodeForStatus(status),
-			"message": message,
-		})
+		// The themed template is unavailable. Preserve browser/API content
+		// negotiation with the hardcoded last-resort response.
+		renderFallbackError(w, r, status)
 		return
 	}
 	data["CurrentPath"] = r.URL.Path
@@ -6115,7 +6411,7 @@ func (s *Server) renderErrorPage(w http.ResponseWriter, r *http.Request, status 
 	if _, ok := data["SEOMeta"]; !ok {
 		data["SEOMeta"] = s.seoMetaTags(r)
 	}
-	s.injectFooterData(data)
+	s.injectFooterData(r, data)
 	s.injectTorData(data)
 	s.injectI2PData(data)
 	s.injectOwnerTokenData(r, data)
@@ -6146,7 +6442,7 @@ func renderFallbackError(w http.ResponseWriter, r *http.Request, status int) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_, _ = fmt.Fprintf(w, "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>%d %s</title></head><body><h1>%d %s</h1></body></html>", status, text, status, text)
+	_, _ = fmt.Fprintf(w, "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <title>%d %s</title>\n  </head>\n  <body>\n    <h1>%d %s</h1>\n  </body>\n</html>\n", status, text, status, text)
 }
 
 // persistOnionAddress records the generated .onion hostname under

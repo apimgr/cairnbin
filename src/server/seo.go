@@ -17,6 +17,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/apimgr/cairnbin/src/config"
@@ -183,14 +184,23 @@ func (s *Server) seoMetaTags(r *http.Request) template.HTML {
 
 	title := html.EscapeString(b.EffectiveTitle())
 	description := html.EscapeString(b.EffectiveDescription())
-	currentURL := html.EscapeString(s.baseURL(r) + r.URL.Path)
+	canonicalBase := strings.TrimRight(seo.Canonical, "/")
+	if canonicalBase == "" {
+		canonicalBase = strings.TrimRight(s.baseURL(r), "/")
+	}
+	currentURL := html.EscapeString(canonicalBase + r.URL.Path)
+	robots := seoRobotsDirective(r.URL.Path)
+	if seo.NoIndex {
+		robots = "noindex,nofollow"
+	}
 
 	var sb strings.Builder
+	ogImage := html.EscapeString(s.baseURL(r) + "/static/branding/og-image.png")
 	sb.WriteString(`<meta name="description" content="`)
 	sb.WriteString(description)
 	sb.WriteString("\">\n")
 	sb.WriteString(`<meta name="robots" content="`)
-	sb.WriteString(seoRobotsDirective(r.URL.Path))
+	sb.WriteString(robots)
 	sb.WriteString("\">\n")
 	sb.WriteString(`<link rel="canonical" href="`)
 	sb.WriteString(currentURL)
@@ -206,39 +216,66 @@ func (s *Server) seoMetaTags(r *http.Request) template.HTML {
 		sb.WriteString("\">\n")
 	}
 
-	sb.WriteString(`<meta property="og:title" content="`)
-	sb.WriteString(title)
-	sb.WriteString("\">\n")
-	sb.WriteString(`<meta property="og:description" content="`)
-	sb.WriteString(description)
-	sb.WriteString("\">\n")
-	// PART 16 "Image Scaling": always point at the cached/generated
-	// 1200x630 branding endpoint (never the raw og_image config value) so
-	// a remote-fetch failure falls back to the embedded default instead of
-	// a broken/oversized image or a missing tag.
-	ogImage := html.EscapeString(s.baseURL(r) + "/static/branding/og-image.png")
-	sb.WriteString(`<meta property="og:image" content="`)
-	sb.WriteString(ogImage)
-	sb.WriteString("\">\n")
-	sb.WriteString(`<meta property="og:type" content="website">` + "\n")
-	sb.WriteString(`<meta property="og:url" content="`)
-	sb.WriteString(currentURL)
-	sb.WriteString("\">\n")
-
-	sb.WriteString(`<meta name="twitter:card" content="summary_large_image">` + "\n")
-	sb.WriteString(`<meta name="twitter:title" content="`)
-	sb.WriteString(title)
-	sb.WriteString("\">\n")
-	sb.WriteString(`<meta name="twitter:description" content="`)
-	sb.WriteString(description)
-	sb.WriteString("\">\n")
-	sb.WriteString(`<meta name="twitter:image" content="`)
-	sb.WriteString(ogImage)
-	sb.WriteString("\">\n")
-	if h := strings.TrimSpace(seo.TwitterHandle); h != "" {
-		sb.WriteString(`<meta name="twitter:site" content="`)
-		sb.WriteString(html.EscapeString(h))
+	if seo.OpenGraph.Enabled {
+		sb.WriteString(`<meta property="og:title" content="`)
+		sb.WriteString(title)
 		sb.WriteString("\">\n")
+		sb.WriteString(`<meta property="og:description" content="`)
+		sb.WriteString(description)
+		sb.WriteString("\">\n")
+		// PART 16 "Image Scaling": always point at the cached/generated
+		// 1200x630 branding endpoint (never the raw og_image config value) so
+		// a remote-fetch failure falls back to the embedded default instead of
+		// a broken/oversized image or a missing tag.
+		sb.WriteString(`<meta property="og:image" content="`)
+		sb.WriteString(ogImage)
+		sb.WriteString("\">\n")
+		ogType := seo.OpenGraph.Type
+		if ogType == "" {
+			ogType = "website"
+		}
+		sb.WriteString(`<meta property="og:type" content="` + html.EscapeString(ogType) + `">` + "\n")
+		sb.WriteString(`<meta property="og:url" content="`)
+		sb.WriteString(currentURL)
+		sb.WriteString("\">\n")
+		ogSiteName := seo.OpenGraph.SiteName
+		if ogSiteName == "" {
+			ogSiteName = b.EffectiveTitle()
+		}
+		sb.WriteString(`<meta property="og:site_name" content="` + html.EscapeString(ogSiteName) + `">` + "\n")
+	}
+
+	if seo.Twitter.Enabled {
+		card := seo.Twitter.Card
+		if card == "" {
+			card = "summary_large_image"
+		}
+		sb.WriteString(`<meta name="twitter:card" content="` + html.EscapeString(card) + `">` + "\n")
+		sb.WriteString(`<meta name="twitter:title" content="`)
+		sb.WriteString(title)
+		sb.WriteString("\">\n")
+		sb.WriteString(`<meta name="twitter:description" content="`)
+		sb.WriteString(description)
+		sb.WriteString("\">\n")
+		sb.WriteString(`<meta name="twitter:image" content="`)
+		sb.WriteString(ogImage)
+		sb.WriteString("\">\n")
+		if h := strings.TrimSpace(seo.TwitterHandle); h != "" {
+			sb.WriteString(`<meta name="twitter:site" content="`)
+			sb.WriteString(html.EscapeString(h))
+			sb.WriteString("\">\n")
+		}
+		if creator := strings.TrimSpace(seo.Twitter.Creator); creator != "" {
+			sb.WriteString(`<meta name="twitter:creator" content="` + html.EscapeString(creator) + `">` + "\n")
+		}
+	}
+	metaNames := make([]string, 0, len(seo.MetaTags))
+	for name := range seo.MetaTags {
+		metaNames = append(metaNames, name)
+	}
+	sort.Strings(metaNames)
+	for _, name := range metaNames {
+		sb.WriteString(`<meta name="` + html.EscapeString(name) + `" content="` + html.EscapeString(seo.MetaTags[name]) + `">` + "\n")
 	}
 
 	for _, rule := range seoVerifyRules(seo.Verification) {

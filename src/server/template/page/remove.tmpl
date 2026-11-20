@@ -1,61 +1,61 @@
-{{define "meta"}}
-    <title>{{t .Lang "pagemeta.remove_title"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{t .Lang "pagemeta.remove_description"}}">
+{{define "meta" -}}
+<title>{{t .Lang "pagemeta.remove_title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{t .Lang "pagemeta.remove_description"}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "paste.delete_title"}}</h1>
-                    <p class="section-description">{{t .Lang "paste.delete_desc"}}</p>
-                </div>
+    <section class="search-section">
+      <div class="container container-sm">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "paste.delete_title"}}</h1>
+          <p class="section-description">{{t .Lang "paste.delete_desc"}}</p>
+        </div>
 
-                {{if .Success}}
-                <div class="paste-view page-view page-centered">
-                    <div class="delete-success-icon" aria-hidden="true">🗑️</div>
-                    <h2>{{t .Lang "paste.deleted_title"}}</h2>
-                    <p class="delete-hint">
-                        {{tf .Lang "paste.deleted_message" "id" .ID}}
-                    </p>
-                    <a href="{{.AssetPrefix}}/" class="btn btn-primary">{{t .Lang "paste.go_home"}}</a>
-                    <a href="{{.AssetPrefix}}/create" class="btn btn-secondary">{{t .Lang "paste.create_new_paste"}}</a>
-                </div>
-                {{else}}
-                <div class="paste-view">
-                    {{if .Error}}
-                    <div class="alert alert-error" role="alert">
-                        {{.Error}}
-                    </div>
-                    {{end}}
+        {{if .Success}}
+        <div class="paste-view page-view page-centered">
+          <div class="delete-success-icon" aria-hidden="true">🗑️</div>
+          <h2>{{t .Lang "paste.deleted_title"}}</h2>
+          <p class="delete-hint">
+            {{tf .Lang "paste.deleted_message" "id" .ID}}
+          </p>
+          <a href="{{.AssetPrefix}}/" class="btn btn-primary">{{t .Lang "paste.go_home"}}</a>
+          <a href="{{.AssetPrefix}}/create" class="btn btn-secondary">{{t .Lang "paste.create_new_paste"}}</a>
+        </div>
+        {{else}}
+        <div class="paste-view">
+          {{if .Error}}
+          <div class="alert alert-error" role="alert">
+            {{.Error}}
+          </div>
+          {{end}}
 
-                    <form action="{{.AssetPrefix}}/remove/{{.ID}}" method="POST" class="paste-form" data-confirm="{{t .Lang "confirm.delete_message"}}">
-                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                        <div class="form-group">
-                            <label for="token" class="form-label">{{t .Lang "paste.delete_token_label"}}</label>
-                            <input
-                                type="password"
-                                id="token"
-                                name="token"
-                                class="form-input form-mono"
-                                placeholder="{{t .Lang "paste.delete_token_placeholder"}}"
-                                autocomplete="off"
-                                data-token-error="{{if .Error}}true{{else}}false{{end}}"
-                                aria-describedby="token-error"
-                                aria-invalid="false"
-                            >
-                            <p class="token-hint">
-                                {{t .Lang "paste.delete_token_hint"}}
-                            </p>
-                            <span id="token-error" class="field-error" role="alert" hidden></span>
-                        </div>
-                        <div class="form-actions">
-                            <a href="{{.AssetPrefix}}/{{.ID}}" class="btn btn-secondary">{{t .Lang "paste.cancel"}}</a>
-                            <button type="submit" class="btn btn-danger" data-action="submit-loading" data-loading-text="{{t .Lang "js.deleting"}}">{{t .Lang "paste.delete_btn"}}</button>
-                        </div>
-                    </form>
-                </div>
-                {{end}}
+          <form action="{{.AssetPrefix}}/remove/{{.ID}}" method="POST" class="paste-form" data-confirm="{{t .Lang "confirm.delete_message"}}">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="form-group">
+              <label for="token" class="form-label">{{t .Lang "paste.delete_token_label"}}</label>
+              <input
+                type="password"
+                id="token"
+                name="token"
+                class="form-input form-mono"
+                placeholder="{{t .Lang "paste.delete_token_placeholder"}}"
+                autocomplete="off"
+                data-token-error="{{if .Error}}true{{else}}false{{end}}"
+                aria-describedby="token-error"
+                aria-invalid="false"
+              >
+              <p class="token-hint">
+                {{t .Lang "paste.delete_token_hint"}}
+              </p>
+              <span id="token-error" class="field-error" role="alert" hidden></span>
             </div>
-        </section>
+            <div class="form-actions">
+              <a href="{{.AssetPrefix}}/{{.ID}}" class="btn btn-secondary">{{t .Lang "paste.cancel"}}</a>
+              <button type="submit" class="btn btn-danger" data-action="submit-loading" data-loading-text="{{t .Lang "js.deleting"}}">{{t .Lang "paste.delete_btn"}}</button>
+            </div>
+          </form>
+        </div>
+        {{end}}
+      </div>
+    </section>
 {{end}}

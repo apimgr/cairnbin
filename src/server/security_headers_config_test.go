@@ -10,15 +10,11 @@ import (
 )
 
 func TestBuildPermissionsPolicy(t *testing.T) {
-	got := buildPermissionsPolicy(config.DefaultPermissionsPolicy())
+	got := buildPermissionsPolicy()
 	for _, want := range []string{"camera=()", "fullscreen=(self)", "interest-cohort=()", "web-share=(self)"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("default policy missing %q: %s", want, got)
 		}
-	}
-	custom := buildPermissionsPolicy(map[string]string{"geolocation": "(self)", "camera": ""})
-	if custom != "geolocation=(self)" {
-		t.Errorf("custom policy = %q, want only geolocation=(self)", custom)
 	}
 }
 

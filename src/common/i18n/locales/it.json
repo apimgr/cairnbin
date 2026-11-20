@@ -375,7 +375,40 @@
     "severity_high": "Alto",
     "severity_medium": "medio",
     "severity_low": "Basso",
-    "severity_informational": "informativo"
+    "severity_informational": "informativo",
+    "purpose_notice": "This form is only for security reports, terms violations at a URL on this site, DMCA notices and privacy requests. It cannot be used for support, bug reports, feature requests or general questions.",
+    "review_title": "Review your report",
+    "review_email": "Email",
+    "review_type": "Type",
+    "review_subject": "Subject",
+    "review_confirm": "This email address is correct, and this is a genuine report, not an advertisement, a solicitation or spam",
+    "review_confirm_button": "Confirm",
+    "review_edit_button": "Edit",
+    "type_label": "Type",
+    "type_choose": "Choose a report type",
+    "type_abuse": "Abuse",
+    "type_dmca": "DMCA",
+    "type_privacy": "Privacy",
+    "type_security": "Sicurezza",
+    "reported_url": "Reported URL",
+    "abuse_reason": "Abuse reason",
+    "reason_choose": "Choose a reason",
+    "reason_illegal": "Illegal content",
+    "reason_terms": "Terms violation",
+    "reason_harassment": "Harassment",
+    "reason_malware": "Malware or phishing",
+    "copyrighted_work": "Copyrighted work",
+    "dmca_good_faith": "I have a good-faith belief that this use is not authorized by the copyright owner, its agent or the law",
+    "dmca_accuracy": "The information is accurate and, under penalty of perjury, I am the owner or authorized to act for the owner",
+    "signature": "Signature",
+    "privacy_request": "Privacy request",
+    "request_choose": "Choose a request",
+    "request_access": "Access",
+    "request_export": "Export",
+    "request_deletion": "Deletion",
+    "request_correction": "Correction",
+    "request_opt_out": "Opt out",
+    "reason_other": "Other"
   },
   "help": {
     "title": "Aiuto",
@@ -586,8 +619,8 @@
     "ccpa_opted_out_full": "Hai rinunciato alla vendita delle tue informazioni personali. Non venderemo i tuoi dati.",
     "ccpa_intro": "Ai sensi del California Consumer Privacy Act (CCPA), puoi rinunciare alla vendita delle tue informazioni personali. Fai clic di seguito per registrare la tua preferenza su questo dispositivo.",
     "ccpa_not_applicable": "Non vendiamo le tue informazioni personali, quindi non c'è nulla a cui rinunciare.",
-    "contact_intro": "Per domande o dubbi utilizza il ns",
-    "contact_page_link": "pagina dei contatti",
+    "contact_intro": "Per segnalare violazioni dei termini, notifiche DMCA o richieste sulla privacy, consulta la nostra",
+    "contact_page_link": "pagina di sicurezza e segnalazione",
     "paste_export_available": "disponibile tramite il suo URL o l'API",
     "paste_deletion_available": "disponibile con il token del proprietario dell'incolla o il token di eliminazione specifico del protocollo per le paste di compatibilità",
     "consent_banner": "In conformità con la legge GDPR dell'UE, viene visualizzato questo messaggio. Utilizziamo i cookie per funzionalità essenziali del sito e, con il tuo consenso, per preferenze e analisi. I tuoi dati sono archiviati sui nostri server e non vengono mai venduti.",
@@ -1638,7 +1671,7 @@
     "progress": "Progresso",
     "maintainer_note": "nota del manutentore",
     "contact": "Contatto",
-    "status_contact_text": "per aggiungere informazioni a questo rapporto, rispondi all'e-mail di conferma e includi il tuo ID di monitoraggio.",
+    "status_contact_text": "Se hai ricevuto un'e-mail di conferma, rispondi per aggiungere informazioni a questo rapporto e includi il tuo ID di monitoraggio.",
     "status_contact_email": "Puoi anche scrivere a:",
     "thanks_title": "Riconoscimenti di sicurezza",
     "thanks_subtitle": "Grazie ai ricercatori che aiutano a mantenere al sicuro {site}",
@@ -1646,7 +1679,9 @@
     "thanks_intro": "Siamo grati ai seguenti ricercatori per aver divulgato in modo responsabile i problemi di sicurezza nell'ambito della nostra politica di sicurezza.",
     "researcher": "Ricercatore",
     "year": "Anno",
-    "thanks_empty": "Nessuna informativa è stata ancora pubblicata. Se hai riscontrato un problema di sicurezza, consulta la nostra politica di sicurezza e segnalalo in modo responsabile."
+    "thanks_empty": "Nessuna informativa è stata ancora pubblicata. Se hai riscontrato un problema di sicurezza, consulta la nostra politica di sicurezza e segnalalo in modo responsabile.",
+    "other_reports_title": "Report other issues",
+    "other_reports_text": "To report terms violations, submit a DMCA notice or make a privacy request, use the report form."
   },
   "create": {
     "plain_text": "testo normale"
@@ -1700,7 +1735,7 @@
       },
       "security_report_ack": {
         "subject": "Abbiamo ricevuto il tuo rapporto sulla sicurezza ({tracking_id})",
-        "body": "Grazie per la tua divulgazione responsabile.\n\nRicevuto: {timestamp}\nSito: {app_name} ({fqdn})\n\nLa tua segnalazione è stata registrata e crittografata. Un manutentore lo valuterà e coordinerà la divulgazione con te.\nID di tracciamento: {tracking_id}\nPagina di stato: {status_url}\n\nMantieni privato il collegamento alla pagina di stato; concede l'accesso allo stato di triage corrente.\n{app_url}"
+        "body": "La segnalazione di sicurezza è stata ricevuta.\nID di tracciamento: {tracking_id}\nPagina di stato: {status_url}"
       },
       "ssl_expiring": {
         "subject": "Certificato SSL in scadenza - {app_name}",

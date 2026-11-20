@@ -73,8 +73,12 @@ func (s *Server) handleSecurityOverview(w http.ResponseWriter, r *http.Request) 
 	}
 	securityID := s.currentSecurityID()
 	reportFormURL := ""
+	otherReportURL := ""
 	if securityID != "" {
 		reportFormURL = strings.TrimRight(s.baseURL(r), "/") + "/server/contact?security_id=" + securityID
+	}
+	if cfg.Server.Pages.Contact.Enabled {
+		otherReportURL = strings.TrimRight(s.baseURL(r), "/") + "/server/contact"
 	}
 	data := map[string]interface{}{
 		"SiteTitle":          cfg.Web.SiteTitle,
@@ -82,6 +86,7 @@ func (s *Server) handleSecurityOverview(w http.ResponseWriter, r *http.Request) 
 		"BaseURL":            s.baseURL(r),
 		"ReportURL":          cfg.SecurityReportURL(),
 		"ReportFormURL":      reportFormURL,
+		"OtherReportURL":     otherReportURL,
 		"SecurityEmail":      s.publicSecurityEmail(r),
 		"HasPGPKey":          s.hasPGPKey(),
 		"Expires":            expires,

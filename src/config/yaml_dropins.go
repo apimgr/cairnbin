@@ -22,9 +22,78 @@ type yamlConfigSource struct {
 	containsSecret bool
 }
 
+func enforceConfigPrivatePaths(configPath string) error {
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chmod(configDir, 0o700); err != nil {
+		log.Printf("[config] warning: could not secure config directory %s: %v", configDir, err)
+	}
+	for _, path := range []string{
+		configPath,
+		filepath.Join(configDir, "secrets.yml"),
+	} {
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return fmt.Errorf("private config file %s must be a regular file", path)
+		}
+		if err := os.Chmod(path, 0o600); err != nil {
+			log.Printf("[config] warning: could not secure config file %s: %v", path, err)
+		}
+	}
+	for _, name := range []string{"yaml.d", "assets", "ssl", "tor", "i2p"} {
+		path := filepath.Join(configDir, name)
+		if _, err := os.Lstat(path); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if err := enforcePrivateTree(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func enforcePrivateTree(root string) error {
+	info, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("private path %s must be a directory", root)
+	}
+	if err := os.Chmod(root, 0o700); err != nil {
+		log.Printf("[config] warning: could not secure private directory %s: %v", root, err)
+	}
+	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == root || entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		mode := os.FileMode(0o600)
+		if entry.IsDir() {
+			mode = 0o700
+		}
+		if err := os.Chmod(path, mode); err != nil {
+			log.Printf("[config] warning: could not secure private path %s: %v", path, err)
+		}
+		return nil
+	})
+}
+
 // decodeConfigFiles loads server.yml and yaml.d drop-ins into cfg. The returned
 // map identifies the file that supplied each final scalar/list value.
-func decodeConfigFiles(configPath string, cfg *Config) (map[string]string, error) {
+func decodeConfigFiles(configPath string, cfg *Config, includeSecrets ...bool) (map[string]string, error) {
 	rootData, rootErr := os.ReadFile(configPath)
 	if rootErr != nil && !os.IsNotExist(rootErr) {
 		return nil, rootErr
@@ -42,6 +111,29 @@ func decodeConfigFiles(configPath string, cfg *Config) (map[string]string, error
 		return nil, err
 	}
 	sources = append(sources, dropIns...)
+	loadSecrets := len(includeSecrets) == 0 || includeSecrets[0]
+	if loadSecrets {
+		secretsPath := filepath.Join(filepath.Dir(configPath), "secrets.yml")
+		secretData, secretErr := os.ReadFile(secretsPath)
+		if secretErr != nil && !os.IsNotExist(secretErr) {
+			return nil, secretErr
+		}
+		if secretErr == nil {
+			info, _ := os.Stat(secretsPath)
+			if info != nil && info.Mode().Perm() != 0o600 {
+				if err := os.Chmod(secretsPath, 0o600); err != nil {
+					log.Printf("[config] warning: could not secure %s permissions: %v", secretsPath, err)
+				} else {
+					info, _ = os.Stat(secretsPath)
+				}
+			}
+			source := yamlConfigSource{path: secretsPath, data: secretData}
+			if info != nil {
+				source.mode = info.Mode()
+			}
+			sources = append(sources, source)
+		}
+	}
 
 	var merged *yaml.Node
 	fieldSources := make(map[string]string)
@@ -67,7 +159,7 @@ func decodeConfigFiles(configPath string, cfg *Config) (map[string]string, error
 			return nil, fmt.Errorf("%s: config must not be group- or world-writable", source.path)
 		}
 		if source.containsSecret && source.mode.Perm() != 0o600 {
-			return nil, fmt.Errorf("%s: config with secrets must have mode 0600", source.path)
+			log.Printf("[config] warning: %s contains secrets but has mode %04o, expected 0600", source.path, source.mode.Perm())
 		}
 		probe := DefaultConfig()
 		if err := decodeConfig(data, probe); err != nil {
@@ -388,5 +480,6 @@ func configFilesFingerprint(configPath string) string {
 			appendFile(path, entry.Type().IsRegular() || entry.Type()&os.ModeSymlink != 0)
 		}
 	}
+	appendFile(filepath.Join(filepath.Dir(configPath), "secrets.yml"), true)
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(b.String())))
 }

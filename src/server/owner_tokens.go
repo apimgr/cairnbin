@@ -86,7 +86,7 @@ func (s *Server) requirePrimaryOwner(w http.ResponseWriter, r *http.Request) (*d
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			writeAPIError(w, r, http.StatusForbidden, "FORBIDDEN", "errors.forbidden")
 		} else {
-			http.Error(w, "Primary token required", http.StatusForbidden)
+			s.renderErrorPage(w, r, http.StatusForbidden, "Primary token required")
 		}
 		return nil, db, false
 	}
@@ -131,17 +131,17 @@ func (s *Server) revealOwnerPrimary(w http.ResponseWriter, r *http.Request) (str
 	}
 	key, err := s.liveCfg().EncryptionKey()
 	if err != nil {
-		http.Error(w, "Token unavailable", http.StatusInternalServerError)
+		s.renderErrorPage(w, r, http.StatusInternalServerError, "Token unavailable")
 		return "", false
 	}
 	sealed, err := base64.StdEncoding.DecodeString(primary.TokenEnc)
 	if err != nil {
-		http.Error(w, "Token unavailable", http.StatusInternalServerError)
+		s.renderErrorPage(w, r, http.StatusInternalServerError, "Token unavailable")
 		return "", false
 	}
 	plain, err := s.openAtRest(key, sealed)
 	if err != nil {
-		http.Error(w, "Token unavailable", http.StatusInternalServerError)
+		s.renderErrorPage(w, r, http.StatusInternalServerError, "Token unavailable")
 		return "", false
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -190,22 +190,22 @@ func (s *Server) rotateOwnerPrimary(w http.ResponseWriter, r *http.Request) (str
 	}
 	token, sum, prefix, err := createOwnerCredential()
 	if err != nil {
-		http.Error(w, "Token rotation failed", http.StatusInternalServerError)
+		s.renderErrorPage(w, r, http.StatusInternalServerError, "Token rotation failed")
 		return "", nil, false
 	}
 	key, err := s.liveCfg().EncryptionKey()
 	if err != nil {
-		http.Error(w, "Token rotation failed", http.StatusInternalServerError)
+		s.renderErrorPage(w, r, http.StatusInternalServerError, "Token rotation failed")
 		return "", nil, false
 	}
 	sealed, err := secretbox.Seal(key, []byte(token))
 	if err != nil {
-		http.Error(w, "Token rotation failed", http.StatusInternalServerError)
+		s.renderErrorPage(w, r, http.StatusInternalServerError, "Token rotation failed")
 		return "", nil, false
 	}
 	err = db.RotateOwnerToken(primary.OwnerID, primary.ID, hex.EncodeToString(sum[:]), prefix, token[len(token)-4:], base64.StdEncoding.EncodeToString(sealed))
 	if err != nil {
-		http.Error(w, "Token rotation failed", http.StatusInternalServerError)
+		s.renderErrorPage(w, r, http.StatusInternalServerError, "Token rotation failed")
 		return "", nil, false
 	}
 	s.tokenAuditOwner(r, primary.OwnerID, "token.rotated", "primary", prefix)
@@ -273,7 +273,7 @@ func parseOwnerCookieAge(value string) (time.Duration, error) {
 func (s *Server) handleOwnerTokenRestore(w http.ResponseWriter, r *http.Request) {
 	db, ok := s.ownerDB()
 	if !ok {
-		http.Error(w, "Token restore unavailable", http.StatusServiceUnavailable)
+		s.renderErrorPage(w, r, http.StatusServiceUnavailable, "Token restore unavailable")
 		return
 	}
 	value := strings.TrimSpace(r.FormValue("owner_token"))
@@ -281,7 +281,7 @@ func (s *Server) handleOwnerTokenRestore(w http.ResponseWriter, r *http.Request)
 		if s.ownerRestoreFailureLimited(w, r) {
 			return
 		}
-		http.Error(w, "Invalid primary token", http.StatusBadRequest)
+		s.renderErrorPage(w, r, http.StatusBadRequest, "Invalid primary token")
 		return
 	}
 	rec, err := db.GetOwnerTokenByHash(sha256.Sum256([]byte(value)))
@@ -289,7 +289,7 @@ func (s *Server) handleOwnerTokenRestore(w http.ResponseWriter, r *http.Request)
 		if s.ownerRestoreFailureLimited(w, r) {
 			return
 		}
-		http.Error(w, "Invalid primary token", http.StatusUnauthorized)
+		s.renderErrorPage(w, r, http.StatusUnauthorized, "Invalid primary token")
 		return
 	}
 	s.setOwnerCookie(w, r, value)
@@ -312,7 +312,7 @@ func (s *Server) ownerRestoreFailureLimited(w http.ResponseWriter, r *http.Reque
 		return false
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(int(s.restoreFailLimiter.window.Seconds())))
-	http.Error(w, "Too many invalid restore attempts", http.StatusTooManyRequests)
+	s.renderErrorPage(w, r, http.StatusTooManyRequests, "Too many invalid restore attempts")
 	return true
 }
 

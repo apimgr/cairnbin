@@ -251,14 +251,25 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 
 	fail := func(status int, msg string) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
+			if status == http.StatusBadRequest {
+				s.recordContactBlock(contactAntispam(cfg), r, "content", true, time.Now())
+			}
 			code := "SERVER_ERROR"
 			if status == http.StatusBadRequest {
 				code = "VALIDATION_FAILED"
 			}
+			if status == http.StatusTooManyRequests {
+				code = "RATE_LIMITED"
+			}
 			if status == http.StatusServiceUnavailable {
 				code = "MAINTENANCE"
 			}
-			writeJSON(w, status, map[string]interface{}{"ok": false, "error": code, "message": msg})
+			data, refreshErr := s.contactRefreshData(r, cfg)
+			if refreshErr != nil {
+				apiPageError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
+				return
+			}
+			writeJSON(w, status, map[string]interface{}{"ok": false, "error": code, "message": msg, "data": data})
 			return
 		}
 		data["ContactError"] = msg
@@ -272,7 +283,7 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 		fail(http.StatusBadRequest, "Please complete all required fields.")
 		return
 	}
-	if !strings.Contains(fromEmail, "@") || strings.ContainsAny(fromEmail, " \t\r\n") {
+	if !validContactEmail(fromEmail) {
 		fail(http.StatusBadRequest, "Please enter a valid email address.")
 		return
 	}
@@ -313,8 +324,20 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 	if response == "" {
 		response = r.PostFormValue("h-captcha-response")
 	}
-	if !s.verifyContactCaptcha(r, r.PostFormValue("captcha_token"), r.PostFormValue("captcha"), response) {
+	if !contactCaptchaWasVerified(r) && !s.verifyContactCaptcha(r, r.PostFormValue("captcha_token"), r.PostFormValue("captcha"), response) {
+		banned := s.recordContactBlock(contactAntispam(cfg), r, "captcha", true, time.Now())
+		if banned {
+			w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(contactAntispam(cfg))))
+			fail(http.StatusTooManyRequests, "Please try again later.")
+			return
+		}
 		fail(http.StatusBadRequest, "Captcha answer was incorrect. Please try again.")
+		return
+	}
+	if reason := s.allowContactSubmission(contactAntispam(cfg), r, fromEmail, time.Now()); reason != "" {
+		s.recordContactBlock(contactAntispam(cfg), r, reason, false, time.Now())
+		w.Header().Set("Retry-After", strconv.Itoa(contactRetryAfter(contactAntispam(cfg))))
+		fail(http.StatusTooManyRequests, "Please try again later.")
 		return
 	}
 
@@ -443,15 +466,17 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 
 	// Content-negotiated success (AI.md 14150).
 	if ct := detectClientType(r); ct == "json" || ct == "text" {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"ok":   true,
-			"data": map[string]string{"tracking_id": trackingID},
-		})
+		data, refreshErr := s.contactAPISuccessData(r, cfg, map[string]interface{}{"tracking_id": trackingID})
+		if refreshErr != nil {
+			apiPageOK(w, map[string]interface{}{"tracking_id": trackingID})
+			return
+		}
+		apiPageOK(w, data)
 		return
 	}
 
 	data["ContactSuccess"] = fmt.Sprintf(
-		"Thank you — your security report was received and encrypted. Your tracking ID is %s. Check your email for confirmation.",
+		"Thank you — your security report was received and encrypted. Your tracking ID is %s. An acknowledgment email may be sent with your private status link.",
 		trackingID)
 	// Clear the preserved fields so the form resets after a successful submit.
 	for _, k := range []string{"FormName", "FormEmail", "FormGPG", "FormComponentOther",
@@ -588,30 +613,50 @@ func (s *Server) sendSecurityReportEmails(r *http.Request, cfg *config.Config, c
 	statusURL := fmt.Sprintf("%s/server/security/report/%s?token=%s",
 		s.baseURL(r), c.trackingID, c.statusToken)
 	ackVars := map[string]string{
-		"timestamp":   c.timestamp,
 		"tracking_id": c.trackingID,
 		"status_url":  statusURL,
 	}
 
-	// When the researcher supplied a valid public key, PGP-encrypt the whole
-	// acknowledgment and deliver the armored ciphertext inline (AI.md 14458). Any
-	// failure resolving, validating, or encrypting to their key falls back to the
-	// plaintext template — the acknowledgment carries no vulnerability content.
-	if strings.TrimSpace(c.researcherGPG) != "" {
-		if pub, err := fetchResearcherPubKey(c.researcherGPG); err != nil {
-			log.Printf("security report: researcher key unusable, sending plaintext ack: %v", err)
-		} else if subject, body, err := m.Render("security_report_ack", ackVars); err != nil {
-			log.Printf("security report: render ack failed: %v", err)
-		} else if armored, err := pgp.Encrypt(pub, []byte(body)); err != nil {
-			log.Printf("security report: encrypt ack to researcher key failed, sending plaintext: %v", err)
-		} else if err := m.SendRawMessage(c.researcher, subject, armored); err != nil {
-			log.Printf("security report: encrypted researcher acknowledgment failed: %v", err)
-		} else {
-			return
+	s.sendResearcherAcknowledgment(m, c, ackVars)
+}
+
+// sendResearcherAcknowledgment makes at most one delivery attempt. Key lookup,
+// template rendering, or encryption failures may select one plaintext attempt;
+// a failed SMTP attempt is never retried (AI.md PART 11).
+func (s *Server) sendResearcherAcknowledgment(m *email.Mailer, c securityEmailCtx, vars map[string]string) {
+	if strings.TrimSpace(c.researcherGPG) == "" {
+		if err := m.Send(c.researcher, "security_report_ack", vars); err != nil {
+			log.Printf("security report: researcher acknowledgment failed: %v", err)
 		}
+		return
 	}
 
-	if err := m.Send(c.researcher, "security_report_ack", ackVars); err != nil {
-		log.Printf("security report: researcher acknowledgment failed: %v", err)
+	pub, err := fetchResearcherPubKey(c.researcherGPG)
+	if err != nil {
+		log.Printf("security report: researcher key unusable, sending plaintext acknowledgment: %v", err)
+		if sendErr := m.Send(c.researcher, "security_report_ack", vars); sendErr != nil {
+			log.Printf("security report: researcher acknowledgment failed: %v", sendErr)
+		}
+		return
+	}
+
+	subject, body, err := m.Render("security_report_ack", vars)
+	if err != nil {
+		log.Printf("security report: render acknowledgment failed: %v", err)
+		if sendErr := m.Send(c.researcher, "security_report_ack", vars); sendErr != nil {
+			log.Printf("security report: researcher acknowledgment failed: %v", sendErr)
+		}
+		return
+	}
+	armored, err := pgp.Encrypt(pub, []byte(body))
+	if err != nil {
+		log.Printf("security report: encrypt acknowledgment to researcher key failed: %v", err)
+		if sendErr := m.Send(c.researcher, "security_report_ack", vars); sendErr != nil {
+			log.Printf("security report: researcher acknowledgment failed: %v", sendErr)
+		}
+		return
+	}
+	if err := m.SendRawMessage(c.researcher, subject, armored); err != nil {
+		log.Printf("security report: encrypted researcher acknowledgment failed: %v", err)
 	}
 }

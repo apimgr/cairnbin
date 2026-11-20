@@ -63,6 +63,18 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
+func TestWebUIToastConfigDefaultsAndValidation(t *testing.T) {
+	cfg := config.DefaultConfig()
+	if got := cfg.Server.Notifications.WebUI; got.Position != "top-right" || got.Duration != 3 || got.WarningDuration != 5 {
+		t.Fatalf("toast defaults = %+v, want top-right/3/5", got)
+	}
+	cfg.Server.Notifications.WebUI = config.ToastConfig{Position: "center", Duration: -1, WarningDuration: 3601}
+	config.Validate(cfg)
+	if got := cfg.Server.Notifications.WebUI; got.Position != "top-right" || got.Duration != 3 || got.WarningDuration != 5 {
+		t.Errorf("invalid toast config = %+v, want defaults top-right/3/5", got)
+	}
+}
+
 // ─── Save / Load round-trip ───────────────────────────────────────────────────
 
 // TestSaveAndLoad persists a config to a file and reloads it, verifying fields survive.
@@ -287,12 +299,12 @@ func TestLoadEncryptsDNSCredentialsAtRest(t *testing.T) {
 	if err != nil || got["DO_AUTH_TOKEN"] != "top-secret-token" {
 		t.Fatalf("DecryptDNSCredentials() = (%v, %v)", got, err)
 	}
-	stored, err := os.ReadFile(path)
+	stored, err := os.ReadFile(filepath.Join(filepath.Dir(path), "secrets.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(stored), "top-secret-token") || !strings.Contains(string(stored), "enc:v1:") {
-		t.Fatalf("server.yml does not contain only encrypted DNS credentials")
+		t.Fatalf("secrets.yml does not contain only encrypted DNS credentials")
 	}
 }
 
@@ -317,12 +329,19 @@ func TestLoadEncryptsDNSCredentialsFromDropInDespiteOtherTypeError(t *testing.T)
 	if err != nil || creds["DO_AUTH_TOKEN"] != "drop-in-secret" {
 		t.Fatalf("DecryptDNSCredentials() = (%v, %v)", creds, err)
 	}
-	stored, err := os.ReadFile(dropInPath)
+	stored, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(stored), "drop-in-secret") || !strings.Contains(string(stored), "enc:v1:") {
-		t.Fatal("drop-in credential was not rewritten as encrypted data")
+		t.Fatal("drop-in credential was not moved to secrets.yml and encrypted")
+	}
+	left, err := os.ReadFile(dropInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(left), "dns_credentials") {
+		t.Fatal("drop-in still contains migrated DNS credentials")
 	}
 }
 
@@ -374,8 +393,15 @@ func TestLoadMigratesLegacyTLSDropInWithFieldPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(stored), "legacy-secret") || !strings.Contains(string(stored), "enc:v1:") || !strings.Contains(string(stored), "ssl:") {
-		t.Fatal("legacy drop-in TLS credential was not migrated and encrypted in place")
+	if strings.Contains(string(stored), "legacy-secret") || !strings.Contains(string(stored), "ssl:") {
+		t.Fatal("legacy drop-in TLS settings were not migrated in place")
+	}
+	secrets, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(secrets), "legacy-secret") || !strings.Contains(string(secrets), "enc:v1:") {
+		t.Fatal("legacy DNS credential was not moved into encrypted secrets.yml")
 	}
 }
 
@@ -642,7 +668,7 @@ func TestValidate(t *testing.T) {
 
 	t.Run("invalid_theme_gets_dark", func(t *testing.T) {
 		cfg := fresh()
-		cfg.Web.Theme = "purple"
+		cfg.Web.UI.Theme = "purple"
 		config.Validate(cfg)
 		if cfg.Web.Theme != "dark" {
 			t.Errorf("expected theme to be reset to %q, got %q", "dark", cfg.Web.Theme)
@@ -652,7 +678,7 @@ func TestValidate(t *testing.T) {
 	t.Run("valid_themes_not_changed", func(t *testing.T) {
 		for _, theme := range []string{"dark", "light", "auto"} {
 			cfg := fresh()
-			cfg.Web.Theme = theme
+			cfg.Web.UI.Theme = theme
 			config.Validate(cfg)
 			if cfg.Web.Theme != theme {
 				t.Errorf("valid theme %q was changed to %q", theme, cfg.Web.Theme)
@@ -1496,8 +1522,8 @@ func TestLoad_LegacyTopLevelRateLimitMigrates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Server.RateLimit.Enabled {
-		t.Error("legacy rate_limit.enabled=false not applied")
+	if !cfg.Server.RateLimit.Enabled {
+		t.Error("rate limiting must remain enabled")
 	}
 	if cfg.Server.RateLimit.Read.Requests != 7 || cfg.Server.RateLimit.Read.Window != 30 {
 		t.Errorf("legacy read limit not applied: %+v", cfg.Server.RateLimit.Read)

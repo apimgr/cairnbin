@@ -4415,6 +4415,22 @@ func TestNewHandlersWithTemplates(t *testing.T) {
 		}
 	})
 
+	t.Run("handleContact_disabled_returns_404", func(t *testing.T) {
+		wasEnabled := s.cfg.Server.Pages.Contact.Enabled
+		defer func() { s.cfg.Server.Pages.Contact.Enabled = wasEnabled }()
+		s.cfg.Server.Pages.Contact.Enabled = false
+		r := httptest.NewRequest(http.MethodGet, "/server/contact", nil)
+		r.Header.Set("Accept", "text/html")
+		w := httptest.NewRecorder()
+		s.handleContact(w, r)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("disabled handleContact status = %d, want 404", w.Code)
+		}
+		if !strings.Contains(w.Header().Get("Content-Type"), "text/html") {
+			t.Errorf("disabled handleContact should render themed HTML, got %q", w.Header().Get("Content-Type"))
+		}
+	})
+
 	t.Run("handleContact_text", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, "/server/contact", nil)
 		r.Header.Set("User-Agent", "curl/7.88.1")
@@ -5295,6 +5311,7 @@ func TestHandleContactPost(t *testing.T) {
 		body := "name=Alice&email=alice%40example.com&subject=Hello&message=Hi"
 		r := httptest.NewRequest(http.MethodPost, "/server/contact", strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Origin", "http://example.com")
 		w := httptest.NewRecorder()
 		s.handleContactPost(w, r)
 		if w.Code == http.StatusInternalServerError {

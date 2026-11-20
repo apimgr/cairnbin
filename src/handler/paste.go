@@ -1029,6 +1029,14 @@ func (h *PasteHandler) GetPasteForWeb(id string) (*model.Paste, error) {
 	return paste, nil
 }
 
+func (h *PasteHandler) Exists(id string) (bool, error) {
+	paste, err := h.db.GetPasteByID(id)
+	if err != nil {
+		return false, err
+	}
+	return paste != nil && (paste.ExpiresAt == nil || paste.ExpiresAt.After(time.Now())), nil
+}
+
 // HighlightedContent returns Chroma-highlighted HTML for the paste content.
 // Falls back to HTML-escaped plain text if the language is unknown or highlighting fails.
 // Returns empty string for binary pastes (ContentType set, non-text) — callers render

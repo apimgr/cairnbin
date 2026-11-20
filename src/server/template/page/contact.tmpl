@@ -1,246 +1,334 @@
-{{define "meta"}}
-    <title>{{t .Lang "contact.title"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{tf .Lang "pagemeta.contact_description" "site" .SiteTitle}}">
+{{define "meta" -}}
+<title>{{t .Lang "contact.title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{tf .Lang "pagemeta.contact_description" "site" .SiteTitle}}">
+<meta name="robots" content="noindex,nofollow">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "contact.title"}}</h1>
+    <section class="search-section">
+      <div class="container container-sm">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "contact.title"}}</h1>
+        </div>
+
+        <div class="paste-view page-view">
+          <p>
+            {{t .Lang "contact.purpose_notice"}}
+          </p>
+
+          {{if .ContactSuccess}}
+          <div class="alert alert-success" role="status">{{.ContactSuccess}}</div>
+          {{end}}
+          {{if .ContactError}}
+          <div class="alert alert-error" role="alert">{{.ContactError}}</div>
+          {{end}}
+
+          {{if .ContactReview}}
+          <div class="contact-review-backdrop">
+            <section class="contact-review-panel" aria-labelledby="contact-review-title">
+              <h2 id="contact-review-title">{{t .Lang "contact.review_title"}}</h2>
+              <dl>
+                <dt>{{t .Lang "contact.review_email"}}</dt><dd class="contact-review-email">{{.ReviewEmail}}</dd>
+                <dt>{{t .Lang "contact.review_type"}}</dt><dd>{{if .ReviewType}}{{t .Lang (printf "contact.type_%s" .ReviewType)}}{{else}}{{t .Lang "contact.type_security"}}{{end}}</dd>
+                <dt>{{t .Lang "contact.review_subject"}}</dt><dd>{{.ReviewSubject}}</dd>
+              </dl>
+              <form method="POST" action="{{.AssetPrefix}}/server/contact{{if .SecurityMode}}?security_id={{.SecurityID}}{{end}}" class="contact-review-form">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="hidden" name="form_token" value="{{.ContactFormToken}}">
+                <input type="hidden" name="website" value="">
+                <input type="hidden" name="review_token" value="{{.ReviewToken}}">
+                {{range $name, $value := .ReviewFields}}<input type="hidden" name="{{$name}}" value="{{$value}}">{{end}}
+                <label class="contact-review-confirm"><input type="checkbox" name="confirmed" value="1" required> {{t .Lang "contact.review_confirm"}}</label>
+                <div class="contact-review-actions">
+                  <button type="submit" name="step" value="confirm" class="btn btn-primary">{{t .Lang "contact.review_confirm_button"}}</button>
+                  <button type="submit" name="step" value="edit" class="btn btn-secondary" formnovalidate>{{t .Lang "contact.review_edit_button"}}</button>
                 </div>
-
-                <div class="paste-view page-view">
-                    <h2>{{t .Lang "contact.general"}}</h2>
-                    <p>
-                        {{t .Lang "contact.general_desc"}}
-                    </p>
-
-                    {{if .ContactSuccess}}
-                    <div class="alert alert-success" role="status">{{.ContactSuccess}}</div>
-                    {{end}}
-                    {{if .ContactError}}
-                    <div class="alert alert-error" role="alert">{{.ContactError}}</div>
-                    {{end}}
-
-                    {{if and .FormEnabled .SecurityMode}}
-                    <div class="alert alert-info" role="status">{{t .Lang "contact.security_mode"}}</div>
-                    <form method="POST" action="{{.AssetPrefix}}/server/contact?security_id={{.SecurityID}}" class="contact-form">
-                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                        <input type="hidden" name="security_id" value="{{.SecurityID}}">
-
-                        <div class="form-group">
-                            <label for="contact-name" class="form-label">{{t .Lang "contact.name"}}</label>
-                            <input type="text" id="contact-name" name="name" class="form-input"
-                                   value="{{.FormName}}" required autocomplete="name" maxlength="100"
-                                   aria-describedby="contact-name-error" aria-invalid="false">
-                            <span id="contact-name-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="contact-email" class="form-label">{{t .Lang "contact.email"}}</label>
-                            <input type="email" id="contact-email" name="email" class="form-input"
-                                   value="{{.FormEmail}}" required autocomplete="email" maxlength="254"
-                                   aria-describedby="contact-email-error" aria-invalid="false">
-                            <span id="contact-email-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-gpg" class="form-label">{{t .Lang "contact.sec_gpg"}}</label>
-                            <textarea id="sec-gpg" name="researcher_gpg" class="form-input long-string" rows="3"
-                                      maxlength="16384" placeholder="{{t .Lang "contact.sec_gpg_placeholder"}}"
-                                      aria-describedby="sec-gpg-error" aria-invalid="false">{{.FormGPG}}</textarea>
-                            <span id="sec-gpg-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-component" class="form-label">{{t .Lang "contact.sec_component"}}</label>
-                            <select id="sec-component" name="component" class="form-input" required
-                                    aria-describedby="sec-component-error" aria-invalid="false">
-                                {{range .Components}}<option value="{{.}}">{{.}}</option>{{end}}
-                            </select>
-                            <span id="sec-component-error" class="field-error" role="alert" hidden></span>
-                            <input type="text" id="sec-component-other" name="component_other" class="form-input section-mt-sm"
-                                   value="{{.FormComponentOther}}" maxlength="255" placeholder="{{t .Lang "contact.sec_component_other"}}"
-                                   aria-describedby="sec-component-other-error" aria-invalid="false">
-                            <span id="sec-component-other-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-endpoint" class="form-label">{{t .Lang "contact.sec_endpoint"}}</label>
-                            <input type="text" id="sec-endpoint" name="endpoint" class="form-input long-string"
-                                   value="{{.FormEndpoint}}" maxlength="2048"
-                                   aria-describedby="sec-endpoint-error" aria-invalid="false">
-                            <span id="sec-endpoint-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-severity" class="form-label">{{t .Lang "contact.sec_severity"}}</label>
-                            <select id="sec-severity" name="severity" class="form-input" required
-                                    aria-describedby="sec-severity-error" aria-invalid="false">
-                                <option value="Critical">{{t .Lang "contact.severity_critical"}}</option>
-                                <option value="High">{{t .Lang "contact.severity_high"}}</option>
-                                <option value="Medium" selected>{{t .Lang "contact.severity_medium"}}</option>
-                                <option value="Low">{{t .Lang "contact.severity_low"}}</option>
-                                <option value="Informational">{{t .Lang "contact.severity_informational"}}</option>
-                            </select>
-                            <span id="sec-severity-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-summary" class="form-label">{{t .Lang "contact.sec_summary"}}</label>
-                            <input type="text" id="sec-summary" name="summary" class="form-input"
-                                   value="{{.FormSummary}}" required maxlength="200"
-                                   aria-describedby="sec-summary-error" aria-invalid="false">
-                            <span id="sec-summary-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-steps" class="form-label">{{t .Lang "contact.sec_steps"}}</label>
-                            <textarea id="sec-steps" name="steps" class="form-input" rows="6"
-                                      required maxlength="10000"
-                                      aria-describedby="sec-steps-error" aria-invalid="false">{{.FormSteps}}</textarea>
-                            <span id="sec-steps-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-impact" class="form-label">{{t .Lang "contact.sec_impact"}}</label>
-                            <textarea id="sec-impact" name="impact" class="form-input" rows="4"
-                                      required maxlength="5000"
-                                      aria-describedby="sec-impact-error" aria-invalid="false">{{.FormImpact}}</textarea>
-                            <span id="sec-impact-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-fix" class="form-label">{{t .Lang "contact.sec_fix"}}</label>
-                            <textarea id="sec-fix" name="suggested_fix" class="form-input" rows="4"
-                                      maxlength="5000"
-                                      aria-describedby="sec-fix-error" aria-invalid="false">{{.FormSuggestedFix}}</textarea>
-                            <span id="sec-fix-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">
-                                <input type="checkbox" name="cve_requested" value="1"> {{t .Lang "contact.sec_cve"}}
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-days" class="form-label">{{t .Lang "contact.sec_days"}}</label>
-                            <input type="number" id="sec-days" name="disclosure_days" class="form-input"
-                                   value="{{.FormDisclosureDays}}" min="1" max="365"
-                                   aria-describedby="sec-days-error" aria-invalid="false">
-                            <span id="sec-days-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sec-credit" class="form-label">{{t .Lang "contact.sec_credit"}}</label>
-                            <select id="sec-credit" name="credit_preference" class="form-input" required
-                                    aria-describedby="sec-credit-error" aria-invalid="false">
-                                <option value="name">{{t .Lang "contact.sec_credit_name"}}</option>
-                                <option value="handle">{{t .Lang "contact.sec_credit_handle"}}</option>
-                                <option value="no">{{t .Lang "contact.sec_credit_no"}}</option>
-                                <option value="anonymous">{{t .Lang "contact.sec_credit_anon"}}</option>
-                            </select>
-                            <span id="sec-credit-error" class="field-error" role="alert" hidden></span>
-                            <input type="text" id="sec-credit-name" name="credit_name" class="form-input section-mt-sm"
-                                   value="{{.FormCreditName}}" maxlength="100" placeholder="{{t .Lang "contact.sec_credit_display"}}"
-                                   aria-describedby="sec-credit-name-error" aria-invalid="false">
-                            <span id="sec-credit-name-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">
-                                <input type="checkbox" id="contact-agreement" name="agreement" value="1" required
-                                       aria-describedby="contact-agreement-error" aria-invalid="false"> {{t .Lang "contact.sec_agreement"}}
-                            </label>
-                            <span id="contact-agreement-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        {{if and (eq .CaptchaType "simple") .CaptchaQuestion}}
-                        <div class="form-group">
-                            <label for="contact-captcha" class="form-label">{{.CaptchaQuestion}}</label>
-                            <input type="text" id="contact-captcha" name="captcha" class="form-input"
-                                   inputmode="numeric" autocomplete="off" required
-                                   aria-describedby="contact-captcha-error" aria-invalid="false">
-                            <span id="contact-captcha-error" class="field-error" role="alert" hidden></span>
-                            <input type="hidden" name="captcha_token" value="{{.CaptchaToken}}">
-                        </div>
-                        {{end}}
-                        {{if eq .CaptchaType "recaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="g-recaptcha" data-sitekey="{{.CaptchaSiteKey}}"></div>{{end}}
-                        {{if eq .CaptchaType "hcaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="h-captcha" data-sitekey="{{.CaptchaSiteKey}}"></div>{{end}}
-
-                        <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.sending"}}">{{t .Lang "contact.sec_send"}}</button>
-                    </form>
-                    {{else if .FormEnabled}}
-                    <form method="POST" action="{{.AssetPrefix}}/server/contact" class="contact-form">
-                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-
-                        <div class="form-group">
-                            <label for="contact-name" class="form-label">{{t .Lang "contact.name"}}</label>
-                            <input type="text" id="contact-name" name="name" class="form-input"
-                                   value="{{.FormName}}" required autocomplete="name" maxlength="100"
-                                   aria-describedby="contact-name-error" aria-invalid="false">
-                            <span id="contact-name-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="contact-email" class="form-label">{{t .Lang "contact.email"}}</label>
-                            <input type="email" id="contact-email" name="email" class="form-input"
-                                   value="{{.FormEmail}}" required autocomplete="email" maxlength="254"
-                                   aria-describedby="contact-email-error" aria-invalid="false">
-                            <span id="contact-email-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="contact-subject" class="form-label">{{t .Lang "contact.subject"}}</label>
-                            <input type="text" id="contact-subject" name="subject" class="form-input"
-                                   value="{{.FormSubject}}" required maxlength="200"
-                                   aria-describedby="contact-subject-error" aria-invalid="false">
-                            <span id="contact-subject-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="contact-message" class="form-label">{{t .Lang "contact.message"}}</label>
-                            <textarea id="contact-message" name="message" class="form-input" rows="8"
-                                      required maxlength="5000"
-                                      aria-describedby="contact-message-error" aria-invalid="false">{{.FormMessage}}</textarea>
-                            <span id="contact-message-error" class="field-error" role="alert" hidden></span>
-                        </div>
-
-                        {{if and (eq .CaptchaType "simple") .CaptchaQuestion}}
-                        <div class="form-group">
-                            <label for="contact-captcha" class="form-label">{{.CaptchaQuestion}}</label>
-                            <input type="text" id="contact-captcha" name="captcha" class="form-input"
-                                   inputmode="numeric" autocomplete="off" required
-                                   aria-describedby="contact-captcha-error" aria-invalid="false">
-                            <span id="contact-captcha-error" class="field-error" role="alert" hidden></span>
-                            <input type="hidden" name="captcha_token" value="{{.CaptchaToken}}">
-                        </div>
-                        {{end}}
-                        {{if eq .CaptchaType "recaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="g-recaptcha" data-sitekey="{{.CaptchaSiteKey}}"></div>{{end}}
-                        {{if eq .CaptchaType "hcaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="h-captcha" data-sitekey="{{.CaptchaSiteKey}}"></div>{{end}}
-
-                        <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.sending"}}">{{t .Lang "contact.send"}}</button>
-                    </form>
-                    {{else if .Contact}}
-                    <p class="section-mt-sm">
-                        <strong>{{t .Lang "contact.email_label"}}:</strong>
-                        <a href="mailto:{{.Contact}}" class="long-string">{{.Contact}}</a>
-                    </p>
-                    {{end}}
-
-                    <h2 class="section-mt">{{t .Lang "contact.security"}}</h2>
-                    <p>
-                        {{t .Lang "contact.security_desc"}}
-                        <a href="{{.AssetPrefix}}/server/security" class="long-string">/server/security</a>.
-                    </p>
-
-                    <h2 class="section-mt">{{t .Lang "contact.abuse"}}</h2>
-                    <p>
-                        {{t .Lang "contact.abuse_desc"}}{{if .Abuse}} {{t .Lang "contact.abuse_or_email"}} <a href="mailto:{{.Abuse}}" class="long-string">{{.Abuse}}</a>{{end}}.
-                    </p>
-                </div>
+              </form>
+            </section>
+          </div>
+          {{else if and .FormEnabled .SecurityMode}}
+          <div class="alert alert-info" role="status">{{t .Lang "contact.security_mode"}}</div>
+          <form method="POST" action="{{.AssetPrefix}}/server/contact?security_id={{.SecurityID}}" class="contact-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="form_token" value="{{.ContactFormToken}}">
+            <input type="hidden" name="step" value="submit">
+            <div class="contact-honeypot" aria-hidden="true">
+              <label for="contact-website">Leave this field empty</label>
+              <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off">
             </div>
-        </section>
+            <input type="hidden" name="security_id" value="{{.SecurityID}}">
+            <input type="hidden" name="type" value="security">
+
+            <div class="form-group">
+              <label for="contact-name" class="form-label">{{t .Lang "contact.name"}}</label>
+              <input type="text" id="contact-name" name="name" class="form-input"
+                  value="{{.FormName}}" required autocomplete="name" maxlength="100"
+                  aria-describedby="contact-name-error" aria-invalid="false">
+              <span id="contact-name-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="contact-email" class="form-label">{{t .Lang "contact.email"}}</label>
+              <input type="email" id="contact-email" name="email" class="form-input"
+                  value="{{.FormEmail}}" required autocomplete="email" maxlength="254"
+                  aria-describedby="contact-email-error" aria-invalid="false">
+              <span id="contact-email-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-gpg" class="form-label">{{t .Lang "contact.sec_gpg"}}</label>
+              <textarea id="sec-gpg" name="researcher_gpg" class="form-input long-string" rows="3"
+                    maxlength="16384" placeholder="{{t .Lang "contact.sec_gpg_placeholder"}}"
+                    aria-describedby="sec-gpg-error" aria-invalid="false">{{.FormGPG}}</textarea>
+              <span id="sec-gpg-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-component" class="form-label">{{t .Lang "contact.sec_component"}}</label>
+              <select id="sec-component" name="component" class="form-input" required
+                  aria-describedby="sec-component-error" aria-invalid="false">
+                {{range .Components}}<option value="{{.}}">{{.}}</option>{{end}}
+              </select>
+              <span id="sec-component-error" class="field-error" role="alert" hidden></span>
+              <input type="text" id="sec-component-other" name="component_other" class="form-input section-mt-sm"
+                  value="{{.FormComponentOther}}" maxlength="255" placeholder="{{t .Lang "contact.sec_component_other"}}"
+                  aria-describedby="sec-component-other-error" aria-invalid="false">
+              <span id="sec-component-other-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-endpoint" class="form-label">{{t .Lang "contact.sec_endpoint"}}</label>
+              <input type="text" id="sec-endpoint" name="endpoint" class="form-input long-string"
+                  value="{{.FormEndpoint}}" maxlength="2048"
+                  aria-describedby="sec-endpoint-error" aria-invalid="false">
+              <span id="sec-endpoint-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-severity" class="form-label">{{t .Lang "contact.sec_severity"}}</label>
+              <select id="sec-severity" name="severity" class="form-input" required
+                  aria-describedby="sec-severity-error" aria-invalid="false">
+                <option value="Critical">{{t .Lang "contact.severity_critical"}}</option>
+                <option value="High">{{t .Lang "contact.severity_high"}}</option>
+                <option value="Medium" selected>{{t .Lang "contact.severity_medium"}}</option>
+                <option value="Low">{{t .Lang "contact.severity_low"}}</option>
+                <option value="Informational">{{t .Lang "contact.severity_informational"}}</option>
+              </select>
+              <span id="sec-severity-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-summary" class="form-label">{{t .Lang "contact.sec_summary"}}</label>
+              <input type="text" id="sec-summary" name="summary" class="form-input"
+                  value="{{.FormSummary}}" required maxlength="200"
+                  aria-describedby="sec-summary-error" aria-invalid="false">
+              <span id="sec-summary-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-steps" class="form-label">{{t .Lang "contact.sec_steps"}}</label>
+              <textarea id="sec-steps" name="steps" class="form-input" rows="6"
+                    required maxlength="10000"
+                    aria-describedby="sec-steps-error" aria-invalid="false">{{.FormSteps}}</textarea>
+              <span id="sec-steps-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-impact" class="form-label">{{t .Lang "contact.sec_impact"}}</label>
+              <textarea id="sec-impact" name="impact" class="form-input" rows="4"
+                    required maxlength="5000"
+                    aria-describedby="sec-impact-error" aria-invalid="false">{{.FormImpact}}</textarea>
+              <span id="sec-impact-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-fix" class="form-label">{{t .Lang "contact.sec_fix"}}</label>
+              <textarea id="sec-fix" name="suggested_fix" class="form-input" rows="4"
+                    maxlength="5000"
+                    aria-describedby="sec-fix-error" aria-invalid="false">{{.FormSuggestedFix}}</textarea>
+              <span id="sec-fix-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                <input type="checkbox" name="cve_requested" value="1"> {{t .Lang "contact.sec_cve"}}
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-days" class="form-label">{{t .Lang "contact.sec_days"}}</label>
+              <input type="number" id="sec-days" name="disclosure_days" class="form-input"
+                  value="{{.FormDisclosureDays}}" min="1" max="365"
+                  aria-describedby="sec-days-error" aria-invalid="false">
+              <span id="sec-days-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="sec-credit" class="form-label">{{t .Lang "contact.sec_credit"}}</label>
+              <select id="sec-credit" name="credit_preference" class="form-input" required
+                  aria-describedby="sec-credit-error" aria-invalid="false">
+                <option value="name">{{t .Lang "contact.sec_credit_name"}}</option>
+                <option value="handle">{{t .Lang "contact.sec_credit_handle"}}</option>
+                <option value="no">{{t .Lang "contact.sec_credit_no"}}</option>
+                <option value="anonymous">{{t .Lang "contact.sec_credit_anon"}}</option>
+              </select>
+              <span id="sec-credit-error" class="field-error" role="alert" hidden></span>
+              <input type="text" id="sec-credit-name" name="credit_name" class="form-input section-mt-sm"
+                  value="{{.FormCreditName}}" maxlength="100" placeholder="{{t .Lang "contact.sec_credit_display"}}"
+                  aria-describedby="sec-credit-name-error" aria-invalid="false">
+              <span id="sec-credit-name-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                <input type="checkbox" id="contact-agreement" name="agreement" value="1" required
+                    aria-describedby="contact-agreement-error" aria-invalid="false"> {{t .Lang "contact.sec_agreement"}}
+              </label>
+              <span id="contact-agreement-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            {{if and (eq .CaptchaType "simple") .CaptchaQuestion}}
+            <div class="form-group">
+              <label for="contact-captcha" class="form-label">{{.CaptchaQuestion}}</label>
+              <input type="text" id="contact-captcha" name="captcha_answer" class="form-input"
+                  inputmode="numeric" autocomplete="off" required
+                  aria-describedby="contact-captcha-error" aria-invalid="false">
+              <span id="contact-captcha-error" class="field-error" role="alert" hidden></span>
+              <input type="hidden" name="captcha_id" value="{{.CaptchaToken}}">
+            </div>
+            {{end}}
+            {{if eq .CaptchaType "recaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="g-recaptcha" data-sitekey="{{.CaptchaSiteKey}}"></div><noscript><label for="contact-captcha-fallback">{{.CaptchaQuestion}}</label><input id="contact-captcha-fallback" name="captcha_answer" inputmode="numeric" autocomplete="off"><input type="hidden" name="captcha_id" value="{{.CaptchaToken}}"></noscript>{{end}}
+            {{if eq .CaptchaType "hcaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="h-captcha" data-sitekey="{{.CaptchaSiteKey}}"></div><noscript><label for="contact-captcha-fallback">{{.CaptchaQuestion}}</label><input id="contact-captcha-fallback" name="captcha_answer" inputmode="numeric" autocomplete="off"><input type="hidden" name="captcha_id" value="{{.CaptchaToken}}"></noscript>{{end}}
+
+            <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.sending"}}">{{t .Lang "contact.sec_send"}}</button>
+          </form>
+          {{else if .FormEnabled}}
+          <form method="POST" action="{{.AssetPrefix}}/server/contact" class="contact-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="form_token" value="{{.ContactFormToken}}">
+            <input type="hidden" name="step" value="submit">
+            <div class="contact-honeypot" aria-hidden="true">
+              <label for="contact-website">Leave this field empty</label>
+              <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off">
+            </div>
+
+            <div class="form-group">
+              <label for="contact-name" class="form-label">{{t .Lang "contact.name"}}</label>
+              <input type="text" id="contact-name" name="name" class="form-input"
+                  value="{{.FormName}}" required autocomplete="name" maxlength="100"
+                  aria-describedby="contact-name-error" aria-invalid="false">
+              <span id="contact-name-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="contact-email" class="form-label">{{t .Lang "contact.email"}}</label>
+              <input type="email" id="contact-email" name="email" class="form-input"
+                  value="{{.FormEmail}}" required autocomplete="email" maxlength="254"
+                  aria-describedby="contact-email-error" aria-invalid="false">
+              <span id="contact-email-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="contact-type" class="form-label">{{t .Lang "contact.type_label"}}</label>
+              <select id="contact-type" name="type" class="form-input" required>
+                <option value="">{{t .Lang "contact.type_choose"}}</option>
+                <option value="abuse" {{if eq .FormType "abuse"}}selected{{end}}>{{t .Lang "contact.type_abuse"}}</option>
+                <option value="dmca" {{if eq .FormType "dmca"}}selected{{end}}>{{t .Lang "contact.type_dmca"}}</option>
+                <option value="privacy" {{if eq .FormType "privacy"}}selected{{end}}>{{t .Lang "contact.type_privacy"}}</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="contact-reported-url" class="form-label">{{t .Lang "contact.reported_url"}}</label>
+              <input id="contact-reported-url" name="reported_url" class="form-input" maxlength="2048" value="{{.FormReportedURL}}">
+            </div>
+
+            <div class="form-group">
+              <label for="contact-reason" class="form-label">{{t .Lang "contact.abuse_reason"}}</label>
+              <select id="contact-reason" name="reason" class="form-input">
+                <option value="">{{t .Lang "contact.reason_choose"}}</option>
+                <option value="illegal_content" {{if eq .FormReason "illegal_content"}}selected{{end}}>{{t .Lang "contact.reason_illegal"}}</option>
+                <option value="terms_violation" {{if eq .FormReason "terms_violation"}}selected{{end}}>{{t .Lang "contact.reason_terms"}}</option>
+                <option value="harassment" {{if eq .FormReason "harassment"}}selected{{end}}>{{t .Lang "contact.reason_harassment"}}</option>
+                <option value="malware_phishing" {{if eq .FormReason "malware_phishing"}}selected{{end}}>{{t .Lang "contact.reason_malware"}}</option>
+                <option value="other" {{if eq .FormReason "other"}}selected{{end}}>{{t .Lang "contact.reason_other"}}</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="contact-copyrighted-work" class="form-label">{{t .Lang "contact.copyrighted_work"}}</label>
+              <textarea id="contact-copyrighted-work" name="copyrighted_work" class="form-input" maxlength="2000">{{.FormCopyrightedWork}}</textarea>
+            </div>
+
+            <div class="form-group">
+              <label><input type="checkbox" name="good_faith" value="1" {{if .FormGoodFaith}}checked{{end}}> {{t .Lang "contact.dmca_good_faith"}}</label>
+              <label><input type="checkbox" name="accuracy" value="1" {{if .FormAccuracy}}checked{{end}}> {{t .Lang "contact.dmca_accuracy"}}</label>
+              <label for="contact-signature" class="form-label">{{t .Lang "contact.signature"}}</label>
+              <input id="contact-signature" name="signature" class="form-input" maxlength="100" value="{{.FormSignature}}">
+            </div>
+
+            <div class="form-group">
+              <label for="contact-request-kind" class="form-label">{{t .Lang "contact.privacy_request"}}</label>
+              <select id="contact-request-kind" name="request_kind" class="form-input">
+                <option value="">{{t .Lang "contact.request_choose"}}</option>
+                <option value="access" {{if eq .FormRequestKind "access"}}selected{{end}}>{{t .Lang "contact.request_access"}}</option>
+                <option value="export" {{if eq .FormRequestKind "export"}}selected{{end}}>{{t .Lang "contact.request_export"}}</option>
+                <option value="deletion" {{if eq .FormRequestKind "deletion"}}selected{{end}}>{{t .Lang "contact.request_deletion"}}</option>
+                <option value="correction" {{if eq .FormRequestKind "correction"}}selected{{end}}>{{t .Lang "contact.request_correction"}}</option>
+                <option value="opt_out" {{if eq .FormRequestKind "opt_out"}}selected{{end}}>{{t .Lang "contact.request_opt_out"}}</option>
+                <option value="other" {{if eq .FormRequestKind "other"}}selected{{end}}>{{t .Lang "contact.reason_other"}}</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="contact-subject" class="form-label">{{t .Lang "contact.subject"}}</label>
+              <input type="text" id="contact-subject" name="subject" class="form-input"
+                  value="{{.FormSubject}}" required maxlength="200"
+                  aria-describedby="contact-subject-error" aria-invalid="false">
+              <span id="contact-subject-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            <div class="form-group">
+              <label for="contact-message" class="form-label">{{t .Lang "contact.message"}}</label>
+              <textarea id="contact-message" name="message" class="form-input" rows="8"
+                    required maxlength="5000"
+                    aria-describedby="contact-message-error" aria-invalid="false">{{.FormMessage}}</textarea>
+              <span id="contact-message-error" class="field-error" role="alert" hidden></span>
+            </div>
+
+            {{if and (eq .CaptchaType "simple") .CaptchaQuestion}}
+            <div class="form-group">
+              <label for="contact-captcha" class="form-label">{{.CaptchaQuestion}}</label>
+              <input type="text" id="contact-captcha" name="captcha_answer" class="form-input"
+                  inputmode="numeric" autocomplete="off" required
+                  aria-describedby="contact-captcha-error" aria-invalid="false">
+              <span id="contact-captcha-error" class="field-error" role="alert" hidden></span>
+              <input type="hidden" name="captcha_id" value="{{.CaptchaToken}}">
+            </div>
+            {{end}}
+            {{if eq .CaptchaType "recaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="g-recaptcha" data-sitekey="{{.CaptchaSiteKey}}"></div><noscript><label for="contact-captcha-fallback">{{.CaptchaQuestion}}</label><input id="contact-captcha-fallback" name="captcha_answer" inputmode="numeric" autocomplete="off"><input type="hidden" name="captcha_id" value="{{.CaptchaToken}}"></noscript>{{end}}
+            {{if eq .CaptchaType "hcaptcha"}}<script src="{{.CaptchaScript}}" async defer></script><div class="h-captcha" data-sitekey="{{.CaptchaSiteKey}}"></div><noscript><label for="contact-captcha-fallback">{{.CaptchaQuestion}}</label><input id="contact-captcha-fallback" name="captcha_answer" inputmode="numeric" autocomplete="off"><input type="hidden" name="captcha_id" value="{{.CaptchaToken}}"></noscript>{{end}}
+
+            <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.sending"}}">{{t .Lang "contact.send"}}</button>
+          </form>
+          {{else if .Contact}}
+          <p class="section-mt-sm">
+            <strong>{{t .Lang "contact.email_label"}}:</strong>
+            <a href="mailto:{{.Contact}}" class="long-string">{{.Contact}}</a>
+          </p>
+          {{end}}
+
+          <h2 class="section-mt">{{t .Lang "contact.security"}}</h2>
+          <p>
+            {{t .Lang "contact.security_desc"}}
+            <a href="{{.AssetPrefix}}/server/security" class="long-string">/server/security</a>.
+          </p>
+
+          <h2 class="section-mt">{{t .Lang "contact.abuse"}}</h2>
+          <p>
+            {{t .Lang "contact.abuse_desc"}}{{if .Abuse}} {{t .Lang "contact.abuse_or_email"}} <a href="mailto:{{.Abuse}}" class="long-string">{{.Abuse}}</a>{{end}}.
+          </p>
+        </div>
+      </div>
+    </section>
 {{end}}

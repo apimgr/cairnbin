@@ -90,9 +90,6 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		static[0].Image = &sitemapImage{Loc: base + "/static/branding/og-image.png"}
 	}
 	publicPages := []string{"/server/about", "/server/help", "/server/privacy", "/server/terms", "/server/security"}
-	if s.liveCfg().Server.Pages.Contact.Enabled {
-		publicPages = append(publicPages, "/server/contact")
-	}
 	for _, p := range publicPages {
 		appendStatic(p, "weekly", "0.8")
 	}
@@ -256,9 +253,7 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&b, "Base URL: %s/api/%s\n", base, apiVersion)
 	fmt.Fprintf(&b, "Authentication: Bearer token (server token from server.yml, or resource owner token issued on paste creation)\n")
 	fmt.Fprintf(&b, "Rate limit: %d requests/minute\n", cfg.Server.RateLimit.Read.Requests)
-	if cfg.Server.MCP.Enabled {
-		fmt.Fprintf(&b, "MCP: %s/mcp (Streamable HTTP; same Bearer token as the API)\n", base)
-	}
+	fmt.Fprintf(&b, "MCP: %s/mcp (Streamable HTTP; same Bearer token as the API)\n", base)
 	fmt.Fprintf(&b, "\n")
 
 	if cfg.Web.LLMs.IncludeEndpoints {
@@ -269,9 +264,7 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&b, "- POST /api/%s/pastes - Create a paste (returns id + owner token)\n", apiVersion)
 		fmt.Fprintf(&b, "- GET /api/%s/pastes/{id} - Fetch a paste (no auth)\n", apiVersion)
 		fmt.Fprintf(&b, "- DELETE /api/%s/pastes/{id} - Delete a paste (owner token or operator auth)\n", apiVersion)
-		if cfg.Server.MCP.Enabled {
-			fmt.Fprintf(&b, "- POST /api/%s/server/mcp - Model Context Protocol endpoint (JSON-RPC 2.0; tools mirror the API)\n", apiVersion)
-		}
+		fmt.Fprintf(&b, "- POST /api/%s/server/mcp - Model Context Protocol endpoint (JSON-RPC 2.0; tools mirror the API)\n", apiVersion)
 		fmt.Fprintf(&b, "\n")
 	}
 

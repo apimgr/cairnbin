@@ -11,16 +11,18 @@ import (
 	"github.com/apimgr/cairnbin/src/mcp"
 )
 
-func TestHandleHelpMCPDisabledReturnsNotFound(t *testing.T) {
+func TestHandleHelpMCPIsAlwaysAvailable(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.MCP.Enabled = false
 	s := newMinimalServer(cfg)
+	s.mcpHandler = mcp.New(mcp.Config{APIVersion: "v1"})
+	s.templates, _ = s.buildTemplates()
 	for _, path := range []string{"/server/help/mcp", "/api/v1/server/help/mcp"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		s.handleHelpMCP(w, r)
-		if w.Code != http.StatusNotFound {
-			t.Errorf("%s status = %d, want 404", path, w.Code)
+		if w.Code != http.StatusOK {
+			t.Errorf("%s status = %d, want 200", path, w.Code)
 		}
 	}
 }
@@ -100,21 +102,13 @@ func TestHandleHelpMCPHTMLSectionsAndHelpLink(t *testing.T) {
 		t.Error("page omits the Bearer guidance or selectable endpoint")
 	}
 
-	data := map[string]interface{}{"SiteTitle": cfg.Web.SiteTitle, "Theme": cfg.Web.Theme, "BaseURL": "http://example.com", "MCPEnabled": true}
+	data := map[string]interface{}{"SiteTitle": cfg.Web.SiteTitle, "Theme": cfg.Web.Theme, "BaseURL": "http://example.com"}
 	linkPage, err := s.renderTemplateToString(r, "help.html", data)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(linkPage, `href="/server/help/mcp"`) {
 		t.Error("/server/help does not link to enabled MCP help")
-	}
-	data["MCPEnabled"] = false
-	linkPage, err = s.renderTemplateToString(r, "help.html", data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(linkPage, `href="/server/help/mcp"`) {
-		t.Error("/server/help links to MCP help while MCP is disabled")
 	}
 }
 

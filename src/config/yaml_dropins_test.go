@@ -81,3 +81,81 @@ func TestSEOFeedDefaultsAndValidation(t *testing.T) {
 		t.Fatalf("invalid feed max_items = %d", cfg.Server.SEO.Feed.MaxItems)
 	}
 }
+
+func TestAreaMigrationPreservesDropInPrecedenceAndAreaValues(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "server.yml")
+	dropDir := filepath.Join(dir, "yaml.d")
+	if err := os.Mkdir(dropDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		root:                                    "server:\n  address: 127.0.0.1\n  branding:\n    title: Legacy\n  seo:\n    sitemap:\n      max_urls: 100\n",
+		filepath.Join(dropDir, "10-custom.yml"): "server:\n  seo:\n    sitemap:\n      max_urls: 200\n",
+		filepath.Join(dropDir, "branding.yml"):  "server:\n  branding:\n    title: Current\n",
+	}
+	for path, contents := range files {
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := migrateAreaFiles(root); err != nil {
+		t.Fatalf("migrate area files: %v", err)
+	}
+	cfg := DefaultConfig()
+	if _, err := decodeConfigFiles(root, cfg); err != nil {
+		t.Fatalf("decode migrated config: %v", err)
+	}
+	if cfg.Server.Branding.Title != "Current" {
+		t.Errorf("branding title = %q, want existing area-file value Current", cfg.Server.Branding.Title)
+	}
+	if cfg.Server.SEO.Sitemap.MaxURLs != 200 {
+		t.Errorf("sitemap max_urls = %d, want latest drop-in value 200", cfg.Server.SEO.Sitemap.MaxURLs)
+	}
+	if _, err := os.Stat(root + ".bak"); err != nil {
+		t.Errorf("server.yml backup missing: %v", err)
+	}
+}
+
+func TestSecretMigrationMovesDropInValuesAndRemovesDuplicates(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "server.yml")
+	dropDir := filepath.Join(dir, "yaml.d")
+	if err := os.Mkdir(dropDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(root, []byte("server:\n  token: root-token\n  cache:\n    password: root-cache\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "secrets.yml"), []byte("server:\n  token: saved-token\n  cache:\n    password: saved-cache\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dropIn := filepath.Join(dropDir, "10-operator.yml")
+	if err := os.WriteFile(dropIn, []byte("server:\n  notifications:\n    email:\n      smtp:\n        password: smtp-secret\n  token: dropin-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateRuntimeSecrets(root); err != nil {
+		t.Fatalf("migrate secrets: %v", err)
+	}
+	secretBytes, err := os.ReadFile(filepath.Join(dir, "secrets.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretText := string(secretBytes)
+	for _, expected := range []string{"saved-token", "saved-cache", "smtp-secret"} {
+		if !strings.Contains(secretText, expected) {
+			t.Errorf("secrets.yml does not contain %q: %s", expected, secretText)
+		}
+	}
+	for _, path := range []string{root, dropIn} {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, forbidden := range []string{"root-token", "dropin-token", "root-cache", "smtp-secret"} {
+			if strings.Contains(string(contents), forbidden) {
+				t.Errorf("secret %q remains in %s: %s", forbidden, path, contents)
+			}
+		}
+	}
+}

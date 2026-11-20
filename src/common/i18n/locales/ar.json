@@ -375,7 +375,40 @@
     "severity_high": "عالية",
     "severity_medium": "متوسطة",
     "severity_low": "منخفضة",
-    "severity_informational": "للعلم"
+    "severity_informational": "للعلم",
+    "purpose_notice": "This form is only for security reports, terms violations at a URL on this site, DMCA notices and privacy requests. It cannot be used for support, bug reports, feature requests or general questions.",
+    "review_title": "Review your report",
+    "review_email": "Email",
+    "review_type": "Type",
+    "review_subject": "Subject",
+    "review_confirm": "This email address is correct, and this is a genuine report, not an advertisement, a solicitation or spam",
+    "review_confirm_button": "Confirm",
+    "review_edit_button": "Edit",
+    "type_label": "Type",
+    "type_choose": "Choose a report type",
+    "type_abuse": "Abuse",
+    "type_dmca": "DMCA",
+    "type_privacy": "Privacy",
+    "type_security": "الأمان",
+    "reported_url": "Reported URL",
+    "abuse_reason": "Abuse reason",
+    "reason_choose": "Choose a reason",
+    "reason_illegal": "Illegal content",
+    "reason_terms": "Terms violation",
+    "reason_harassment": "Harassment",
+    "reason_malware": "Malware or phishing",
+    "copyrighted_work": "Copyrighted work",
+    "dmca_good_faith": "I have a good-faith belief that this use is not authorized by the copyright owner, its agent or the law",
+    "dmca_accuracy": "The information is accurate and, under penalty of perjury, I am the owner or authorized to act for the owner",
+    "signature": "Signature",
+    "privacy_request": "Privacy request",
+    "request_choose": "Choose a request",
+    "request_access": "Access",
+    "request_export": "Export",
+    "request_deletion": "Deletion",
+    "request_correction": "Correction",
+    "request_opt_out": "Opt out",
+    "reason_other": "Other"
   },
   "help": {
     "title": "مساعدة",
@@ -586,8 +619,8 @@
     "ccpa_opted_out_full": "لقد رفضت بيع معلوماتك الشخصية. لن نبيع بياناتك.",
     "ccpa_intro": "بموجب قانون خصوصية المستهلك في كاليفورنيا (CCPA)، يمكنك رفض بيع معلوماتك الشخصية. انقر أدناه لتسجيل تفضيلك على هذا الجهاز.",
     "ccpa_not_applicable": "نحن لا نبيع معلوماتك الشخصية، لذا لا يوجد شيء يمكنك رفضه.",
-    "contact_intro": "للأسئلة أو المخاوف، استخدم",
-    "contact_page_link": "صفحة الاتصال",
+    "contact_intro": "للإبلاغ عن انتهاكات الشروط أو إشعارات DMCA أو طلبات الخصوصية، راجع",
+    "contact_page_link": "صفحة الأمان والإبلاغ",
     "paste_export_available": "متاح عبر رابطها أو واجهة API",
     "paste_deletion_available": "متاح باستخدام رمز مالك اللصقة أو رمز الحذف الخاص بالبروتوكول للصقات المتوافقة",
     "consent_banner": "يُعرض هذا الإشعار وفقًا للائحة العامة لحماية البيانات في الاتحاد الأوروبي. نستخدم ملفات تعريف الارتباط لوظائف الموقع الأساسية، وبموافقتك للتفضيلات والتحليلات. تُخزَّن بياناتك على خوادمنا ولا تُباع مطلقًا.",
@@ -1638,7 +1671,7 @@
     "progress": "التقدم",
     "maintainer_note": "ملاحظة المشرف",
     "contact": "الاتصال",
-    "status_contact_text": "لإضافة معلومات إلى هذا البلاغ، ردّ على رسالة تأكيد الاستلام وأرفق معرّف التتبع.",
+    "status_contact_text": "إذا تلقيت رسالة تأكيد، فردّ عليها لإضافة معلومات إلى هذا البلاغ وأرفق معرّف التتبع.",
     "status_contact_email": "يمكنك أيضًا مراسلة:",
     "thanks_title": "شكر وتقدير في مجال الأمان",
     "thanks_subtitle": "شكرًا للباحثين الذين يساعدون في الحفاظ على أمان {site}",
@@ -1646,7 +1679,9 @@
     "thanks_intro": "نشكر الباحثين التاليين على الإفصاح المسؤول عن مشكلات أمنية وفق سياسة الأمان لدينا.",
     "researcher": "الباحث",
     "year": "السنة",
-    "thanks_empty": "لم يتم نشر أي إفصاح بعد. إذا عثرت على مشكلة أمنية، فيرجى مراجعة سياسة الأمان لدينا والإبلاغ عنها بمسؤولية."
+    "thanks_empty": "لم يتم نشر أي إفصاح بعد. إذا عثرت على مشكلة أمنية، فيرجى مراجعة سياسة الأمان لدينا والإبلاغ عنها بمسؤولية.",
+    "other_reports_title": "Report other issues",
+    "other_reports_text": "To report terms violations, submit a DMCA notice or make a privacy request, use the report form."
   },
   "create": {
     "plain_text": "نص عادي"
@@ -1700,7 +1735,7 @@
       },
       "security_report_ack": {
         "subject": "استلمنا تقريرك الأمني ({tracking_id})",
-        "body": "شكرًا على الإفصاح المسؤول.\n\nوقت الاستلام: {timestamp}\nالموقع: {app_name} ({fqdn})\n\nتم تسجيل تقريرك وتشفيره. سيراجعه المسؤول وينسق معك عملية الإفصاح.\nرقم التتبع: {tracking_id}\nصفحة الحالة: {status_url}\n\nاحتفظ برابط الحالة خاصًا؛ فهو يتيح الوصول إلى حالة المعالجة الحالية.\n{app_url}"
+        "body": "تم استلام تقريرك الأمني.\nرقم التتبع: {tracking_id}\nصفحة الحالة: {status_url}"
       },
       "ssl_expiring": {
         "subject": "شارفت صلاحية شهادة SSL على الانتهاء - {app_name}",

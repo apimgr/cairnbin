@@ -1,15 +1,15 @@
-{{define "meta"}}
-    <title>{{.StatusCode}} {{.StatusText}} - {{.SiteTitle}}</title>
+{{define "meta" -}}
+<title>{{.StatusCode}} {{.StatusText}}{{.TitleSeparator}}{{.SiteTitle}}</title>
 {{end}}
 
 {{define "content"}}
-        <div class="error-page">
-            <h1 class="error-code">{{.StatusCode}}</h1>
-            <h2 class="error-title">{{.StatusText}}</h2>
-            <p class="error-message">{{.Message}}</p>
-            <div class="error-actions">
-                <a href="{{.AssetPrefix}}/" class="btn btn-primary">{{t .Lang "nav.home"}}</a>
-                <a href="{{.AssetPrefix}}/server/help" class="btn btn-secondary">{{t .Lang "footer.help"}}</a>
-            </div>
-        </div>
+    <div class="error-page">
+      <h1 class="error-code">{{.StatusCode}}</h1>
+      <h2 class="error-title">{{.StatusText}}</h2>
+      <p class="error-message">{{.Message}}</p>
+      <div class="error-actions">
+        <a href="{{.AssetPrefix}}/" class="btn btn-primary">{{t .Lang "nav.home"}}</a>
+        <a href="{{.AssetPrefix}}/server/help" class="btn btn-secondary">{{t .Lang "footer.help"}}</a>
+      </div>
+    </div>
 {{end}}

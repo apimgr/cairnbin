@@ -1,203 +1,203 @@
-{{define "meta"}}
-    <title>{{tf .Lang "pagemeta.health_title" "site" .SiteTitle}}</title>
+{{define "meta" -}}
+<title>{{tf .Lang "pagemeta.health_title" "site" .SiteTitle}}</title>
 {{end}}
 
 {{define "content"}}
-        <div class="container container-sm">
+    <div class="container container-sm">
 
-            <!-- 1. Project Info -->
-            <header class="health-header">
-                <h1>📦 {{.Health.Project.Name}}</h1>
-                <p class="tagline">{{.Health.Project.Tagline}}</p>
-                <p>{{.Health.Project.Description}}</p>
-            </header>
+      <!-- 1. Project Info -->
+      <header class="health-header">
+        <h1>📦 {{.Health.Project.Name}}</h1>
+        <p class="tagline">{{.Health.Project.Tagline}}</p>
+        <p>{{.Health.Project.Description}}</p>
+      </header>
 
-            <!-- 2. Status Banner -->
-            {{if eq .Health.Status "healthy"}}
-            <div class="status-banner status-ok">
-                <span>✅</span>
-                <span>{{t .Lang "health.all_operational"}}</span>
-            </div>
-            {{else if eq .Health.Status "degraded"}}
-            <div class="status-banner status-warning">
-                <span>⚠️</span>
-                <span>{{t .Lang "health.degraded"}}</span>
-            </div>
-            {{else if eq .Health.Status "restart_required"}}
-            <div class="status-banner status-warning">
-                <span>🔄</span>
-                <span>{{t .Lang "health.restart_required"}}</span>
-            </div>
-            {{else if eq .Health.Status "maintenance"}}
-            <div class="status-banner status-error">
-                <span>🚧</span>
-                <span>{{t .Lang "health.maintenance"}}</span>
-            </div>
-            {{else if eq .Health.Status "shutting_down"}}
-            <div class="status-banner status-error">
-                <span>🛑</span>
-                <span>{{t .Lang "health.shutting_down"}}</span>
-            </div>
+      <!-- 2. Status Banner -->
+      {{if eq .Health.Status "healthy"}}
+      <div class="status-banner status-ok">
+        <span>✅</span>
+        <span>{{t .Lang "health.all_operational"}}</span>
+      </div>
+      {{else if eq .Health.Status "degraded"}}
+      <div class="status-banner status-warning">
+        <span>⚠️</span>
+        <span>{{t .Lang "health.degraded"}}</span>
+      </div>
+      {{else if eq .Health.Status "restart_required"}}
+      <div class="status-banner status-warning">
+        <span>🔄</span>
+        <span>{{t .Lang "health.restart_required"}}</span>
+      </div>
+      {{else if eq .Health.Status "maintenance"}}
+      <div class="status-banner status-error">
+        <span>🚧</span>
+        <span>{{t .Lang "health.maintenance"}}</span>
+      </div>
+      {{else if eq .Health.Status "shutting_down"}}
+      <div class="status-banner status-error">
+        <span>🛑</span>
+        <span>{{t .Lang "health.shutting_down"}}</span>
+      </div>
+      {{else}}
+      <div class="status-banner status-error">
+        <span>❌</span>
+        <span>{{t .Lang "health.unhealthy"}}</span>
+      </div>
+      {{end}}
+
+      <!-- 3. Version & Build -->
+      <section class="section-card">
+        <h2>ℹ️ {{t .Lang "health.version"}}</h2>
+        <dl class="info-list">
+          <dt>🏷️ {{t .Lang "health.version"}}</dt>
+          <dd><code>{{.Health.Version}}</code></dd>
+
+          <dt>🐹 {{t .Lang "health.go_version"}}</dt>
+          <dd><code>{{.Health.GoVersion}}</code></dd>
+
+          <dt>🔨 {{t .Lang "health.build_commit"}}</dt>
+          <dd><code>{{.Health.Build.Commit}}</code></dd>
+
+          <dt>📅 {{t .Lang "health.build_date"}}</dt>
+          <dd>{{.Health.Build.Date}}</dd>
+        </dl>
+      </section>
+
+      <!-- 4. Runtime -->
+      <section class="section-card">
+        <h2>⏱️ {{t .Lang "health.runtime"}}</h2>
+        <dl class="info-list">
+          <dt>⬆️ {{t .Lang "health.uptime"}}</dt>
+          <dd>{{.Health.Uptime}}</dd>
+
+          <dt>🔧 {{t .Lang "health.mode"}}</dt>
+          <dd>
+            {{if eq .Health.Mode "production"}}
+            <span class="badge badge-production">{{t .Lang "health.production"}}</span>
             {{else}}
-            <div class="status-banner status-error">
-                <span>❌</span>
-                <span>{{t .Lang "health.unhealthy"}}</span>
+            <span class="badge badge-development">{{t .Lang "health.development"}}</span>
+            {{end}}
+          </dd>
+
+          <dt>🕐 {{t .Lang "health.timestamp"}}</dt>
+          <dd><time datetime="{{.Health.Timestamp.Format "2006-01-02T15:04:05Z"}}">{{.Health.Timestamp.Format "2006-01-02 15:04:05 UTC"}}</time></dd>
+        </dl>
+      </section>
+
+      <!-- 5. Features -->
+      <section class="section-card">
+        <h2>✨ {{t .Lang "health.features"}}</h2>
+        <ul class="feature-list">
+          {{if .Health.Features.Tor.Enabled}}
+          <li class="feature-enabled">
+            🧅 {{t .Lang "health.tor_hidden"}}: <span class="status status-ok">✅ {{.Health.Features.Tor.Status}}</span>
+            {{if .Health.Features.Tor.Hostname}}
+            <div class="code-block">
+              <code class="code-content onion-address">{{.Health.Features.Tor.Hostname}}</code>
+              <button type="button" class="copy-btn" data-copy="{{.Health.Features.Tor.Hostname}}" aria-live="polite">
+                <span class="copy-icon">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+              </button>
             </div>
             {{end}}
+          </li>
+          {{else}}
+          <li class="feature-disabled">🧅 {{t .Lang "health.tor_hidden"}}</li>
+          {{end}}
+          {{if .Health.Features.I2P.Enabled}}
+          <li class="feature-enabled">
+            🔗 {{t .Lang "health.i2p_eepsite"}}: <span class="status status-ok">✅ {{.Health.Features.I2P.Status}}</span>
+            {{if .Health.Features.I2P.Hostname}}
+            <div class="code-block">
+              <code class="code-content i2p-address">{{.Health.Features.I2P.Hostname}}</code>
+              <button type="button" class="copy-btn" data-copy="{{.Health.Features.I2P.Hostname}}" aria-live="polite">
+                <span class="copy-icon">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+              </button>
+            </div>
+            {{end}}
+          </li>
+          {{else}}
+          <li class="feature-disabled">🔗 {{t .Lang "health.i2p_eepsite"}}</li>
+          {{end}}
+          {{if .Health.Features.GeoIP}}
+          <li class="feature-enabled">🌍 {{t .Lang "health.geoip"}}</li>
+          {{else}}
+          <li class="feature-disabled">🌍 {{t .Lang "health.geoip"}}</li>
+          {{end}}
+          <li class="feature-enabled">🎨 {{t .Lang "health.syntax_hl"}}</li>
+        </ul>
+      </section>
 
-            <!-- 3. Version & Build -->
-            <section class="section-card">
-                <h2>ℹ️ {{t .Lang "health.version"}}</h2>
-                <dl class="info-list">
-                    <dt>🏷️ {{t .Lang "health.version"}}</dt>
-                    <dd><code>{{.Health.Version}}</code></dd>
-
-                    <dt>🐹 {{t .Lang "health.go_version"}}</dt>
-                    <dd><code>{{.Health.GoVersion}}</code></dd>
-
-                    <dt>🔨 {{t .Lang "health.build_commit"}}</dt>
-                    <dd><code>{{.Health.Build.Commit}}</code></dd>
-
-                    <dt>📅 {{t .Lang "health.build_date"}}</dt>
-                    <dd>{{.Health.Build.Date}}</dd>
-                </dl>
-            </section>
-
-            <!-- 4. Runtime -->
-            <section class="section-card">
-                <h2>⏱️ {{t .Lang "health.runtime"}}</h2>
-                <dl class="info-list">
-                    <dt>⬆️ {{t .Lang "health.uptime"}}</dt>
-                    <dd>{{.Health.Uptime}}</dd>
-
-                    <dt>🔧 {{t .Lang "health.mode"}}</dt>
-                    <dd>
-                        {{if eq .Health.Mode "production"}}
-                        <span class="badge badge-production">{{t .Lang "health.production"}}</span>
-                        {{else}}
-                        <span class="badge badge-development">{{t .Lang "health.development"}}</span>
-                        {{end}}
-                    </dd>
-
-                    <dt>🕐 {{t .Lang "health.timestamp"}}</dt>
-                    <dd><time datetime="{{.Health.Timestamp.Format "2006-01-02T15:04:05Z"}}">{{.Health.Timestamp.Format "2006-01-02 15:04:05 UTC"}}</time></dd>
-                </dl>
-            </section>
-
-            <!-- 5. Features -->
-            <section class="section-card">
-                <h2>✨ {{t .Lang "health.features"}}</h2>
-                <ul class="feature-list">
-                    {{if .Health.Features.Tor.Enabled}}
-                    <li class="feature-enabled">
-                        🧅 {{t .Lang "health.tor_hidden"}}: <span class="status status-ok">✅ {{.Health.Features.Tor.Status}}</span>
-                        {{if .Health.Features.Tor.Hostname}}
-                        <div class="code-block">
-                            <code class="code-content onion-address">{{.Health.Features.Tor.Hostname}}</code>
-                            <button type="button" class="copy-btn" data-copy="{{.Health.Features.Tor.Hostname}}" aria-live="polite">
-                                <span class="copy-icon">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
-                            </button>
-                        </div>
-                        {{end}}
-                    </li>
-                    {{else}}
-                    <li class="feature-disabled">🧅 {{t .Lang "health.tor_hidden"}}</li>
-                    {{end}}
-                    {{if .Health.Features.I2P.Enabled}}
-                    <li class="feature-enabled">
-                        🔗 {{t .Lang "health.i2p_eepsite"}}: <span class="status status-ok">✅ {{.Health.Features.I2P.Status}}</span>
-                        {{if .Health.Features.I2P.Hostname}}
-                        <div class="code-block">
-                            <code class="code-content i2p-address">{{.Health.Features.I2P.Hostname}}</code>
-                            <button type="button" class="copy-btn" data-copy="{{.Health.Features.I2P.Hostname}}" aria-live="polite">
-                                <span class="copy-icon">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
-                            </button>
-                        </div>
-                        {{end}}
-                    </li>
-                    {{else}}
-                    <li class="feature-disabled">🔗 {{t .Lang "health.i2p_eepsite"}}</li>
-                    {{end}}
-                    {{if .Health.Features.GeoIP}}
-                    <li class="feature-enabled">🌍 {{t .Lang "health.geoip"}}</li>
-                    {{else}}
-                    <li class="feature-disabled">🌍 {{t .Lang "health.geoip"}}</li>
-                    {{end}}
-                    <li class="feature-enabled">🎨 {{t .Lang "health.syntax_hl"}}</li>
-                </ul>
-            </section>
-
-            <!-- 6. Checks -->
-            <section class="section-card">
-                <h2>🩺 {{t .Lang "health.checks"}}</h2>
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>{{t .Lang "health.component"}}</th>
-                                <th>{{t .Lang "health.status"}}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>{{t .Lang "health.database"}}</td>
-                                <td>
-                                    {{if eq .Health.Checks.Database "ok"}}
-                                    <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
-                                    {{else}}
-                                    <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
-                                    {{end}}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>{{t .Lang "health.cache"}}</td>
-                                <td>
-                                    {{if eq .Health.Checks.Cache "ok"}}
-                                    <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
-                                    {{else}}
-                                    <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
-                                    {{end}}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>{{t .Lang "health.disk"}}</td>
-                                <td>
-                                    {{if eq .Health.Checks.Disk "ok"}}
-                                    <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
-                                    {{else}}
-                                    <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
-                                    {{end}}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>{{t .Lang "health.scheduler"}}</td>
-                                <td>
-                                    {{if eq .Health.Checks.Scheduler "ok"}}
-                                    <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
-                                    {{else}}
-                                    <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
-                                    {{end}}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- 7. Stats -->
-            <section class="section-card">
-                <h2>📊 {{t .Lang "health.server_statistics"}}</h2>
-                <dl class="info-list">
-                    <dt>{{t .Lang "health.total_requests"}}</dt>
-                    <dd class="stat-number">{{.Health.Stats.RequestsTotal}}</dd>
-
-                    <dt>{{t .Lang "health.requests_24h"}}</dt>
-                    <dd class="stat-number">{{.Health.Stats.Requests24h}}</dd>
-
-                    <dt>{{t .Lang "health.active_connections"}}</dt>
-                    <dd class="stat-number">{{.Health.Stats.ActiveConns}}</dd>
-                </dl>
-            </section>
-
+      <!-- 6. Checks -->
+      <section class="section-card">
+        <h2>🩺 {{t .Lang "health.checks"}}</h2>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>{{t .Lang "health.component"}}</th>
+                <th>{{t .Lang "health.status"}}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{{t .Lang "health.database"}}</td>
+                <td>
+                  {{if eq .Health.Checks.Database "ok"}}
+                  <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
+                  {{else}}
+                  <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
+                  {{end}}
+                </td>
+              </tr>
+              <tr>
+                <td>{{t .Lang "health.cache"}}</td>
+                <td>
+                  {{if eq .Health.Checks.Cache "ok"}}
+                  <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
+                  {{else}}
+                  <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
+                  {{end}}
+                </td>
+              </tr>
+              <tr>
+                <td>{{t .Lang "health.disk"}}</td>
+                <td>
+                  {{if eq .Health.Checks.Disk "ok"}}
+                  <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
+                  {{else}}
+                  <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
+                  {{end}}
+                </td>
+              </tr>
+              <tr>
+                <td>{{t .Lang "health.scheduler"}}</td>
+                <td>
+                  {{if eq .Health.Checks.Scheduler "ok"}}
+                  <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
+                  {{else}}
+                  <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
+                  {{end}}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+      </section>
+
+      <!-- 7. Stats -->
+      <section class="section-card">
+        <h2>📊 {{t .Lang "health.server_statistics"}}</h2>
+        <dl class="info-list">
+          <dt>{{t .Lang "health.total_requests"}}</dt>
+          <dd class="stat-number">{{.Health.Stats.RequestsTotal}}</dd>
+
+          <dt>{{t .Lang "health.requests_24h"}}</dt>
+          <dd class="stat-number">{{.Health.Stats.Requests24h}}</dd>
+
+          <dt>{{t .Lang "health.active_connections"}}</dt>
+          <dd class="stat-number">{{.Health.Stats.ActiveConns}}</dd>
+        </dl>
+      </section>
+
+    </div>
 {{end}}

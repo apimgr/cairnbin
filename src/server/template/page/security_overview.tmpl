@@ -1,67 +1,72 @@
-{{define "meta"}}
-    <title>{{t .Lang "security.title"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{tf .Lang "security.meta_description" "site" .SiteTitle}}">
+{{define "meta" -}}
+<title>{{t .Lang "security.title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{tf .Lang "security.meta_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "security.title"}}</h1>
-                    <p class="section-subtitle">{{tf .Lang "security.report_subtitle" "site" .SiteTitle}}</p>
-                </div>
+    <section class="search-section">
+      <div class="container container-sm">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "security.title"}}</h1>
+          <p class="section-subtitle">{{tf .Lang "security.report_subtitle" "site" .SiteTitle}}</p>
+        </div>
 
-                <div class="paste-view page-view">
-                    <h2>{{t .Lang "security.how_to_report"}}</h2>
-                    <p>{{t .Lang "security.how_to_report_text"}}</p>
+        <div class="paste-view page-view">
+          <h2>{{t .Lang "security.how_to_report"}}</h2>
+          <p>{{t .Lang "security.how_to_report_text"}}</p>
 
-                    <h2 class="section-mt">{{t .Lang "security.contact_channels"}}</h2>
-                    <ol class="feature-list">
-                        {{if .ReportURL}}
-                        <li>
-                            <strong>{{t .Lang "security.channel_private"}}</strong> —
-                            <a href="{{.ReportURL}}" class="long-string" rel="noopener">{{.ReportURL}}</a>
-                        </li>
-                        {{end}}
-                        {{if .ReportFormURL}}
-                        <li>
-                            <strong>{{t .Lang "security.channel_form"}}</strong> —
-                            <a href="{{.ReportFormURL}}" class="long-string">{{.ReportFormURL}}</a>.
-                            {{t .Lang "security.channel_form_text"}}
-                        </li>
-                        {{end}}
-                        {{if .SecurityEmail}}
-                        <li>
-                            <strong>{{t .Lang "security.channel_email"}}</strong> —
-                            <a href="mailto:{{.SecurityEmail}}" class="long-string">{{.SecurityEmail}}</a>
-                        </li>
-                        {{end}}
-                    </ol>
+          <h2 class="section-mt">{{t .Lang "security.contact_channels"}}</h2>
+          <ol class="feature-list">
+            {{if .ReportURL}}
+            <li>
+              <strong>{{t .Lang "security.channel_private"}}</strong> —
+              <a href="{{.ReportURL}}" class="long-string" rel="noopener">{{.ReportURL}}</a>
+            </li>
+            {{end}}
+            {{if .ReportFormURL}}
+            <li>
+              <strong>{{t .Lang "security.channel_form"}}</strong> —
+              <a href="{{.ReportFormURL}}" class="long-string">{{.ReportFormURL}}</a>.
+              {{t .Lang "security.channel_form_text"}}
+            </li>
+            {{end}}
+            {{if .SecurityEmail}}
+            <li>
+              <strong>{{t .Lang "security.channel_email"}}</strong> —
+              <a href="mailto:{{.SecurityEmail}}" class="long-string">{{.SecurityEmail}}</a>
+            </li>
+            {{end}}
+          </ol>
 
-                    {{if .HasPGPKey}}
-                    <h2 class="section-mt">{{t .Lang "security.encryption"}}</h2>
-                    <p>
-                        {{t .Lang "security.encryption_text"}}
-                        <a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">/.well-known/pgp-key.asc</a>
-                    </p>
-                    {{end}}
+          {{if .OtherReportURL}}
+          <h2 class="section-mt">{{t .Lang "security.other_reports_title"}}</h2>
+          <p>{{t .Lang "security.other_reports_text"}} <a href="{{.OtherReportURL}}">{{t .Lang "contact.title"}}</a>.</p>
+          {{end}}
 
-                    <h2 class="section-mt">{{t .Lang "security.details"}}</h2>
-                    <ul class="feature-list">
-                        <li><strong>{{t .Lang "security.preferred_languages"}}:</strong> {{.PreferredLanguages}}</li>
-                        <li><strong>{{t .Lang "security.expires"}}:</strong> <span class="long-string">{{.Expires}}</span></li>
-                    </ul>
+          {{if .HasPGPKey}}
+          <h2 class="section-mt">{{t .Lang "security.encryption"}}</h2>
+          <p>
+            {{t .Lang "security.encryption_text"}}
+            <a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">/.well-known/pgp-key.asc</a>
+          </p>
+          {{end}}
 
-                    <h2 class="section-mt">{{t .Lang "security.more_info"}}</h2>
-                    <ul class="feature-list">
-                        <li><a href="{{.AssetPrefix}}/server/security/policy">{{t .Lang "security.link_policy"}}</a> — {{t .Lang "security.link_policy_desc"}}</li>
-                        <li><a href="{{.AssetPrefix}}/server/security/thanks">{{t .Lang "security.link_thanks"}}</a> — {{t .Lang "security.link_thanks_desc"}}</li>
-                        {{if .HasPGPKey}}
-                        <li><a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">{{t .Lang "security.link_pgp"}}</a></li>
-                        {{end}}
-                        <li><a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a> — {{t .Lang "security.link_txt_desc"}}</li>
-                    </ul>
-                </div>
-            </div>
-        </section>
+          <h2 class="section-mt">{{t .Lang "security.details"}}</h2>
+          <ul class="feature-list">
+            <li><strong>{{t .Lang "security.preferred_languages"}}:</strong> {{.PreferredLanguages}}</li>
+            <li><strong>{{t .Lang "security.expires"}}:</strong> <span class="long-string">{{.Expires}}</span></li>
+          </ul>
+
+          <h2 class="section-mt">{{t .Lang "security.more_info"}}</h2>
+          <ul class="feature-list">
+            <li><a href="{{.AssetPrefix}}/server/security/policy">{{t .Lang "security.link_policy"}}</a> — {{t .Lang "security.link_policy_desc"}}</li>
+            <li><a href="{{.AssetPrefix}}/server/security/thanks">{{t .Lang "security.link_thanks"}}</a> — {{t .Lang "security.link_thanks_desc"}}</li>
+            {{if .HasPGPKey}}
+            <li><a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">{{t .Lang "security.link_pgp"}}</a></li>
+            {{end}}
+            <li><a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a> — {{t .Lang "security.link_txt_desc"}}</li>
+          </ul>
+        </div>
+      </div>
+    </section>
 {{end}}

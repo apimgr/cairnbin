@@ -163,11 +163,15 @@ func (m *Mailer) resolveFrom() (name, addr string) {
 // the caller, bypassing the template system. Used to deliver a message whose body
 // is an inline PGP-encrypted payload (AI.md 14457). Silent no-op when SMTP is off.
 func (m *Mailer) SendRawMessage(to, subject, body string) error {
+	return m.SendRawMessageWithReplyTo(to, subject, body, m.config().ReplyTo)
+}
+
+func (m *Mailer) SendRawMessageWithReplyTo(to, subject, body, replyTo string) error {
 	if !m.Enabled() {
 		return nil
 	}
 	fromName, fromAddr := m.resolveFrom()
-	msg, err := buildRFCMessage(fromName, fromAddr, to, subject, body, m.config().ReplyTo, m.fqdn)
+	msg, err := buildRFCMessage(fromName, fromAddr, to, subject, body, replyTo, m.fqdn)
 	if err != nil {
 		return err
 	}

@@ -304,9 +304,11 @@ func TestSanitizeFooterHTML_Empty(t *testing.T) {
 }
 
 func TestSanitizeFooterHTML_SpaceSentinel(t *testing.T) {
-	got := config.SanitizeFooterHTML(" ")
-	if got != " " {
-		t.Errorf("SanitizeFooterHTML(' ') = %q, want space", got)
+	for _, input := range []string{" ", "\n \t"} {
+		got := config.SanitizeFooterHTML(input)
+		if got != input {
+			t.Errorf("SanitizeFooterHTML(%q) = %q, want original whitespace", input, got)
+		}
 	}
 }
 
@@ -327,12 +329,14 @@ func TestSanitizeFooterHTML_SafeTagsPreserved(t *testing.T) {
 	}
 }
 
-func TestFooterCustomHTML_SpaceDisables(t *testing.T) {
+func TestFooterCustomHTML_WhitespaceDisables(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Web.Footer.CustomHTML = " "
-	got := cfg.FooterCustomHTML()
-	if got != "" {
-		t.Errorf("FooterCustomHTML(' ') = %q, want empty", got)
+	for _, input := range []string{" ", "\n \t"} {
+		cfg.Web.Footer.CustomHTML = input
+		got := cfg.FooterCustomHTML()
+		if got != "" {
+			t.Errorf("FooterCustomHTML(%q) = %q, want empty", input, got)
+		}
 	}
 }
 

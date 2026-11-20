@@ -206,7 +206,7 @@ func undoRewrap[T any](done []T, get func(T) (string, []byte)) {
 }
 
 // rotateEncryptionKey generates a new AES-256-GCM key, parks the old one for
-// the 30-day grace period, writes the new key to server.yml and re-encrypts
+// the 30-day grace period, writes the new key to secrets.yml and re-encrypts
 // every at-rest value (owner/linked token copies, AES-sealed security report
 // bodies and the DNS-01 credentials) under it.
 func rotateEncryptionKey(db secretStore, cfg *config.Config, cfgPath string) (int, int, error) {
@@ -238,15 +238,20 @@ func rotateEncryptionKey(db secretStore, cfg *config.Config, cfgPath string) (in
 		return 0, 0, fmt.Errorf("secret rotate: %w", err)
 	}
 
-	data, err := os.ReadFile(cfgPath)
+	secretsPath := filepath.Join(filepath.Dir(cfgPath), "secrets.yml")
+	data, err := os.ReadFile(secretsPath)
 	if err != nil {
-		return 0, 0, fmt.Errorf("secret rotate: read config: %w", err)
+		return 0, 0, fmt.Errorf("secret rotate: read secrets: %w", err)
 	}
-	lines := strings.Split(string(data), "\n")
-	lines = replaceYAMLField(lines, "encryption_key", `"`+hex.EncodeToString(newKey)+`"`)
 	var root yaml.Node
-	if err := yaml.Unmarshal([]byte(strings.Join(lines, "\n")), &root); err != nil {
-		return 0, 0, fmt.Errorf("secret rotate: parse config: %w", err)
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return 0, 0, fmt.Errorf("secret rotate: parse secrets: %w", err)
+	}
+	if len(root.Content) == 0 {
+		return 0, 0, fmt.Errorf("secret rotate: secrets file is empty")
+	}
+	if err := setYAMLSecretPath(root.Content[0], []string{"server", "security", "encryption_key"}, hex.EncodeToString(newKey)); err != nil {
+		return 0, 0, fmt.Errorf("secret rotate: update encryption key: %w", err)
 	}
 	for name, value := range newDNS {
 		if err := setYAMLSecretPath(root.Content[0], []string{"server", "ssl", "letsencrypt", "dns_credentials", name}, value); err != nil {
@@ -257,8 +262,8 @@ func rotateEncryptionKey(db secretStore, cfg *config.Config, cfgPath string) (in
 	if err != nil {
 		return 0, 0, fmt.Errorf("secret rotate: encode config: %w", err)
 	}
-	if err := atomicWriteFile(cfgPath, encoded, 0o600); err != nil {
-		return 0, 0, fmt.Errorf("secret rotate: write config: %w", err)
+	if err := atomicWriteFile(secretsPath, encoded, 0o600); err != nil {
+		return 0, 0, fmt.Errorf("secret rotate: write secrets: %w", err)
 	}
 
 	tokens, tSkip, err := db.ReencryptTokens(func(old string) (string, error) {

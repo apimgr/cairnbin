@@ -162,8 +162,12 @@ func Backup(opts BackupOptions) error {
 	}
 
 	addFile(filepath.Join(opts.ConfigDir, "server.yml"), "server.yml")
+	addFile(filepath.Join(opts.ConfigDir, "secrets.yml"), "secrets.yml")
 	if err := addDir(filepath.Join(opts.ConfigDir, "yaml.d"), "yaml.d"); err != nil {
 		return fmt.Errorf("collect drop-in config backup files: %w", err)
+	}
+	if err := addDir(filepath.Join(opts.ConfigDir, "html"), "html"); err != nil {
+		return fmt.Errorf("collect operator content backup files: %w", err)
 	}
 	addFile(filepath.Join(opts.DataDir, "db", "server.db"), "server.db")
 	addFile(filepath.Join(opts.DataDir, "db", "users.db"), "users.db")
@@ -752,6 +756,8 @@ func extractEntryBudget(tr *tar.Reader, hdr *tar.Header, configDir, dataDir stri
 	switch hdr.Name {
 	case "server.yml":
 		dest = filepath.Join(configDir, "server.yml")
+	case "secrets.yml":
+		dest = filepath.Join(configDir, "secrets.yml")
 	case "server.db":
 		dest = filepath.Join(dataDir, "db", "server.db")
 	case "users.db":
@@ -768,6 +774,8 @@ func extractEntryBudget(tr *tar.Reader, hdr *tar.Header, configDir, dataDir stri
 			base, prefix = filepath.Join(configDir, "theme"), "theme/"
 		case strings.HasPrefix(hdr.Name, "security/"):
 			base, prefix = filepath.Join(configDir, "security"), "security/"
+		case strings.HasPrefix(hdr.Name, "html/"):
+			base, prefix = filepath.Join(configDir, "html"), "html/"
 		case strings.HasPrefix(hdr.Name, "ssl/"):
 			base, prefix = filepath.Join(configDir, "ssl"), "ssl/"
 		case strings.HasPrefix(hdr.Name, "data/"):

@@ -2,49 +2,49 @@
 <!DOCTYPE html>
 <html lang="{{.Lang}}" dir="{{.Dir}}" class="theme-{{.Theme}}">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Paste.Title}}</title>
-    <link rel="stylesheet" href="{{asset .AssetPrefix "/static/css/common.css"}}">
-    <link rel="stylesheet" href="{{asset .AssetPrefix "/static/css/components.css"}}">
-    <link rel="stylesheet" href="{{asset .AssetPrefix "/static/css/public.css"}}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.Paste.Title}}</title>
+  <link rel="stylesheet" href="{{asset .AssetPrefix "/static/css/common.css"}}">
+  <link rel="stylesheet" href="{{asset .AssetPrefix "/static/css/components.css"}}">
+  <link rel="stylesheet" href="{{asset .AssetPrefix "/static/css/public.css"}}">
 </head>
 <body>
-    <div class="emb-wrap">
-        <div class="emb-header">
-            <span class="lang">{{.Paste.Language}}</span>
-            <span>{{.Paste.Title}}</span>
-            <span class="ml-auto">{{.Paste.Views}} {{t .Lang "paste.views"}}</span>
-        </div>
-        <div class="emb-body">
-            {{if .IsImage}}
-            <div class="paste-image">
-                <img src="{{.ImageDataURI}}" alt="{{.Paste.Title}}">
-            </div>
-            {{else if .IsAudio}}
-            <div class="paste-media">
-                <audio controls>
-                    <source src="{{.MediaDataURI}}" type="{{.FileContentType}}">
-                    {{t .Lang "paste.audio_unsupported"}}
-                </audio>
-            </div>
-            {{else if .IsVideo}}
-            <div class="paste-media">
-                <video controls>
-                    <source src="{{.MediaDataURI}}" type="{{.FileContentType}}">
-                    {{t .Lang "paste.video_unsupported"}}
-                </video>
-            </div>
-            {{else if or .IsActiveContent .IsBinary}}
-            <div class="paste-binary">
-                <p><code class="long-string">{{.FileContentType}}</code></p>
-                <a href="{{.AssetPrefix}}/dl/{{.ID}}" class="btn btn-primary">{{t .Lang "common.download"}}</a>
-            </div>
-            {{else}}
-            <pre><code>{{.Content}}</code></pre>
-            {{end}}
-        </div>
+  <div class="emb-wrap">
+    <div class="emb-header">
+      <span class="lang">{{.Paste.Language}}</span>
+      <span>{{.Paste.Title}}</span>
+      <span class="ml-auto">{{.Paste.Views}} {{t .Lang "paste.views"}}</span>
     </div>
+    <div class="emb-body">
+      {{if .IsImage}}
+      <div class="paste-image">
+        <img src="{{.ImageDataURI}}" alt="{{.Paste.Title}}">
+      </div>
+      {{else if .IsAudio}}
+      <div class="paste-media">
+        <audio controls>
+          <source src="{{.MediaDataURI}}" type="{{.FileContentType}}">
+          {{t .Lang "paste.audio_unsupported"}}
+        </audio>
+      </div>
+      {{else if .IsVideo}}
+      <div class="paste-media">
+        <video controls>
+          <source src="{{.MediaDataURI}}" type="{{.FileContentType}}">
+          {{t .Lang "paste.video_unsupported"}}
+        </video>
+      </div>
+      {{else if or .IsActiveContent .IsBinary}}
+      <div class="paste-binary">
+        <p><code class="long-string">{{.FileContentType}}</code></p>
+        <a href="{{.AssetPrefix}}/dl/{{.ID}}" class="btn btn-primary">{{t .Lang "common.download"}}</a>
+      </div>
+      {{else}}
+      <pre><code>{{.Content}}</code></pre>
+      {{end}}
+    </div>
+  </div>
 </body>
 </html>
 {{end}}

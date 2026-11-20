@@ -231,7 +231,40 @@
     "severity_high": "高",
     "severity_medium": "中",
     "severity_low": "低",
-    "severity_informational": "信息"
+    "severity_informational": "信息",
+    "purpose_notice": "This form is only for security reports, terms violations at a URL on this site, DMCA notices and privacy requests. It cannot be used for support, bug reports, feature requests or general questions.",
+    "review_title": "Review your report",
+    "review_email": "Email",
+    "review_type": "Type",
+    "review_subject": "Subject",
+    "review_confirm": "This email address is correct, and this is a genuine report, not an advertisement, a solicitation or spam",
+    "review_confirm_button": "Confirm",
+    "review_edit_button": "Edit",
+    "type_label": "Type",
+    "type_choose": "Choose a report type",
+    "type_abuse": "Abuse",
+    "type_dmca": "DMCA",
+    "type_privacy": "Privacy",
+    "type_security": "安全",
+    "reported_url": "Reported URL",
+    "abuse_reason": "Abuse reason",
+    "reason_choose": "Choose a reason",
+    "reason_illegal": "Illegal content",
+    "reason_terms": "Terms violation",
+    "reason_harassment": "Harassment",
+    "reason_malware": "Malware or phishing",
+    "copyrighted_work": "Copyrighted work",
+    "dmca_good_faith": "I have a good-faith belief that this use is not authorized by the copyright owner, its agent or the law",
+    "dmca_accuracy": "The information is accurate and, under penalty of perjury, I am the owner or authorized to act for the owner",
+    "signature": "Signature",
+    "privacy_request": "Privacy request",
+    "request_choose": "Choose a request",
+    "request_access": "Access",
+    "request_export": "Export",
+    "request_deletion": "Deletion",
+    "request_correction": "Correction",
+    "request_opt_out": "Opt out",
+    "reason_other": "Other"
   },
   "help": {
     "title": "帮助",
@@ -442,8 +475,8 @@
     "ccpa_opted_out_full": "您已选择退出出售您的个人信息。我们不会出售您的数据。",
     "ccpa_intro": "根据《加利福尼亚消费者隐私法案》（CCPA），您可以选择退出出售您的个人信息。点击下方在此设备上记录您的偏好。",
     "ccpa_not_applicable": "我们不出售您的个人信息，因此没有需要退出的内容。",
-    "contact_intro": "如有问题或疑虑，请使用我们的",
-    "contact_page_link": "联系页面",
+    "contact_intro": "如需举报条款违规、提交 DMCA 通知或提出隐私请求，请参阅我们的",
+    "contact_page_link": "安全与举报页面",
     "paste_export_available": "可通过其 URL 或 API 获取",
     "paste_deletion_available": "可使用粘贴内容的所有者令牌删除；兼容协议粘贴内容使用其协议专用删除令牌",
     "consent_banner": "根据欧盟 GDPR 法规，我们显示此通知。我们使用 Cookie 提供网站基本功能，并在您同意后用于偏好设置和分析。您的数据存储在我们的服务器上，绝不出售。",
@@ -1638,7 +1671,7 @@
     "progress": "进度",
     "maintainer_note": "维护者备注",
     "contact": "联系方式",
-    "status_contact_text": "如需补充此报告的信息，请回复确认邮件并附上您的跟踪 ID。",
+    "status_contact_text": "如果您收到了确认邮件，请回复以补充此报告的信息，并附上您的跟踪 ID。",
     "status_contact_email": "您也可以写信至：",
     "thanks_title": "安全致谢",
     "thanks_subtitle": "感谢帮助保障 {site} 安全的研究人员",
@@ -1646,7 +1679,9 @@
     "thanks_intro": "感谢以下研究人员依据我们的安全政策负责任地披露安全问题。",
     "researcher": "研究人员",
     "year": "年份",
-    "thanks_empty": "尚未发布任何披露。如果您发现了安全问题，请查阅我们的安全政策并负责任地报告。"
+    "thanks_empty": "尚未发布任何披露。如果您发现了安全问题，请查阅我们的安全政策并负责任地报告。",
+    "other_reports_title": "Report other issues",
+    "other_reports_text": "To report terms violations, submit a DMCA notice or make a privacy request, use the report form."
   },
   "create": {
     "plain_text": "纯文本"
@@ -1700,7 +1735,7 @@
       },
       "security_report_ack": {
         "subject": "已收到您的安全报告（{tracking_id}）",
-        "body": "感谢您负责任地披露问题。\n\n收到时间：{timestamp}\n站点：{app_name}（{fqdn}）\n\n您的报告已记录并加密。维护人员将进行审查并与您协调披露。\n跟踪编号：{tracking_id}\n状态页面：{status_url}\n\n请保密此状态链接；它可访问报告当前的处理状态。\n{app_url}"
+        "body": "已收到您的安全报告。\n跟踪编号：{tracking_id}\n状态页面：{status_url}"
       },
       "ssl_expiring": {
         "subject": "SSL 证书即将到期 - {app_name}",

@@ -1,91 +1,91 @@
-{{define "meta"}}
-    <title>{{.Paste.Title}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{tf .Lang "pagemeta.paste_description" "title" .Paste.Title}}">
+{{define "meta" -}}
+<title>{{.Paste.Title}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{tf .Lang "pagemeta.paste_description" "title" .Paste.Title}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container">
-                <div class="paste-view">
-                    <div class="paste-header">
-                        <h1>{{.Paste.Title}}</h1>
-                        <div class="paste-meta">
-                            <span class="language">{{.ContentLabel}}</span>
-                            <span>{{.Paste.Views}} {{t .Lang "paste.views"}}</span>
-                            <span>{{t .Lang "paste.created"}} {{fmtTime .Paste.CreatedAt}}</span>
-                        </div>
-                        <div class="paste-actions">
-                            <a href="{{.AssetPrefix}}/raw/{{.ID}}" class="btn btn-secondary">{{t .Lang "paste.raw"}}</a>
-                            <a href="{{.AssetPrefix}}/dl/{{.ID}}" class="btn btn-secondary">{{t .Lang "common.download"}}</a>
-                            <a href="{{.AssetPrefix}}/emb/{{.ID}}" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">{{t .Lang "paste.embed"}}</a>
-                            <a href="{{.AssetPrefix}}/qr/{{.ID}}" class="btn btn-secondary">{{t .Lang "paste.qr"}}</a>
-                            <a href="{{.AssetPrefix}}/remove/{{.ID}}" class="btn btn-danger">{{t .Lang "common.delete"}}</a>
-                            <button type="button" data-copy-paste="paste-code" data-copied-label="{{t .Lang "js.copied"}}" aria-live="polite" class="btn btn-primary" id="copyBtn">
-                                {{t .Lang "paste.copy"}}
-                            </button>
-                        </div>
-                    </div>
-                    <div class="paste-content">
-                        {{if .IsImage}}
-                        <div class="paste-image">
-                            <img src="{{.ImageDataURI}}" alt="{{.Paste.Title}}">
-                        </div>
-                        {{else if .IsAudio}}
-                        <div class="paste-media">
-                            <audio controls>
-                                <source src="{{.MediaDataURI}}" type="{{.FileContentType}}">
-                                {{t .Lang "paste.audio_unsupported"}}
-                            </audio>
-                        </div>
-                        {{else if .IsVideo}}
-                        <div class="paste-media">
-                            <video controls>
-                                <source src="{{.MediaDataURI}}" type="{{.FileContentType}}">
-                                {{t .Lang "paste.video_unsupported"}}
-                            </video>
-                        </div>
-                        {{else if .IsMarkdown}}
-                        <div class="paste-markdown" id="paste-code">{{.MarkdownContent}}</div>
-                        {{else if .IsActiveContent}}
-                        <div class="paste-binary">
-                            <div class="alert alert-warning" role="alert">
-                                <p><strong>{{t .Lang "paste.active_content_title"}}</strong></p>
-                                <p>{{t .Lang "paste.active_content_desc"}}</p>
-                                <p><code class="long-string">{{.FileContentType}}</code></p>
-                                <a href="{{.AssetPrefix}}/dl/{{.ID}}" class="btn btn-primary mt-2">{{t .Lang "common.download"}}</a>
-                            </div>
-                        </div>
-                        {{else if .IsBinary}}
-                        <div class="paste-binary">
-                            <div class="alert alert-info" role="alert">
-                                <p><strong>{{t .Lang "paste.binary_title"}}</strong></p>
-                                <p>{{t .Lang "paste.binary_desc"}}</p>
-                                <p><code class="long-string">{{.FileContentType}}</code></p>
-                                <a href="{{.AssetPrefix}}/dl/{{.ID}}" class="btn btn-primary mt-2">{{t .Lang "common.download"}}</a>
-                            </div>
-                        </div>
-                        {{else}}
-                        <pre><code id="paste-code">{{.Content}}</code></pre>
-                        {{end}}
-                    </div>
-                    <div class="embed-snippets">
-                        <h2 class="embed-snippets-title">{{t .Lang "paste.embed_title"}}</h2>
-                        <div class="embed-snippet">
-                            <label class="embed-snippet-label" for="embed-html-snippet">HTML</label>
-                            <div class="embed-snippet-row">
-                                <input class="form-input embed-snippet-input" id="embed-html-snippet" type="text" readonly value="{{.EmbedHTML}}">
-                                <button type="button" class="btn btn-secondary" data-copy="{{.EmbedHTML}}" aria-live="polite" aria-label="{{t .Lang "paste.copy"}}"><span class="copy-text">{{t .Lang "paste.copy"}}</span></button>
-                            </div>
-                        </div>
-                        <div class="embed-snippet">
-                            <label class="embed-snippet-label" for="embed-markdown-snippet">Markdown</label>
-                            <div class="embed-snippet-row">
-                                <input class="form-input embed-snippet-input" id="embed-markdown-snippet" type="text" readonly value="{{.EmbedMarkdown}}">
-                                <button type="button" class="btn btn-secondary" data-copy="{{.EmbedMarkdown}}" aria-live="polite" aria-label="{{t .Lang "paste.copy"}}"><span class="copy-text">{{t .Lang "paste.copy"}}</span></button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    <section class="search-section">
+      <div class="container">
+        <div class="paste-view">
+          <div class="paste-header">
+            <h1>{{.Paste.Title}}</h1>
+            <div class="paste-meta">
+              <span class="language">{{.ContentLabel}}</span>
+              <span>{{.Paste.Views}} {{t .Lang "paste.views"}}</span>
+              <span>{{t .Lang "paste.created"}} {{fmtTime .Paste.CreatedAt}}</span>
             </div>
-        </section>
+            <div class="paste-actions">
+              <a href="{{.AssetPrefix}}/raw/{{.ID}}" class="btn btn-secondary">{{t .Lang "paste.raw"}}</a>
+              <a href="{{.AssetPrefix}}/dl/{{.ID}}" class="btn btn-secondary">{{t .Lang "common.download"}}</a>
+              <a href="{{.AssetPrefix}}/emb/{{.ID}}" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">{{t .Lang "paste.embed"}}</a>
+              <a href="{{.AssetPrefix}}/qr/{{.ID}}" class="btn btn-secondary">{{t .Lang "paste.qr"}}</a>
+              <a href="{{.AssetPrefix}}/remove/{{.ID}}" class="btn btn-danger">{{t .Lang "common.delete"}}</a>
+              <button type="button" data-copy-paste="paste-code" data-copied-label="{{t .Lang "js.copied"}}" aria-live="polite" class="btn btn-primary" id="copyBtn">
+                {{t .Lang "paste.copy"}}
+              </button>
+            </div>
+          </div>
+          <div class="paste-content">
+            {{if .IsImage}}
+            <div class="paste-image">
+              <img src="{{.ImageDataURI}}" alt="{{.Paste.Title}}">
+            </div>
+            {{else if .IsAudio}}
+            <div class="paste-media">
+              <audio controls>
+                <source src="{{.MediaDataURI}}" type="{{.FileContentType}}">
+                {{t .Lang "paste.audio_unsupported"}}
+              </audio>
+            </div>
+            {{else if .IsVideo}}
+            <div class="paste-media">
+              <video controls>
+                <source src="{{.MediaDataURI}}" type="{{.FileContentType}}">
+                {{t .Lang "paste.video_unsupported"}}
+              </video>
+            </div>
+            {{else if .IsMarkdown}}
+            <div class="paste-markdown" id="paste-code">{{.MarkdownContent}}</div>
+            {{else if .IsActiveContent}}
+            <div class="paste-binary">
+              <div class="alert alert-warning" role="alert">
+                <p><strong>{{t .Lang "paste.active_content_title"}}</strong></p>
+                <p>{{t .Lang "paste.active_content_desc"}}</p>
+                <p><code class="long-string">{{.FileContentType}}</code></p>
+                <a href="{{.AssetPrefix}}/dl/{{.ID}}" class="btn btn-primary mt-2">{{t .Lang "common.download"}}</a>
+              </div>
+            </div>
+            {{else if .IsBinary}}
+            <div class="paste-binary">
+              <div class="alert alert-info" role="alert">
+                <p><strong>{{t .Lang "paste.binary_title"}}</strong></p>
+                <p>{{t .Lang "paste.binary_desc"}}</p>
+                <p><code class="long-string">{{.FileContentType}}</code></p>
+                <a href="{{.AssetPrefix}}/dl/{{.ID}}" class="btn btn-primary mt-2">{{t .Lang "common.download"}}</a>
+              </div>
+            </div>
+            {{else}}
+            <pre><code id="paste-code">{{.Content}}</code></pre>
+            {{end}}
+          </div>
+          <div class="embed-snippets">
+            <h2 class="embed-snippets-title">{{t .Lang "paste.embed_title"}}</h2>
+            <div class="embed-snippet">
+              <label class="embed-snippet-label" for="embed-html-snippet">HTML</label>
+              <div class="embed-snippet-row">
+                <input class="form-input embed-snippet-input" id="embed-html-snippet" type="text" readonly value="{{.EmbedHTML}}">
+                <button type="button" class="btn btn-secondary" data-copy="{{.EmbedHTML}}" aria-live="polite" aria-label="{{t .Lang "paste.copy"}}"><span class="copy-text">{{t .Lang "paste.copy"}}</span></button>
+              </div>
+            </div>
+            <div class="embed-snippet">
+              <label class="embed-snippet-label" for="embed-markdown-snippet">Markdown</label>
+              <div class="embed-snippet-row">
+                <input class="form-input embed-snippet-input" id="embed-markdown-snippet" type="text" readonly value="{{.EmbedMarkdown}}">
+                <button type="button" class="btn btn-secondary" data-copy="{{.EmbedMarkdown}}" aria-live="polite" aria-label="{{t .Lang "paste.copy"}}"><span class="copy-text">{{t .Lang "paste.copy"}}</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 {{end}}

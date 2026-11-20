@@ -15,7 +15,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/apimgr/cairnbin/src/logging"
-	"github.com/apimgr/cairnbin/src/mode"
 )
 
 // SetLogManager registers the logging manager that owns access/server/error/
@@ -69,8 +68,7 @@ func (s *Server) accessLogMiddleware(next http.Handler) http.Handler {
 		latency := time.Since(start)
 		bodies.log(s, r, ww.Status())
 
-		if ww.Status() >= 200 && ww.Status() < 300 && !mode.IsDebugEnabled() &&
-			!s.liveCfg().Server.Logging.Access.LogHealthChecks && isHealthzPath(r.URL.Path) {
+		if ww.Status() >= 200 && ww.Status() < 300 && isHealthzPath(r.URL.Path) {
 			return
 		}
 

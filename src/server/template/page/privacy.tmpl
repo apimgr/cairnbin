@@ -1,169 +1,168 @@
-{{define "meta"}}
-    <title>{{t .Lang "privacy.title"}} - {{.SiteTitle}}</title>
-    <meta name="description" content="{{tf .Lang "pagemeta.privacy_description" "site" .SiteTitle}}">
+{{define "meta" -}}
+<title>{{t .Lang "privacy.title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{tf .Lang "pagemeta.privacy_description" "site" .SiteTitle}}">
 {{end}}
 
 {{define "content"}}
-        <section class="search-section">
-            <div class="container container-sm">
-                <div class="section-header">
-                    <h1 class="section-title">{{t .Lang "privacy.title"}}</h1>
-                    <p class="last-updated">{{t .Lang "privacy.last_updated"}} {{.BuildDate}}</p>
-                </div>
+    <section class="search-section">
+      <div class="container container-sm">
+        <div class="section-header">
+          <h1 class="section-title">{{t .Lang "privacy.title"}}</h1>
+          <p class="last-updated">{{t .Lang "privacy.last_updated"}} {{.BuildDate}}</p>
+        </div>
 
-                <div class="paste-view page-view">
-                    {{if .PageContent}}<div class="markdown-content">{{.PageContent}}</div>{{else}}
-                    <section id="summary" class="privacy-summary">
-                    <p class="privacy-summary">
-                        {{if .Privacy.Data.Sold}}
-                            <strong>{{t .Lang "privacy.data_may_be_sold"}}</strong>
-                            {{t .Lang "privacy.see_sections_prefix"}} <a href="#ccpa-opt-out">"{{t .Lang "privacy.ccpa_do_not_sell"}}"</a> {{t .Lang "privacy.see_sections_suffix"}}
-                        {{else}}
-                            <strong>{{t .Lang "privacy.never_sell"}}</strong>
-                            {{if .Privacy.Data.StoredOnServer}}{{t .Lang "privacy.stored_own_servers"}}{{end}}
-                        {{end}}
-                    </p>
-                    </section>
+        <div class="paste-view page-view">
+          <section id="summary" class="privacy-summary">
+          <p class="privacy-summary">
+            {{if .Privacy.Data.Sold}}
+              <strong>{{t .Lang "privacy.data_may_be_sold"}}</strong>
+              {{t .Lang "privacy.see_sections_prefix"}} <a href="#ccpa-opt-out">"{{t .Lang "privacy.ccpa_do_not_sell"}}"</a> {{t .Lang "privacy.see_sections_suffix"}}
+            {{else}}
+              <strong>{{t .Lang "privacy.never_sell"}}</strong>
+              {{if .Privacy.Data.StoredOnServer}}{{t .Lang "privacy.stored_own_servers"}}{{end}}
+            {{end}}
+          </p>
+          </section>
 
-                    <section id="data-collection">
-                    <h2 class="section-mt">{{t .Lang "privacy.data_we_collect"}}</h2>
-                    <div class="markdown-content">{{markdown (privacyText .Lang "data_collection" .Privacy.Content.DataCollection)}}</div>
-                    </section>
+          <section id="data-collection">
+          <h2 class="section-mt">{{t .Lang "privacy.data_we_collect"}}</h2>
+          <div class="markdown-content">{{markdown (privacyText .Lang "data_collection" .Privacy.Content.DataCollection)}}</div>
+          </section>
 
-                    <section id="data-usage">
-                    <h2 class="section-mt">{{t .Lang "privacy.how_we_use"}}</h2>
-                    {{$usage := .Privacy.GetDataUsageContent}}
-                    {{if .Privacy.Data.Sold}}
-                    <div class="markdown-content">{{markdown (privacyText .Lang "data_usage_if_sold" $usage)}}</div>
-                    {{else}}
-                    <div class="markdown-content">{{markdown (privacyText .Lang "data_usage" $usage)}}</div>
-                    {{end}}
-                    </section>
+          <section id="data-usage">
+          <h2 class="section-mt">{{t .Lang "privacy.how_we_use"}}</h2>
+          {{$usage := .Privacy.GetDataUsageContent}}
+          {{if .Privacy.Data.Sold}}
+          <div class="markdown-content">{{markdown (privacyText .Lang "data_usage_if_sold" $usage)}}</div>
+          {{else}}
+          <div class="markdown-content">{{markdown (privacyText .Lang "data_usage" $usage)}}</div>
+          {{end}}
+          </section>
 
-                    <section id="data-security">
-                    <h2 class="section-mt">{{t .Lang "privacy.how_we_protect"}}</h2>
-                    <div class="markdown-content">{{markdown (privacyText .Lang "data_security" .Privacy.Content.DataSecurity)}}</div>
-                    </section>
+          <section id="data-security">
+          <h2 class="section-mt">{{t .Lang "privacy.how_we_protect"}}</h2>
+          <div class="markdown-content">{{markdown (privacyText .Lang "data_security" .Privacy.Content.DataSecurity)}}</div>
+          </section>
 
-                    <section id="data-retention">
-                    <h2 class="section-mt">{{t .Lang "privacy.data_retention"}}</h2>
-                    <p>{{.Privacy.Retention.Period}}</p>
-                    </section>
+          <section id="data-retention">
+          <h2 class="section-mt">{{t .Lang "privacy.data_retention"}}</h2>
+          <p>{{.Privacy.Retention.Period}}</p>
+          </section>
 
-                    <section id="your-rights">
-                    <h2 class="section-mt">{{t .Lang "privacy.your_rights"}}</h2>
-                    <ul class="feature-list">
-                        <li>{{t .Lang "privacy.data_export_label"}} {{if .Privacy.Retention.ExportAvailable}}{{t .Lang "privacy.paste_export_available"}}{{else}}{{t .Lang "privacy.export_not_available"}}{{end}}</li>
-                        <li>{{t .Lang "privacy.account_deletion_label"}} {{if .Privacy.Retention.DeletionAvailable}}{{t .Lang "privacy.paste_deletion_available"}}{{else}}{{t .Lang "privacy.export_not_available"}}{{end}}</li>
-                    </ul>
-                    </section>
+          <section id="your-rights">
+          <h2 class="section-mt">{{t .Lang "privacy.your_rights"}}</h2>
+          <ul class="feature-list">
+            <li>{{t .Lang "privacy.data_export_label"}} {{if .Privacy.Retention.ExportAvailable}}{{t .Lang "privacy.paste_export_available"}}{{else}}{{t .Lang "privacy.export_not_available"}}{{end}}</li>
+            <li>{{t .Lang "privacy.account_deletion_label"}} {{if .Privacy.Retention.DeletionAvailable}}{{t .Lang "privacy.paste_deletion_available"}}{{else}}{{t .Lang "privacy.export_not_available"}}{{end}}</li>
+          </ul>
+          </section>
 
-                    <section id="data-storage">
-                    <h2 class="section-mt">{{t .Lang "privacy.data_storage"}}</h2>
-                    <p>{{t .Lang "privacy.all_data_stored"}}</p>
-                    {{if .Privacy.Data.Sharing}}
-                    <h3>{{t .Lang "privacy.when_shared"}}</h3>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr><th>{{t .Lang "privacy.table_condition"}}</th><th>{{t .Lang "privacy.table_when"}}</th><th>{{t .Lang "privacy.table_data"}}</th></tr>
-                            </thead>
-                            <tbody>
-                                {{range .Privacy.Data.Sharing}}
-                                <tr>
-                                    <td>{{.Condition}}</td>
-                                    <td>{{.When}}</td>
-                                    <td class="long-string">{{.Data}}</td>
-                                </tr>
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
-                    {{end}}
-                    </section>
+          <section id="data-storage">
+          <h2 class="section-mt">{{t .Lang "privacy.data_storage"}}</h2>
+          <p>{{t .Lang "privacy.all_data_stored"}}</p>
+          {{if .Privacy.Data.Sharing}}
+          <h3>{{t .Lang "privacy.when_shared"}}</h3>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr><th>{{t .Lang "privacy.table_condition"}}</th><th>{{t .Lang "privacy.table_when"}}</th><th>{{t .Lang "privacy.table_data"}}</th></tr>
+              </thead>
+              <tbody>
+                {{range .Privacy.Data.Sharing}}
+                <tr>
+                  <td>{{.Condition}}</td>
+                  <td>{{.When}}</td>
+                  <td class="long-string">{{.Data}}</td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+          {{end}}
+          </section>
 
-                    <section id="third-parties">
-                    {{if .ThirdPartyServices}}
-                    <h2 class="section-mt">{{t .Lang "privacy.third_party_services"}}</h2>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr><th>{{t .Lang "privacy.service"}}</th><th>{{t .Lang "privacy.purpose"}}</th><th>{{t .Lang "privacy.data_sent"}}</th><th>{{t .Lang "privacy.table_policy"}}</th></tr>
-                            </thead>
-                            <tbody>
-                                {{range .ThirdPartyServices}}
-                                <tr>
-                                    <td>{{.Name}}</td>
-                                    <td>{{.Purpose}}</td>
-                                    <td class="long-string">{{.DataSent}}</td>
-                                    <td>
-                                        {{if .PolicyURL}}
-                                            <a class="long-string" href="{{.PolicyURL}}" rel="noopener noreferrer nofollow" target="_blank">{{t .Lang "privacy.view_policy"}}</a>
-                                        {{else}}—{{end}}
-                                    </td>
-                                </tr>
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
-                    {{else}}
-                    <h2 class="section-mt">{{t .Lang "privacy.third_party_services"}}</h2>
-                    <p>{{t .Lang "privacy.no_third_party"}}</p>
-                    {{end}}
-                    </section>
+          <section id="third-parties">
+          {{if .ThirdPartyServices}}
+          <h2 class="section-mt">{{t .Lang "privacy.third_party_services"}}</h2>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr><th>{{t .Lang "privacy.service"}}</th><th>{{t .Lang "privacy.purpose"}}</th><th>{{t .Lang "privacy.data_sent"}}</th><th>{{t .Lang "privacy.table_policy"}}</th></tr>
+              </thead>
+              <tbody>
+                {{range .ThirdPartyServices}}
+                <tr>
+                  <td>{{.Name}}</td>
+                  <td>{{.Purpose}}</td>
+                  <td class="long-string">{{.DataSent}}</td>
+                  <td>
+                    {{if .PolicyURL}}
+                      <a class="long-string" href="{{.PolicyURL}}" rel="noopener noreferrer nofollow" target="_blank">{{t .Lang "privacy.view_policy"}}</a>
+                    {{else}}—{{end}}
+                  </td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+          {{else}}
+          <h2 class="section-mt">{{t .Lang "privacy.third_party_services"}}</h2>
+          <p>{{t .Lang "privacy.no_third_party"}}</p>
+          {{end}}
+          </section>
 
-                    <section id="cookies">
-                    <h2 class="section-mt">{{t .Lang "privacy.cookies_heading"}}</h2>
-                    <ul class="feature-list">
-                        <li><strong>{{t .Lang "privacy.essential_label"}}</strong> {{privacyText .Lang "essential_cookies" .Privacy.Cookies.Essential.Description}}</li>
-                        <li><strong>{{t .Lang "privacy.preferences_label"}}</strong> {{privacyText .Lang "preference_cookies" .Privacy.Cookies.Preferences.Description}}</li>
-                        {{if .Tracking.Enabled}}
-                            {{if .Privacy.Data.Sold}}
-                        <li><strong>{{tf .Lang "privacy.analytics_label" "type" .Tracking.TypeName}}</strong> {{privacyText .Lang "analytics_cookies_sold" .Privacy.GetAnalyticsDescription}}</li>
-                            {{else}}
-                        <li><strong>{{tf .Lang "privacy.analytics_label" "type" .Tracking.TypeName}}</strong> {{privacyText .Lang "analytics_cookies" .Privacy.GetAnalyticsDescription}}</li>
-                            {{end}}
-                        {{end}}
-                    </ul>
-                    {{if .Privacy.Consent.ShowPreferences}}
-                    {{$consent := consentInfo .Lang}}
-                    <p>
-                        <a href="{{.AssetPrefix}}/server/preferences" class="btn btn-secondary" data-action="cookie-preferences">{{$consent.PreferencesText}}</a>
-                    </p>
-                    {{end}}
-                    </section>
+          <section id="cookies">
+          <h2 class="section-mt">{{t .Lang "privacy.cookies_heading"}}</h2>
+          <ul class="feature-list">
+            <li><strong>{{t .Lang "privacy.essential_label"}}</strong> {{privacyText .Lang "essential_cookies" .Privacy.Cookies.Essential.Description}}</li>
+            <li><strong>{{t .Lang "privacy.preferences_label"}}</strong> {{privacyText .Lang "preference_cookies" .Privacy.Cookies.Preferences.Description}}</li>
+            {{if .Tracking.Enabled}}
+              {{if .Privacy.Data.Sold}}
+            <li><strong>{{tf .Lang "privacy.analytics_label" "type" .Tracking.TypeName}}</strong> {{privacyText .Lang "analytics_cookies_sold" .Privacy.GetAnalyticsDescription}}</li>
+              {{else}}
+            <li><strong>{{tf .Lang "privacy.analytics_label" "type" .Tracking.TypeName}}</strong> {{privacyText .Lang "analytics_cookies" .Privacy.GetAnalyticsDescription}}</li>
+              {{end}}
+            {{end}}
+          </ul>
+          {{if .Privacy.Consent.ShowPreferences}}
+          {{$consent := consentInfo .Lang}}
+          <p>
+            <a href="{{.AssetPrefix}}/server/preferences" class="btn btn-secondary" data-action="cookie-preferences">{{$consent.PreferencesText}}</a>
+          </p>
+          {{end}}
+          </section>
 
-                    <section id="ccpa-opt-out">
-                    <h2 class="section-mt">{{t .Lang "privacy.ccpa_do_not_sell"}}</h2>
-                    {{if .Privacy.IsCCPAApplicable}}
-                        {{if .CCPAOptedOut}}
-                        <p>{{t .Lang "privacy.ccpa_opted_out_full"}}</p>
-                        <form method="POST" action="{{.AssetPrefix}}/server/ccpa">
-                            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                            <input type="hidden" name="choice" value="opt-in">
-                            <button type="submit" class="btn btn-secondary" data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "privacy.ccpa_opt_back_in"}}</button>
-                        </form>
-                        {{else}}
-                        <p>{{t .Lang "privacy.ccpa_intro"}}</p>
-                        <form method="POST" action="{{.AssetPrefix}}/server/ccpa">
-                            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                            <input type="hidden" name="choice" value="opt-out">
-                            <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "privacy.ccpa_do_not_sell"}}</button>
-                        </form>
-                        {{end}}
-                    {{else}}
-                    <p>{{t .Lang "privacy.ccpa_not_applicable"}}</p>
-                    {{end}}
-                    </section>
+          <section id="ccpa-opt-out">
+          <h2 class="section-mt">{{t .Lang "privacy.ccpa_do_not_sell"}}</h2>
+          {{if .Privacy.IsCCPAApplicable}}
+            {{if .CCPAOptedOut}}
+            <p>{{t .Lang "privacy.ccpa_opted_out_full"}}</p>
+            <form method="POST" action="{{.AssetPrefix}}/server/ccpa">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <input type="hidden" name="choice" value="opt-in">
+              <button type="submit" class="btn btn-secondary" data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "privacy.ccpa_opt_back_in"}}</button>
+            </form>
+            {{else}}
+            <p>{{t .Lang "privacy.ccpa_intro"}}</p>
+            <form method="POST" action="{{.AssetPrefix}}/server/ccpa">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <input type="hidden" name="choice" value="opt-out">
+              <button type="submit" class="btn btn-primary" data-action="submit-loading" data-loading-text="{{t .Lang "js.saving"}}">{{t .Lang "privacy.ccpa_do_not_sell"}}</button>
+            </form>
+            {{end}}
+          {{else}}
+          <p>{{t .Lang "privacy.ccpa_not_applicable"}}</p>
+          {{end}}
+          </section>
 
-                    <section id="contact">
-                    <h2 class="section-mt">{{t .Lang "privacy.contact_us"}}</h2>
-                    <p>
-                        {{t .Lang "privacy.contact_intro"}} <a href="{{.AssetPrefix}}/server/contact">{{t .Lang "privacy.contact_page_link"}}</a>.
-                    </p>
-                    </section>
-                    {{end}}
-                </div>
-            </div>
-        </section>
+          {{if .OperatorPrivacyHTML}}<section class="section-mt operator-privacy-content"><div class="markdown-content">{{.OperatorPrivacyHTML}}</div></section>{{end}}
+          <section id="contact">
+          <h2 class="section-mt">{{t .Lang "privacy.contact_us"}}</h2>
+          <p>
+            {{t .Lang "privacy.contact_intro"}} <a href="{{.AssetPrefix}}/server/security">{{t .Lang "privacy.contact_page_link"}}</a>.
+          </p>
+          </section>
+        </div>
+      </div>
+    </section>
 {{end}}

@@ -231,7 +231,40 @@
     "severity_high": "高",
     "severity_medium": "中",
     "severity_low": "低",
-    "severity_informational": "情報"
+    "severity_informational": "情報",
+    "purpose_notice": "This form is only for security reports, terms violations at a URL on this site, DMCA notices and privacy requests. It cannot be used for support, bug reports, feature requests or general questions.",
+    "review_title": "Review your report",
+    "review_email": "Email",
+    "review_type": "Type",
+    "review_subject": "Subject",
+    "review_confirm": "This email address is correct, and this is a genuine report, not an advertisement, a solicitation or spam",
+    "review_confirm_button": "Confirm",
+    "review_edit_button": "Edit",
+    "type_label": "Type",
+    "type_choose": "Choose a report type",
+    "type_abuse": "Abuse",
+    "type_dmca": "DMCA",
+    "type_privacy": "Privacy",
+    "type_security": "セキュリティ",
+    "reported_url": "Reported URL",
+    "abuse_reason": "Abuse reason",
+    "reason_choose": "Choose a reason",
+    "reason_illegal": "Illegal content",
+    "reason_terms": "Terms violation",
+    "reason_harassment": "Harassment",
+    "reason_malware": "Malware or phishing",
+    "copyrighted_work": "Copyrighted work",
+    "dmca_good_faith": "I have a good-faith belief that this use is not authorized by the copyright owner, its agent or the law",
+    "dmca_accuracy": "The information is accurate and, under penalty of perjury, I am the owner or authorized to act for the owner",
+    "signature": "Signature",
+    "privacy_request": "Privacy request",
+    "request_choose": "Choose a request",
+    "request_access": "Access",
+    "request_export": "Export",
+    "request_deletion": "Deletion",
+    "request_correction": "Correction",
+    "request_opt_out": "Opt out",
+    "reason_other": "Other"
   },
   "help": {
     "title": "ヘルプ",
@@ -442,8 +475,8 @@
     "ccpa_opted_out_full": "個人情報の販売をオプトアウトしました。データを販売することはありません。",
     "ccpa_intro": "カリフォルニア州消費者プライバシー法（CCPA）に基づき、個人情報の販売をオプトアウトできます。以下をクリックして、このデバイスに設定を記録してください。",
     "ccpa_not_applicable": "当社はお客様の個人情報を販売していないため、オプトアウトするものはありません。",
-    "contact_intro": "ご質問やご懸念がある場合は、",
-    "contact_page_link": "お問い合わせページ",
+    "contact_intro": "利用規約違反、DMCA通知、プライバシーに関する依頼は、",
+    "contact_page_link": "セキュリティと報告のページ",
     "paste_export_available": "URLまたはAPIから利用できます",
     "paste_deletion_available": "ペーストの所有者トークン、互換ペーストの場合はプロトコル固有の削除トークンで実行できます",
     "consent_banner": "EU GDPRに基づき、この通知を表示しています。サイトの基本機能にCookieを使用し、ご同意いただいた場合は設定と分析にも使用します。データは当サーバーに保存され、販売されることはありません。",
@@ -1638,7 +1671,7 @@
     "progress": "進捗",
     "maintainer_note": "メンテナーからのメモ",
     "contact": "連絡先",
-    "status_contact_text": "この報告に情報を追加するには、受領確認メールに返信し、追跡 ID を記載してください。",
+    "status_contact_text": "受領確認メールを受け取った場合は、返信してこの報告に情報を追加し、追跡 ID を記載してください。",
     "status_contact_email": "次のアドレスにも連絡できます：",
     "thanks_title": "セキュリティ謝辞",
     "thanks_subtitle": "{site} の安全維持に協力してくださる研究者の皆様に感謝します",
@@ -1646,7 +1679,9 @@
     "thanks_intro": "セキュリティポリシーに従って責任をもって問題を開示してくださった以下の研究者に感謝します。",
     "researcher": "研究者",
     "year": "年",
-    "thanks_empty": "まだ公開された開示はありません。セキュリティ上の問題を見つけた場合は、セキュリティポリシーを確認し、責任をもって報告してください。"
+    "thanks_empty": "まだ公開された開示はありません。セキュリティ上の問題を見つけた場合は、セキュリティポリシーを確認し、責任をもって報告してください。",
+    "other_reports_title": "Report other issues",
+    "other_reports_text": "To report terms violations, submit a DMCA notice or make a privacy request, use the report form."
   },
   "create": {
     "plain_text": "プレーンテキスト"
@@ -1700,7 +1735,7 @@
       },
       "security_report_ack": {
         "subject": "セキュリティ報告を受け取りました ({tracking_id})",
-        "body": "責任ある情報開示にご協力いただきありがとうございます。\n\n受信日時: {timestamp}\nサイト: {app_name} ({fqdn})\n\n報告は記録され、暗号化されました。担当者が確認し、開示について調整します。\n追跡 ID: {tracking_id}\n状況ページ: {status_url}\n\n状況ページのリンクは現在の対応状況にアクセスできるため、他者に共有しないでください。\n{app_url}"
+        "body": "セキュリティ報告を受け取りました。\n追跡 ID: {tracking_id}\n状況ページ: {status_url}"
       },
       "ssl_expiring": {
         "subject": "SSL 証明書の有効期限が近づいています - {app_name}",

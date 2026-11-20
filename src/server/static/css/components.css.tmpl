@@ -543,8 +543,25 @@ textarea:user-invalid ~ .field-error {
     gap: var(--space-2);
     max-height: calc(100vh - var(--space-8));
     overflow: hidden;
-    z-index: 10000;
+    z-index: var(--z-toast);
     pointer-events: none;
+}
+
+#toast-container[data-position="top-left"] {
+    inset-inline-start: var(--space-4);
+    inset-inline-end: auto;
+}
+
+#toast-container[data-position="bottom-right"] {
+    top: auto;
+    bottom: var(--space-4);
+}
+
+#toast-container[data-position="bottom-left"] {
+    top: auto;
+    bottom: var(--space-4);
+    inset-inline-start: var(--space-4);
+    inset-inline-end: auto;
 }
 
 .toast {
@@ -587,17 +604,27 @@ textarea:user-invalid ~ .field-error {
 
 .toast-progress {
     position: absolute;
+    inset-inline: 0;
     bottom: 0;
-    inset-inline-start: 0;
+    width: 100%;
     height: 3px;
-    background: rgba(255, 255, 255, 0.5);
-    animation: toastCountdown linear forwards;
+    margin: 0;
+    border: 0;
+    padding: 0;
+    appearance: none;
+    overflow: hidden;
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    accent-color: var(--color-accent);
+    background: transparent;
 }
 
-/* Pause on hover is pure CSS - JS only syncs the removal timer. */
-.toast:hover .toast-progress {
-    animation-play-state: paused;
+.toast-progress::-webkit-progress-bar {
+    background: transparent;
+}
+
+.toast-progress::-webkit-progress-value,
+.toast-progress::-moz-progress-bar {
+    background: var(--color-accent);
 }
 
 .toast-info { border-inline-start: 4px solid var(--color-info); }
@@ -627,11 +654,6 @@ textarea:user-invalid ~ .field-error {
 
 [dir="rtl"] .toast-dismissing {
     animation-name: toastOut;
-}
-
-@keyframes toastCountdown {
-    from { width: 100%; }
-    to { width: 0%; }
 }
 
 .toast-dismissing {
@@ -840,7 +862,7 @@ textarea:user-invalid ~ .field-error {
     background: var(--color-accent-primary);
     color: var(--color-on-accent);
     box-shadow: var(--shadow-lg);
-    z-index: 9999;
+    z-index: var(--z-banner);
 }
 
 .cookie-banner-bottom {
@@ -936,7 +958,7 @@ textarea:user-invalid ~ .field-error {
 }
 
 .cookie-modal::backdrop {
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--color-backdrop);
 }
 
 .cookie-modal-title {
@@ -1491,4 +1513,65 @@ textarea:user-invalid ~ .field-error {
 .pagination .btn[aria-disabled="true"] {
     opacity: 0.5;
     pointer-events: none;
+}
+
+.contact-honeypot {
+    position: absolute;
+    top: auto;
+    inset-inline-start: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+.contact-review-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+    background: color-mix(in srgb, var(--color-bg-primary) 72%, transparent);
+}
+
+.contact-review-panel {
+    width: min(100%, 36rem);
+    max-height: min(90vh, 50rem);
+    overflow-y: auto;
+    padding: var(--space-6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-lg);
+}
+
+.contact-review-panel dl {
+    display: grid;
+    grid-template-columns: minmax(5rem, auto) 1fr;
+    gap: var(--space-2) var(--space-4);
+    margin-block: var(--space-5);
+}
+
+.contact-review-panel dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.contact-review-email {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+}
+
+.contact-review-confirm {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+}
+
+.contact-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-5);
 }

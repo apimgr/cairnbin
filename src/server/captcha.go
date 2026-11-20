@@ -107,6 +107,9 @@ func (s *Server) verifyContactCaptcha(r *http.Request, token, answer, response s
 	if provider == "simple" {
 		return s.validateSimpleCaptcha(token, answer)
 	}
+	if strings.TrimSpace(response) == "" {
+		return s.validateSimpleCaptcha(token, answer)
+	}
 	pc := s.liveCfg().Server.Pages.Contact
 	endpoint := ""
 	form := url.Values{"secret": {pc.CaptchaSecretKey}, "response": {response}}

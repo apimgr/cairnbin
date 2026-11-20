@@ -83,7 +83,10 @@ func TestFrontendValidationAndToastContracts(t *testing.T) {
 		"form.requestSubmit(event.submitter || undefined)",
 		"function showToast(message, type, requestedDuration)",
 		"requestedDuration === undefined ? TOAST_DURATIONS[toastType] : Number(requestedDuration)",
-		"const TOAST_DURATIONS = { success: 3000, info: 3000, warning: 5000, error: 0 }",
+		"configuredToastDuration('duration', 3000)",
+		"configuredToastDuration('warningDuration', 5000)",
+		"function updateToastProgress(toast)",
+		"progress.className = 'toast-progress'",
 		"if (duration > 0) armToastTimer(toast, duration)",
 		"if (toast.__toastDuration > 0) armToastTimer(toast, toast.__toastDuration)",
 		"function requestClosePreferences()",
@@ -226,7 +229,7 @@ func TestCSSFollowsMobileFirstPolicy(t *testing.T) {
 		t.Fatalf("read common.css.tmpl: %v", err)
 	}
 	for _, v := range []string{
-		"--color-info-bg", "--color-secondary", "--color-accent:", "--color-on-error",
+		"--color-info-bg", "--color-secondary", "--color-accent:", "--color-on-error", "--color-backdrop", "--color-backdrop-subtle",
 		"--z-modal", "--z-toast", "--focus-ring", "--focus-ring-offset",
 		"--radius-base", "--shadow-xl", "--transition-spring", "--font-serif",
 		"--font-weight-bold", "--line-height-relaxed", "--space-24",
