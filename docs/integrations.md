@@ -110,12 +110,12 @@ None enabled. The service has no user accounts, no federated or machine-to-machi
 
 ## Platform Integrations
 
-None enabled: no Android App Links, Apple Universal Links, WebFinger, OpenID Provider metadata, MTA-STS, inbound webhooks or federation. Outbound operator notifications (email and chat webhooks) are optional and configured only under `server.notifications` in `server.yml`.
+None enabled: no Android App Links, Apple Universal Links, WebFinger, OpenID Provider metadata, MTA-STS, inbound webhooks or federation. Outbound operator notifications (email and chat webhooks) are optional and configured under `server.notifications` in `yaml.d/notifications.yml`.
 
 ## Operator Notes
 
 - Everything above is on by default except the optional pieces: PGP publishing, the `/healthz` root alias, I2P, and operator notifications. MCP and metrics are always enabled. The termbin listener is enabled by default on TCP port `9999`.
-- Nothing needs to be configured before use; each optional integration is switched on in `server.yml` and picked up by live reload (listen address and port need a restart).
+- Nothing needs to be configured before use; each optional integration is switched on in its assigned `yaml.d/` area file and picked up by live reload (listen address and port need a restart).
 
 ## CLI Tool
 
