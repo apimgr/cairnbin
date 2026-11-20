@@ -1,6 +1,6 @@
 # Configuration
 
-The server reads `server.yml` from the config directory on startup. First run creates this file automatically. CLI flags always override config file values.
+The server reads `server.yml`, ordered `yaml.d/*.yml` area files, and `secrets.yml` from the config directory. First run creates the node-specific `server.yml`; the rest use built-in defaults until an area file is present. `secrets.yml` is merged last. CLI flags and environment variables override file values.
 
 ## Config File Location
 
@@ -119,16 +119,14 @@ and fall back to the defaults above.
 
 ## Complete Settings Index
 
-The following groups are also accepted in `server.yml`. Fields are nested
-under the path shown; runtime-generated values such as `server.tor.onion_address`
-and `server.i2p.b32_address` are normally maintained by the server.
+The following settings use these dotted paths in the merged configuration. The area-file table below shows their home; runtime-generated addresses are maintained by the server.
 
 | Path | Settings | Purpose |
 |------|----------|---------|
-| `server` | `port`, `address`, `fqdn`, `mode`, `lang`, `api_version`, `baseurl`, `user`, `group`, `pidfile`, `daemonize`, `token`, `data_dir` | Listener, branding inputs, service identity, operator token, and data location. |
+| `server` | `port`, `address`, `fqdn`, `mode`, `lang`, `api_version`, `baseurl`, `user`, `group`, `pidfile`, `daemonize`, `data_dir` | This node’s listener, identity, and data location. The operator token is in `secrets.yml`. |
 | `server.tokens` | `max_linked`, `cookie_max_age`, `idle_purge_days` | Owner-token limits and cleanup. |
 | `server.contact.{admin,security,abuse,general}` | `email`, `webhooks` | Per-role notification destinations; empty roles use the documented fallback chain. |
-| `server.pages.contact` | `enabled`, `captcha`, `captcha_site_key`, `captcha_secret_key`, `antispam.*`, `success_message` | Contact form behavior. Page content is read from `{config_dir}/html/`. |
+| `server.pages.contact` | `enabled`, `captcha`, `captcha_site_key`, `captcha_secret_key`, `antispam.*`, `success_message` | Contact form behavior. Help content remains configuration-driven; other page content is in `yaml.d/branding.yml`. |
 | `database` | `driver`, `url`, `token`, `pool.max_open`, `pool.max_idle`, `pool.max_lifetime`, `pool.max_idle_time` | SQLite or remote libSQL/Turso storage and connection pooling. SQLite is the local default. |
 | `paste` | `max_size`, `default_expiry`, `default_language`, `max_burn_after`, `allow_unlisted` | Paste size, expiry, language, burn-after-read, and visibility defaults. |
 | `server.cache` | `type`, `url`, `host`, `port`, `username`, `password`, `db`, `tls`, `tls_skip_verify`, `pool_size`, `min_idle`, `timeout`, `prefix`, `ttl` | In-memory or remote Redis/Valkey cache. `url` takes precedence over individual connection fields. |
@@ -139,10 +137,10 @@ and `server.i2p.b32_address` are normally maintained by the server.
 | `server.ssl` | `enabled`, `cert`, `key`, `min_version`, `letsencrypt.{enabled,email,challenge,staging,dns_provider,dns_credentials}` | HTTPS certificates and ACME. DNS credentials use a flat map of lego environment-variable names; plaintext values are atomically rewritten as `enc:v1:` ciphertext under `server.security.encryption_key`. |
 | `server.notifications.email` | `enabled`, `smtp.{host,port,username,password,tls}`, `from.{name,email}`, `reply_to`, `template_dir`, `events.{startup,shutdown,...}` | SMTP transport, sender identity, custom template directory, and per-event email switches. Startup and graceful-shutdown emails default off; TLS accepts `auto`, `starttls`, `tls`, or `none`. |
 | `server.notifications.disk_low` | `enabled`, `threshold_percent`, `check_interval`, `repeat` | Monitors data, log, and backup filesystems once per volume. Defaults: enabled, 85% used, every 5 minutes, repeat alerts every 24 hours while still above threshold; recovery is logged after usage falls 5 percentage points below threshold. |
-| `server.privacy` | `data.{sold,stored_on_server,sharing}`, `retention.{period,export_available,deletion_available}`, `consent.*`, `cookies.{essential,preferences,analytics}`, `third_party.services` | Data-disclosure and consent behavior. Privacy text is built in and may be extended from `{config_dir}/html/privacy.{html,md,txt}`. |
+| `server.privacy` | `data.{sold,stored_on_server,sharing}`, `retention.{period,export_available,deletion_available}`, `consent.*`, `cookies.{essential,preferences,analytics}`, `third_party.services` | Data-disclosure and consent behavior. Privacy text is built in and may be extended with `server.branding.content.privacy`. |
 | `server.tracking` | `type`, `id`, `url` | Optional analytics provider; empty or `none` disables tracking. |
 | `server.security` | `encryption_key`, `allowlist`, `blocked_ips`, `abuse_detection.{request_flood,auto_block_ip,auto_alert}`, `blocklists.{enabled,sources}`, `cve.*`, `trivy.*` | At-rest encryption key, IP controls, abuse response, and downloaded security data. |
-| `server.rate_limit` | `enabled`, `read.{requests,window}`, `write.{requests,window}`, `health.{requests,window}`, `global_burst` | Per-IP request limits by endpoint class. |
+| `server.rate_limit` | `read.{requests,window}`, `write.{requests,window}`, `health.{requests,window}`, `global_burst` | Always-on per-IP request limits by endpoint class. |
 | `server.limits` | `max_body_size`, `read_timeout`, `write_timeout`, `idle_timeout` | HTTP request and connection limits. |
 | `server.trusted_proxies` | `additional` | Additional trusted proxy IPs/CIDRs beyond the built-in private ranges. |
 | `server.url_detection` | `learning`, `min_samples`, `sample_window`, `log_changes`, `live_reload` | Hostname learning behavior. |
@@ -151,31 +149,45 @@ and `server.i2p.b32_address` are normally maintained by the server.
 | `server.restore` | `max_archive_size`, `max_expanded_size`, `max_files`, `max_file_size`, `max_ratio` | Safety limits for backup restore extraction. |
 | `server.compliance` | `enabled`, `gdpr`, `ccpa`, `hipaa`, `soc2`, `pci_dss`, `iso27001`, `fedramp`, `lgpd`, `pipeda`, `appi`, `pdpa` | Compliance behavior switches; each standard is off unless enabled. |
 | `server.scheduler` | `timezone`, `catch_up_window`, `tasks.<task_id>.{schedule,retry_on_fail,retry_delay,max_retries,max_age,max_size,retention,renew_before}` | Built-in scheduler timezone, missed-run window, and task-specific options. |
-| `web` | `site_title`, `theme`, `robots.{allow,deny,ai_bots}`, `security.*`, `hsts.*`, `csp.*`, `reports.*`, `headers.*`, `llms.*`, `announcements.*` | Browser theme, crawler policy, transport/security headers, discovery content, footer branding, and site banners. |
+| `web` | `robots.{allow,deny}`, `security.*`, `hsts.*`, `csp.*`, `reports.*`, `headers.*`, `llms.*`, `announcements.*`, `ui.{theme,accent}` | Crawler policy, transport/security headers, discovery content, site banners, and UI theme/accent. Branding and SEO are in `server.branding` and `server.seo`. |
 | `server.cors` | `allowed_origins`, `allow_credentials`, `max_age` | Cross-origin access. Wildcard origins do not receive credentialed CORS. |
 | `server.healthz.root.enabled` | boolean | Opt-in root `/healthz` alias; `/server/healthz` remains canonical. |
 | `server.compression` | `enabled`, `level`, `types` | Response compression and MIME types. |
 | `server.debug` | `pprof`, `log_queries`, `log_cache`, `log_bodies`, `max_body_log_size`, `block_profile_rate`, `mutex_profile_fraction`, `runtime_endpoints` | Debug-only profiling and diagnostics. These settings require debug mode. |
 
-The generated first-run `server.yml` contains defaults. For fields with special
+The generated first-run `server.yml` contains node settings only. Area files are created when migration or an explicit configuration writer moves or saves those settings. The area-file homes are:
+
+| File | Sections |
+|------|----------|
+| `yaml.d/branding.yml` | `server.branding`, `server.seo`, `web.ui` |
+| `yaml.d/web.yml` | `web.*` except `web.ui`; CORS, CSRF, compression, health alias, i18n, and URL detection |
+| `yaml.d/pages.yml` | `server.pages` |
+| `yaml.d/contact.yml` | `server.contact` |
+| `yaml.d/privacy.yml` | `server.privacy`, compliance, tracking |
+| `yaml.d/security.yml` | security, rate limits, GeoIP, limits, tokens, `data.*` |
+| `yaml.d/logs.yml`, `metrics.yml`, `notifications.yml` | corresponding `server.*` sections |
+| `yaml.d/tor.yml`, `i2p.yml` | overlay networking settings |
+| `yaml.d/maintenance.yml` | maintenance, scheduler, update, backup, restore |
+| `yaml.d/accounts.yml` | auth and account settings |
+| `yaml.d/app.yml` | other project-defined settings |
+
+Credentials live in private `secrets.yml` and override the same key from other files. The server automatically migrates legacy monolithic settings at startup. For fields with special
 validation or privacy behavior, see the relevant section above and the
 [Security](security.md), [Integrations](integrations.md), and [API](api.md)
 references.
 
 `server.cors.allowed_origins` defaults to `*`; configured origins are checked against the list. An explicit origin may receive `Access-Control-Allow-Credentials: true`; wildcard origins never do. Preflight responses list the exact supported content, authorization, CSRF, and fetch headers.
 
-Operator page content lives under `{config_dir}/html/`. See [Operator Content Files](../AI.md) for names, formats, sanitization, and reload behavior. `footer.html` may use the documented footer variables.
+Operator page content lives under `server.branding.content` in `yaml.d/branding.yml`; see [Branding and SEO](#branding-and-seo-serverbranding-serverseo) for formats and language selection.
 
-`server.pages.contact` configures the contact form. Its antispam settings control signed form tokens, rate limits, blocked content, strikes, and duplicate detection. Page content is file-based; contact and help behavior remain configuration-driven.
+`server.pages.contact` configures the contact form. Its antispam settings control signed form tokens, rate limits, blocked content, strikes, and duplicate detection. About, privacy, terms, header, and footer content use `server.branding.content`; help content remains under `server.pages.help`.
 
 Configuration may be split between `server.yml` and the optional `yaml.d/`
 directory beside it. The server loads `server.yml` first, then regular `*.yml`
 and `*.yaml` drop-ins in byte-wise filename order. Maps merge recursively;
-later scalars and lists replace earlier values. Hidden files, backups, other
-extensions and subdirectories are ignored. Explicit nulls, duplicate scalar
-keys and drop-ins writable by group or others are rejected. Reloads keep the
-last valid merged configuration if a new version fails validation. Backups
-include `yaml.d/` when it exists.
+later scalars and lists replace earlier values. `secrets.yml` loads last. Hidden files, backups, other
+extensions and subdirectories are ignored. Explicit nulls and duplicate scalar
+keys are invalid; invalid values fall back to defaults, and an unreadable YAML file keeps its last good copy. The migration writes a private backup and moves area sections to their assigned files. Backups include `yaml.d/`, `secrets.yml`, and `assets/` when present.
 
 ### Branding and SEO (`server.branding`, `server.seo`)
 
@@ -324,7 +336,7 @@ is skipped (with a `backup.skipped_disk_full` audit event) when free
 space is less than 2x the last backup size or disk usage exceeds
 `maintenance.cleanup.disk_threshold` (default 90%).
 
-`--maintenance backup` archives `server.yml`, the databases, and the
+`--maintenance backup` archives `server.yml`, `yaml.d/`, `secrets.yml`, `assets/`, the databases, and the
 `template/` and `theme/` directories; add `--include-ssl` for
 `{config_dir}/ssl/` and `--include-data` for `{data_dir}/` (excluding
 `db/` and the backup directory).

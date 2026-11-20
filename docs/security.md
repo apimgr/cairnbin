@@ -33,7 +33,7 @@
 
 - All routes send `X-Frame-Options: SAMEORIGIN` and CSP `frame-ancestors 'self'` — third-party sites cannot iframe the app
 - **Exception:** `/emb/{id}` is the designated embeddable endpoint — it omits `X-Frame-Options` and sends a configurable `frame-ancestors` directive instead
-- Default embed policy is `*` (any site may iframe an embed); restrict it via `web.csp.embed_frame_ancestors` in `server.yml`, e.g. `'self' https://example.com`
+- Default embed policy is `*` (any site may iframe an embed); restrict it via `web.csp.embed_frame_ancestors` in the merged configuration, e.g. `'self' https://example.com`
 - Defense in depth: when a browser sends `Sec-Fetch-Dest: iframe|frame|embed|object` cross-site for any endpoint other than `/emb/{id}`, the request is rejected with 403 (requires `web.headers.sec_fetch_validation`)
 - The paste view page offers copy-ready HTML (`<iframe>` of `/emb/{id}`) and Markdown embed snippets
 
@@ -50,7 +50,7 @@
 ## Rate Limiting
 
 - Defaults, per IP per minute: 120 reads, 10 writes (create/delete), 120 health checks, 240 total (global burst)
-- Configurable under `server.rate_limit` (`read`, `write`, `health`, `global_burst`) in `server.yml`
+- Configurable under `server.rate_limit` (`read`, `write`, `health`, `global_burst`) in the merged configuration
 - A client that sends more than 10x the read limit in a minute is blocked for an hour (`server.security.abuse_detection`)
 - Rate limiting protects the server against abuse — it is not a usage cap
 
