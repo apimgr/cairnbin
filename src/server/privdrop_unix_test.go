@@ -98,21 +98,31 @@ func TestApplyPrivilegeDropNoConfig(t *testing.T) {
 
 func TestApplyPrivilegeDropNoTarget(t *testing.T) {
 	s := &Server{}
-	// A configured-but-unresolvable target must keep current privileges and not
-	// fail: when running as root this exercises the !ok branch; when running
-	// unprivileged it returns at the root guard. Either way no real drop occurs.
+	// A root process must refuse to continue when the service account cannot be
+	// resolved; an unprivileged process needs no drop.
 	s.SetPrivilegeDrop("nonexistent_user_zzz_999", "", []string{t.TempDir(), ""})
-	if err := s.applyPrivilegeDrop(); err != nil {
-		t.Errorf("applyPrivilegeDrop with unresolvable target: %v", err)
+	err := s.applyPrivilegeDrop()
+	if os.Geteuid() == 0 && err == nil {
+		t.Error("applyPrivilegeDrop with unresolvable target succeeded as root")
+	}
+	if os.Geteuid() != 0 && err != nil {
+		t.Errorf("unprivileged applyPrivilegeDrop returned error: %v", err)
 	}
 }
 
 func TestBindAndDropNoConfig(t *testing.T) {
 	s := &Server{}
-	// With no privilege-drop config, bindAndDrop just binds an ephemeral port.
-	ln, err := s.bindAndDrop("127.0.0.1:0")
+	// Unprivileged ports are bound after privilege-drop processing.
+	listeners, err := s.bindPrivilegedListenersAndDrop("127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("bindAndDrop: %v", err)
+		t.Fatalf("bindPrivilegedListenersAndDrop: %v", err)
+	}
+	if listeners[0] != nil {
+		t.Fatal("ephemeral port was bound before post-drop startup")
+	}
+	ln, err := bindListenerAfterDrop("127.0.0.1:0", listeners[0])
+	if err != nil {
+		t.Fatalf("bindListenerAfterDrop: %v", err)
 	}
 	defer func() { _ = ln.Close() }()
 	if ln.Addr() == nil {
@@ -120,20 +130,14 @@ func TestBindAndDropNoConfig(t *testing.T) {
 	}
 }
 
-func TestApplyPrivilegeDropAsRoot(t *testing.T) {
+func TestApplyPrivilegeDropRejectsRootTarget(t *testing.T) {
 	if os.Geteuid() != 0 {
-		t.Skip("requires root to exercise the chown + drop path")
-	}
-	// Dropping root→root is a no-op switch, so this safely exercises the full
-	// chown-then-drop path without actually relinquishing privileges.
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
+		t.Skip("requires root to resolve and reject a root service target")
 	}
 	s := &Server{}
-	s.SetPrivilegeDrop("root", "", []string{dir})
-	if err := s.applyPrivilegeDrop(); err != nil {
-		t.Errorf("applyPrivilegeDrop(root→root): %v", err)
+	s.SetPrivilegeDrop("root", "", nil)
+	if err := s.applyPrivilegeDrop(); err == nil {
+		t.Error("applyPrivilegeDrop accepted root as the service target")
 	}
 }
 

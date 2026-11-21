@@ -20,8 +20,8 @@ func currentlyRoot() bool {
 
 // resolvePrivDropTarget resolves the uid/gid for the configured service user/group.
 // An empty or "{auto}" username resolves to the default service account. ok is false
-// when the target cannot be resolved (e.g. the system user was never created), in
-// which case the caller keeps running with current privileges.
+// when the target cannot be resolved (e.g. the system user was never created), so a
+// root startup can fail closed instead of starting child services as root.
 func resolvePrivDropTarget(username, group string) (uid, gid int, name string, ok bool) {
 	name = username
 	if name == "" || name == "{auto}" {

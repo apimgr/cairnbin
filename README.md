@@ -36,7 +36,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - QR code at `/qr/{id}`
 - View count tracking
 - Automatic background cleanup of expired and burned pastes
-- Full web frontend (server-side Go templates, dark/light/auto theme, installable PWA with offline recovery and user-controlled updates, mobile-first)
+- Full web frontend (server-side Go templates, dark/light/auto theme, installable PWA with offline recovery at the root or under a mounted base path, user-controlled updates, mobile-first)
 - Cookie-based preferences with inline export/import, consent controls, and local reset at `/server/preferences`; owner-token management at `/server/preferences/tokens`
 - Server pages: `/server/about`, `/server/contact`, `/server/help`, `/server/help/mcp`, `/server/healthz`, `/server/privacy`, `/server/security`, `/server/security/policy`, `/server/security/thanks`, `/server/security/report/{tracking_id}`, `/server/terms`
 - Machine-readable server API includes contact-form metadata and submissions plus a side-effect-free Bearer token check at `/api/v1/server/auth/check`

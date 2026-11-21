@@ -1,6 +1,28 @@
 {{define "header"}}
   <a href="#main-content" class="skip-link">{{t .Lang "nav.skip_to_content"}}</a>
   <a href="#navigation" class="skip-link">{{t .Lang "nav.skip_to_navigation"}}</a>
+  {{$c := consentInfo .Lang}}
+  <div id="site-banner-stack" data-position="{{if and (not .HasConsented) (ne .CurrentPath "/server/preferences")}}{{$c.Position}}{{else}}top{{end}}">
+  {{if and (not .HasConsented) (ne .CurrentPath "/server/preferences")}}
+  <div id="cookie-consent" class="cookie-banner cookie-banner-{{$c.Position}}" data-sold="{{if $c.DataSold}}true{{else}}false{{end}}">
+    <div class="cookie-banner-content">
+      <span class="cookie-message">{{$c.Message}} - <a href="{{$c.PolicyURL}}" class="policy-link">{{$c.PolicyText}}</a></span>
+      <div class="cookie-buttons">
+        {{if $c.ShowPreferences}}<a href="{{.AssetPrefix}}/server/preferences" class="btn-preferences policy-link">{{$c.PreferencesText}}</a>{{end}}
+        <form method="post" action="{{.AssetPrefix}}/server/consent">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <input type="hidden" name="choice" value="decline">
+          <button type="submit" class="btn-decline">{{$c.DeclineText}}</button>
+        </form>
+        <form method="post" action="{{.AssetPrefix}}/server/consent">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <input type="hidden" name="choice" value="accept">
+          <button type="submit" class="btn-accept">{{$c.AcceptText}}</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {{end}}
   {{if ne .CurrentPath "/server/preferences"}}{{range .Announcements}}
   <div class="site-banner site-banner-{{.Type}}" role="{{.Role}}" data-announcement-id="{{.ID}}">
     <span class="site-banner-icon" aria-hidden="true">{{.Icon}}</span>
@@ -15,6 +37,8 @@
     {{end}}
   </div>
   {{end}}{{end}}
+  <div id="pwa-update-banner-slot" aria-live="polite"></div>
+  </div>
   {{if .Flash}}
   <div class="flash flash-{{.Flash.Kind}}" role="status">{{.Flash.Message}}</div>
   {{end}}

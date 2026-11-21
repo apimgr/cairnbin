@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -89,6 +90,15 @@ type Manager struct {
 	debug    *fileWriter
 	audit    *fileWriter
 	security *fileWriter
+}
+
+var standardLogOutputMu sync.Mutex
+
+// LockStandardLogOutput serializes direct console output with writes from the
+// standard logger, keeping multi-line startup output contiguous.
+func LockStandardLogOutput() func() {
+	standardLogOutputMu.Lock()
+	return standardLogOutputMu.Unlock
 }
 
 // levelRank maps a level name to its ordering; unknown levels rank as info.
@@ -278,6 +288,8 @@ type standardLogWriter struct {
 }
 
 func (w standardLogWriter) Write(p []byte) (int, error) {
+	standardLogOutputMu.Lock()
+	defer standardLogOutputMu.Unlock()
 	line := strings.TrimSpace(string(p))
 	if line == "" {
 		return len(p), nil

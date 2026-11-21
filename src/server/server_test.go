@@ -1338,6 +1338,22 @@ func TestHandleManifest(t *testing.T) {
 	if cats, _ := body["categories"].([]interface{}); len(cats) != 1 || cats[0] != "utilities" {
 		t.Errorf("manifest categories = %v", body["categories"])
 	}
+
+	cfg.Server.BaseURL = "/mount"
+	s = newMinimalServer(cfg)
+	r = httptest.NewRequest(http.MethodGet, "/manifest.json", nil)
+	w = httptest.NewRecorder()
+	s.handleManifest(w, r)
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("prefixed manifest body is not valid JSON: %v", err)
+	}
+	if body["start_url"] != "/mount/?source=pwa" || body["scope"] != "/mount/" {
+		t.Errorf("prefixed manifest start_url/scope = %v/%v", body["start_url"], body["scope"])
+	}
+	icons, _ := body["icons"].([]interface{})
+	if len(icons) == 0 || icons[0].(map[string]interface{})["src"] != "/mount/static/icons/icon-72.png" {
+		t.Errorf("prefixed manifest icon = %v", icons)
+	}
 }
 
 // ─── Server.handleServiceWorker ───────────────────────────────────────────────
@@ -1370,11 +1386,15 @@ func TestHandleServiceWorker(t *testing.T) {
 				t.Errorf("service worker cache version should use build stamp %q", tc.wantStamp)
 			}
 			for _, required := range []string{
+				`const BASE_PATH = "";`,
+				": 'cairnbin-cache-root-';",
+				"key.startsWith('cairnbin-cache-')",
+				"!key.startsWith('cairnbin-cache-%2F')",
 				"const NAV_TIMEOUT_MS = 8000;",
 				"withTimeout(fetch(request), NAV_TIMEOUT_MS)",
 				"if (response.ok && !response.redirected)",
 				"event.data.type === 'SKIP_WAITING'",
-				"'/static/js/app.js?v=' + CACHE_VERSION",
+				"appPath('/static/js/app.js?v=' + CACHE_VERSION)",
 			} {
 				if !strings.Contains(body, required) {
 					t.Errorf("service worker is missing recovery contract %q", required)
@@ -1395,6 +1415,22 @@ func TestHandleServiceWorker(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("baseurl prefix", func(t *testing.T) {
+		buildinfo.Set("1.2.3", "abcdef0")
+		cfg := &config.Config{}
+		cfg.Server.BaseURL = "/mount"
+		s := &Server{version: "1.2.3", cfg: cfg}
+		r := httptest.NewRequest(http.MethodGet, "/sw.js", nil)
+		w := httptest.NewRecorder()
+		s.handleServiceWorker(w, r)
+		body := w.Body.String()
+		for _, want := range []string{`const BASE_PATH = "/mount";`, `encodeURIComponent(BASE_PATH) + '-'`, `return key.startsWith(CACHE_PREFIX)`, `appPath('/offline.html')`, `appPath('/api/')`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("prefixed service worker is missing %q", want)
+			}
+		}
+	})
 }
 
 func TestOpenAPIRoutesAreRegistered(t *testing.T) {

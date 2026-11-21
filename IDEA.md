@@ -48,7 +48,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - Token reuse: callers may supply an existing owner token on paste creation to link the new paste to that token; the web UI saves the token to the `cairnbin_owner_token_rU3uW5Ze` cookie (HttpOnly, primary) and, as a JS convenience copy, to `localStorage` under the same key; the create form is pre-filled by JS only, never load-bearing
 - Raw paste view, file download, iframe-embeddable view with copy-ready HTML and Markdown embed snippets offered on the paste view page, and a QR code available as both a page and a PNG image
 - View count tracking; automatic background cleanup of expired and burned pastes
-- Full web frontend (server-side Go templates, dark/light/auto theme, PWA, mobile-first)
+- Full web frontend (server-side Go templates, dark/light/auto theme, installable PWA with offline recovery at the root or under a mounted base path, mobile-first)
 - Static info pages: about, help, health check, privacy, terms
 - CLI client (`cairnbin-cli`) — full API access from the terminal
 - OpenAPI/Swagger docs
@@ -93,7 +93,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - **URL shortening** — a paste whose entire content is exactly one `http`/`https` URL auto-becomes a redirecting short link; the raw and download views always return the literal stored URL text instead of redirecting
 - **Raw view, file download, and embeds** — raw content view, download-as-file, an iframe-embeddable view with copy-ready HTML/Markdown snippets, and a QR code page plus PNG image for every paste
 - **View count tracking** with automatic background cleanup of expired and burned pastes
-- **Full web frontend** — server-rendered Go templates, dark/light/auto theme, PWA, mobile-first, fully usable without JavaScript
+- **Full web frontend** — server-rendered Go templates, dark/light/auto theme, installable PWA with offline recovery at the root or under a mounted base path, mobile-first, fully usable without JavaScript
 - **CLI client** (`cairnbin-cli`) — full API access from the terminal
 - **OpenAPI/Swagger docs** and a **read-only GraphQL query interface** (create/delete remain REST-only)
 - **Public discovery** — `/sitemap.xml` lists anonymous pages allowed by robots rules; Atom `/feed.xml` and RSS `/rss.xml` list recent public pastes

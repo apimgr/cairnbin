@@ -284,6 +284,39 @@ func TestPeekServerAddressReadsOnlyAddress(t *testing.T) {
 	}
 }
 
+func TestEarlyPeeksUseMergedDropInOrder(t *testing.T) {
+	path := tempConfigPath(t)
+	dropInDir := filepath.Join(filepath.Dir(path), "yaml.d")
+	if err := os.MkdirAll(dropInDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		path: "server:\n  port: 8080\n  address: '[::]'\n  daemonize: false\n  user: default-user\n  group: default-group\n",
+		filepath.Join(dropInDir, "10-network.yml"): "server:\n  port: 8443\n  address: 0.0.0.0\n  user: service-user\n",
+		filepath.Join(dropInDir, "20-start.yml"):   "server:\n  address: pste.us\n  daemonize: true\n  group: service-group\n",
+	}
+	for file, content := range files {
+		if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := config.PeekServerPort(path); got != "8443" {
+		t.Errorf("PeekServerPort() = %q, want drop-in winner 8443", got)
+	}
+	if got := config.PeekServerAddress(path); got != "pste.us" {
+		t.Errorf("PeekServerAddress() = %q, want last drop-in pste.us", got)
+	}
+	if !config.PeekServerDaemonize(path) {
+		t.Error("PeekServerDaemonize() = false, want true from the last drop-in")
+	}
+	if got := config.PeekServerUser(path); got != "service-user" {
+		t.Errorf("PeekServerUser() = %q, want service-user", got)
+	}
+	if got := config.PeekServerGroup(path); got != "service-group" {
+		t.Errorf("PeekServerGroup() = %q, want service-group", got)
+	}
+}
+
 func TestLoadEncryptsDNSCredentialsAtRest(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
 	plain := "DO_AUTH_TOKEN: top-secret-token"

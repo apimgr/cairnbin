@@ -858,7 +858,6 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	if pidFlag != "" {
 		pidFile = pidFlag
 	}
-
 	for _, dir := range []string{configDir, dataDir, logsDir, cacheDir, backupDir} {
 		if err := paths.EnsureDir(dir); err != nil {
 			log.Printf("warning: could not create directory %s: %v", dir, err)
@@ -945,11 +944,58 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		return 73
 	}
 
-	// PART 8 early config peek: inspect only server.port before the full
-	// configuration validation so unrelated malformed settings do not affect
-	// early listener setup.
+	// PART 8 early config peeks read only listener and service identity values.
 	earlyConfigPort := config.PeekServerPort(cfgFile)
 	earlyConfigAddress := config.PeekServerAddress(cfgFile)
+	earlyConfigUser := config.PeekServerUser(cfgFile)
+	earlyConfigGroup := config.PeekServerGroup(cfgFile)
+	// This early daemonize peek preserves daemon re-exec before root setup ends;
+	// the startup rules currently list only port and address for early reads.
+	if !daemonFlag && daemon.ShouldDaemonize(false, config.PeekServerDaemonize(cfgFile)) {
+		if err := daemon.Daemonize(activeLang); err != nil {
+			log.Printf("daemon: %v", err)
+			os.Exit(71)
+		}
+	}
+	if err := service.EnsureServiceAccount(earlyConfigUser); err != nil {
+		log.Printf("warning: could not ensure service account: %v", err)
+	}
+	earlyPort := portFlag
+	if earlyPort == "" {
+		earlyPort = strings.TrimSpace(os.Getenv("PORT"))
+	}
+	if earlyPort == "" {
+		earlyPort = earlyConfigPort
+	}
+	if earlyPort == "" && paths.IsContainer() {
+		earlyPort = "80"
+	}
+	listenAddress := earlyConfigAddress
+	if listenAddress == "" {
+		listenAddress = "[::]"
+	}
+	if listen := os.Getenv("LISTEN"); listen != "" {
+		listenAddress = listen
+	}
+	if addressFlag != "" {
+		listenAddress = addressFlag
+	}
+	listenAddrs := earlyListenAddresses(listenAddress, earlyPort)
+	preparedListeners, err := server.PreparePrivilegeDrop(earlyConfigUser, earlyConfigGroup, []string{
+		configDir, dataDir, logsDir, cacheDir, backupDir, filepath.Dir(pidFile),
+	}, listenAddrs...)
+	if err != nil {
+		log.Printf("startup privilege preparation: %v", err)
+		return 73
+	}
+	defer func() {
+		for _, listener := range preparedListeners {
+			if listener != nil {
+				_ = listener.Close()
+			}
+		}
+	}()
+
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		log.Printf("warning: config load: %v", err)
@@ -957,30 +1003,13 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	if cfg.Server.Port == "" {
 		cfg.Server.Port = earlyConfigPort
 	}
-	if earlyConfigAddress != "" {
+	if cfg.Server.Address == "" && earlyConfigAddress != "" {
 		cfg.Server.Address = earlyConfigAddress
-	}
-
-	// server.daemonize applies to manual starts only (PART 8): the --daemon flag
-	// was handled above, and a service-manager or container start never
-	// daemonizes. The re-exec'd child sees _DAEMON_CHILD and continues.
-	if !daemonFlag && daemon.ShouldDaemonize(false, cfg.Server.Daemonize) {
-		if err := daemon.Daemonize(activeLang); err != nil {
-			log.Printf("daemon: %v", err)
-			os.Exit(71)
-		}
 	}
 
 	// PART 17: custom email templates override embedded defaults from
 	// {config_dir}/template/email/ when present; empty dir falls back silently.
 	cfg.Server.Notifications.Email.TemplateDir = filepath.Join(configDir, "template", "email")
-
-	// PART 23 startup step 8a: while still root, create the dedicated service
-	// account (if missing) before directory setup and the later privilege drop.
-	// No-op for non-root and on Windows (VSA). --service --install never does this.
-	if err := service.EnsureServiceAccount(cfg.Server.User); err != nil {
-		log.Printf("warning: could not ensure service account: %v", err)
-	}
 
 	// CLI flag overrides on config.
 	if portFlag != "" {
@@ -1136,6 +1165,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// Construct the server before registering background tasks that use its
 	// Tor-aware outbound client and GeoIP controls.
 	srv := server.New(db, cfg, cfgMgr, Version, CommitID, BuildDate, configDir, dataDir)
+	srv.SetPreparedListeners(preparedListeners)
 
 	// ── Background scheduler ──────────────────────────────────────────────────
 
@@ -1492,19 +1522,19 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// run is audited; failures also send a scheduler_error email to the operator.
 	sched.SetNotifier(schedulerNotifier(cfg, auditW))
 
-	// One full retention sweep of the backup dir before the scheduler starts
-	// (startup step 16, AI.md:10595–10596) — clears accumulation from crashed
-	// or failed prior runs.
-	if err := task.RetentionSweep(backupCfg); err != nil {
-		log.Printf("backup: startup retention sweep: %v", err)
-	}
-
-	sched.Start()
 	defer sched.Stop()
 
 	// Register scheduler health callback with the server for /server/healthz.
 	srv.SetSchedulerHealthFn(sched.Running)
 	srv.SetSchedulerAPI(sched)
+	srv.SetAfterPrivilegeDropFn(func() {
+		// Startup step 16 runs user-owned maintenance work after privilege drop
+		// and before Tor/I2P or the HTTP listener starts.
+		if err := task.RetentionSweep(backupCfg); err != nil {
+			log.Printf("backup: startup retention sweep: %v", err)
+		}
+		sched.Start()
+	})
 
 	// ── PID file ──────────────────────────────────────────────────────────────
 	// WritePIDFile also calls CheckPIDFile; it exits non-zero if another
@@ -1522,12 +1552,6 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	}
 
 	addr := net.JoinHostPort(strings.Trim(cfg.Server.Address, "[]"), cfg.Server.Port)
-
-	// Register privilege drop: after binding the listen port as root, switch to the
-	// unprivileged service account, chowning runtime paths first (PART 23 step 8g).
-	srv.SetPrivilegeDrop(cfg.Server.User, cfg.Server.Group, []string{
-		configDir, dataDir, logsDir, cacheDir, backupDir, filepath.Dir(pidFile),
-	})
 
 	// runServer is the shared startup closure used both for interactive mode
 	// and for the Windows Service Control Manager path.
@@ -1580,15 +1604,10 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			cancel()
 		}()
 
-		// Emit the startup banner with the protocol-correct URL (PART 12/15).
-		// startupScheme() resolves {proto} from config (TLS, LE, port 443 → https,
-		// otherwise http). The listen address addr is raw ":PORT"; the banner URLs
-		// show the public base URL and the listen address with protocol.
+		// Resolve public and bound URLs now; the server invokes the banner callback
+		// only after privilege drop, overlay startup, and listener startup.
 		proto := startupScheme(cfg)
 		publicURL := startupBaseURL(cfg)
-		// Listen URL is a diagnostic showing the bound interface. Never display a
-		// wildcard bind address (0.0.0.0/::) — resolve the real FQDN/IP instead
-		// (PART 7); strip :80/:443 for display.
 		listenHost := strings.TrimSpace(cfg.Server.Address)
 		switch listenHost {
 		case "", "0.0.0.0", "::", "[::]":
@@ -1607,33 +1626,38 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		if listenPort != "" {
 			listenURL += ":" + listenPort
 		}
-		// Tor URL: http:// on overlays unless clearnet is HTTPS-only (single
-		// port 443) — overlay networks inherit HTTPS-only mode (AI.md:19916-19942).
-		torURL := ""
-		if onion := cfg.Server.Tor.OnionAddress; onion != "" {
-			torProto := "http"
-			if strings.TrimSpace(cfg.Server.Port) == "443" {
-				torProto = "https"
+		srv.SetStartupBannerFn(func() {
+			// Overlay URLs are only included after their managed services finish
+			// startup, so the banner reflects the address actually serving traffic.
+			torURL := ""
+			if onion := srv.TorOnionAddress(); onion != "" {
+				torProto := "http"
+				if strings.TrimSpace(cfg.Server.Port) == "443" {
+					torProto = "https"
+				}
+				torURL = torProto + "://" + onion
 			}
-			torURL = torProto + "://" + onion
-		}
-		banner.PrintStartupBanner(banner.BannerConfig{
-			AppName:   appName,
-			Version:   Version,
-			AppMode:   string(mode.Get()),
-			Debug:     mode.IsDebugEnabled(),
-			Lang:      activeLang,
-			PublicURL: publicURL,
-			ListenURL: listenURL,
-			TorURL:    torURL,
-			FirstRun:  cfg.FirstRun,
+			var overlayURLs []string
+			if address := srv.I2PAddress(); address != "" {
+				overlayProto := "http"
+				if strings.TrimSpace(cfg.Server.Port) == "443" {
+					overlayProto = "https"
+				}
+				overlayURLs = append(overlayURLs, overlayProto+"://"+address)
+			}
+			emitStartupOutput(os.Stdout, banner.BannerConfig{
+				AppName:   appName,
+				Version:   Version,
+				AppMode:   string(mode.Get()),
+				Debug:     mode.IsDebugEnabled(),
+				Lang:      activeLang,
+				PublicURL: publicURL,
+				ListenURL: listenURL,
+				TorURL:    torURL,
+				URLs:      overlayURLs,
+				FirstRun:  cfg.FirstRun,
+			}, addr, cfgFile)
 		})
-		log.Printf("listening on %s", listenURL)
-		// First run: point the operator at the generated config file
-		// (startup step 20, AI.md:10631).
-		if cfg.FirstRun {
-			log.Printf("first run: generated config at %s", cfgFile)
-		}
 		if err := srv.Run(ctx, addr); err != nil {
 			log.Printf("server: %v", err)
 			logMgr.Error("server run failed", "error", err.Error())
@@ -2430,6 +2454,40 @@ func schedulerNotifier(cfg *config.Config, auditW *audit.Writer) scheduler.Notif
 
 // startupScheme returns the config-derived {proto} for contexts without an
 // HTTP request (PART 12/15).
+func emitStartupOutput(w io.Writer, cfg banner.BannerConfig, address, configPath string) {
+	banner.WriteStartupBanner(w, cfg)
+	log.Printf("listening on %s", address)
+	if cfg.FirstRun {
+		log.Printf("first run: generated config at %s", configPath)
+	}
+}
+
+func earlyListenAddresses(address, portSpec string) []string {
+	if strings.TrimSpace(portSpec) == "" {
+		return nil
+	}
+	httpPort, httpsPort := config.SplitPorts(portSpec)
+	ports := []string{httpPort}
+	if strings.Contains(portSpec, ",") {
+		if httpsPort == "" {
+			return nil
+		}
+		ports = append(ports, httpsPort)
+	}
+	for _, value := range ports {
+		port, err := strconv.Atoi(value)
+		if err != nil || port < 1 || port > 65535 {
+			return nil
+		}
+	}
+	address = strings.Trim(address, "[]")
+	addrs := make([]string, 0, len(ports))
+	for _, port := range ports {
+		addrs = append(addrs, net.JoinHostPort(address, port))
+	}
+	return addrs
+}
+
 func startupScheme(cfg *config.Config) string {
 	return cfg.StartupScheme()
 }

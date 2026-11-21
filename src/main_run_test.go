@@ -1,11 +1,98 @@
 package main
 
 import (
+	"bytes"
+	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/cairnbin/src/common/banner"
 )
+
+type startupOutputBuffer struct {
+	bytes.Buffer
+	writes int
+}
+
+func (w *startupOutputBuffer) Write(p []byte) (int, error) {
+	w.writes++
+	return w.Buffer.Write(p)
+}
+
+func TestStartupOutputContract(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	oldWriter, oldFlags := log.Writer(), log.Flags()
+	var logOutput bytes.Buffer
+	log.SetOutput(&logOutput)
+	log.SetFlags(0)
+	t.Cleanup(func() {
+		log.SetOutput(oldWriter)
+		log.SetFlags(oldFlags)
+	})
+
+	var console startupOutputBuffer
+	emitStartupOutput(&console, banner.BannerConfig{
+		AppName:   "cairnbin",
+		Version:   "devel",
+		AppMode:   "debug",
+		PublicURL: "http://pste.us",
+	}, "0.0.0.0:64080", "server.yml")
+
+	if console.writes != 1 {
+		t.Errorf("startup console used %d writes, want one contiguous banner write", console.writes)
+	}
+	if !strings.Contains(console.String(), "pste.us") || strings.Contains(console.String(), "0.0.0.0") {
+		t.Errorf("startup banner omitted resolved public hostname: %q", console.String())
+	}
+	if strings.Contains(console.String(), "I2P") {
+		t.Errorf("default startup banner unexpectedly includes I2P: %q", console.String())
+	}
+	if logOutput.String() != "listening on 0.0.0.0:64080\n" {
+		t.Errorf("startup emitted unexpected, missing, or duplicated log lines: %q", logOutput.String())
+	}
+	for _, icon := range []string{"🚀", "🧅", "🔗", "📡", "✅", "🔧", "🔒", "🐛"} {
+		if strings.Contains(logOutput.String(), icon) {
+			t.Errorf("decorated banner icon %q leaked into plain log output: %q", icon, logOutput.String())
+		}
+	}
+
+	logOutput.Reset()
+	var firstRunConsole startupOutputBuffer
+	emitStartupOutput(&firstRunConsole, banner.BannerConfig{
+		AppName:   "cairnbin",
+		Version:   "devel",
+		AppMode:   "production",
+		PublicURL: "http://pste.us",
+		FirstRun:  true,
+	}, "0.0.0.0:64080", "server.yml")
+	if got, want := logOutput.String(), "listening on 0.0.0.0:64080\nfirst run: generated config at server.yml\n"; got != want {
+		t.Errorf("first-run startup logs = %q, want each event once: %q", got, want)
+	}
+}
+
+func TestEarlyListenAddresses(t *testing.T) {
+	cases := []struct {
+		name    string
+		address string
+		ports   string
+		want    []string
+	}{
+		{name: "single privileged", address: "[::]", ports: "443", want: []string{"[::]:443"}},
+		{name: "dual ports", address: "0.0.0.0", ports: "80,443", want: []string{"0.0.0.0:80", "0.0.0.0:443"}},
+		{name: "no known port", address: "[::]", ports: "", want: nil},
+		{name: "invalid port", address: "[::]", ports: "80,invalid", want: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := earlyListenAddresses(tc.address, tc.ports); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("earlyListenAddresses(%q, %q) = %v, want %v", tc.address, tc.ports, got, tc.want)
+			}
+		})
+	}
+}
 
 // runCapture calls run() with the given args and returns (exitCode, stdout, stderr).
 func runCapture(args ...string) (int, string, string) {

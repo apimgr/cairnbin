@@ -1,6 +1,68 @@
 // Cairnbin — Main JavaScript
 // Progressive enhancement only. All core features work without this file.
 
+// Recover once if a cache purge or stale worker prevents the page from rendering.
+const bootRecoveryKey = 'cairnbin_recovered';
+const bootRecoveryQueryKey = 'cairnbin_recovered';
+const bootRecoveryTimer = window.setTimeout(async function () {
+    const currentURL = new URL(window.location.href);
+    let alreadyRecovered = currentURL.searchParams.get(bootRecoveryQueryKey) === '1';
+    try {
+        alreadyRecovered = alreadyRecovered || window.sessionStorage.getItem(bootRecoveryKey) === 'true';
+    } catch (_) {
+        // The query marker below handles browsers that block session storage.
+    }
+
+    if (alreadyRecovered) {
+        window.location.replace(`${APP_BASE_PATH}/offline.html`);
+        return;
+    }
+
+    let recoveryMarkerStored = false;
+    try {
+        window.sessionStorage.setItem(bootRecoveryKey, 'true');
+        recoveryMarkerStored = window.sessionStorage.getItem(bootRecoveryKey) === 'true';
+    } catch (_) {
+        // A query marker below bounds recovery when session storage is blocked.
+    }
+
+    const cleanup = [];
+    if ('serviceWorker' in navigator) {
+        cleanup.push(navigator.serviceWorker.getRegistrations().then(registrations =>
+            Promise.all(registrations.map(registration => registration.unregister()))
+        ));
+    }
+    if ('caches' in window) {
+        cleanup.push(caches.keys().then(keys => Promise.all(keys.map(key => caches.delete(key)))));
+    }
+    await Promise.race([
+        Promise.allSettled(cleanup),
+        new Promise(resolve => window.setTimeout(resolve, 2000))
+    ]);
+    if (recoveryMarkerStored) {
+        window.location.reload();
+    } else {
+        currentURL.searchParams.set(bootRecoveryQueryKey, '1');
+        window.location.replace(currentURL.href);
+    }
+}, 10000);
+
+document.addEventListener('DOMContentLoaded', function () {
+    window.clearTimeout(bootRecoveryTimer);
+    try {
+        window.sessionStorage.removeItem(bootRecoveryKey);
+    } catch (_) {
+        // The successful render remains usable when session storage is blocked.
+    }
+    const currentURL = new URL(window.location.href);
+    if (currentURL.searchParams.has(bootRecoveryQueryKey)) {
+        currentURL.searchParams.delete(bootRecoveryQueryKey);
+        window.history.replaceState(window.history.state, '', currentURL.pathname + currentURL.search + currentURL.hash);
+    }
+}, { once: true });
+
+const APP_BASE_PATH = (document.querySelector('meta[name="app-baseurl"]')?.content || '').replace(/\/$/, '');
+
 // ─── i18n ─────────────────────────────────────────────────────────────────────
 
 // English fallback strings for the few messages this script generates at
@@ -242,7 +304,9 @@ if ('serviceWorker' in navigator) {
 
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+            const registration = await navigator.serviceWorker.register(`${APP_BASE_PATH}/sw.js`, {
+                scope: `${APP_BASE_PATH}/`
+            });
 
             // Detect when a new service worker version is waiting.
             registration.addEventListener('updatefound', () => {
@@ -264,14 +328,12 @@ if ('serviceWorker' in navigator) {
 
 }
 
-// showUpdateBanner injects an update-available banner into the #toast-container,
-// so it shares the project's single fixed-position notification slot rather than
-// pinning its own element to the viewport.
+// showUpdateBanner places the update prompt after server-rendered announcements.
 function showUpdateBanner(registration) {
     if (document.getElementById('sw-update-banner')) return;
     const banner = document.createElement('div');
     banner.id = 'sw-update-banner';
-    banner.className = 'toast toast-info sw-update-banner';
+    banner.className = 'site-banner site-banner-info sw-update-banner';
     banner.setAttribute('role', 'status');
     banner.setAttribute('aria-live', 'polite');
 
@@ -292,7 +354,8 @@ function showUpdateBanner(registration) {
     banner.appendChild(msg);
     banner.appendChild(applyBtn);
     banner.appendChild(dismissBtn);
-    getToastContainer().appendChild(banner);
+    const slot = document.getElementById('pwa-update-banner-slot');
+    (slot || document.body).appendChild(banner);
     window.__swRegistration = registration;
 }
 

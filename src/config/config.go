@@ -4552,58 +4552,66 @@ func ResolvePort(cfgPath string, cfg *Config, inContainer bool) error {
 // YAML config. It deliberately avoids Config validation so unrelated invalid
 // settings cannot prevent early listener setup.
 func PeekServerPort(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	var root yaml.Node
-	if yaml.Unmarshal(data, &root) != nil || len(root.Content) == 0 {
-		return ""
-	}
-	doc := root.Content[0]
-	if doc.Kind != yaml.MappingNode {
-		return ""
-	}
-	for i := 0; i+1 < len(doc.Content); i += 2 {
-		if doc.Content[i].Value != "server" || doc.Content[i+1].Kind != yaml.MappingNode {
-			continue
-		}
-		server := doc.Content[i+1]
-		for j := 0; j+1 < len(server.Content); j += 2 {
-			if server.Content[j].Value == "port" && server.Content[j+1].Kind == yaml.ScalarNode {
-				return strings.TrimSpace(server.Content[j+1].Value)
-			}
-		}
-	}
-	return ""
+	return peekServerScalar(path, "port")
 }
 
 // PeekServerAddress reads only server.address before full config validation.
 func PeekServerAddress(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
+	return peekServerScalar(path, "address")
+}
+
+// PeekServerUser reads only server.user before full config validation.
+func PeekServerUser(path string) string {
+	return peekServerScalar(path, "user")
+}
+
+// PeekServerGroup reads only server.group before full config validation.
+func PeekServerGroup(path string) string {
+	return peekServerScalar(path, "group")
+}
+
+// PeekServerDaemonize reads only the manual-start daemonize setting. It is an
+// early startup exception needed to preserve daemon re-exec before privilege
+// drop; AI.md's early-peek list currently names only port and address.
+func PeekServerDaemonize(path string) bool {
+	return strings.EqualFold(peekServerScalar(path, "daemonize"), "true")
+}
+
+func peekServerScalar(path, key string) string {
+	var sources [][]byte
+	if data, err := os.ReadFile(path); err == nil {
+		sources = append(sources, data)
 	}
-	var root yaml.Node
-	if yaml.Unmarshal(data, &root) != nil || len(root.Content) == 0 {
-		return ""
+	if dropIns, err := readYAMLDropIns(path); err == nil {
+		for _, source := range dropIns {
+			sources = append(sources, source.data)
+		}
 	}
-	doc := root.Content[0]
-	if doc.Kind != yaml.MappingNode {
-		return ""
-	}
-	for i := 0; i+1 < len(doc.Content); i += 2 {
-		if doc.Content[i].Value != "server" || doc.Content[i+1].Kind != yaml.MappingNode {
+	value := ""
+	for _, data := range sources {
+		var root yaml.Node
+		if yaml.Unmarshal(data, &root) != nil || len(root.Content) == 0 {
 			continue
 		}
-		server := doc.Content[i+1]
-		for j := 0; j+1 < len(server.Content); j += 2 {
-			if server.Content[j].Value == "address" && server.Content[j+1].Kind == yaml.ScalarNode {
-				return strings.TrimSpace(server.Content[j+1].Value)
+		doc := root.Content[0]
+		if doc.Kind != yaml.MappingNode {
+			continue
+		}
+		for i := 0; i+1 < len(doc.Content); i += 2 {
+			if doc.Content[i].Value != "server" || doc.Content[i+1].Kind != yaml.MappingNode {
+				continue
 			}
+			server := doc.Content[i+1]
+			for j := 0; j+1 < len(server.Content); j += 2 {
+				if server.Content[j].Value == key && server.Content[j+1].Kind == yaml.ScalarNode {
+					value = strings.TrimSpace(server.Content[j+1].Value)
+					break
+				}
+			}
+			break
 		}
 	}
-	return ""
+	return value
 }
 
 // persistPortOnly reads the config file at path, sets Server.Port to port, and

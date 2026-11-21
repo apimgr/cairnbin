@@ -71,7 +71,7 @@ func TestVersionPurgeFirstVisitDoesNotPurge(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	s.versionPurge(rec, req)
+	s.versionPurge(rec, req, http.StatusOK)
 
 	if got := rec.Header().Get("Clear-Site-Data"); got != "" {
 		t.Fatalf("Clear-Site-Data = %q, want empty on a first visit", got)
@@ -88,7 +88,7 @@ func TestVersionPurgeMatchingCookieDoesNotPurge(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.AddCookie(&http.Cookie{Name: buildCookieName, Value: buildinfo.AssetStamp()})
 
-	s.versionPurge(rec, req)
+	s.versionPurge(rec, req, http.StatusOK)
 
 	if got := rec.Header().Get("Clear-Site-Data"); got != "" {
 		t.Fatalf("Clear-Site-Data = %q, want empty when the stamp matches", got)
@@ -102,7 +102,7 @@ func TestVersionPurgeStaleCookiePurgesCacheAndStorageOnly(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.AddCookie(&http.Cookie{Name: buildCookieName, Value: "0.9.0-0000000"})
 
-	s.versionPurge(rec, req)
+	s.versionPurge(rec, req, http.StatusOK)
 
 	// "cookies" must never appear here — it would destroy owner_token and every
 	// cookie-stored preference (AI.md PART 9, line 13334).
@@ -112,6 +112,43 @@ func TestVersionPurgeStaleCookiePurgesCacheAndStorageOnly(t *testing.T) {
 	// The same response re-stamps the cookie, making the purge one-shot.
 	if got, want := buildCookie(t, rec).Value, buildinfo.AssetStamp(); got != want {
 		t.Fatalf("build cookie = %q, want %q", got, want)
+	}
+}
+
+func TestVersionPurgeOnlyClearsOnTopLevelSuccessfulNavigation(t *testing.T) {
+	buildinfo.Set("1.0.0", "abcdef0")
+	s := &Server{cfg: &config.Config{}}
+	cases := []struct {
+		name      string
+		method    string
+		status    int
+		dest      string
+		mode      string
+		wantPurge bool
+	}{
+		{name: "old browser navigation", method: http.MethodGet, status: http.StatusOK, wantPurge: true},
+		{name: "document navigation", method: http.MethodGet, status: http.StatusOK, dest: "document", mode: "navigate", wantPurge: true},
+		{name: "subresource", method: http.MethodGet, status: http.StatusOK, dest: "script", mode: "no-cors"},
+		{name: "fetch", method: http.MethodGet, status: http.StatusOK, dest: "empty", mode: "cors"},
+		{name: "head", method: http.MethodHead, status: http.StatusOK},
+		{name: "redirect", method: http.MethodGet, status: http.StatusSeeOther},
+		{name: "error", method: http.MethodGet, status: http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, "/", nil)
+			req.Header.Set("Sec-Fetch-Dest", tc.dest)
+			req.Header.Set("Sec-Fetch-Mode", tc.mode)
+			req.AddCookie(&http.Cookie{Name: buildCookieName, Value: "old-stamp"})
+			s.versionPurge(rec, req, tc.status)
+			if got := rec.Header().Get("Clear-Site-Data") != ""; got != tc.wantPurge {
+				t.Errorf("purge header present = %t, want %t", got, tc.wantPurge)
+			}
+			if got, want := buildCookie(t, rec).Value, buildinfo.AssetStamp(); got != want {
+				t.Errorf("build cookie = %q, want %q", got, want)
+			}
+		})
 	}
 }
 

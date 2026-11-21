@@ -61,10 +61,12 @@ func setHTMLCacheHeaders(w http.ResponseWriter) {
 // The same response re-sets the cookie to the current stamp, so the purge is
 // naturally one-shot and a first-ever visit (no cookie) never purges. Called
 // only from the HTML render path — never for static, API, or /sw.js responses.
-func (s *Server) versionPurge(w http.ResponseWriter, r *http.Request) {
+func (s *Server) versionPurge(w http.ResponseWriter, r *http.Request, statusCode int) {
 	stamp := buildinfo.AssetStamp()
-	if c, err := r.Cookie(buildCookieName); err == nil && c.Value != stamp {
-		w.Header().Set("Clear-Site-Data", `"cache", "storage"`)
+	if shouldPurgeVersionState(r, statusCode) {
+		if c, err := r.Cookie(buildCookieName); err == nil && c.Value != stamp {
+			w.Header().Set("Clear-Site-Data", `"cache", "storage"`)
+		}
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     buildCookieName,
@@ -75,4 +77,18 @@ func (s *Server) versionPurge(w http.ResponseWriter, r *http.Request) {
 		Secure:   s.cookieSecure(r),
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+// shouldPurgeVersionState limits cache eviction to successful top-level
+// navigations, where Clear-Site-Data cannot disrupt a subresource or form flow.
+func shouldPurgeVersionState(r *http.Request, statusCode int) bool {
+	if r.Method != http.MethodGet || statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+		return false
+	}
+	dest := r.Header.Get("Sec-Fetch-Dest")
+	mode := r.Header.Get("Sec-Fetch-Mode")
+	if dest == "" && mode == "" {
+		return true
+	}
+	return dest == "document" && mode == "navigate"
 }

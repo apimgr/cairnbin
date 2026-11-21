@@ -121,6 +121,48 @@ func TestServiceWorkerUpdateRecoveryContract(t *testing.T) {
 	}
 }
 
+func TestBootCacheRecoveryAndBannerOrder(t *testing.T) {
+	read := func(path string) string {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		return string(data)
+	}
+	script := read("static/js/app.js")
+	for _, required := range []string{
+		"const bootRecoveryKey = 'cairnbin_recovered';",
+		"}, 10000);",
+		"navigator.serviceWorker.getRegistrations()",
+		"caches.keys()",
+		"window.location.reload();",
+		"window.location.replace(`${APP_BASE_PATH}/offline.html`)",
+		"currentURL.searchParams.set(bootRecoveryQueryKey, '1')",
+		"`${APP_BASE_PATH}/sw.js`",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("app.js is missing cache recovery requirement %q", required)
+		}
+	}
+
+	header := read("template/partial/public/header.tmpl")
+	consent := strings.Index(header, `id="cookie-consent"`)
+	announcements := strings.Index(header, `class="site-banner site-banner-`)
+	update := strings.Index(header, `id="pwa-update-banner-slot"`)
+	stack := strings.Index(header, `id="site-banner-stack"`)
+	if stack < 0 || consent < stack || announcements < stack || update < stack || consent >= announcements || announcements >= update {
+		t.Errorf("banner slot order must be cookie consent, announcements, PWA update; positions: %d, %d, %d", consent, announcements, update)
+	}
+	head := read("template/partial/head.tmpl")
+	if !strings.Contains(head, `name="app-baseurl" content="{{.AssetPrefix}}"`) {
+		t.Error("head template is missing the request baseurl for frontend PWA registration")
+	}
+	styles := read("static/css/components.css.tmpl")
+	if !strings.Contains(styles, `#site-banner-stack {`+"\n"+`    position: fixed;`) || !strings.Contains(styles, `#site-banner-stack[data-position="top"]`) || !strings.Contains(styles, `#site-banner-stack[data-position="bottom"]`) {
+		t.Error("banner stack must be fixed to the viewport and honor the configured top or bottom position")
+	}
+}
+
 // TestTemplatesAccessibilityBasics enforces the static half of PART 30
 // "Testing Requirements": skip links that target real anchors, landmark
 // elements, alt text on every image, and a programmatic label for every

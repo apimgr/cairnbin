@@ -290,6 +290,14 @@ type Server struct {
 	prevEncKey []byte
 	// privDrop holds privilege-drop parameters set by main before Run (PART 23 step 8g).
 	privDrop *privDropConfig
+	// preparedListeners were bound before privilege drop by main and are consumed
+	// by the first Run listener setup.
+	preparedListeners []net.Listener
+	// startupBannerFn emits the process banner after overlays and listeners are ready.
+	startupBannerFn func()
+	// afterPrivilegeDropFn starts user-mode startup tasks after the root phase.
+	afterPrivilegeDropFn func()
+	stopTermbinFn        func()
 	// notifier delivers outbound role-scoped webhook notifications (PART 17).
 	notifier *notify.Dispatcher
 	// resolvedProxyMu guards resolvedProxyIPs.
@@ -386,33 +394,114 @@ func (s *Server) SetPrivilegeDrop(user, group string, chownPaths []string) {
 	s.privDrop = &privDropConfig{user: user, group: group, chown: chownPaths}
 }
 
-// bindAndDrop binds the TCP listener for addr while still privileged (so ports below
-// 1024 succeed), then chowns the runtime paths and drops to the unprivileged service
-// account (PART 23 step 8g). The returned listener is ready for Serve/ServeTLS.
-func (s *Server) bindAndDrop(addr string) (net.Listener, error) {
-	ln, err := listener.ListenTCP(addr)
-	if err != nil {
-		return nil, err
+// SetPreparedListeners transfers sockets bound during the root setup phase.
+func (s *Server) SetPreparedListeners(listeners []net.Listener) {
+	s.preparedListeners = listeners
+}
+
+// SetStartupBannerFn registers the startup banner callback run after listeners
+// are serving and managed overlay services have completed startup.
+func (s *Server) SetStartupBannerFn(fn func()) {
+	s.startupBannerFn = fn
+}
+
+// SetAfterPrivilegeDropFn registers user-mode startup work such as the
+// scheduler and initial retention sweep.
+func (s *Server) SetAfterPrivilegeDropFn(fn func()) {
+	s.afterPrivilegeDropFn = fn
+}
+
+func (s *Server) afterPrivilegeDrop(ctx context.Context, cfg *config.Config) {
+	if s.maintenance != nil {
+		go s.maintenance.Start(ctx)
+	}
+	if s.afterPrivilegeDropFn != nil {
+		s.afterPrivilegeDropFn()
+	}
+	s.stopTermbinFn = s.startTermbin(ctx, cfg)
+}
+
+func (s *Server) printStartupBanner() {
+	if s.startupBannerFn != nil {
+		s.startupBannerFn()
+	}
+}
+
+// bindPrivilegedListenersAndDrop binds only ports below 1024 while root, then
+// chowns runtime paths and drops privileges. Unprivileged ports are bound later.
+func (s *Server) bindPrivilegedListenersAndDrop(addrs ...string) ([]net.Listener, error) {
+	if len(s.preparedListeners) > 0 {
+		if len(s.preparedListeners) != len(addrs) {
+			return nil, fmt.Errorf("prepared listener count %d does not match address count %d", len(s.preparedListeners), len(addrs))
+		}
+		listeners := s.preparedListeners
+		s.preparedListeners = nil
+		return listeners, nil
+	}
+	listeners := make([]net.Listener, len(addrs))
+	closeListeners := func() {
+		for _, ln := range listeners {
+			if ln != nil {
+				_ = ln.Close()
+			}
+		}
+	}
+	if s.privDrop != nil && currentlyRoot() {
+		for i, addr := range addrs {
+			_, portText, err := net.SplitHostPort(addr)
+			if err != nil {
+				closeListeners()
+				return nil, err
+			}
+			port, err := strconv.Atoi(portText)
+			if err != nil {
+				closeListeners()
+				return nil, err
+			}
+			if port >= 1024 {
+				continue
+			}
+			listeners[i], err = listener.ListenTCP(addr)
+			if err != nil {
+				closeListeners()
+				return nil, err
+			}
+		}
 	}
 	if err := s.applyPrivilegeDrop(); err != nil {
-		_ = ln.Close()
+		closeListeners()
 		return nil, err
 	}
-	return ln, nil
+	return listeners, nil
+}
+
+// PreparePrivilegeDrop binds privileged addresses, fixes runtime ownership, and
+// drops root before the remaining startup initialization begins.
+func PreparePrivilegeDrop(user, group string, chownPaths []string, addrs ...string) ([]net.Listener, error) {
+	s := &Server{privDrop: &privDropConfig{user: user, group: group, chown: chownPaths}}
+	return s.bindPrivilegedListenersAndDrop(addrs...)
+}
+
+func bindListenerAfterDrop(addr string, prebound net.Listener) (net.Listener, error) {
+	if prebound != nil {
+		return prebound, nil
+	}
+	return listener.ListenTCP(addr)
 }
 
 // applyPrivilegeDrop chowns runtime paths and permanently drops privileges to the
 // configured service account. It is a no-op unless privilege drop was configured and
-// the process is currently running as root. When no unprivileged target can be
-// resolved it logs and keeps running as root rather than failing startup.
+// the process is currently running as root. An unresolved or root target fails closed.
 func (s *Server) applyPrivilegeDrop() error {
 	if s.privDrop == nil || !currentlyRoot() {
 		return nil
 	}
 	uid, gid, name, ok := resolvePrivDropTarget(s.privDrop.user, s.privDrop.group)
 	if !ok {
-		log.Printf("privilege: no drop target resolved; continuing as root")
-		return nil
+		return fmt.Errorf("privilege: no service-user drop target resolved")
+	}
+	if uid == 0 {
+		return fmt.Errorf("privilege: service-user target %q resolves to root", name)
 	}
 	// Chown runtime paths so the dropped account retains read/write access.
 	for _, p := range s.privDrop.chown {
@@ -2924,41 +3013,36 @@ func (s *Server) startTermbin(ctx context.Context, cfg *config.Config) func() {
 	return func() { _ = ln.Close() }
 }
 
-// startManagedNetworkServices launches children after the HTTP listener binds
-// and the process drops privileges, so their private state is owned by the
-// dedicated service account and the child processes run as that account too.
+// startManagedNetworkServices starts overlays after privilege drop and before
+// HTTP listeners bind, so their private state is owned by the service account.
 func (s *Server) startManagedNetworkServices() {
 	if s.torManager != nil {
-		go func() {
-			if err := s.torManager.Start(); err != nil {
-				log.Printf("tor: start failed: %v", err)
-			} else if s.torManager.Running() {
-				go s.torManager.Monitor()
-				s.persistOnionAddress()
-				if s.liveCfg().Server.Tor.UseNetwork {
-					if s.geoipDB != nil {
-						go func() {
-							if err := s.UpdateGeoIP(); err != nil {
-								log.Printf("geoip: initial Tor-routed refresh failed: %v", err)
-							}
-						}()
-					}
-					if key := s.projectPGPPublicKey(); key != "" && s.liveCfg().PublishPGPKeyEnabled() {
-						go s.publishToKeyservers(key)
-					}
+		if err := s.torManager.Start(); err != nil {
+			log.Printf("tor: start failed: %v", err)
+		} else if s.torManager.Running() {
+			go s.torManager.Monitor()
+			s.persistOnionAddress()
+			if s.liveCfg().Server.Tor.UseNetwork {
+				if s.geoipDB != nil {
+					go func() {
+						if err := s.UpdateGeoIP(); err != nil {
+							log.Printf("geoip: initial Tor-routed refresh failed: %v", err)
+						}
+					}()
+				}
+				if key := s.projectPGPPublicKey(); key != "" && s.liveCfg().PublishPGPKeyEnabled() {
+					go s.publishToKeyservers(key)
 				}
 			}
-		}()
+		}
 	}
 	if s.i2pManager != nil {
-		go func() {
-			if err := s.i2pManager.Start(); err != nil {
-				log.Printf("i2p: start failed: %v", err)
-			} else if s.i2pManager.Running() {
-				s.startI2PMonitor()
-				s.persistB32Address()
-			}
-		}()
+		if err := s.i2pManager.Start(); err != nil {
+			log.Printf("i2p: start failed: %v", err)
+		} else if s.i2pManager.Running() {
+			s.startI2PMonitor()
+			s.persistB32Address()
+		}
 	}
 }
 
@@ -2993,6 +3077,11 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 	if s.i2pManager != nil {
 		defer s.i2pManager.Close()
 	}
+	defer func() {
+		if s.stopTermbinFn != nil {
+			s.stopTermbinFn()
+		}
+	}()
 
 	cfg := s.liveCfg()
 
@@ -3015,13 +3104,8 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		s.serverStopped(s.liveCfg(), reason)
 	}()
 
-	// Start the runtime self-healing maintenance monitor (PART 20). It probes
-	// critical systems and toggles maintenance mode until ctx is cancelled.
-	if s.maintenance != nil {
-		go s.maintenance.Start(ctx)
-	}
-
-	// Resolve DNS-valued trusted_proxies.additional entries once at startup, then
+	// Resolve DNS-valued trusted_proxies.additional entries once after dropping
+	// privileges, then
 	// refresh every 5 minutes so CDN / load-balancer IP changes are picked up
 	// without a restart (PART 12 Trusted Proxies — DNS names).
 	s.refreshDNSTrustedProxies(ctx)
@@ -3037,10 +3121,6 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 			}
 		}
 	}()
-
-	// Start the termbin/fiche raw-TCP listener when enabled; the returned stop
-	// function closes the listener on shutdown.
-	defer s.startTermbin(ctx, cfg)()
 
 	// Parse HTTP server timeouts from config, falling back to safe defaults.
 	readTimeout := 30 * time.Second
@@ -3111,17 +3191,23 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 			srv.TLSConfig = tlsCfg
 			// Wrap the router so autocert HTTP-01 challenges are handled on port 80.
 			srv.Handler = sslMgr.GetHTTPHandler(s.router)
-			ln, err := s.bindAndDrop(addr)
+			listeners, err := s.bindPrivilegedListenersAndDrop(addr)
 			if err != nil {
 				return fmt.Errorf("bind %s: %w", addr, err)
 			}
+			s.afterPrivilegeDrop(ctx, cfg)
 			s.startManagedNetworkServices()
-			s.serverStarted(cfg, addr)
+			ln, err := bindListenerAfterDrop(addr, listeners[0])
+			if err != nil {
+				return fmt.Errorf("bind %s: %w", addr, err)
+			}
 			go func() {
 				if err := srv.ServeTLS(ln, "", ""); err != nil && err != http.ErrServerClosed {
 					errCh <- err
 				}
 			}()
+			s.printStartupBanner()
+			s.serverStarted(cfg, addr)
 
 			select {
 			case <-ctx.Done():
@@ -3136,17 +3222,23 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 	}
 
 	// Plain HTTP (no TLS, or TLS setup failed).
-	ln, err := s.bindAndDrop(addr)
+	listeners, err := s.bindPrivilegedListenersAndDrop(addr)
 	if err != nil {
 		return fmt.Errorf("bind %s: %w", addr, err)
 	}
+	s.afterPrivilegeDrop(ctx, cfg)
 	s.startManagedNetworkServices()
-	s.serverStarted(cfg, addr)
+	ln, err := bindListenerAfterDrop(addr, listeners[0])
+	if err != nil {
+		return fmt.Errorf("bind %s: %w", addr, err)
+	}
 	go func() {
 		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
 	}()
+	s.printStartupBanner()
+	s.serverStarted(cfg, addr)
 
 	select {
 	case <-ctx.Done():
@@ -3220,27 +3312,23 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 		IdleTimeout:  idleTimeout,
 	}
 
-	// Bind both privileged listeners before dropping privileges so ports <1024
-	// succeed. bindAndDrop is not reused here because it drops privileges on the
-	// first call, which would prevent binding the second privileged port.
-	httpsLn, err := listener.ListenTCP(httpsAddr)
+	// Bind only privileged sockets as root; drop privileges before overlays and
+	// bind unprivileged ports afterward as the service account.
+	listeners, err := s.bindPrivilegedListenersAndDrop(httpAddr, httpsAddr)
 	if err != nil {
-		return fmt.Errorf("dual-port: listen HTTPS %s: %w", httpsAddr, err)
+		return fmt.Errorf("dual-port: %w", err)
 	}
-	httpLn, err := listener.ListenTCP(httpAddr)
+	s.afterPrivilegeDrop(ctx, cfg)
+	s.startManagedNetworkServices()
+	httpLn, err := bindListenerAfterDrop(httpAddr, listeners[0])
 	if err != nil {
-		_ = httpsLn.Close()
 		return fmt.Errorf("dual-port: listen HTTP %s: %w", httpAddr, err)
 	}
-	if dropErr := s.applyPrivilegeDrop(); dropErr != nil {
-		_ = httpsLn.Close()
+	httpsLn, err := bindListenerAfterDrop(httpsAddr, listeners[1])
+	if err != nil {
 		_ = httpLn.Close()
-		return fmt.Errorf("dual-port: %w", dropErr)
+		return fmt.Errorf("dual-port: listen HTTPS %s: %w", httpsAddr, err)
 	}
-	s.startManagedNetworkServices()
-	s.serverStarted(cfg, httpAddr+","+httpsAddr)
-
-	log.Printf("dual-port: HTTP on %s, HTTPS on %s", httpAddr, httpsAddr)
 
 	errCh := make(chan error, 2)
 	go func() {
@@ -3253,6 +3341,8 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 			errCh <- fmt.Errorf("dual-port: HTTP server: %w", serveErr)
 		}
 	}()
+	s.printStartupBanner()
+	s.serverStarted(cfg, httpAddr+","+httpsAddr)
 
 	select {
 	case <-ctx.Done():
@@ -5528,28 +5618,29 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/manifest+json")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("ETag", `"`+buildinfo.AssetStamp()+`"`)
+	basePath := s.assetPrefix(r)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"name":             s.liveCfg().Web.SiteTitle,
 		"short_name":       "Paste",
 		"description":      "A fast, public cairnbin service",
-		"start_url":        "/?source=pwa",
-		"scope":            "/",
+		"start_url":        basePath + "/?source=pwa",
+		"scope":            basePath + "/",
 		"display":          "standalone",
 		"orientation":      "any",
 		"categories":       []string{"utilities"},
 		"background_color": theme.ThemePaletteDark.Background,
 		"theme_color":      theme.ThemePaletteDark.Primary,
 		"icons": []map[string]interface{}{
-			{"src": "/static/icons/icon-72.png", "sizes": "72x72", "type": "image/png"},
-			{"src": "/static/icons/icon-96.png", "sizes": "96x96", "type": "image/png"},
-			{"src": "/static/icons/icon-128.png", "sizes": "128x128", "type": "image/png"},
-			{"src": "/static/icons/icon-144.png", "sizes": "144x144", "type": "image/png"},
-			{"src": "/static/icons/icon-152.png", "sizes": "152x152", "type": "image/png"},
-			{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
-			{"src": "/static/icons/icon-384.png", "sizes": "384x384", "type": "image/png"},
-			{"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
-			{"src": "/static/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
-			{"src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+			{"src": basePath + "/static/icons/icon-72.png", "sizes": "72x72", "type": "image/png"},
+			{"src": basePath + "/static/icons/icon-96.png", "sizes": "96x96", "type": "image/png"},
+			{"src": basePath + "/static/icons/icon-128.png", "sizes": "128x128", "type": "image/png"},
+			{"src": basePath + "/static/icons/icon-144.png", "sizes": "144x144", "type": "image/png"},
+			{"src": basePath + "/static/icons/icon-152.png", "sizes": "152x152", "type": "image/png"},
+			{"src": basePath + "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+			{"src": basePath + "/static/icons/icon-384.png", "sizes": "384x384", "type": "image/png"},
+			{"src": basePath + "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+			{"src": basePath + "/static/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+			{"src": basePath + "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
 		},
 	})
 }
@@ -5558,20 +5649,31 @@ func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	stamp := buildinfo.AssetStamp()
+	basePath := s.assetPrefix(r)
 	// The full build stamp changes for every build, including builds in the
 	// same release channel, so controlled browsers install the matching worker.
 	w.Header().Set("ETag", `"`+stamp+`"`)
 	sw := fmt.Sprintf(`// Cairnbin Service Worker — build %s
+const BASE_PATH = %q;
 const CACHE_VERSION = %q;
-const CACHE_NAME = 'cairnbin-cache-' + CACHE_VERSION;
+const CACHE_PREFIX = BASE_PATH
+  ? 'cairnbin-cache-' + encodeURIComponent(BASE_PATH) + '-'
+  : 'cairnbin-cache-root-';
+const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
+function appPath(path) { return BASE_PATH + path; }
+function belongsToAppCache(key) {
+  if (BASE_PATH) return key.startsWith(CACHE_PREFIX);
+  return key.startsWith(CACHE_PREFIX)
+    || (key.startsWith('cairnbin-cache-') && !key.startsWith('cairnbin-cache-%%2F'));
+}
 const PRECACHE_ASSETS = [
-  '/static/css/common.css?v=' + CACHE_VERSION,
-  '/static/css/components.css?v=' + CACHE_VERSION,
-  '/static/css/public.css?v=' + CACHE_VERSION,
-  '/static/js/app.js?v=' + CACHE_VERSION,
-  '/static/icons/icon-192.png?v=' + CACHE_VERSION,
-  '/static/icons/icon-512.png?v=' + CACHE_VERSION,
-  '/offline.html',
+  appPath('/static/css/common.css?v=' + CACHE_VERSION),
+  appPath('/static/css/components.css?v=' + CACHE_VERSION),
+  appPath('/static/css/public.css?v=' + CACHE_VERSION),
+  appPath('/static/js/app.js?v=' + CACHE_VERSION),
+  appPath('/static/icons/icon-192.png?v=' + CACHE_VERSION),
+  appPath('/static/icons/icon-512.png?v=' + CACHE_VERSION),
+  appPath('/offline.html'),
 ];
 
 // INSTALL — pre-cache safe responses. An updated worker waits for the user;
@@ -5601,7 +5703,7 @@ self.addEventListener('activate', event => {
     caches.keys()
       .then(keys => Promise.all(
         keys
-          .filter(k => k.startsWith('cairnbin-cache-') && k !== CACHE_NAME)
+          .filter(k => belongsToAppCache(k) && k !== CACHE_NAME)
           .map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
@@ -5664,7 +5766,7 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
   // API calls are network-only — never intercept
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/graphql')) return;
+  if (url.pathname.startsWith(appPath('/api/')) || url.pathname.startsWith(appPath('/graphql'))) return;
 
   // Navigations (page loads): network-first, then cache, then a GUARANTEED
   // synthesized offline page — a transient network failure renders a real error
@@ -5679,7 +5781,7 @@ self.addEventListener('fetch', event => {
         })
         .catch(async () =>
           (await cachedResponse(request))
-            || (await cachedResponse('/offline.html'))
+            || (await cachedResponse(appPath('/offline.html')))
             || offlineFallbackResponse()
         )
     );
@@ -5688,7 +5790,7 @@ self.addEventListener('fetch', event => {
 
   // Static assets: cache-first, then network, then a GUARANTEED 504 — a failed
   // subresource must never reject respondWith
-  if (url.pathname.startsWith('/static/')) {
+  if (url.pathname.startsWith(appPath('/static/'))) {
     event.respondWith(
       cachedResponse(request)
         .then(cached => cached || fetch(request).then(response => {
@@ -5724,7 +5826,7 @@ function offlineFallbackResponse() {
       headers: { 'Content-Type': 'text/html; charset=utf-8' } }
   );
 }
-`, stamp, stamp)
+`, stamp, basePath, stamp)
 	_, _ = w.Write([]byte(sw))
 }
 
@@ -6029,7 +6131,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	// Inject the next mode in the cycle so the no-JS toggle form can advance it (AI.md 21588)
 	data["NextTheme"] = nextTheme(theme)
 	// Inject whether the visitor already has a recorded cookie_consent choice so
-	// the footer's no-JS consent form only renders while a decision is still
+	// the base layout's no-JS consent form only renders while a decision is still
 	// outstanding, matching the JS banner's own show/hide behavior (AI.md 25598).
 	data["HasConsented"] = hasConsentCookie(r)
 	// Tracking markup is only emitted when the visitor consented to analytics
@@ -6096,12 +6198,12 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	// from an older build is purged exactly once (AI.md PART 9, 13287 and
 	// 13323-13351). This is the single HTML choke point, so static, API and
 	// /sw.js responses can never pick these up.
-	setHTMLCacheHeaders(w)
-	s.versionPurge(w, r)
 	statusCode := http.StatusOK
 	if len(status) > 0 {
 		statusCode = status[0]
 	}
+	setHTMLCacheHeaders(w)
+	s.versionPurge(w, r, statusCode)
 	// Onion-Location (PART 12): advertise the hidden service on clearnet 2xx
 	// HTML document responses only — never on the onion's own responses.
 	if statusCode >= 200 && statusCode < 300 && r.Method == http.MethodGet && !s.isOverlayRequest(r) {

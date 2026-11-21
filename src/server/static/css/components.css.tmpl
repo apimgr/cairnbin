@@ -828,6 +828,20 @@ textarea:user-invalid ~ .field-error {
     align-items: center;
 }
 
+#site-banner-stack {
+    position: fixed;
+    inset-inline: 0;
+    z-index: var(--z-banner);
+}
+
+#site-banner-stack[data-position="top"] {
+    top: 0;
+}
+
+#site-banner-stack[data-position="bottom"] {
+    bottom: 0;
+}
+
 .sw-update-banner__btn-apply {
     background: var(--color-info);
     border: none;
@@ -855,22 +869,10 @@ textarea:user-invalid ~ .field-error {
    ============================================ */
 
 .cookie-banner {
-    position: fixed;
-    inset-inline-start: 0;
-    inset-inline-end: 0;
     width: 100%;
     background: var(--color-accent-primary);
     color: var(--color-on-accent);
     box-shadow: var(--shadow-lg);
-    z-index: var(--z-banner);
-}
-
-.cookie-banner-bottom {
-    bottom: 0;
-}
-
-.cookie-banner-top {
-    top: 0;
 }
 
 .cookie-banner-content {
