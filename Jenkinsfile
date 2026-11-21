@@ -593,13 +593,16 @@ pipeline {
             }
         }
 
-        // Docker Devel - matches docker.yml build-devel job (every push + daily cron, never the main Docker stage)
+        // Docker Devel - matches docker.yml build-devel job (main/master push + daily cron, never the main Docker stage)
         stage('Docker: Devel') {
             agent { label 'amd64' }
+            when {
+                anyOf { branch 'main'; branch 'master' }
+            }
             steps {
                 script {
-                    // Runs on every push (this pipeline's global cron trigger above
-                    // also fires it devel) and always builds Dockerfile.dev with a
+                    // Runs on every push to main/master (this pipeline's global cron trigger above
+                    // also schedules this stage) and always builds Dockerfile.dev with a
                     // single static :devel tag - MODE=devel is baked into
                     // Dockerfile.dev via ENV, no extra build-arg needed here.
                     sh """

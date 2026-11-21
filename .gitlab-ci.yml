@@ -639,10 +639,10 @@ docker:build:
     - if: $CI_COMMIT_BRANCH == "beta"
 
 # =============================================================================
-# DEVEL IMAGE BUILD (own job — push to any branch + daily schedule)
+# DEVEL IMAGE BUILD (own job — main/master pushes + daily schedule)
 # =============================================================================
 # :devel is never built by docker:build above — Dockerfile.dev is built here,
-# on every push (excluding tags) and once devel via a scheduled pipeline, so a
+# on every push to main/master and once daily via a scheduled pipeline on main, so a
 # broken Dockerfile.dev can never block the release docker:build job. MODE=devel
 # is baked into Dockerfile.dev via ENV — no extra build-arg needed here.
 
@@ -694,8 +694,6 @@ docker:devel:
         --push \
         .
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_COMMIT_TAG
       when: never
-    - when: on_success
-
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
