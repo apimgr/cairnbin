@@ -11,6 +11,8 @@
 - NEVER use `github.event.before`/`default_branch` incorrectly for secret-scan range — never use `default_branch` (resolves to HEAD after push, silently skips the scan); use `github.event.before` / `github.event.after`
 - NEVER create a `build-toolchain.yml` or `ensure-build-image` gate for Go projects — `casjaysdev/go:latest` is externally maintained
 - NEVER include `-musl` suffix in binary names
+- NEVER publish generated release notes, names, descriptions, asset names or links containing literal `${VAR}`, `${{ … }}` or spec placeholders such as `{project_name}`
+- NEVER use shell substring/removal expansions such as `${VAR:0:7}` or `${VAR#v}` in GitLab keywords outside `script:`; calculate those values upstream and pass them with a dotenv report
 - NEVER skip building any of the 8 required platform/arch combinations
 - NEVER run container jobs without `options: "--user 0:0"` — the runner execs into the job container as a user the image's `/etc/passwd` may not define, which fails after all real work passes
 
@@ -29,8 +31,14 @@
 - ALWAYS include `secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan` security jobs in `ci.yml`, running on push/PR and weekly cron (`0 6 * * 1`); add `if: github.event_name != 'schedule'` to skip non-security jobs on scheduled runs
 - ALWAYS use truffleHog (Apache-2.0) for mandatory secret scanning on every public repo
 - ALWAYS require Jenkins agent labels `amd64` AND `arm64` to be available, with Docker + buildx on the amd64 runner
+- ALWAYS fully expand generated workflow text before publishing: use an unquoted heredoc or `printf` when shell expansion is intended; use `${{ env.X }}` in GitHub/Gitea/Forgejo YAML values; use Groovy double-quoted strings for interpolation in Jenkins
+- ALWAYS add the generated-text guard to workflows that build release notes or description files, checking for `${`, `{{`, or `{project_name}`, `{project_org}`, `{version}` before publishing
 
 ## Key Rules Summary
+
+### Generated-text guard
+
+Any workflow that builds its own release notes or description file checks it before publishing. Reject literal variable syntax or project placeholders (`${`, `{{`, `{project_name}`, `{project_org}`, `{version}`) and report an actionable `::error::` message. Shell-generated files use an unquoted heredoc or `printf` when expansion is intended; a quoted heredoc is only for deliberately literal text. GitHub/Gitea/Forgejo YAML values use `${{ env.X }}`. GitLab release metadata and artifact paths use only `$VAR` / `${VAR}` syntax; substring/removal transforms must be computed in an upstream job and passed via dotenv. Jenkins interpolation requires Groovy double-quoted strings.
 
 ### Workflow files by provider
 
