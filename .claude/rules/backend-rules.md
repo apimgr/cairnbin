@@ -30,7 +30,7 @@
 - NEVER omit `HiddenServiceExportCircuitID haproxy` from torrc — the backend listener depends on the PROXY-protocol header it adds.
 - NEVER let the Tor backend HTTP server bind anything but a random loopback port (`127.0.0.1:0`) — never a fixed or non-loopback port.
 - NEVER wrap the I2P backend listener in `go-proxyproto` — unlike Tor, neither i2pd nor a SAM bridge prepends a PROXY-protocol header; the I2P backend listener is a plain loopback listener.
-- NEVER enable I2P by default — it is strictly opt-in (`server.i2p.enabled` / `I2P_ENABLED` / `--i2p`, all default false); no backend port, provider process, or SAM session is created unless explicitly enabled.
+- NEVER enable I2P by default outside containers; the built-in default is false on bare metal/VM and true inside a container, unless `--i2p`, an operator-set `I2P_ENABLED`, or explicit `server.i2p.enabled` overrides it. No provider or port is created unless effective `enabled` is true.
 - NEVER let the app reconfigure or depend on a system-wide i2pd — the app spawns/manages its own dedicated i2pd child process (Model A) when the binary is found.
 - NEVER fail server startup because I2P is missing/misconfigured/unreachable — same non-blocking, best-effort contract as Tor (log WARN, disable I2P, continue).
 - NEVER expose I2P configuration via a REST API or admin web UI — `server.yml` + CLI only, same as Tor.
@@ -72,6 +72,15 @@
 - ALWAYS treat a missing i2pd binary and an unreachable SAM bridge as INFO/WARN-level, non-fatal; continue without I2P features.
 
 ## Key Rules Summary
+
+### Current token, configuration and startup contracts
+- Bearer token prefixes are `adm_` (operator), `own_` (owner/linked), and `mtr_` (metrics), followed by 32 base62 characters. The operator token is stored in `secrets.yml`, compared via its SHA-256 hash, and is not an `api_tokens` row or a revealable token. Owner tokens use hash lookup plus an AES-256-GCM encrypted copy for masked-by-default reveal.
+- Config is merged from built-in defaults, `server.yml`, byte-sorted `yaml.d/*.yml`, then `secrets.yml`; credentials and generated secrets go in `secrets.yml`. `server.yml`, `secrets.yml`, and drop-ins are mode `0600`; `yaml.d/` is `0700`.
+- The service identity is fixed to `{internal_name}`. No child process starts while root: Tor and enabled I2P start only after privilege drop. Connection URL credentials are encoded/decoded correctly and credential-bearing URLs are kept in `secrets.yml`; connection env vars only seed initial configuration.
+- Tor contact/startup is non-fatal when unavailable. I2P follows its computed container-sensitive default, stays silent when effectively disabled, and is non-fatal when its provider is unavailable. Startup log events appear once as plain text; the startup banner is one locked write after feature startup.
+- I2P's computed default is enabled in containers and disabled elsewhere; the image must not set `I2P_ENABLED`, so an operator override remains distinguishable from the default.
+- Security reports are purged only after `closed_at + retention_days` (default 365); open reports are never purged. PGP key rotation re-encrypts retained report bodies transactionally and keeps the old private key encrypted for 30 days for in-flight notices.
+- The built-in `firehol_level1` IPv4 source is always active and cannot be removed by `extra_sources`. Validate `.netset` lines as IPv4/CIDR and drop ranges overlapping private, loopback, link-local, CGNAT, or trusted-proxy ranges so updates cannot block local access.
 
 ### Error handling (PART 9)
 | Code | HTTP | Message |
@@ -132,7 +141,7 @@ Rotation defaults: access=monthly, audit=daily, others=weekly,50MB. `keep: none`
 | installation_secret | 32B | server.db | manual, 7-day grace |
 | cookie_signing_key | 32B (HMAC-SHA256) | server.db | auto every 90d, 7-day grace |
 | csrf_token_secret | 32B | server.db | auto on API key regen + 180d |
-| server.security.encryption_key | 32B AES-256-GCM | server.yml | manual, 30-day grace |
+| server.security.encryption_key | 32B AES-256-GCM | secrets.yml | manual, 30-day grace |
 
 Secrets: never in any API response, never logged, always in backups, restored verbatim (all-or-nothing).
 
@@ -155,12 +164,12 @@ Temporary (default 1h, auto-release) vs permanent (config-file only). Allowlist 
 - Config change: stop Tor → mutate torrc → start Tor (torrc always regenerated on start, so this is just a restart).
 
 ### I2P Eepsite (PART 31.2, optional)
-- **Opt-in only, disabled by default**: `server.i2p.enabled` / `I2P_ENABLED` env / `--i2p` flag, all default `false`. No backend port, provider process, or SAM session exists unless explicitly enabled — unlike Tor's auto-enable-when-binary-found behavior.
+- **Computed default**: disabled outside containers and enabled inside containers; `server.i2p.enabled`, operator-set `I2P_ENABLED`, and `--i2p` can override. No backend port, provider process, or SAM session exists unless effective `enabled` is true — unlike Tor's auto-enable-when-binary-found behavior.
 - Scope: eepsite (`.b32.i2p`) hosting only — never outbound anonymized requests (that's Tor's job), never floodfill/relay/SOCKS-proxy functionality.
 - Two provider models, resolved in order at start: **Model A** (preferred) — dedicated i2pd child process the app spawns/manages, regenerates `tunnels.conf` every startup, i2pd persists the destination key and derives `.b32.i2p`. **Model B** (fallback) — raw SAMv3 over TCP to `sam_address` (default `127.0.0.1:7656`): `HELLO VERSION` → load-or-create persisted destination → `SESSION CREATE STYLE=STREAM` → `STREAM FORWARD` to the backend port. Neither available → log WARN, disable I2P, continue (non-fatal, mirrors Tor).
 - Backend: dedicated loopback listener (`127.0.0.1:0`), **plain, no `go-proxyproto` wrapping** — neither i2pd nor a SAM bridge prepends a PROXY-protocol header.
 - `.b32.i2p` derivation: `base32(sha256(destination))`, no padding, lowercased, `+ ".b32.i2p"` — stdlib `crypto/sha256` + `encoding/base32`, no new dependency.
-- Config (`server.i2p.*`): `enabled` (false), `binary` (auto-detect), `sam_address` ("127.0.0.1:7656"), `virtual_port` (80), `inbound_length`/`outbound_length` (3/3), `inbound_quantity`/`outbound_quantity` (5/5), `signature_type` (7, EdDSA-SHA512-Ed25519), `bootstrap_timeout` (5m). Directories are NOT configurable, always derived: config `{config_dir}/i2p/`, data `{data_dir}/i2p/`, destination key `{data_dir}/i2p/site/site-keys.dat`, log `{log_dir}/i2pd.log` (Model A only).
+- Config (`server.i2p.*`): `enabled` (computed: true in containers, false elsewhere), `binary` (auto-detect), `sam_address` ("127.0.0.1:7656"), `virtual_port` (80), `inbound_length`/`outbound_length` (3/3), `inbound_quantity`/`outbound_quantity` (5/5), `signature_type` (7, EdDSA-SHA512-Ed25519), `bootstrap_timeout` (5m). Directories are NOT configurable, always derived: config `{config_dir}/i2p/`, data `{data_dir}/i2p/`, destination key `{data_dir}/i2p/site/site-keys.dat`, log `{log_dir}/i2pd.log` (Model A only).
 - Dirs: 0700 (`{config_dir}/i2p/`, `{data_dir}/i2p/`, `{data_dir}/i2p/site/`); destination key file 0600.
 - i2pd binary lookup order: `server.i2p.binary` config → common per-OS locations → `$PATH` → not found: fall back to SAM; SAM unreachable too → disable I2P.
 - No `RegenerateAddress`/`ApplyKeys`/vanity surface for I2P — not in the spec. Regenerate identity by stopping I2P, deleting `{data_dir}/i2p/site/`, and restarting.

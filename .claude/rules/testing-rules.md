@@ -100,6 +100,7 @@ RTD URL formats: `{project_org}-{project_name}.readthedocs.io`, `{project_name}.
 | ar | Arabic | rtl | zero, one, two, few, many, other |
 | de | German | ltr | one, other |
 | ja | Japanese | ltr | other |
+| it | Italian | ltr | one, other |
 
 ### I18N Key Conventions
 - Location: `src/common/i18n/locales/{lang}.json`, embedded via `go:embed` in ALL binaries
@@ -108,6 +109,7 @@ RTD URL formats: `{project_org}-{project_name}.readthedocs.io`, `{project_name}.
 - Plurals: nested under key with `zero`/`one`/`two`/`few`/`many`/`other` (CLDR categories)
 - Same word, different meaning → different keys (e.g. `common.close` vs `nav.close`)
 - `?lang=` sets a persistent cookie (`lang`, Max-Age 1 year, `SameSite=Lax`), no URL path prefixes
+- When a user-facing translation changes, update `en.json` and best-effort translations in every other locale file in the same change; never leave locale key sets inconsistent.
 
 ### Language Detection Priority
 Web: `?lang=` → `lang` cookie → `Accept-Language` header → `en`

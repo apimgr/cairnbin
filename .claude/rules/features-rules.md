@@ -121,6 +121,10 @@ Default per-event email toggles (`server.notifications.email.events`): `backup_f
 | `backup_hourly` | Hourly (`@hourly`), disabled by default | Yes |
 | `healthcheck_self` | Every 5m (`@every 5m`) | No |
 | `tor_health` | Every 10m (`@every 10m`) | No (only if Tor installed) |
+| `disk_check` | Every 5m (`@every 5m`) | Yes |
+| `i2p_health` | Every 10m (`@every 10m`) | No (only when effective I2P is enabled) |
+
+`i2p_health` is registered when effective I2P is enabled; the effective default is container-sensitive (on in containers, off elsewhere).
 
 Schedule formats: standard cron, `@hourly`, `@daily`, `@weekly`, `@monthly`, `@every Xm`, `@every Xh`.
 
@@ -196,8 +200,12 @@ Duration histogram buckets (default): `[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.
 | `server.yml` | Always |
 | `server.db` (config, rate limits, audit log, scheduler state, backup metadata) | Always |
 | `{config_dir}/template/` | If exists |
+| `{config_dir}/yaml.d/`, `secrets.yml`, `{config_dir}/assets/` | If they exist |
 | `{config_dir}/theme/` | If exists |
 | `{config_dir}/ssl/` | Optional (`--include-ssl`) |
+| Referenced database/cache TLS files | Always when referenced; include only named cert/key/CA files, even without `--include-ssl` |
+
+Security-report retention is measured from `closed_at` (default 365 days); open reports are never purged. PGP rotation re-encrypts retained report bodies in one transaction, and retains the old encrypted private key for 30 days for in-flight notifications.
 | `{data_dir}/` | Optional (`--include-data`) |
 
 ### Format

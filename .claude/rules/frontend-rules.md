@@ -215,6 +215,12 @@ Manifest (`/manifest.json`), service worker (`/sw.js`, install/activate/fetch li
 
 Cache strategy: static assets cache-first, HTML network-first w/ cache fallback, API calls network-only (never cached, queued for background sync), max cache 50MB, static asset expiry 7 days.
 
+### Current frontend amendments
+- After a server update/restart, an open PWA page must recover automatically without manual reload and must not hang. Service-worker navigation fetches are bounded (8 seconds), every `respondWith()` branch returns a real `Response`, and update takeover/reload is bounded (5 seconds) and happens at most once after user acceptance.
+- Use named z-index variables only: dropdown 100, sticky 200, banner 250, overlay 300, drawer 350, modal 400, toast 500; no arbitrary high values.
+- Brand/theme/SEO settings and operator page-content overrides live in `yaml.d/branding.yml`; built-in project facts remain in IDEA.md and embedded assets, not generated `server.yml` settings.
+- The security/contact report form is reached only from `/.well-known/security.txt` and `/server/security`; `/server/contact` is not linked from public navigation. Respect `server.pages.contact.enabled` and the per-type report contract.
+
 ## CORS Defaults
 
 `Access-Control-Allow-Origin: *` by default (`server.cors.allowed_origins`); credentials only sent with an explicit origin list, never with `*`. Resolution order: explicit config → `DOMAIN` env → reverse-proxy-learned hosts (trusted proxies only) → fallback `*`.

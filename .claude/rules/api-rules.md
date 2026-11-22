@@ -62,12 +62,13 @@
 | Optional root alias | `/healthz`, only if `server.healthz.root.enabled: true`, same handler, no redirect |
 | API health route | `/api/{api_version}/server/healthz` (JSON default) |
 | Unversioned health alias | `/api/healthz` (JSON, direct alias, no redirect) |
+| MCP help | `/api/{api_version}/server/help/mcp` returns the same public MCP endpoint, auth, aliases and tools description as `/server/help/mcp`; no auth |
 | Status values | `healthy`, `degraded`, `unhealthy` |
 | Check values | `ok` / `error` only — never details (e.g. `database: "ok"`, never a connection string) |
 | SemVer start | `1.0.0` (never `0.x.x`); pre-release suffix `-rc1`/`-alpha`; no `v` prefix in version string; git tags DO use `v` prefix |
 | Version format (beta) | `YYYYMMDDHHMMSS-beta` |
 | Version format (devel) | short commit id (7 chars), rolling `devel` tag |
-| Version source order | `release.txt` → git tag → `dev` |
+| Version source | CI release = pushed tag with leading `v` stripped; CI devel = 7-char commit; CI beta = timestamp tag. Local Makefile only: explicit user `VERSION` env > non-empty `release.txt` > 7-char commit (or `devel` outside Git). CI never reads `release.txt` or `VERSION` env. |
 
 ### API Structure (PART 14)
 

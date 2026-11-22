@@ -68,7 +68,7 @@
 - Always treat server apps as internet-facing/hostile-exposed unless the user says otherwise
 - Always trim whitespace on text input; reject (don't trim) passwords with leading/trailing whitespace
 - Always make configuration changes apply via live-reload (except listen address/port/DB driver)
-- Always keep all settings configurable via `server.yml` only — no runtime config-mutation API, no admin web UI for config
+- Always keep configuration in the merged operator files (`server.yml`, ordered `yaml.d/` area files, and `secrets.yml`); do not add a general runtime config-mutation API or admin config UI
 - Show newly generated secrets once; owner and linked API tokens are the exception and remain viewable, masked by default, at `/server/preferences/tokens`
 - Always assume self-hosted/SMB users are NOT tech-savvy
 

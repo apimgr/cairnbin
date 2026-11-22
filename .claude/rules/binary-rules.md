@@ -117,13 +117,13 @@ Files: `/.dockerenv` (Docker), `/run/.containerenv` (Podman), `/dev/lxc` (LXC/LX
 
 ### Database
 
-Single SQLite file `server.db` (default) with tables: `config`, `config_meta`, `rate_limits`, `audit_log`, `scheduler_tasks`, `scheduler_history`, `backups`, `api_tokens`. Remote option: libsql/Turso. `server.token` is NEVER stored in `api_tokens` — validated via SHA-256 + constant-time compare against `server.yml` value, cached in memory.
+Single SQLite file `server.db` (default) with tables for resource state, owners/tokens, rate limits, audit, scheduler and backups. Remote option: libsql/Turso. `server.token` is NEVER stored in `api_tokens` — it is loaded from `secrets.yml`, validated by SHA-256 + constant-time compare, and cached in memory.
 
 ### Token model
 
-- Format: `tok_` + 32 URL-safe base62 chars. Header: `Authorization: Bearer tok_...`
-- `server.token` (in `server.yml`) = global operator token, auto-generated on first run
-- Owner and linked tokens: `SHA-256` hash + AES-256-GCM `token_enc` in `api_tokens` (resolve to an `owner_id`); viewable masked on `/server/preferences/tokens`; reveal/rotate/restore/linked-token management use that page's owner-cookie web fallback or the primary token's Bearer header on the API mirror
+- Token catalogue prefixes encode token purpose: `adm_` operator, `own_` owner/linked, `mtr_` metrics, each followed by 32 random base62 characters. Header: `Authorization: Bearer {token}`.
+- `server.token` (in `secrets.yml`) = global operator token, auto-generated on first run
+- Owner and linked tokens: `SHA-256` hash + AES-256-GCM `token_enc` in `api_tokens` (resolve to an `owner_id`); viewable masked on `/server/preferences/tokens`; reveal and linked-token management use that page's owner-cookie web fallback or the primary token's Bearer header on the API mirror. Raw tokens are never logged or included in backups/list/detail responses.
 - Revoke: `{project_name} --maintenance token revoke <prefix>`; list: `{project_name} --maintenance token list`
 - Cookie name (web fallback only, never for `/api/...`): `{project_name}_owner_token_XXXXXX`
 

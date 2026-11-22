@@ -77,6 +77,8 @@ Health responses report only `ok`/`error` per check and never include connection
 - Each accepted security report sends exactly one best-effort maintainer notification and may send one researcher acknowledgment. The acknowledgment contains only the tracking ID and private status URL, uses the configured server sender, and is never retried. SMTP disabled or delivery failure does not invalidate the report.
 - Contact fields are length-checked after trimming by Unicode character count. Standard name/email/subject/message limits are 100/254/200/5000. Security reports cap GPG input at 16384 characters (2048 for an HTTPS URL), component/free text at 255, endpoint at 2048, summary at 200, steps at 10000, impact/suggested fix at 5000, and credit handle at 100. A handle is required only for the handle credit choice and is stored only for that choice.
 - `/server/security` explains the process in plain language and `/server/security/policy` states the disclosure policy.
+- Closed reports (`disclosed` or `wont_fix`) are removed after `server.security.reports.retention_days` (365 days by default); open reports are never purged. A daily cleanup also removes a rotated PGP private key after its 30-day in-flight grace period.
+- PGP key rotation re-encrypts retained PGP-protected report bodies to the new key in one database transaction. If any report cannot be decrypted and re-encrypted, rotation aborts and the old key remains active.
 
 ## Well-Known Namespace
 

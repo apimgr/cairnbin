@@ -61,7 +61,7 @@
 
 - `Type=simple`, `Restart=on-failure`, `RestartSec=5`
 - `StandardOutput=journal`, `StandardError=journal`
-- Hardening: `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`
+- Hardening: `ProtectSystem=true`, `ProtectHome=yes`, `PrivateTmp=yes`
 - `ReadWritePaths=` for config, data, cache, and log dirs
 - `WantedBy=multi-user.target`
 

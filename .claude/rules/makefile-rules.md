@@ -16,12 +16,12 @@
 - NEVER skip test coverage enforcement — `make test` must fail if coverage < 60% (or the project's IDEA.md-configured higher floor)
 - NEVER use `-short`, `-count=0`, or `//go:coverage ignore` to bypass the coverage gate
 - NEVER build on the host — all Makefile build/test/dev/local targets run inside Docker (`casjaysdev/go:latest`)
-- NEVER let `release.txt`, if present, be overridden by `VERSION` env var or git tag — `release.txt` always wins
+- NEVER let a git tag override the local Makefile's explicit user `VERSION` or non-empty `release.txt`; CI does not read `release.txt` or `VERSION`
 
 ## CRITICAL - ALWAYS DO
 
 - ALWAYS use exactly six targets: `dev`, `local`, `build`, `test`, `release`, `docker`
-- ALWAYS resolve version precedence: `release.txt` (if exists) > `VERSION` env var > `devel` fallback
+- ALWAYS resolve local version precedence: explicit user `VERSION` env > non-empty `release.txt` > 7-character commit ID (or `devel` outside Git); AI agents never set `VERSION`
 - ALWAYS embed `Version`, `CommitID`, `BuildDate`, `OfficialSite` via `-ldflags -X` at build time
 - ALWAYS use `CGO_ENABLED=0` and `GOFLAGS=-buildvcs=false` for Go Docker builds
 - ALWAYS run `clean` before `build` and `local` (removes previous artifacts)
@@ -58,9 +58,9 @@
 
 ### Version Priority
 
-1. `release.txt` (wins if present)
-2. `VERSION` env var
-3. `devel` fallback
+1. Explicit user `VERSION` environment variable
+2. Non-empty `release.txt`
+3. 7-character commit ID, or `devel` outside a Git checkout
 
 ### Coverage Gate
 

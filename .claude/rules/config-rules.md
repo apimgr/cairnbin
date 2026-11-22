@@ -6,7 +6,7 @@
 
 - NEVER use inline YAML comments — all comments go ABOVE the setting (exception: GitHub Actions SHA-pin `# vX.Y.Z` annotations stay inline)
 - NEVER use `strconv.ParseBool()` directly — only accepts `true/false/1/0/t/f`; always use `config.ParseBool()`/`config.IsTruthy()`
-- NEVER store user accounts or operator-editable configuration in the database — `server.yml` is the sole source of truth for configuration; database stores resource state, owners, owner and linked tokens, audit log only (owners are anonymous credential-only identities, not accounts)
+- NEVER store user accounts or operator-editable configuration in the database — merged `server.yml`, ordered `yaml.d/` area files, and `secrets.yml` are the source of truth; database stores resource state, owners/tokens, audit, scheduler and other operational state only (owners are anonymous credential-only identities, not accounts)
 - NEVER silently default an invalid boolean value — empty/unset uses default, but an actually invalid value is an error
 - NEVER fail startup on invalid config — warn and replace with default instead
 - NEVER let path traversal through — reject any path containing `..`, reject uppercase/invalid-char segments, reject segments >64 chars
@@ -56,7 +56,7 @@
 | Filename | `server.yml` (never `.yaml`; auto-migrated) |
 | Root path | `/etc/{internal_org}/{internal_name}/server.yml` |
 | Regular user path | `~/.config/{internal_org}/{internal_name}/server.yml` |
-| Source of truth | Configuration lives in `server.yml`; DB never holds user accounts / operator config |
+| Source of truth | Merged `server.yml` + ordered `yaml.d/` area files + `secrets.yml`; DB never holds user accounts / operator config |
 
 ### Boolean truthy/falsy sets
 | Truthy | Falsy |
@@ -89,6 +89,12 @@ URL variable resolution order: `{fqdn}`: Reverse Proxy → `DOMAIN` → `os.Host
 | Port change | config-file only, requires restart, no runtime API |
 | Privileged (<1024) | needs `isElevated()`; service install escalates once, binds, then drops privileges |
 | Display | strip `:80`/`:443`, show all other ports |
+
+### Startup and configuration amendments
+- Privilege setup fixes the service identity to `{internal_name}:{internal_name}`; there is no config key for another user or group.
+- Before privileged bind, the early read is limited to `server.port`, `server.address`, and `server.daemonize` from `server.yml` followed by ordered drop-ins; these settings require restart and are not rebound later. An unset address defaults to `[::]`, with a once-only warning and `0.0.0.0` fallback when IPv6 is unavailable.
+- Secrets generated at startup are written atomically to `secrets.yml` with mode `0600`; generated operator tokens use `adm_` and metrics tokens use `mtr_` prefixes.
+- I2P defaults off outside containers and on inside containers; an operator flag, environment variable or explicit config value overrides that computed default. Disabled I2P is silent; enabled-but-unavailable I2P logs one warning and does not stop startup. Startup logs each event once, in plain text; only the banner and `--status` use decorated output.
 
 ### Service user
 | Property | Value |

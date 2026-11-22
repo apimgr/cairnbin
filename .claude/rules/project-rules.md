@@ -79,7 +79,7 @@
 
 **Required top-level directories:** `.github/` or `.gitea/` workflows, `.claude/rules/` (13 files), `docs/` (MkDocs/ReadTheDocs), `src/`, `scripts/`, `tests/` (`run_tests.sh`, `docker.sh`, `incus.sh`, `e2e.sh`), `docker/` (`Dockerfile`, `Dockerfile.dev`, 3 compose files, `rootfs/`), `volumes/` (gitignored), `binaries/` (gitignored), `releases/` (gitignored).
 
-**Required root files:** `README.md`, `LICENSE.md`, `AI.md`, `IDEA.md`, `AGENTS.md` (identical copy of `CLAUDE.md`, for non-Claude agents — real file, never a symlink), `Jenkinsfile`, and `release.txt`. Optional root files: `TODO.AI.md` (required only while tracking three or more active tasks), `TODO.md` and `PLAN.md` (human-owned — AI marks items done only, never deletes), `PLAN.AI.md` (AI-owned), `SPEC.md` (project context that cannot override AI.md; may be empty), and `site.txt` (official site URL).
+**Required root files:** `README.md`, `LICENSE.md`, `AI.md`, `IDEA.md`, `AGENTS.md` (exact real-file copy of `CLAUDE.md`, never a symlink), `Jenkinsfile`, `.gitlab-ci.yml`, `renovate.json`, `mkdocs.yml`, `.readthedocs.yaml`, and the project build files. `release.txt` is optional and used only by local Makefile builds. `TODO.AI.md` is required only while tracking three or more active implementation tasks; template defects belong in the parent API template's `TODO.API.md`, never project task tracking.
 
 **Runtime directory purpose table:**
 

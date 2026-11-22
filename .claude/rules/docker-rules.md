@@ -70,6 +70,8 @@ docker/
 | STOPSIGNAL | `SIGRTMIN+3` |
 | ENV MODE | not set in image; compose sets it explicitly |
 
+The HTTP listener defaults to `[::]:80`; IPv4-only kernels fall back to `0.0.0.0`. `PORT` overrides the internal port. Runtime packages include `git`, `curl`, `bash`, `tini`, `tor`, `i2pd`, `tzdata`, and `ca-certificates`. Do not bake `I2P_ENABLED`: the binary computes the I2P default as on in containers and off elsewhere, while preserving explicit operator overrides.
+
 ### Container Path Reference
 
 | Path | Purpose |
