@@ -68,7 +68,20 @@
 | `/server/healthz` | Health page (HTML, text or JSON by content negotiation) |
 | `/api/v1/server/healthz`, `/api/healthz` | Health as JSON by default; text via `.txt`, `Accept: text/plain` or curl-style clients (same handler, no redirect) |
 
-Health responses report only `ok`/`error` per check and never include connection strings, paths or configuration. `/healthz` is an optional root alias for `/server/healthz`, mounted only when `server.healthz.root.enabled: true`. `/server/metrics` and `/metrics` are internal only; restrict them at the firewall or reverse proxy and protect them with the per-service bearer tokens under `server.metrics`.
+Health responses never include connection strings, paths or configuration. Tor and I2P checks report `ok` while starting or healthy and `degraded` after startup failure or timeout; an unavailable overlay makes overall health `degraded` but does not stop clearnet service. Disabled overlays are omitted from checks. `/healthz` is an optional root alias for `/server/healthz`, mounted only when `server.healthz.root.enabled: true`. `/server/metrics` and `/metrics` are internal only; restrict them at the firewall or reverse proxy and protect them with the per-service bearer tokens under `server.metrics`.
+
+Enabled GeoIP databases, blocklist sources, and configured NVD/Trivy data sets also appear as ordered `checks.geoip_*`, `checks.blocklist_*`, and `checks.data_*` fields. Their cached status is `ok`, `degraded`, or `error`; the health request itself does not scan or parse data files. The `dataset_health` scheduler refreshes these results every 60 seconds, and data update tasks refresh them after reloads.
+
+## Domain Blocklists
+
+Operator-managed domain sources match the host from `Origin`, or `Referer` if
+`Origin` is absent, plus submitted email domains and URL-valued request fields.
+They do not match the request `Host` and do not use reverse DNS. Hostnames are
+trimmed, lowercased, converted to ASCII IDNA form, and stripped of a trailing
+dot, port, and URL userinfo; IP literals are ignored by domain lists. Exact
+entries match only themselves. A `*.example.com` entry matches subdomains at
+label boundaries but not the apex, and wildcards over public suffixes are
+invalid. A match is rejected with `403` before the request handler runs.
 
 ## Security Reporting
 
@@ -77,7 +90,7 @@ Health responses report only `ok`/`error` per check and never include connection
 - Each accepted security report sends exactly one best-effort maintainer notification and may send one researcher acknowledgment. The acknowledgment contains only the tracking ID and private status URL, uses the configured server sender, and is never retried. SMTP disabled or delivery failure does not invalidate the report.
 - Contact fields are length-checked after trimming by Unicode character count. Standard name/email/subject/message limits are 100/254/200/5000. Security reports cap GPG input at 16384 characters (2048 for an HTTPS URL), component/free text at 255, endpoint at 2048, summary at 200, steps at 10000, impact/suggested fix at 5000, and credit handle at 100. A handle is required only for the handle credit choice and is stored only for that choice.
 - `/server/security` explains the process in plain language and `/server/security/policy` states the disclosure policy.
-- Closed reports (`disclosed` or `wont_fix`) are removed after `server.security.reports.retention_days` (365 days by default); open reports are never purged. A daily cleanup also removes a rotated PGP private key after its 30-day in-flight grace period.
+- Closed reports (`disclosed` or `wont_fix`) are removed after `server.security.reports.retention_days` (365 days by default); open reports are never purged. The daily `security_cleanup` task runs at 03:30 and also removes a rotated PGP private key after its 30-day in-flight grace period.
 - PGP key rotation re-encrypts retained PGP-protected report bodies to the new key in one database transaction. If any report cannot be decrypted and re-encrypted, rotation aborts and the old key remains active.
 
 ## Well-Known Namespace

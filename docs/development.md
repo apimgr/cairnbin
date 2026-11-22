@@ -126,5 +126,6 @@ The built-in scheduler runs the following tasks automatically:
 | `disk_check` | Every 5 min | Check available disk space and report low-space conditions |
 | `branding_refresh` | Every 24 hours by default | Refresh cached branding image variants; configurable with `server.branding.image_refresh_interval` |
 | `healthcheck_self` | Every 5 min | Self-health check |
+| `dataset_health` | Every 60 sec | Refresh cached data-set health checks without making health requests read data files |
 | `tor_health` | Every 10 min | Tor connectivity check |
-| `i2p_health` | Every 10 min when I2P is enabled | I2P connectivity check |
+| `i2p_health` | Every 10 min when I2P is enabled | I2P connectivity check; startup is asynchronous and failure degrades health without stopping the HTTP listener |

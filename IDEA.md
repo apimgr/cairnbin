@@ -58,7 +58,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - Two-tier operator token: server operator may set a `server.token` in `server.yml`; this operator token allows deleting any paste unconditionally
 - i18n: 8 supported locales (en, es, fr, de, it, zh, ar, ja); automatic language selection via `Accept-Language` header; RTL layout for Arabic (`dir="rtl"` on `<html>`); fallback to English when locale unknown
 - Tor hidden service: auto-enabled when the `tor` binary is present; the site is reachable at a persistent v3 `.onion` address; non-fatal when Tor is absent — see PART 31.1 for HOW
-- I2P eepsite: optional, disabled by default (`server.i2p.enabled` / `I2P_ENABLED` / `--i2p`); when enabled the site is reachable at a persistent `.b32.i2p` address; non-fatal when no provider is available — see PART 31.2 for HOW
+- I2P eepsite: enabled by the computed default in containers and disabled elsewhere; `server.i2p.enabled`, `I2P_ENABLED`, or `--i2p` explicitly overrides that default. When active and a provider is available the site is reachable at a persistent `.b32.i2p` address; startup is asynchronous and provider failure never stops clearnet — see PART 31.2 for HOW
 - GeoIP: country-based access control (allowlist or denylist) applied per request, with a fail-open when the country database is unavailable — see PART 19 for HOW
 - Prometheus metrics (`cairnbin_` namespace); internal-only, never exposed publicly — see PART 20 for HOW
 - Built-in task scheduler (no external cron): the PART 18 mandated task set plus a project-specific `expire-pastes` task that removes expired and burned pastes
@@ -66,7 +66,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - Self-update: checks GitHub Releases for new versions and installs a checksum-verified binary — see PART 22 for HOW
 - Service lifecycle management: `--install`/`--uninstall` (requires root privilege; uninstall prompts interactive `[y/N]` confirmation before data purge); `--start`/`--stop`/`--restart`/`--reload`/`--disable`/`--enable`; systemd unit (Linux), launchd plist (macOS), SCM service (Windows)
 - Rate limiting: per-endpoint, IP-based, configurable; proxy-aware (`X-Forwarded-For`, `CF-Connecting-IP`, `True-Client-IP`)
-- IP/CIDR/country blocklist: loaded from a URL or local file; refreshed hourly by `blocklist_update` scheduled task
+- IP/CIDR/domain/country blocklists: operator-managed IP and domain sources are loaded from a URL or local file; refreshed by the daily `blocklist_update` task. Domain checks use submitted Origin/Referer, email domains and URL fields, never request Host or reverse DNS
 - Email notifications: SMTP; 15 built-in template types (`backup_complete`, `backup_failed`, `contact`, `disk_low`, `scheduler_error`, `security_alert`, `security_report_ack`, `server_started`, `server_stopped`, `ssl_expiring`, `ssl_renewal_failed`, `ssl_renewed`, `test`, `update_available`, `update_installed`); silently disabled when unconfigured; startup and shutdown messages are opt-in
 - Security report system: `/server/security` report submission flow with optional PGP-encrypted reports and researcher credit by real name, handle, anonymity or no credit; `security.txt` (RFC 9116) at `/.well-known/security.txt`, and operator PGP key at `/.well-known/pgp-key.asc`
 - Cookie consent and CCPA opt-out: consent banner (works without JavaScript) plus a do-not-sell opt-out submission; guest preference and consent state are stored in browser cookies, not a server-side preference profile; consent changes are recorded in the compliance audit log, and behavioral analytics run only when configured
@@ -225,7 +225,7 @@ Yes, per-endpoint and IP-based; configurable in `server.yml`.
 Yes, when the `tor` binary is present the server auto-enables a persistent `.onion` hidden service address, shown on `/server/help`.
 
 **Can I access it over I2P?**
-Only if the operator opts in (`server.i2p.enabled` / `I2P_ENABLED` / `--i2p`, disabled by default). When enabled and a provider (i2pd or a local SAM bridge) is available, a persistent `.b32.i2p` eepsite address is shown on `/server/help`.
+In containers by default, and elsewhere only when the operator opts in (`server.i2p.enabled` / `I2P_ENABLED` / `--i2p`). When enabled and a provider (i2pd or a local SAM bridge) is available, a persistent `.b32.i2p` eepsite address is shown on `/server/help`.
 
 ### Roles & permissions
 
@@ -281,7 +281,7 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 | Compat delete token (inbound) | **Untrusted** | Hashed before comparison |
 | GitHub Releases API | **Untrusted network source** | Used by self-update; SHA-256 checksum verified before applying the downloaded binary; update is operator-initiated, not automatic |
 | Tor binary (host-installed) | Trusted — operator-controlled binary | Forked as subprocess via `github.com/cretz/bine`; hidden service declared via torrc `HiddenServiceDir`; non-fatal when absent |
-| I2P provider (i2pd binary or local SAM bridge) | Trusted — operator-controlled binary/service, opt-in only | i2pd forked as subprocess, or raw SAMv3 session against `sam_address`; non-fatal when neither is available; disabled by default |
+| I2P provider (i2pd binary or local SAM bridge) | Trusted — operator-controlled binary/service, enabled by default in containers and opt-in elsewhere | i2pd forked as subprocess, or raw SAMv3 session against `sam_address`; non-fatal when neither is available |
 | SMTP server (operator-configured) | Semi-trusted — operator-controlled | Used for email notifications; credentials in `server.yml`; silently disabled when unconfigured |
 | GeoIP CDN (jsDelivr) | Semi-trusted network source | GeoLite2-Country database downloaded by `geoip_update` scheduled task over HTTPS; no separate checksum beyond HTTPS; fail-open on download error |
 | `forksmgr/lcomrade-lenpaste` (protocol reference) | **Untrusted source** — wire protocol spec consulted at development time; no code imported at runtime | Failure mode: compat layer continues to function even if the upstream fork is deleted or unmaintained; the protocol is implemented independently from the published spec |
@@ -342,7 +342,7 @@ No user roles exist. All native API endpoints are public. The only privilege dis
 - **User-submitted content** — every paste originates from an anonymous request; there is no seeded, curated, or imported paste corpus
 - **SQLite or libSQL/Turso database** — stores pastes, owner tokens, and server state; SQLite is local and created on first run, while libSQL/Turso is an optional remote database — see PART 10
 - **GeoLite2-Country database** — downloaded over HTTPS from a public CDN by the `geoip_update` scheduled task, refreshed weekly, fail-open when unavailable — see PART 19
-- **IP/CIDR/country blocklist** — loaded from an operator-configured URL or local file, refreshed hourly by the `blocklist_update` scheduled task
+- **IP/CIDR/domain/country blocklists** — operator-managed IP and domain sources are loaded from an operator-configured URL or local file and refreshed daily by `blocklist_update`; domain matches use the request Origin or Referer, submitted email domains, and URL fields, never the request Host or reverse DNS
 - **CVE feed** — refreshed by the `cve_update` scheduled task — see PART 19
 - **GitHub Releases** — polled for self-update version checks — see PART 22
 - **Embedded assets** — templates, CSS, JS, images, fonts, and the eight locale files are compiled into the binary at build time; no security database is ever embedded
