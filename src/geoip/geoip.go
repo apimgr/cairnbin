@@ -113,6 +113,49 @@ type DB struct {
 	countryOverride func(net.IP) string
 }
 
+// DatasetStatus reports whether one configured GeoIP data set is available and
+// when its current file was last modified. It contains no filesystem paths.
+type DatasetStatus struct {
+	ID        string
+	Loaded    bool
+	UpdatedAt time.Time
+}
+
+// DatasetStatuses returns the configured databases' cached open state and
+// their file timestamps for periodic health refreshes.
+func (d *DB) DatasetStatuses() []DatasetStatus {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	var out []DatasetStatus
+	add := func(id, filename string, enabled, loaded bool) {
+		if !enabled {
+			return
+		}
+		status := DatasetStatus{ID: id, Loaded: loaded}
+		if info, err := os.Stat(filepath.Join(d.cfg.Dir, filename)); err == nil && !info.IsDir() && info.Size() > 0 {
+			status.UpdatedAt = info.ModTime()
+		} else {
+			status.Loaded = false
+		}
+		out = append(out, status)
+	}
+	add("asn", "asn.mmdb", d.cfg.EnableASN, d.asnDB != nil)
+	add("country", "country.mmdb", d.cfg.EnableCountry, d.countDB != nil)
+	cityLoaded := d.cityDB != nil && d.cityDBv6 != nil
+	cityTime := time.Time{}
+	if info, err := os.Stat(filepath.Join(d.cfg.Dir, "dbip-city-ipv4.mmdb")); err == nil {
+		cityTime = info.ModTime()
+	}
+	if info, err := os.Stat(filepath.Join(d.cfg.Dir, "dbip-city-ipv6.mmdb")); err == nil && (cityTime.IsZero() || info.ModTime().Before(cityTime)) {
+		cityTime = info.ModTime()
+	}
+	if d.cfg.EnableCity {
+		loaded := cityLoaded && !cityTime.IsZero()
+		out = append(out, DatasetStatus{ID: "city", Loaded: loaded, UpdatedAt: cityTime})
+	}
+	return out
+}
+
 // Open downloads any missing MMDB files and opens the configured databases.
 // If no databases are enabled, a no-op DB is returned (all lookups return nil).
 func Open(cfg Config) (*DB, error) {

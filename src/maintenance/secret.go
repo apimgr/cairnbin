@@ -157,7 +157,7 @@ func rotateInstallationSecret(db secretStore, configDir string) (int, error) {
 	secDir := filepath.Join(configDir, "security")
 	files := []string{
 		filepath.Join(secDir, "pgp.priv.asc.enc"),
-		filepath.Join(secDir, "pgp.priv.asc.enc.old"),
+		filepath.Join(secDir, "pgp.priv.old.asc.enc"),
 	}
 	type rewrap struct {
 		path     string

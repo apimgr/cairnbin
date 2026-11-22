@@ -1088,9 +1088,9 @@ func TestLoadBlocklists(t *testing.T) {
 			ip   string
 			want bool
 		}{
-			{"10.0.0.1", true},
-			{"10.0.0.2", true},
-			{"192.168.0.50", true},
+			{"10.0.0.1", false},
+			{"10.0.0.2", false},
+			{"192.168.0.50", false},
 			{"1.2.3.4", false},
 		}
 		for _, c := range cases {
@@ -1114,6 +1114,33 @@ func TestLoadBlocklists(t *testing.T) {
 			t.Error("non-.txt file should not be loaded")
 		}
 	})
+}
+
+func TestLoadBlocklistsExcludesTrustedAndSpecialNetworks(t *testing.T) {
+	dir := makeTempDir(t)
+	content := "203.0.113.8\n100.64.0.0/10\n198.51.100.0/24\n192.168.1.0/24\n2001:db8::1\n"
+	if err := os.WriteFile(filepath.Join(dir, "blocklist.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bs := loadBlocklistsWithTrustedRanges(dir, []string{"198.51.100.8"})
+	for _, tc := range []struct {
+		ip   string
+		want bool
+	}{
+		{"203.0.113.8", true},
+		{"100.64.0.1", false},
+		{"198.51.100.8", false},
+		{"198.51.100.20", false},
+		{"192.168.1.4", false},
+		{"2001:db8::1", true},
+	} {
+		if got := bs.contains(net.ParseIP(tc.ip)); got != tc.want {
+			t.Errorf("contains(%q) = %v, want %v", tc.ip, got, tc.want)
+		}
+	}
+	if bs.skipped != 3 {
+		t.Errorf("skipped entries = %d, want 3", bs.skipped)
+	}
 }
 
 func TestBlocklistStoreContains(t *testing.T) {
@@ -1391,7 +1418,10 @@ func TestHandleServiceWorker(t *testing.T) {
 				"key.startsWith('cairnbin-cache-')",
 				"!key.startsWith('cairnbin-cache-%2F')",
 				"const NAV_TIMEOUT_MS = 8000;",
+				"const CACHE_OPERATION_TIMEOUT_MS = 1000;",
 				"withTimeout(fetch(request), NAV_TIMEOUT_MS)",
+				"withTimeout(cache.match(request), CACHE_OPERATION_TIMEOUT_MS)",
+				"withTimeout(cache.put(request, response.clone()), CACHE_OPERATION_TIMEOUT_MS)",
 				"if (response.ok && !response.redirected)",
 				"event.data.type === 'SKIP_WAITING'",
 				"appPath('/static/js/app.js?v=' + CACHE_VERSION)",
@@ -2164,7 +2194,7 @@ func TestAllowlistMiddleware(t *testing.T) {
 func TestBlocklistMiddleware(t *testing.T) {
 	t.Run("blocked IP gets 403", func(t *testing.T) {
 		dir := makeTempDir(t)
-		if err := os.WriteFile(filepath.Join(dir, "blocked.txt"), []byte("10.0.0.99\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "blocked.txt"), []byte("198.51.100.99\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2177,10 +2207,12 @@ func TestBlocklistMiddleware(t *testing.T) {
 		if err := os.MkdirAll(secDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(secDir, "blocked.txt"), []byte("10.0.0.99\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(secDir, "blocked.txt"), []byte("198.51.100.99\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		cfg.Server.DataDir = dataDir
+		cfg.Server.Security.Blocklists.Enabled = true
+		cfg.Server.Security.Blocklists.ExtraSources = []config.BlocklistSource{{ID: "blocked", Type: "ip", URL: "https://lists.example/blocked.txt"}}
 
 		s := newMinimalServer(cfg)
 		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2189,7 +2221,7 @@ func TestBlocklistMiddleware(t *testing.T) {
 		h := s.blocklistMiddleware(inner)
 
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		r.RemoteAddr = "10.0.0.99:5000"
+		r.RemoteAddr = "198.51.100.99:5000"
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 
@@ -2713,6 +2745,68 @@ func TestBuildHealthResponse(t *testing.T) {
 			t.Errorf("database check = %q, want error", hr.Checks.Database)
 		}
 	})
+}
+
+func TestHealthDatasetChecksAreCachedOrderedAndAffectStatus(t *testing.T) {
+	s := newServerWithDB(&config.Config{}, &stubDB{})
+	now := time.Now().UTC()
+	if err := s.datasetChecks.Register("blocklist_ads", false, time.Hour, func() (time.Time, bool) {
+		return now.Add(-2 * time.Hour), true
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.datasetChecks.Refresh(now)
+	hr := s.buildHealthResponse()
+	if hr.Status != "degraded" || len(hr.Checks.Datasets) != 1 || hr.Checks.Datasets[0].Status != "degraded" {
+		t.Fatalf("health response did not expose stale dataset check: status=%q checks=%+v", hr.Status, hr.Checks.Datasets)
+	}
+	encoded, err := json.Marshal(hr.Checks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(encoded)
+	ordered := []string{`"database"`, `"cache"`, `"disk"`, `"scheduler"`, `"blocklist_ads"`, `"config"`}
+	last := -1
+	for _, key := range ordered {
+		position := strings.Index(body, key)
+		if position <= last {
+			t.Fatalf("checks JSON keys are not in required order: %s", body)
+		}
+		last = position
+	}
+}
+
+func TestNVDHealthCheckValidatesStoredCVEArray(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{name: "valid cve array", content: `[{"id":"CVE-2026-1234"}]`, want: "ok"},
+		{name: "empty array", content: `[]`, want: "error"},
+		{name: "api response envelope is not the stored format", content: `{"vulnerabilities":[{"cve":{"id":"CVE-2026-1234"}}]}`, want: "error"},
+		{name: "missing id", content: `[{"description":"no id"}]`, want: "error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dataDir := t.TempDir()
+			cfg := config.DefaultConfig()
+			cfg.Server.DataDir = dataDir
+			path := filepath.Join(dataDir, "security", "cve", "nvd.json")
+			if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(tc.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			s := newMinimalServer(cfg)
+			s.dataDir = dataDir
+			s.registerSecurityDataHealthChecks(cfg)
+			checks := s.datasetChecks.Refresh(time.Now().UTC())
+			if len(checks) != 1 || checks[0].Key != "data_nvd" || checks[0].Status != tc.want {
+				t.Fatalf("NVD health checks = %+v, want data_nvd %q", checks, tc.want)
+			}
+		})
+	}
 }
 
 // ─── Server.handleHealthzJSON ─────────────────────────────────────────────────

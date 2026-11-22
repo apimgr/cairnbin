@@ -1,0 +1,41 @@
+{{define "meta" -}}
+<title>{{t .Lang "preferences.sync_title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{t .Lang "preferences.sync_desc"}}">
+{{end}}
+
+{{define "content"}}
+  <div class="container container-md">
+    <header class="page-header">
+      <nav class="breadcrumb" aria-label="{{t .Lang "common.breadcrumb"}}"><a href="/server/preferences">← {{t .Lang "preferences.title"}}</a></nav>
+      <h1 class="page-title">{{t .Lang "preferences.sync_title"}}</h1>
+      <p class="page-lead">{{t .Lang "preferences.sync_desc"}}</p>
+    </header>
+
+    <section class="section-card" aria-labelledby="preferences-export">
+      <h2 id="preferences-export">{{t .Lang "preferences.export_title"}}</h2>
+      <p>{{t .Lang "preferences.export_desc"}}</p>
+      <div class="form-group">
+        <span class="form-label">{{t .Lang "preferences.export_url"}}</span>
+        <p><code class="copy-value">{{.ExportURL}}</code> <button type="button" class="copy-btn" data-copy="{{.ExportURL}}" aria-label="{{t .Lang "preferences.copy"}}" aria-live="polite">{{t .Lang "preferences.copy"}}</button></p>
+      </div>
+      <div class="form-group">
+        <span class="form-label">{{t .Lang "preferences.export_code"}}</span>
+        <p><code class="copy-value">{{.ExportCode}}</code> <button type="button" class="copy-btn" data-copy="{{.ExportCode}}" aria-label="{{t .Lang "preferences.copy"}}" aria-live="polite">{{t .Lang "preferences.copy"}}</button></p>
+      </div>
+    </section>
+
+    <section class="section-card" aria-labelledby="preferences-import">
+      <h2 id="preferences-import">{{t .Lang "preferences.import_title"}}</h2>
+      <p>{{t .Lang "preferences.import_desc"}}</p>
+      <form method="post" action="/server/preferences/sync">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="redirect" value="{{.CancelURL}}">
+        <div class="form-group">
+          <label class="form-label" for="preferences-import-code">{{t .Lang "preferences.import_code"}}</label>
+          <textarea id="preferences-import-code" name="code" class="form-input" maxlength="2048" rows="3" placeholder="{{t .Lang "preferences.import_placeholder"}}"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">{{t .Lang "preferences.import_action"}}</button>
+      </form>
+    </section>
+  </div>
+{{end}}

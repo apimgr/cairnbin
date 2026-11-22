@@ -64,7 +64,8 @@
     "page_x_of_y": "第 {current} 页，共 {total} 页",
     "showing_x_of_y": "显示 {count} / {total}",
     "last_updated": "最后更新：{datetime}",
-    "made_with": "使用以下工具制作"
+    "made_with": "使用以下工具制作",
+    "breadcrumb": "面包屑导航"
   },
   "theme": {
     "light": "浅色",
@@ -178,7 +179,8 @@
     "scheduler": "调度器",
     "syntax_hl": "语法高亮",
     "timestamp": "时间戳",
-    "tor_hidden": "Tor 隐藏服务"
+    "tor_hidden": "Tor 隐藏服务",
+    "configuration": "配置"
   },
   "status_values": {
     "online": "在线",
@@ -414,7 +416,11 @@
     "mcp_error_404": "此服务器已禁用 MCP。",
     "mcp_error_405": "端点仅接受 POST；MCP 请求请使用 POST。",
     "mcp_project_heading": "使用 cairnbin 工具",
-    "mcp_alias_connector": "和"
+    "mcp_alias_connector": "和",
+    "more": "更多帮助",
+    "page_lead": "API 使用和服务帮助。",
+    "custom_content": "其他信息",
+    "mcp_tool": "工具"
   },
   "privacy": {
     "title": "隐私政策",
@@ -608,7 +614,13 @@
     "owner_confirm_rotate_primary": "轮换主令牌？现有副本将停止工作。",
     "reset": "重置",
     "reset_warning": "这将清除此网站保存的偏好设置、同意选项、已关闭的公告、构建标记、临时消息和浏览器本地数据。此操作无法撤销。",
-    "erase": "全部清除"
+    "erase": "全部清除",
+    "sync_title": "同步偏好设置",
+    "sync_desc": "导出偏好设置，或在其他浏览器或设备上应用。",
+    "tokens_desc": "为客户端创建和管理 API 令牌。",
+    "automatic": "自动",
+    "more": "更多偏好设置",
+    "owner_no_linked": "尚无关联令牌。创建一个令牌以连接客户端。"
   },
   "announcements": {
     "warning": "警告",
@@ -1201,7 +1213,7 @@
     "base_url": "URL 路径前缀",
     "daemon": "以守护进程运行（与终端分离）",
     "debug": "启用调试模式",
-    "optional_i2p": "启用可选 I2P 站点（需主动选择）",
+    "optional_i2p": "I2P 站点（容器中默认启用；使用 --i2p=false 可禁用）",
     "color": "彩色输出",
     "language": "输出语言",
     "service_cmd": "服务管理",

@@ -32,7 +32,7 @@ func (s *Server) pgpPrivateKeyPath() string {
 // pgpRotatedKeyPath is where the previous private key is parked after a rotation
 // so in-flight reports can still be decrypted during the grace window.
 func (s *Server) pgpRotatedKeyPath() string {
-	return filepath.Join(s.configDir, "security", "pgp.priv.asc.enc.old")
+	return filepath.Join(s.configDir, "security", "pgp.priv.old.asc.enc")
 }
 
 // keyserversStatePath persists per-keyserver publish state so a restart or a
@@ -155,9 +155,9 @@ func (s *Server) installKeypair(kp *pgp.Keypair, rotatedFrom *database.SecurityK
 	return s.db.UpsertSecurityKeypair(meta)
 }
 
-// pruneRotatedKey removes the parked previous private key once the 30-day grace
-// window has elapsed since the last rotation.
-func (s *Server) pruneRotatedKey() {
+// CleanupRotatedPGPKey removes the parked previous private key after its
+// 30-day in-flight grace period.
+func (s *Server) CleanupRotatedPGPKey() {
 	info, err := os.Stat(s.pgpRotatedKeyPath())
 	if err != nil {
 		return

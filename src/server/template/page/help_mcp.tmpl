@@ -4,53 +4,75 @@
 {{end}}
 
 {{define "content"}}
-    <section class="search-section">
-      <div class="container container-sm">
-          <div class="section-header"><h1 class="section-title">{{t .Lang "help.mcp_page_title"}}</h1></div>
-        <div class="paste-view page-view">
-          <h2 id="overview">{{t .Lang "help.mcp_overview_heading"}}</h2>
-          <p>{{tf .Lang "help.mcp_overview_body" "site" .SiteTitle}}</p>
+  <div class="container container-md">
+    <header class="page-header">
+      <nav class="breadcrumb" aria-label="{{t .Lang "common.breadcrumb"}}"><a href="/server/help">← {{t .Lang "help.title"}}</a></nav>
+      <h1 class="page-title">{{t .Lang "help.mcp_page_title"}}</h1>
+      <p class="page-lead">{{tf .Lang "help.mcp_meta_description" "site" .SiteTitle}}</p>
+    </header>
 
-          <h2 id="endpoint">{{t .Lang "help.mcp_endpoint_heading"}}</h2>
-          <p>{{t .Lang "help.mcp_primary_endpoint"}}</p>
-          <p><code class="user-select-all">{{.MCPURL}}</code> <button type="button" class="copy-btn" data-copy="{{.MCPURL}}">{{t .Lang "common.copy"}}</button></p>
-          <p>{{t .Lang "help.mcp_aliases_prefix"}} <code class="user-select-all">{{.MCPAliasAPI}}</code> {{t .Lang "help.mcp_alias_connector"}} <code class="user-select-all">{{.MCPAliasRoot}}</code>.</p>
+    <section id="overview" class="section-card" aria-labelledby="overview-heading">
+      <h2 id="overview-heading">{{t .Lang "help.mcp_overview_heading"}}</h2>
+      <p>{{tf .Lang "help.mcp_overview_body" "site" .SiteTitle}}</p>
+    </section>
 
-          <h2 id="authentication">{{t .Lang "help.mcp_auth_heading"}}</h2>
-          <p>{{tfh .Lang "help.mcp_auth_body" "token" "{token}" "tokens_url" (printf "%s/server/preferences/tokens" .AssetPrefix)}}</p>
+    <section id="endpoint" class="section-card" aria-labelledby="endpoint-heading">
+      <h2 id="endpoint-heading">{{t .Lang "help.mcp_endpoint_heading"}}</h2>
+      <p>{{t .Lang "help.mcp_primary_endpoint"}}</p>
+      <p class="copy-field"><code class="copy-value">{{.MCPURL}}</code><button type="button" class="copy-btn" data-copy="{{.MCPURL}}" aria-label="{{t .Lang "common.copy"}}" aria-live="polite">{{t .Lang "common.copy"}}</button></p>
+      <p>{{t .Lang "help.mcp_aliases_prefix"}} <code class="copy-value">{{.MCPAliasAPI}}</code> {{t .Lang "help.mcp_alias_connector"}} <code class="copy-value">{{.MCPAliasRoot}}</code>.</p>
+    </section>
 
-          <h2 id="connect">{{t .Lang "help.mcp_connect_heading"}}</h2>
-          <h3>{{t .Lang "help.mcp_claude_code"}}</h3>
-          <pre><code>claude mcp add --transport http cairnbin {{.MCPURL}} --header "Authorization: Bearer $MCP_TOKEN"</code></pre>
-          <h3>{{t .Lang "help.mcp_generic_config"}}</h3>
-          <pre><code>{"mcpServers":{"cairnbin":{"type":"http","url":"{{.MCPURL}}","headers":{"Authorization":"Bearer $MCP_TOKEN"}}}}</code></pre>
-          <h3>{{t .Lang "help.mcp_verify_curl"}}</h3>
-          <pre><code>curl -q -LSsf -X POST '{{.MCPURL}}' \
+    <section id="authentication" class="section-card" aria-labelledby="authentication-heading">
+      <h2 id="authentication-heading">{{t .Lang "help.mcp_auth_heading"}}</h2>
+      <p>{{tfh .Lang "help.mcp_auth_body" "token" "{token}" "tokens_url" (printf "%s/server/preferences/tokens" .AssetPrefix)}}</p>
+    </section>
+
+    <section id="connect" class="section-card" aria-labelledby="connect-heading">
+      <h2 id="connect-heading">{{t .Lang "help.mcp_connect_heading"}}</h2>
+      <h3>{{t .Lang "help.mcp_claude_code"}}</h3>
+      <div class="code-block"><pre><code id="mcp-claude-command">claude mcp add --transport http cairnbin {{.MCPURL}} --header "Authorization: Bearer $MCP_TOKEN"</code></pre><button type="button" class="copy-btn" data-copy-target="mcp-claude-command" aria-label="{{t .Lang "common.copy"}}" aria-live="polite">{{t .Lang "common.copy"}}</button></div>
+      <h3>{{t .Lang "help.mcp_generic_config"}}</h3>
+      <div class="code-block"><pre><code id="mcp-json-config">{"mcpServers":{"cairnbin":{"type":"http","url":"{{.MCPURL}}","headers":{"Authorization":"Bearer $MCP_TOKEN"}}}}</code></pre><button type="button" class="copy-btn" data-copy-target="mcp-json-config" aria-label="{{t .Lang "common.copy"}}" aria-live="polite">{{t .Lang "common.copy"}}</button></div>
+      <h3>{{t .Lang "help.mcp_verify_curl"}}</h3>
+      <div class="code-block"><pre><code id="mcp-curl">curl -q -LSsf -X POST '{{.MCPURL}}' \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2025-06-18' \
   -H "Authorization: Bearer $MCP_TOKEN" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'</code></pre>
-
-          <h2 id="tools">{{t .Lang "help.mcp_tools_heading"}}</h2>
-          <ul>{{range .MCPTools}}<li><code>{{.name}}</code> — {{.description}}</li>{{else}}<li>{{t .Lang "help.mcp_no_tools"}}</li>{{end}}</ul>
-          <p>{{t .Lang "help.mcp_auth_tools_note"}}</p>
-
-          <h2 id="limits">{{t .Lang "help.mcp_behavior_heading"}}</h2>
-          <p>{{t .Lang "help.mcp_behavior_body"}} 2025-06-18, 2025-03-26, 2024-11-05.</p>
-
-          <h2 id="troubleshooting">{{t .Lang "help.mcp_troubleshooting_heading"}}</h2>
-          <div class="table-wrapper"><table class="help-table">
-            <tr><th>{{t .Lang "help.mcp_status"}}</th><th>{{t .Lang "help.mcp_cause_fix"}}</th></tr>
-            <tr><td>400</td><td>{{t .Lang "help.mcp_error_400"}}</td></tr>
-            <tr><td>401</td><td>{{th .Lang "help.mcp_error_401"}}</td></tr>
-            <tr><td>403</td><td>{{t .Lang "help.mcp_error_403"}}</td></tr>
-            <tr><td>404</td><td>{{t .Lang "help.mcp_error_404"}}</td></tr>
-            <tr><td>405</td><td>{{t .Lang "help.mcp_error_405"}}</td></tr>
-          </table></div>
-
-          {{if .MCPProject}}<section id="project"><h2>{{t .Lang "help.mcp_project_heading"}}</h2>{{.MCPProject}}</section>{{end}}
-        </div>
-      </div>
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'</code></pre><button type="button" class="copy-btn" data-copy-target="mcp-curl" aria-label="{{t .Lang "common.copy"}}" aria-live="polite">{{t .Lang "common.copy"}}</button></div>
     </section>
+
+    <section id="tools" class="section-card" aria-labelledby="tools-heading">
+      <h2 id="tools-heading">{{t .Lang "help.mcp_tools_heading"}}</h2>
+      <div class="table-wrapper"><table class="data-table">
+        <caption>{{t .Lang "help.mcp_tools_heading"}}</caption>
+        <thead><tr><th scope="col">{{t .Lang "help.mcp_tool"}}</th><th scope="col">{{t .Lang "help.col_description"}}</th></tr></thead>
+        <tbody>{{range .MCPToolsView}}<tr><td><code>{{.name}}</code></td><td>{{.description}}</td></tr>{{else}}<tr><td colspan="2">{{t .Lang "help.mcp_no_tools"}}</td></tr>{{end}}</tbody>
+      </table></div>
+      <p>{{t .Lang "help.mcp_auth_tools_note"}}</p>
+    </section>
+
+    <section id="limits" class="section-card" aria-labelledby="limits-heading">
+      <h2 id="limits-heading">{{t .Lang "help.mcp_behavior_heading"}}</h2>
+      <p>{{t .Lang "help.mcp_behavior_body"}} 2025-06-18, 2025-03-26, 2024-11-05.</p>
+    </section>
+
+    <section id="troubleshooting" class="section-card" aria-labelledby="troubleshooting-heading">
+      <h2 id="troubleshooting-heading">{{t .Lang "help.mcp_troubleshooting_heading"}}</h2>
+      <div class="table-wrapper"><table class="data-table">
+        <caption>{{t .Lang "help.mcp_troubleshooting_heading"}}</caption>
+        <thead><tr><th scope="col">{{t .Lang "help.mcp_status"}}</th><th scope="col">{{t .Lang "help.mcp_cause_fix"}}</th></tr></thead>
+        <tbody>
+          <tr><td>400</td><td>{{t .Lang "help.mcp_error_400"}}</td></tr>
+          <tr><td>401</td><td>{{th .Lang "help.mcp_error_401"}}</td></tr>
+          <tr><td>403</td><td>{{t .Lang "help.mcp_error_403"}}</td></tr>
+          <tr><td>404</td><td>{{t .Lang "help.mcp_error_404"}}</td></tr>
+          <tr><td>405</td><td>{{t .Lang "help.mcp_error_405"}}</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    {{if .MCPProject}}<section id="project" class="section-card" aria-labelledby="project-heading"><h2 id="project-heading">{{t .Lang "help.mcp_project_heading"}}</h2>{{.MCPProject}}</section>{{end}}
+  </div>
 {{end}}

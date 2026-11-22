@@ -11,9 +11,9 @@ import (
 	"github.com/apimgr/cairnbin/src/mcp"
 )
 
-func TestHandleHelpMCPIsAlwaysAvailable(t *testing.T) {
+func TestHandleHelpMCPAvailableWhenEnabled(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.MCP.Enabled = false
+	cfg.Server.MCP.Enabled = true
 	s := newMinimalServer(cfg)
 	s.mcpHandler = mcp.New(mcp.Config{APIVersion: "v1"})
 	s.templates, _ = s.buildTemplates()
@@ -98,11 +98,11 @@ func TestHandleHelpMCPHTMLSectionsAndHelpLink(t *testing.T) {
 		}
 		last = pos
 	}
-	if !strings.Contains(body, "Authorization: Bearer") || !strings.Contains(body, "user-select-all") {
+	if !strings.Contains(body, "Authorization: Bearer") || !strings.Contains(body, "class=\"copy-value\"") {
 		t.Error("page omits the Bearer guidance or selectable endpoint")
 	}
 
-	data := map[string]interface{}{"SiteTitle": cfg.Web.SiteTitle, "Theme": cfg.Web.Theme, "BaseURL": "http://example.com"}
+	data := map[string]interface{}{"SiteTitle": cfg.Web.SiteTitle, "Theme": cfg.Web.Theme, "BaseURL": "http://example.com", "MoreHelp": s.hubPageData(s.helpPageRegistry(), "en")}
 	linkPage, err := s.renderTemplateToString(r, "help.html", data)
 	if err != nil {
 		t.Fatal(err)

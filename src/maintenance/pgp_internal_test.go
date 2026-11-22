@@ -54,8 +54,8 @@ func TestPGPManager_PrivPath(t *testing.T) {
 func TestPGPManager_RotatedPath(t *testing.T) {
 	m := newTestManager(t)
 	got := m.rotatedPath()
-	if !strings.HasSuffix(got, "pgp.priv.asc.enc.old") {
-		t.Errorf("rotatedPath = %q, does not end in pgp.priv.asc.enc.old", got)
+	if !strings.HasSuffix(got, "pgp.priv.old.asc.enc") {
+		t.Errorf("rotatedPath = %q, does not end in pgp.priv.old.asc.enc", got)
 	}
 }
 

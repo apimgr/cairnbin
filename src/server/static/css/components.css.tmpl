@@ -380,6 +380,24 @@ textarea:user-invalid ~ .field-error {
     margin-top: var(--space-6);
 }
 
+.code-block {
+    position: relative;
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-secondary);
+    overflow-wrap: anywhere;
+}
+
+.code-block pre {
+    margin: 0;
+    overflow-x: auto;
+    color: var(--color-text-primary);
+}
+
+
 
 /* ============================================
    Loading & Empty States
@@ -1060,48 +1078,11 @@ textarea:user-invalid ~ .field-error {
 }
 
 /* ============================================
-   Swagger UI viewer (src/swagger/swagger.go)
-   Scoped under body.swagger-page so it never
-   collides with the site header/nav/footer.
+   Swagger UI viewer components
    Colors reuse the canonical --color-* variables
    defined once in common.css (AI.md PART 16).
    ============================================ */
-.swagger-page {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: var(--color-bg-primary);
-    color: var(--color-text-primary);
-    line-height: 1.6;
-    font-size: 15px;
-}
-
-.swagger-page .swagger-ui {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: var(--space-4) var(--space-6) var(--space-16);
-}
-
-.swagger-page header {
-    background: var(--color-bg-secondary);
-    border-bottom: 1px solid var(--color-border);
-    padding: var(--space-3) var(--space-6);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.swagger-page header h1 {
-    font-size: 1.15rem;
-    color: var(--color-accent-primary);
-    font-weight: 600;
-}
-
-.swagger-page header .version {
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
-    margin-inline-start: var(--space-3);
-}
-
-.swagger-page .info-block {
+.swagger-ui .info-block {
     margin: var(--space-6) 0;
     padding: var(--space-4) var(--space-5);
     background: var(--color-bg-secondary);
@@ -1109,23 +1090,23 @@ textarea:user-invalid ~ .field-error {
     border-inline-start: 4px solid var(--color-accent-primary);
 }
 
-.swagger-page .info-block p {
+.swagger-ui .info-block p {
     color: var(--color-text-muted);
     margin-top: var(--space-2);
     font-size: 0.9rem;
 }
 
-.swagger-page .servers {
+.swagger-ui .servers {
     margin: var(--space-4) 0 var(--space-6);
     font-size: 0.85rem;
     color: var(--color-text-muted);
 }
 
-.swagger-page .servers strong {
+.swagger-ui .servers strong {
     color: var(--color-text-primary);
 }
 
-.swagger-page .servers code {
+.swagger-ui .servers code {
     background: var(--color-bg-elevated);
     padding: 0.15rem 0.4rem;
     border-radius: var(--radius-sm);
@@ -1133,11 +1114,11 @@ textarea:user-invalid ~ .field-error {
     color: var(--color-info);
 }
 
-.swagger-page .tag-section {
+.swagger-ui .tag-section {
     margin: var(--space-8) 0 var(--space-2);
 }
 
-.swagger-page .tag-label {
+.swagger-ui .tag-label {
     font-size: 1rem;
     font-weight: 600;
     color: var(--color-warning);
@@ -1147,14 +1128,14 @@ textarea:user-invalid ~ .field-error {
     text-transform: capitalize;
 }
 
-.swagger-page .opblock {
+.swagger-ui .opblock {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     margin-bottom: var(--space-2);
     overflow: hidden;
 }
 
-.swagger-page .opblock-summary {
+.swagger-ui .opblock-summary {
     display: flex;
     align-items: center;
     gap: var(--space-3);
@@ -1164,11 +1145,11 @@ textarea:user-invalid ~ .field-error {
     user-select: none;
 }
 
-.swagger-page .opblock-summary:hover {
+.swagger-ui .opblock-summary:hover {
     filter: brightness(1.08);
 }
 
-.swagger-page .method {
+.swagger-ui .method {
     font-size: 0.7rem;
     font-weight: 700;
     padding: 0.25rem 0.55rem;
@@ -1180,35 +1161,35 @@ textarea:user-invalid ~ .field-error {
     background: var(--color-bg-elevated);
 }
 
-.swagger-page .method-get    { color: var(--color-info);           border: 1px solid var(--color-info); }
-.swagger-page .method-post   { color: var(--color-success);        border: 1px solid var(--color-success); }
-.swagger-page .method-put    { color: var(--color-warning);        border: 1px solid var(--color-warning); }
-.swagger-page .method-delete { color: var(--color-error);          border: 1px solid var(--color-error); }
-.swagger-page .method-patch  { color: var(--color-accent-primary); border: 1px solid var(--color-accent-primary); }
+.swagger-ui .method-get    { color: var(--color-info);           border: 1px solid var(--color-info); }
+.swagger-ui .method-post   { color: var(--color-success);        border: 1px solid var(--color-success); }
+.swagger-ui .method-put    { color: var(--color-warning);        border: 1px solid var(--color-warning); }
+.swagger-ui .method-delete { color: var(--color-error);          border: 1px solid var(--color-error); }
+.swagger-ui .method-patch  { color: var(--color-accent-primary); border: 1px solid var(--color-accent-primary); }
 
-.swagger-page .opblock-path {
+.swagger-ui .opblock-path {
     font-family: monospace;
     font-size: 0.9rem;
     color: var(--color-text-primary);
 }
 
-.swagger-page .opblock-summary-desc {
+.swagger-ui .opblock-summary-desc {
     font-size: 0.85rem;
     color: var(--color-text-muted);
     margin-inline-start: auto;
 }
 
-.swagger-page .opblock-body {
+.swagger-ui .opblock-body {
     display: none;
     padding: var(--space-4) var(--space-5);
     border-top: 1px solid var(--color-border);
 }
 
-.swagger-page .opblock.open .opblock-body {
+.swagger-ui .opblock.open .opblock-body {
     display: block;
 }
 
-.swagger-page .section-title {
+.swagger-ui .section-title {
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--color-text-muted);
@@ -1217,14 +1198,14 @@ textarea:user-invalid ~ .field-error {
     margin: var(--space-3) 0 var(--space-2);
 }
 
-.swagger-page .param-table {
+.swagger-ui .param-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.85rem;
     margin-bottom: var(--space-2);
 }
 
-.swagger-page .param-table th {
+.swagger-ui .param-table th {
     text-align: start;
     padding: 0.35rem var(--space-2);
     background: var(--color-bg-elevated);
@@ -1235,34 +1216,34 @@ textarea:user-invalid ~ .field-error {
     letter-spacing: 0.06em;
 }
 
-.swagger-page .param-table td {
+.swagger-ui .param-table td {
     padding: 0.4rem var(--space-2);
     border-bottom: 1px solid var(--color-border);
     vertical-align: top;
 }
 
-.swagger-page .param-table tr:last-child td {
+.swagger-ui .param-table tr:last-child td {
     border-bottom: none;
 }
 
-.swagger-page .param-name {
+.swagger-ui .param-name {
     font-family: monospace;
     color: var(--color-info);
 }
 
-.swagger-page .param-in {
+.swagger-ui .param-in {
     font-size: 0.75rem;
     color: var(--color-text-muted);
     font-style: italic;
 }
 
-.swagger-page .param-req {
+.swagger-ui .param-req {
     color: var(--color-error);
     font-weight: 600;
     font-size: 0.75rem;
 }
 
-.swagger-page .response-block {
+.swagger-ui .response-block {
     display: flex;
     align-items: flex-start;
     gap: var(--space-3);
@@ -1271,11 +1252,11 @@ textarea:user-invalid ~ .field-error {
     font-size: 0.85rem;
 }
 
-.swagger-page .response-block:last-child {
+.swagger-ui .response-block:last-child {
     border-bottom: none;
 }
 
-.swagger-page .status-code {
+.swagger-ui .status-code {
     font-family: monospace;
     font-weight: 700;
     min-width: 42px;
@@ -1284,11 +1265,11 @@ textarea:user-invalid ~ .field-error {
     text-align: center;
 }
 
-.swagger-page .status-2xx { color: var(--color-success); background: var(--color-success-tint-soft); }
-.swagger-page .status-4xx { color: var(--color-warning); background: var(--color-warning-tint-12); }
-.swagger-page .status-5xx { color: var(--color-error);   background: var(--color-error-tint-soft); }
+.swagger-ui .status-2xx { color: var(--color-success); background: var(--color-success-tint-soft); }
+.swagger-ui .status-4xx { color: var(--color-warning); background: var(--color-warning-tint-12); }
+.swagger-ui .status-5xx { color: var(--color-error);   background: var(--color-error-tint-soft); }
 
-.swagger-page .body-schema {
+.swagger-ui .body-schema {
     background: var(--color-bg-elevated);
     border-radius: var(--radius-sm);
     padding: 0.6rem 0.8rem;
@@ -1300,48 +1281,13 @@ textarea:user-invalid ~ .field-error {
     margin-top: var(--space-2);
 }
 
-.swagger-page footer {
-    margin-top: var(--space-16);
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--color-border);
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
-    text-align: center;
-}
-
 /* ============================================
-   GraphiQL viewer (src/graphql/graphql.go)
-   Scoped under body.graphql-page so it never
-   collides with the site header/nav/footer.
+   GraphiQL viewer components
    Colors reuse the canonical --color-* variables
    defined once in common.css (AI.md PART 16).
    ============================================ */
-.graphql-page {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: var(--color-bg-primary);
-    color: var(--color-text-primary);
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
 
-.graphql-page header {
-    background: var(--color-bg-secondary);
-    border-bottom: 1px solid var(--color-border);
-    padding: 0.6rem var(--space-4);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-}
-
-.graphql-page header h1 {
-    font-size: 1rem;
-    color: var(--color-accent-primary);
-    font-weight: 600;
-}
-
-.graphql-page .graphiql-container {
+.graphiql-container {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -1350,12 +1296,12 @@ textarea:user-invalid ~ .field-error {
 }
 
 @media (min-width: 768px) {
-    .graphql-page .graphiql-container {
+    .graphiql-container {
         flex-direction: row;
     }
 }
 
-.graphql-page .pane {
+.graphiql-container .pane {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -1363,11 +1309,11 @@ textarea:user-invalid ~ .field-error {
     border-inline-end: 1px solid var(--color-border);
 }
 
-.graphql-page .pane:last-child {
+.graphiql-container .pane:last-child {
     border-inline-end: none;
 }
 
-.graphql-page .pane-header {
+.graphiql-container .pane-header {
     background: var(--color-bg-secondary);
     padding: 0.4rem var(--space-3);
     font-size: 0.75rem;
@@ -1382,8 +1328,8 @@ textarea:user-invalid ~ .field-error {
     flex-shrink: 0;
 }
 
-.graphql-page textarea,
-.graphql-page .result-window {
+.graphiql-container textarea,
+.graphiql-container .result-window {
     flex: 1;
     width: 100%;
     resize: none;
@@ -1398,16 +1344,16 @@ textarea:user-invalid ~ .field-error {
     overflow-y: auto;
 }
 
-.graphql-page .result-window {
+.graphiql-container .result-window {
     white-space: pre-wrap;
     word-break: break-word;
 }
 
-.graphql-page .result-window.error {
+.graphiql-container .result-window.error {
     color: var(--color-error);
 }
 
-.graphql-page .execute-button {
+.graphiql-container .execute-button {
     background: var(--color-success);
     color: var(--color-text-inverse);
     border: none;
@@ -1419,11 +1365,11 @@ textarea:user-invalid ~ .field-error {
     letter-spacing: 0.03em;
 }
 
-.graphql-page .execute-button:hover {
+.graphiql-container .execute-button:hover {
     filter: brightness(1.1);
 }
 
-.graphql-page .vars-pane {
+.graphiql-container .vars-pane {
     flex-shrink: 0;
     border-top: 1px solid var(--color-border);
     max-height: 120px;
@@ -1431,17 +1377,17 @@ textarea:user-invalid ~ .field-error {
     flex-direction: column;
 }
 
-.graphql-page .schema-panel {
+.graphiql-container .schema-panel {
     display: none;
 }
 
-.graphql-page .schema-panel h3 {
+.graphiql-container .schema-panel h3 {
     color: var(--color-accent-primary);
     margin-bottom: var(--space-2);
     font-size: 0.85rem;
 }
 
-.graphql-page .schema-panel pre {
+.graphiql-container .schema-panel pre {
     color: var(--color-info);
     white-space: pre-wrap;
     word-break: break-word;
@@ -1451,7 +1397,7 @@ textarea:user-invalid ~ .field-error {
 }
 
 @media (min-width: 768px) {
-    .graphql-page .schema-panel {
+    .graphiql-container .schema-panel {
         display: block;
         width: 260px;
         flex-shrink: 0;
@@ -1576,4 +1522,77 @@ textarea:user-invalid ~ .field-error {
     flex-wrap: wrap;
     gap: var(--space-3);
     margin-top: var(--space-5);
+}
+
+/* Shared shell for every server page. */
+.container-sm { max-width: 40rem; }
+.container-md { max-width: 56rem; }
+.container-lg { max-width: 72rem; }
+
+.page-header {
+    display: grid;
+    gap: var(--space-2);
+    margin-block: var(--space-6) var(--space-4);
+}
+
+.page-title { margin: 0; }
+
+.page-lead {
+    max-width: 70ch;
+    margin: 0;
+    color: var(--color-text-muted);
+}
+
+.breadcrumb { margin-block-end: var(--space-2); }
+
+.hub-list {
+    display: grid;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.hub-link {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    text-decoration: none;
+}
+
+.hub-link:hover { border-color: var(--color-border-hover); }
+.hub-title { font-weight: 600; }
+.hub-desc { color: var(--color-text-muted); }
+
+.form-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+}
+
+.header-icon {
+    display: block;
+    width: 1.25rem;
+    height: 1.25rem;
+    color: currentColor;
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-block: var(--space-4);
+}
+
+[popover] {
+    max-width: min(100vw - var(--space-6), 32rem);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-lg);
 }

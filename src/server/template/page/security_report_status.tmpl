@@ -3,14 +3,15 @@
 {{end}}
 
 {{define "content"}}
-    <section class="search-section">
-      <div class="container container-sm">
-        <div class="section-header">
-          <h1 class="section-title">{{t .Lang "security.status_title"}}</h1>
-          <p class="section-subtitle long-string">{{t .Lang "security.tracking_id"}}: <code>{{.TrackingID}}</code></p>
-        </div>
+    <div class="container container-sm">
+      <header class="page-header">
+        <nav class="breadcrumb" aria-label="{{t .Lang "common.breadcrumb"}}"><a href="{{.AssetPrefix}}/server/security">← {{t .Lang "security.title"}}</a></nav>
+        <h1 class="page-title">{{t .Lang "security.status_title"}}</h1>
+        <p class="page-lead long-string">{{t .Lang "security.tracking_id"}}: <code>{{.TrackingID}}</code></p>
+      </header>
 
-        <div class="paste-view page-view">
+        <section class="section-card" aria-labelledby="security-current-status-heading">
+          <h2 id="security-current-status-heading">{{t .Lang "security.current_status"}}</h2>
           {{if .RateLimited}}
           <div class="alert alert-warning" role="alert">
             {{t .Lang "security.status_rate_limited"}}
@@ -50,7 +51,7 @@
             {{end}}
           </dl>
 
-          <h2 class="section-mt">{{t .Lang "security.progress"}}</h2>
+          <h3>{{t .Lang "security.progress"}}</h3>
           <ol class="progress-stages">
             {{range .Stages}}
             <li class="progress-stage{{if eq . $.CurrentStage}} progress-stage-current{{end}}">{{.}}</li>
@@ -58,17 +59,16 @@
           </ol>
 
           {{if .Comment}}
-          <h2 class="section-mt">{{t .Lang "security.maintainer_note"}}</h2>
+          <h3>{{t .Lang "security.maintainer_note"}}</h3>
           <blockquote class="maintainer-comment">{{.Comment}}</blockquote>
           {{end}}
 
-          <h2 class="section-mt">{{t .Lang "security.contact"}}</h2>
+          <h3>{{t .Lang "security.contact"}}</h3>
           <p>
             {{t .Lang "security.status_contact_text"}}
             {{if .SecurityEmail}}{{t .Lang "security.status_contact_email"}}
             <a href="mailto:{{.SecurityEmail}}" class="long-string">{{.SecurityEmail}}</a>{{end}}
           </p>
-        </div>
-      </div>
-    </section>
+        </section>
+    </div>
 {{end}}

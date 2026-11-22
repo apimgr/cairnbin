@@ -218,6 +218,7 @@ func TestLangFromRequest(t *testing.T) {
 		// Query parameter wins over everything else
 		{"query_param_supported", "/?lang=fr", "", "", "fr"},
 		{"query_param_unsupported_falls_back_to_en", "/?lang=ru", "", "", "en"},
+		{"query_param_unsupported_falls_through_to_cookie", "/?lang=ru", "fr", "", "fr"},
 		{"query_param_uppercase", "/?lang=FR", "", "", "fr"},
 
 		// Cookie wins when no query param
@@ -229,6 +230,8 @@ func TestLangFromRequest(t *testing.T) {
 		{"accept_lang_en_US_base_match", "/", "", "en-US,en;q=0.9", "en"},
 		{"accept_lang_es_with_quality", "/", "", "en-US,en;q=0.9,es;q=0.8", "en"},
 		{"accept_lang_first_preferred_match", "/", "", "fr;q=0.9,de;q=0.8", "fr"},
+		{"accept_lang_quality_beats_header_order", "/", "", "fr;q=0.4,de;q=0.9", "de"},
+		{"accept_lang_zero_quality_is_ignored", "/", "", "fr;q=0,de;q=0.8", "de"},
 		{"accept_lang_only_subtag", "/", "", "zh-CN;q=1.0", "zh"},
 		{"accept_lang_unsupported_falls_back_to_en", "/", "", "ru;q=1.0,uk;q=0.9", "en"},
 

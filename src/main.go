@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -115,6 +116,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		daemonFlag  bool
 		debugFlag   bool
 		i2pFlag     bool
+		i2pFlagSet  bool
 	)
 
 	// Subcommands that take optional secondary positional arguments.
@@ -145,7 +147,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&showStatus, "status", false, "Show server status and health")
 	fs.BoolVar(&daemonFlag, "daemon", false, "Run as daemon (detach from terminal)")
 	fs.BoolVar(&debugFlag, "debug", false, "Enable debug mode")
-	fs.BoolVar(&i2pFlag, "i2p", false, "Enable the optional I2P eepsite (opt-in; PART 31.2)")
+	fs.BoolVar(&i2pFlag, "i2p", false, "Set I2P eepsite state (container default enabled; use --i2p=false to disable)")
 	fs.StringVar(&portFlag, "port", "", "Listen port")
 	fs.StringVar(&addressFlag, "address", "", "Listen address")
 	fs.StringVar(&modeFlag, "mode", "", "Application mode (production|development|debug)")
@@ -170,6 +172,11 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, cliMessage(i18n.GetLanguage(langFlag, ""), "run_help_hint", "project_name", binaryName))
 		return 2
 	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "i2p" {
+			i2pFlagSet = true
+		}
+	})
 
 	// Positional arguments left over after the flag(s) that take a secondary
 	// value (--shell, --maintenance, --update branch).
@@ -1024,11 +1031,10 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	if baseurlFlag != "" {
 		cfg.Server.BaseURL = baseurlFlag
 	}
-	// Priority order for I2P: (1) --i2p CLI flag, (2) I2P_ENABLED env var
-	// (applied in config.Load), (3) server.yml, (4) default false (PART 31.2).
-	if i2pFlag {
-		cfg.Server.I2P.Enabled = true
-	}
+	// Priority order for I2P: explicit --i2p (including --i2p=false),
+	// operator-set I2P_ENABLED (applied in config.Load), explicit config,
+	// then the container-sensitive built-in default (PART 31.2).
+	applyI2PFlag(cfg, i2pFlagSet, i2pFlag)
 	// Reconcile the application mode into the config so the health/version response
 	// (PART 13) and CSP report-only logic report the mode the server actually runs in.
 	// Priority (PART 6): --mode flag → MODE env → config-file mode → default production.
@@ -1297,17 +1303,25 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			SendRenewed:       cfg.Server.Notifications.Email.Events.SSLRenewed,
 			SendRenewalFailed: cfg.Server.Notifications.Email.Events.SSLRenewalFailed,
 		})))
-	logSchedErr(sched.Register("blocklist_update", "Blocklist Update", "0 4 * * *", true,
-		task.BlocklistUpdateWithClient(dataDir, srv.OutboundHTTPClient(), blocklistSources(cfg)...)))
-	cveTask := task.CVEUpdateWithClient(dataDir, srv.OutboundHTTPClient(), cveSources(cfg)...)
-	trivyCfg := cfg.Server.Security.Trivy
+	blocklistUpdate := task.BlocklistUpdateWithClient(dataDir, srv.OutboundHTTPClient(), blocklistSources(cfg)...)
+	logSchedErr(sched.Register("blocklist_update", "Blocklist Update", "0 4 * * *", true, func(ctx context.Context) error {
+		err := blocklistUpdate(ctx)
+		srv.ReloadBlocklists()
+		return err
+	}))
+	logSchedErr(sched.Register("dataset_health", "Dataset Health Checks", "@every 60s", true, func(context.Context) error {
+		srv.RefreshDatasetChecks()
+		return nil
+	}))
+	cveTask := task.NVDUpdate(dataDir, nvdTaskConfig(cfg), srv.OutboundHTTPClient())
+	trivyCfg := cfg.Data.Trivy
 	// PART 18: trivy has no scheduled task of its own — cve_update owns both the
 	// NVD CVE feed and the Trivy vulnerability database.
 	logSchedErr(sched.Register("cve_update", "CVE Update", "0 5 * * *", true, func(ctx context.Context) error {
-		if err := cveTask(ctx); err != nil {
-			return err
-		}
-		return task.TrivyUpdateWithClient(ctx, dataDir, trivyCfg.Source, trivyCfg.Enabled, srv.OutboundHTTPClient())
+		cveErr := cveTask(ctx)
+		trivyErr := task.TrivyUpdateWithClient(ctx, dataDir, trivyCfg.Source, trivyCfg.Enabled, srv.OutboundHTTPClient())
+		srv.RefreshDatasetChecks()
+		return errors.Join(cveErr, trivyErr)
 	}))
 	logSchedErr(sched.Register("token_cleanup", "Token Cleanup", "@every 15m", true, func(ctx context.Context) error {
 		n, err := db.DeleteExpiredAPITokens()
@@ -1332,6 +1346,22 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	}))
 	logSchedErr(sched.Register("log_rotation", "Log Rotation", "0 0 * * *", true,
 		task.LogRotation(logMgr)))
+	if reportDB, ok := db.(interface {
+		DeleteExpiredSecurityReports(time.Time) (int64, error)
+	}); ok {
+		logSchedErr(sched.Register("security_cleanup", "Security Report Cleanup", "30 3 * * *", true, func(ctx context.Context) error {
+			cutoff := time.Now().AddDate(0, 0, -cfg.Server.Security.Reports.RetentionDays)
+			deleted, err := reportDB.DeleteExpiredSecurityReports(cutoff)
+			if err != nil {
+				return fmt.Errorf("security_cleanup: delete expired reports: %w", err)
+			}
+			if deleted > 0 {
+				log.Printf("security_cleanup: removed %d expired closed report(s)", deleted)
+			}
+			srv.CleanupRotatedPGPKey()
+			return nil
+		}))
+	}
 	diskLow := cfg.Server.Notifications.DiskLow
 	diskInterval := 5 * time.Minute
 	if configured, err := time.ParseDuration(strings.TrimSpace(diskLow.CheckInterval)); err == nil && configured > 0 {
@@ -1679,6 +1709,13 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	runServer(nil)
 	return 0
+}
+
+func applyI2PFlag(cfg *config.Config, explicitlySet, enabled bool) {
+	if cfg == nil || !explicitlySet {
+		return
+	}
+	cfg.Server.I2P.Enabled = enabled
 }
 
 // torControlEnvelope decodes the standard {"ok":bool,"data"/"error"+"message"}
@@ -2498,30 +2535,34 @@ func startupBaseURL(cfg *config.Config) string {
 	return cfg.StartupBaseURL()
 }
 
-// blocklistSources maps the configured blocklist sources to task.Source values.
-// Returns nil when blocklists are disabled so the task only ensures the
-// directory exists (graceful degradation, PART 19).
+// blocklistSources returns the immutable FireHOL source and enabled operator
+// sources for the scheduled blocklist refresh (PART 19).
 func blocklistSources(cfg *config.Config) []task.Source {
+	sources := []task.Source{{
+		Name: "firehol_level1.txt",
+		URL:  "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
+		Type: "ip",
+	}}
 	bl := cfg.Server.Security.Blocklists
 	if !bl.Enabled {
-		return nil
+		return sources
 	}
-	sources := make([]task.Source, 0, len(bl.Sources))
-	for _, s := range bl.Sources {
-		if s.File == "" || s.URL == "" {
+	seen := map[string]struct{}{"firehol_level1": {}}
+	for _, s := range bl.ExtraSources {
+		if !s.ValidID() || s.URL == "" || !s.IsEnabled() || (s.Type != "ip" && s.Type != "domain") {
 			continue
 		}
-		sources = append(sources, task.Source{Name: s.File, URL: s.URL})
+		if _, duplicate := seen[s.ID]; duplicate {
+			continue
+		}
+		seen[s.ID] = struct{}{}
+		sources = append(sources, task.Source{Name: s.ID + ".txt", URL: s.URL, Type: s.Type})
 	}
 	return sources
 }
 
-// cveSources maps the configured CVE source to task.Source values. Returns nil
-// when CVE updates are disabled or unconfigured.
-func cveSources(cfg *config.Config) []task.Source {
-	c := cfg.Server.Security.CVE
-	if !c.Enabled || c.File == "" || c.Source == "" {
-		return nil
-	}
-	return []task.Source{{Name: c.File, URL: c.Source}}
+// nvdTaskConfig maps the canonical data.cve configuration to the NVD updater.
+func nvdTaskConfig(cfg *config.Config) task.NVDConfig {
+	c := cfg.Data.CVE
+	return task.NVDConfig{Source: c.Source, APIKey: c.APIKey}
 }

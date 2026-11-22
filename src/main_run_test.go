@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/apimgr/cairnbin/src/common/banner"
+	"github.com/apimgr/cairnbin/src/config"
 )
 
 type startupOutputBuffer struct {
@@ -117,6 +118,19 @@ func TestRunHelp(t *testing.T) {
 		if !strings.Contains(out, "--maintenance") {
 			t.Errorf("run(%v): help output missing '--maintenance'", args)
 		}
+	}
+}
+
+func TestApplyI2PFlagHonorsExplicitFalse(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.I2P.Enabled = true
+	applyI2PFlag(cfg, true, false)
+	if cfg.Server.I2P.Enabled {
+		t.Fatal("explicit --i2p=false did not disable I2P")
+	}
+	applyI2PFlag(cfg, false, false)
+	if cfg.Server.I2P.Enabled {
+		t.Fatal("unset --i2p flag unexpectedly changed I2P state")
 	}
 }
 

@@ -3,16 +3,16 @@
 {{end}}
 
 {{define "content"}}
-    <div class="container container-sm">
+    <div class="container container-lg">
 
-      <!-- 1. Project Info -->
-      <header class="health-header">
-        <h1>📦 {{.Health.Project.Name}}</h1>
-        <p class="tagline">{{.Health.Project.Tagline}}</p>
+      <header class="page-header">
+        <h1 class="page-title">{{.Health.Project.Name}}</h1>
+        <p class="page-lead">{{.Health.Project.Tagline}}</p>
         <p>{{.Health.Project.Description}}</p>
       </header>
 
-      <!-- 2. Status Banner -->
+      <section class="section-card" aria-labelledby="health-status-heading">
+      <h2 id="health-status-heading">{{t .Lang "health.status"}}</h2>
       {{if eq .Health.Status "healthy"}}
       <div class="status-banner status-ok">
         <span>✅</span>
@@ -44,10 +44,10 @@
         <span>{{t .Lang "health.unhealthy"}}</span>
       </div>
       {{end}}
+      </section>
 
-      <!-- 3. Version & Build -->
-      <section class="section-card">
-        <h2>ℹ️ {{t .Lang "health.version"}}</h2>
+      <section class="section-card" aria-labelledby="health-version-heading">
+        <h2 id="health-version-heading">{{t .Lang "health.version"}}</h2>
         <dl class="info-list">
           <dt>🏷️ {{t .Lang "health.version"}}</dt>
           <dd><code>{{.Health.Version}}</code></dd>
@@ -64,8 +64,8 @@
       </section>
 
       <!-- 4. Runtime -->
-      <section class="section-card">
-        <h2>⏱️ {{t .Lang "health.runtime"}}</h2>
+      <section class="section-card" aria-labelledby="health-runtime-heading">
+        <h2 id="health-runtime-heading">{{t .Lang "health.runtime"}}</h2>
         <dl class="info-list">
           <dt>⬆️ {{t .Lang "health.uptime"}}</dt>
           <dd>{{.Health.Uptime}}</dd>
@@ -85,17 +85,17 @@
       </section>
 
       <!-- 5. Features -->
-      <section class="section-card">
-        <h2>✨ {{t .Lang "health.features"}}</h2>
+      <section class="section-card" aria-labelledby="health-features-heading">
+        <h2 id="health-features-heading">{{t .Lang "health.features"}}</h2>
         <ul class="feature-list">
           {{if .Health.Features.Tor.Enabled}}
           <li class="feature-enabled">
-            🧅 {{t .Lang "health.tor_hidden"}}: <span class="status status-ok">✅ {{.Health.Features.Tor.Status}}</span>
+            {{t .Lang "health.tor_hidden"}}: <span class="status status-{{if eq .Health.Features.Tor.Status "healthy"}}ok{{else if eq .Health.Features.Tor.Status "unavailable"}}error{{else}}warning{{end}}">{{.Health.Features.Tor.Status}}</span>
             {{if .Health.Features.Tor.Hostname}}
             <div class="code-block">
-              <code class="code-content onion-address">{{.Health.Features.Tor.Hostname}}</code>
-              <button type="button" class="copy-btn" data-copy="{{.Health.Features.Tor.Hostname}}" aria-live="polite">
-                <span class="copy-icon">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+              <pre><code>{{.Health.Features.Tor.Hostname}}</code></pre>
+              <button type="button" class="copy-btn" data-copy="{{.Health.Features.Tor.Hostname}}" aria-label="{{t .Lang "common.copy"}}">
+                <span class="copy-icon">📋</span><span class="copy-text" aria-live="polite">{{t .Lang "common.copy"}}</span>
               </button>
             </div>
             {{end}}
@@ -105,12 +105,12 @@
           {{end}}
           {{if .Health.Features.I2P.Enabled}}
           <li class="feature-enabled">
-            🔗 {{t .Lang "health.i2p_eepsite"}}: <span class="status status-ok">✅ {{.Health.Features.I2P.Status}}</span>
+            {{t .Lang "health.i2p_eepsite"}}: <span class="status status-{{if eq .Health.Features.I2P.Status "healthy"}}ok{{else if eq .Health.Features.I2P.Status "unavailable"}}error{{else}}warning{{end}}">{{.Health.Features.I2P.Status}}</span>
             {{if .Health.Features.I2P.Hostname}}
             <div class="code-block">
-              <code class="code-content i2p-address">{{.Health.Features.I2P.Hostname}}</code>
-              <button type="button" class="copy-btn" data-copy="{{.Health.Features.I2P.Hostname}}" aria-live="polite">
-                <span class="copy-icon">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+              <pre><code>{{.Health.Features.I2P.Hostname}}</code></pre>
+              <button type="button" class="copy-btn" data-copy="{{.Health.Features.I2P.Hostname}}" aria-label="{{t .Lang "common.copy"}}">
+                <span class="copy-icon">📋</span><span class="copy-text" aria-live="polite">{{t .Lang "common.copy"}}</span>
               </button>
             </div>
             {{end}}
@@ -128,14 +128,14 @@
       </section>
 
       <!-- 6. Checks -->
-      <section class="section-card">
-        <h2>🩺 {{t .Lang "health.checks"}}</h2>
+      <section class="section-card" aria-labelledby="health-checks-heading">
+        <h2 id="health-checks-heading">{{t .Lang "health.checks"}}</h2>
         <div class="table-wrapper">
           <table class="data-table">
             <thead>
               <tr>
-                <th>{{t .Lang "health.component"}}</th>
-                <th>{{t .Lang "health.status"}}</th>
+                <th scope="col">{{t .Lang "health.component"}}</th>
+                <th scope="col">{{t .Lang "health.status"}}</th>
               </tr>
             </thead>
             <tbody>
@@ -143,9 +143,9 @@
                 <td>{{t .Lang "health.database"}}</td>
                 <td>
                   {{if eq .Health.Checks.Database "ok"}}
-                  <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
+                  <span class="status status-ok">{{t .Lang "health.ok"}}</span>
                   {{else}}
-                  <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
+                  <span class="status status-error">{{t .Lang "health.error"}}</span>
                   {{end}}
                 </td>
               </tr>
@@ -153,9 +153,9 @@
                 <td>{{t .Lang "health.cache"}}</td>
                 <td>
                   {{if eq .Health.Checks.Cache "ok"}}
-                  <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
+                  <span class="status status-ok">{{t .Lang "health.ok"}}</span>
                   {{else}}
-                  <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
+                  <span class="status status-error">{{t .Lang "health.error"}}</span>
                   {{end}}
                 </td>
               </tr>
@@ -163,9 +163,9 @@
                 <td>{{t .Lang "health.disk"}}</td>
                 <td>
                   {{if eq .Health.Checks.Disk "ok"}}
-                  <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
+                  <span class="status status-ok">{{t .Lang "health.ok"}}</span>
                   {{else}}
-                  <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
+                  <span class="status status-error">{{t .Lang "health.error"}}</span>
                   {{end}}
                 </td>
               </tr>
@@ -173,11 +173,33 @@
                 <td>{{t .Lang "health.scheduler"}}</td>
                 <td>
                   {{if eq .Health.Checks.Scheduler "ok"}}
-                  <span class="status-badge ok">✅ {{t .Lang "health.ok"}}</span>
+                  <span class="status status-ok">{{t .Lang "health.ok"}}</span>
                   {{else}}
-                  <span class="status-badge error">❌ {{t .Lang "health.error"}}</span>
+                  <span class="status status-error">{{t .Lang "health.error"}}</span>
                   {{end}}
                 </td>
+              </tr>
+              {{if .Health.Checks.Tor}}
+              <tr>
+                <td>{{t .Lang "health.tor_hidden"}}</td>
+                <td>{{if eq .Health.Checks.Tor "ok"}}<span class="status status-ok">{{t .Lang "health.ok"}}</span>{{else}}<span class="status status-warning">{{t .Lang "health.degraded"}}</span>{{end}}</td>
+              </tr>
+              {{end}}
+              {{if .Health.Checks.I2P}}
+              <tr>
+                <td>{{t .Lang "health.i2p_eepsite"}}</td>
+                <td>{{if eq .Health.Checks.I2P "ok"}}<span class="status status-ok">{{t .Lang "health.ok"}}</span>{{else}}<span class="status status-warning">{{t .Lang "health.degraded"}}</span>{{end}}</td>
+              </tr>
+              {{end}}
+              {{range .Health.Checks.Datasets}}
+              <tr>
+                <td>{{healthCheckLabel $.Lang .Key}}</td>
+                <td>{{if eq .Status "ok"}}<span class="status status-ok">{{t $.Lang "health.ok"}}</span>{{else if eq .Status "degraded"}}<span class="status status-warning">{{t $.Lang "health.degraded"}}</span>{{else}}<span class="status status-error">{{t $.Lang "health.error"}}</span>{{end}}</td>
+              </tr>
+              {{end}}
+              <tr>
+                <td>{{t .Lang "health.configuration"}}</td>
+                <td>{{if eq .Health.Checks.Config "ok"}}<span class="status status-ok">{{t .Lang "health.ok"}}</span>{{else}}<span class="status status-error">{{t .Lang "health.error"}}</span>{{end}}</td>
               </tr>
             </tbody>
           </table>
@@ -185,8 +207,8 @@
       </section>
 
       <!-- 7. Stats -->
-      <section class="section-card">
-        <h2>📊 {{t .Lang "health.server_statistics"}}</h2>
+      <section class="section-card" aria-labelledby="health-statistics-heading">
+        <h2 id="health-statistics-heading">{{t .Lang "health.server_statistics"}}</h2>
         <dl class="info-list">
           <dt>{{t .Lang "health.total_requests"}}</dt>
           <dd class="stat-number">{{.Health.Stats.RequestsTotal}}</dd>

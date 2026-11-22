@@ -4,16 +4,15 @@
 {{end}}
 
 {{define "content"}}
-    <section class="search-section">
-      <div class="container container-sm">
-        <div class="section-header">
-          <h1 class="section-title">{{t .Lang "privacy.title"}}</h1>
-          <p class="last-updated">{{t .Lang "privacy.last_updated"}} {{.BuildDate}}</p>
-        </div>
+    <div class="container container-sm">
+      <header class="page-header">
+        <h1 class="page-title">{{t .Lang "privacy.title"}}</h1>
+        <p class="page-lead">{{t .Lang "privacy.last_updated"}} {{.BuildDate}}</p>
+      </header>
 
-        <div class="paste-view page-view">
-          <section id="summary" class="privacy-summary">
-          <p class="privacy-summary">
+          <section id="summary" class="section-card" aria-labelledby="summary-heading">
+          <h2 id="summary-heading">{{t .Lang "common.summary"}}</h2>
+          <p>
             {{if .Privacy.Data.Sold}}
               <strong>{{t .Lang "privacy.data_may_be_sold"}}</strong>
               {{t .Lang "privacy.see_sections_prefix"}} <a href="#ccpa-opt-out">"{{t .Lang "privacy.ccpa_do_not_sell"}}"</a> {{t .Lang "privacy.see_sections_suffix"}}
@@ -24,13 +23,13 @@
           </p>
           </section>
 
-          <section id="data-collection">
-          <h2 class="section-mt">{{t .Lang "privacy.data_we_collect"}}</h2>
+          <section id="data-collection" class="section-card" aria-labelledby="data-collection-heading">
+          <h2 id="data-collection-heading">{{t .Lang "privacy.data_we_collect"}}</h2>
           <div class="markdown-content">{{markdown (privacyText .Lang "data_collection" .Privacy.Content.DataCollection)}}</div>
           </section>
 
-          <section id="data-usage">
-          <h2 class="section-mt">{{t .Lang "privacy.how_we_use"}}</h2>
+          <section id="data-usage" class="section-card" aria-labelledby="data-usage-heading">
+          <h2 id="data-usage-heading">{{t .Lang "privacy.how_we_use"}}</h2>
           {{$usage := .Privacy.GetDataUsageContent}}
           {{if .Privacy.Data.Sold}}
           <div class="markdown-content">{{markdown (privacyText .Lang "data_usage_if_sold" $usage)}}</div>
@@ -39,33 +38,33 @@
           {{end}}
           </section>
 
-          <section id="data-security">
-          <h2 class="section-mt">{{t .Lang "privacy.how_we_protect"}}</h2>
+          <section id="data-security" class="section-card" aria-labelledby="data-security-heading">
+          <h2 id="data-security-heading">{{t .Lang "privacy.how_we_protect"}}</h2>
           <div class="markdown-content">{{markdown (privacyText .Lang "data_security" .Privacy.Content.DataSecurity)}}</div>
           </section>
 
-          <section id="data-retention">
-          <h2 class="section-mt">{{t .Lang "privacy.data_retention"}}</h2>
+          <section id="data-retention" class="section-card" aria-labelledby="data-retention-heading">
+          <h2 id="data-retention-heading">{{t .Lang "privacy.data_retention"}}</h2>
           <p>{{.Privacy.Retention.Period}}</p>
           </section>
 
-          <section id="your-rights">
-          <h2 class="section-mt">{{t .Lang "privacy.your_rights"}}</h2>
+          <section id="your-rights" class="section-card" aria-labelledby="your-rights-heading">
+          <h2 id="your-rights-heading">{{t .Lang "privacy.your_rights"}}</h2>
           <ul class="feature-list">
             <li>{{t .Lang "privacy.data_export_label"}} {{if .Privacy.Retention.ExportAvailable}}{{t .Lang "privacy.paste_export_available"}}{{else}}{{t .Lang "privacy.export_not_available"}}{{end}}</li>
             <li>{{t .Lang "privacy.account_deletion_label"}} {{if .Privacy.Retention.DeletionAvailable}}{{t .Lang "privacy.paste_deletion_available"}}{{else}}{{t .Lang "privacy.export_not_available"}}{{end}}</li>
           </ul>
           </section>
 
-          <section id="data-storage">
-          <h2 class="section-mt">{{t .Lang "privacy.data_storage"}}</h2>
+          <section id="data-storage" class="section-card" aria-labelledby="data-storage-heading">
+          <h2 id="data-storage-heading">{{t .Lang "privacy.data_storage"}}</h2>
           <p>{{t .Lang "privacy.all_data_stored"}}</p>
           {{if .Privacy.Data.Sharing}}
           <h3>{{t .Lang "privacy.when_shared"}}</h3>
           <div class="table-wrapper">
             <table class="data-table">
               <thead>
-                <tr><th>{{t .Lang "privacy.table_condition"}}</th><th>{{t .Lang "privacy.table_when"}}</th><th>{{t .Lang "privacy.table_data"}}</th></tr>
+                <tr><th scope="col">{{t .Lang "privacy.table_condition"}}</th><th scope="col">{{t .Lang "privacy.table_when"}}</th><th scope="col">{{t .Lang "privacy.table_data"}}</th></tr>
               </thead>
               <tbody>
                 {{range .Privacy.Data.Sharing}}
@@ -81,13 +80,13 @@
           {{end}}
           </section>
 
-          <section id="third-parties">
+          <section id="third-parties" class="section-card" aria-labelledby="third-parties-heading">
           {{if .ThirdPartyServices}}
-          <h2 class="section-mt">{{t .Lang "privacy.third_party_services"}}</h2>
+          <h2 id="third-parties-heading">{{t .Lang "privacy.third_party_services"}}</h2>
           <div class="table-wrapper">
             <table class="data-table">
               <thead>
-                <tr><th>{{t .Lang "privacy.service"}}</th><th>{{t .Lang "privacy.purpose"}}</th><th>{{t .Lang "privacy.data_sent"}}</th><th>{{t .Lang "privacy.table_policy"}}</th></tr>
+                <tr><th scope="col">{{t .Lang "privacy.service"}}</th><th scope="col">{{t .Lang "privacy.purpose"}}</th><th scope="col">{{t .Lang "privacy.data_sent"}}</th><th scope="col">{{t .Lang "privacy.table_policy"}}</th></tr>
               </thead>
               <tbody>
                 {{range .ThirdPartyServices}}
@@ -106,13 +105,13 @@
             </table>
           </div>
           {{else}}
-          <h2 class="section-mt">{{t .Lang "privacy.third_party_services"}}</h2>
+          <h2 id="third-parties-heading">{{t .Lang "privacy.third_party_services"}}</h2>
           <p>{{t .Lang "privacy.no_third_party"}}</p>
           {{end}}
           </section>
 
-          <section id="cookies">
-          <h2 class="section-mt">{{t .Lang "privacy.cookies_heading"}}</h2>
+          <section id="cookies" class="section-card" aria-labelledby="cookies-heading">
+          <h2 id="cookies-heading">{{t .Lang "privacy.cookies_heading"}}</h2>
           <ul class="feature-list">
             <li><strong>{{t .Lang "privacy.essential_label"}}</strong> {{privacyText .Lang "essential_cookies" .Privacy.Cookies.Essential.Description}}</li>
             <li><strong>{{t .Lang "privacy.preferences_label"}}</strong> {{privacyText .Lang "preference_cookies" .Privacy.Cookies.Preferences.Description}}</li>
@@ -132,8 +131,8 @@
           {{end}}
           </section>
 
-          <section id="ccpa-opt-out">
-          <h2 class="section-mt">{{t .Lang "privacy.ccpa_do_not_sell"}}</h2>
+          <section id="ccpa-opt-out" class="section-card" aria-labelledby="ccpa-heading">
+          <h2 id="ccpa-heading">{{t .Lang "privacy.ccpa_do_not_sell"}}</h2>
           {{if .Privacy.IsCCPAApplicable}}
             {{if .CCPAOptedOut}}
             <p>{{t .Lang "privacy.ccpa_opted_out_full"}}</p>
@@ -155,14 +154,12 @@
           {{end}}
           </section>
 
-          {{if .OperatorPrivacyHTML}}<section class="section-mt operator-privacy-content"><div class="markdown-content">{{.OperatorPrivacyHTML}}</div></section>{{end}}
-          <section id="contact">
-          <h2 class="section-mt">{{t .Lang "privacy.contact_us"}}</h2>
+          {{if .OperatorPrivacyHTML}}<section class="section-card" aria-labelledby="operator-privacy-heading"><h2 id="operator-privacy-heading">{{t .Lang "help.custom_content"}}</h2><div class="markdown-content">{{.OperatorPrivacyHTML}}</div></section>{{end}}
+          <section id="contact" class="section-card" aria-labelledby="contact-heading">
+          <h2 id="contact-heading">{{t .Lang "privacy.contact_us"}}</h2>
           <p>
             {{t .Lang "privacy.contact_intro"}} <a href="{{.AssetPrefix}}/server/security">{{t .Lang "privacy.contact_page_link"}}</a>.
           </p>
           </section>
-        </div>
-      </div>
-    </section>
+    </div>
 {{end}}

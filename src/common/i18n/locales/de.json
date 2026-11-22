@@ -64,7 +64,8 @@
     "page_x_of_y": "Seite {current} von {total}",
     "showing_x_of_y": "Zeige {count} von {total}",
     "last_updated": "Zuletzt aktualisiert: {datetime}",
-    "made_with": "Gemacht mit"
+    "made_with": "Gemacht mit",
+    "breadcrumb": "Brotkrumennavigation"
   },
   "theme": {
     "light": "Hell",
@@ -178,7 +179,8 @@
     "scheduler": "Planer",
     "syntax_hl": "Syntax-Hervorhebung",
     "timestamp": "Zeitstempel",
-    "tor_hidden": "Tor Hidden Service"
+    "tor_hidden": "Tor Hidden Service",
+    "configuration": "Konfiguration"
   },
   "status_values": {
     "online": "Online",
@@ -414,7 +416,11 @@
     "mcp_error_404": "MCP ist für diesen Server deaktiviert.",
     "mcp_error_405": "Der Endpunkt akzeptiert nur POST; verwende POST für MCP-Anfragen.",
     "mcp_project_heading": "cairnbin-Tools verwenden",
-    "mcp_alias_connector": "und"
+    "mcp_alias_connector": "und",
+    "more": "Weitere Hilfe",
+    "page_lead": "Hilfe zur API-Nutzung und zum Dienst.",
+    "custom_content": "Zusätzliche Informationen",
+    "mcp_tool": "Werkzeug"
   },
   "privacy": {
     "title": "Datenschutzrichtlinie",
@@ -608,7 +614,13 @@
     "owner_confirm_rotate_primary": "Primäres Token ersetzen? Vorhandene Kopien funktionieren danach nicht mehr.",
     "reset": "Zurücksetzen",
     "reset_warning": "Dadurch werden gespeicherte Einstellungen, Einwilligungsentscheidungen, ausgeblendete Ankündigungen, der Versionsstempel, temporäre Meldungen und lokale Browserdaten dieser Website gelöscht. Dies kann nicht rückgängig gemacht werden.",
-    "erase": "Alles löschen"
+    "erase": "Alles löschen",
+    "sync_title": "Einstellungen synchronisieren",
+    "sync_desc": "Einstellungen exportieren oder in einem anderen Browser oder Gerät anwenden.",
+    "tokens_desc": "API-Token für Ihre Clients erstellen und verwalten.",
+    "automatic": "Automatisch",
+    "more": "Weitere Einstellungen",
+    "owner_no_linked": "Noch keine verknüpften Token. Erstellen Sie eines, um einen Client zu verbinden."
   },
   "announcements": {
     "warning": "Warnung",
@@ -1201,7 +1213,7 @@
     "base_url": "URL-Pfadpräfix",
     "daemon": "Als Daemon ausführen (vom Terminal getrennt)",
     "debug": "Debug-Modus aktivieren",
-    "optional_i2p": "Optionalen I2P-Eepsite aktivieren (Opt-in)",
+    "optional_i2p": "I2P-Eepsite (in Containern standardmäßig aktiviert; mit --i2p=false deaktivieren)",
     "color": "Farbausgabe",
     "language": "Ausgabesprache",
     "service_cmd": "Dienstverwaltung",

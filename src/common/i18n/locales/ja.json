@@ -64,7 +64,8 @@
     "page_x_of_y": "{total}ページ中{current}ページ",
     "showing_x_of_y": "{total}件中{count}件を表示",
     "last_updated": "最終更新: {datetime}",
-    "made_with": "使用して作成"
+    "made_with": "使用して作成",
+    "breadcrumb": "パンくずリスト"
   },
   "theme": {
     "light": "ライト",
@@ -178,7 +179,8 @@
     "scheduler": "スケジューラー",
     "syntax_hl": "シンタックスハイライト",
     "timestamp": "タイムスタンプ",
-    "tor_hidden": "Tor 秘匿サービス"
+    "tor_hidden": "Tor 秘匿サービス",
+    "configuration": "設定"
   },
   "status_values": {
     "online": "オンライン",
@@ -414,7 +416,11 @@
     "mcp_error_404": "このサーバーでは MCP が無効です。",
     "mcp_error_405": "エンドポイントは POST のみです。MCP リクエストには POST を使用してください。",
     "mcp_project_heading": "cairnbin ツールの使い方",
-    "mcp_alias_connector": "と"
+    "mcp_alias_connector": "と",
+    "more": "その他のヘルプ",
+    "page_lead": "API とサービスの利用方法。",
+    "custom_content": "追加情報",
+    "mcp_tool": "ツール"
   },
   "privacy": {
     "title": "プライバシーポリシー",
@@ -608,7 +614,13 @@
     "owner_confirm_rotate_primary": "プライマリトークンをローテーションしますか？既存のコピーは使えなくなります。",
     "reset": "リセット",
     "reset_warning": "このサイトの保存済み設定、同意設定、非表示にしたお知らせ、ビルド情報、一時メッセージ、ブラウザーのローカルデータが消去されます。元に戻すことはできません。",
-    "erase": "すべて消去"
+    "erase": "すべて消去",
+    "sync_title": "設定を同期",
+    "sync_desc": "設定をエクスポートするか、別のブラウザーやデバイスに適用します。",
+    "tokens_desc": "クライアント用の API トークンを作成、管理します。",
+    "automatic": "自動",
+    "more": "その他の設定",
+    "owner_no_linked": "リンク済みトークンはありません。クライアントを接続するにはトークンを作成してください。"
   },
   "announcements": {
     "warning": "警告",
@@ -1201,7 +1213,7 @@
     "base_url": "URLパスのプレフィックス",
     "daemon": "デーモンとして実行（端末から切り離す）",
     "debug": "デバッグモードを有効化",
-    "optional_i2p": "オプションのI2Pサイトを有効化（明示的な選択）",
+    "optional_i2p": "I2Pサイト（コンテナでは既定で有効。無効にするには --i2p=false を指定）",
     "color": "カラー出力",
     "language": "出力言語",
     "service_cmd": "サービス管理",

@@ -218,11 +218,11 @@ func TestPreferencesPageRenders(t *testing.T) {
 	// AI.md 23485: a control for every app-specific cairnbin_pref_* setting.
 	// Each must post to the endpoint and render its current value as selected.
 	body := w.Body.String()
-	if got := strings.Count(body, `method="POST"`) + strings.Count(body, `method="post"`); got != 1 {
-		t.Errorf("preferences page has %d POST forms, want exactly one", got)
+	if got := strings.Count(body, `method="POST"`) + strings.Count(body, `method="post"`); got != 2 {
+		t.Errorf("preferences page has %d POST forms, want the page form and shared header theme form", got)
 	}
-	if !strings.Contains(body, `action="/server/preferences"`) || strings.Contains(body, `/server/consent`) || strings.Contains(body, `/announcements/dismiss`) {
-		t.Error("preferences page must keep all changes in its single preferences form")
+	if strings.Count(body, `action="/server/preferences"`) != 2 || strings.Contains(body, `/announcements/dismiss`) {
+		t.Error("preferences page must retain its page form and shared header theme form")
 	}
 	for _, want := range []string{
 		`name="cairnbin_pref_sort"`,
@@ -257,6 +257,8 @@ type prefsAPIOut struct {
 	Data struct {
 		Theme   string            `json:"theme"`
 		Lang    string            `json:"lang"`
+		URL     string            `json:"url"`
+		Code    string            `json:"code"`
 		Prefs   map[string]string `json:"prefs"`
 		Applied []string          `json:"applied"`
 		Ignored []string          `json:"ignored"`
@@ -328,9 +330,9 @@ func TestPreferencesImport_CodeForms(t *testing.T) {
 		"unpadded": unpadded,
 		"padded":   padded,
 		"plain":    query,
-		"fullurl":  "https://h.example/server/preferences/import?" + query,
+		"fullurl":  "https://h.example/server/preferences/sync/import?" + query,
 	} {
-		rec := importPrefs(t, "/server/preferences/import?code="+url.QueryEscape(code))
+		rec := importPrefs(t, "/server/preferences/sync/import?code="+url.QueryEscape(code))
 		if rec.Code != http.StatusSeeOther {
 			t.Fatalf("%s: status = %d, want 303", name, rec.Code)
 		}
@@ -342,7 +344,7 @@ func TestPreferencesImport_CodeForms(t *testing.T) {
 			t.Errorf("%s: cookies = %v", name, c)
 		}
 	}
-	rec := importPrefs(t, "/server/preferences/import?theme=dark&code="+unpadded)
+	rec := importPrefs(t, "/server/preferences/sync/import?theme=dark&code="+unpadded)
 	if c := setCookiesOf(rec); c["theme"] != "dark" || c["lang"] != "fr" {
 		t.Errorf("direct param must win over code: %v", c)
 	}
@@ -351,16 +353,16 @@ func TestPreferencesImport_CodeForms(t *testing.T) {
 // TestPreferencesImport_InvalidAndExcluded verifies invalid values and
 // excluded names are dropped (still 303), never removing existing cookies.
 func TestPreferencesImport_InvalidAndExcluded(t *testing.T) {
-	rec := importPrefs(t, "/server/preferences/import?theme=neon&lang=xx&cookie_consent=x&cairnbin_build=1&cairnbin_pref_sort=bogus")
+	rec := importPrefs(t, "/server/preferences/sync/import?theme=neon&lang=xx&cookie_consent=x&cairnbin_build=1&cairnbin_pref_sort=bogus")
 	if rec.Code != http.StatusSeeOther || len(rec.Result().Cookies()) != 0 {
 		t.Errorf("status=%d cookies=%v, want 303 and no cookies", rec.Code, rec.Result().Cookies())
 	}
-	rec = importPrefs(t, "/server/preferences/import?lang=FR-CA")
+	rec = importPrefs(t, "/server/preferences/sync/import?lang=FR-CA")
 	if c := setCookiesOf(rec); c["lang"] != "fr" {
 		t.Errorf("regional tag must fall back to base: %v", c)
 	}
 	long := strings.Repeat("a", prefMaxCodeLen+1)
-	rec = importPrefs(t, "/server/preferences/import?code="+long)
+	rec = importPrefs(t, "/server/preferences/sync/import?code="+long)
 	if len(rec.Result().Cookies()) != 0 {
 		t.Error("oversized code must be ignored")
 	}
@@ -369,7 +371,7 @@ func TestPreferencesImport_InvalidAndExcluded(t *testing.T) {
 // TestPreferencesImport_APIResponse verifies the API mirror answers 200 JSON
 // with applied/ignored arrays and no redirect.
 func TestPreferencesImport_APIResponse(t *testing.T) {
-	rec := importPrefs(t, "/api/v1/server/preferences/import?lang=fr&cookie_consent=x")
+	rec := importPrefs(t, "/api/v1/server/preferences/sync/import?lang=fr&cookie_consent=x")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -393,17 +395,18 @@ func TestPrefRedirectDest(t *testing.T) {
 		{"backslash rejected", "/\\evil", "", "/"},
 		{"absolute rejected", "https://evil.example/", "", "/"},
 		{"crlf rejected", "/a\r\nSet-Cookie: x=1", "", "/"},
-		{"import path falls through", "/server/preferences/import?x=1", "http://h.example/about", "/about"},
+		{"import path falls through", "/server/preferences/sync/import?x=1", "http://h.example/about", "/about"},
+		{"sync save path falls through", "/server/preferences/sync", "http://h.example/about", "/about"},
 		{"same-origin referer", "", "http://h.example/about?a=1", "/about?a=1"},
 		{"foreign referer", "", "http://evil.example/about", "/"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "http://h.example/server/preferences/import", nil)
+			r := httptest.NewRequest(http.MethodGet, "http://h.example/server/preferences/sync/import", nil)
 			if tc.referer != "" {
 				r.Header.Set("Referer", tc.referer)
 			}
-			if got := prefRedirectDest(r, tc.redirect); got != tc.want {
+			if got := newMinimalServer(config.DefaultConfig()).prefRedirectDest(r, tc.redirect, "/"); got != tc.want {
 				t.Errorf("prefRedirectDest = %q, want %q", got, tc.want)
 			}
 		})
@@ -413,7 +416,7 @@ func TestPrefRedirectDest(t *testing.T) {
 // TestPreferencesCookieAttributes verifies rule 8 behind a TLS-terminating
 // proxy: Secure follows the forwarded scheme and Max-Age is fixed.
 func TestPreferencesCookieAttributes(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/server/preferences/import?theme=dark", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/sync/import?theme=dark", nil)
 	addConsentCookie(req, `{"essential":true,"preferences":true}`)
 	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -430,14 +433,14 @@ func TestPreferencesCookieAttributes(t *testing.T) {
 func TestPreferencesExportRoundTrip(t *testing.T) {
 	q := preferencesExportQuery("light", "fr", map[string]string{"sort": "name"})
 	code := base64.RawURLEncoding.EncodeToString([]byte(q))
-	rec := importPrefs(t, "/server/preferences/import?code="+code)
+	rec := importPrefs(t, "/server/preferences/sync/import?code="+code)
 	c := setCookiesOf(rec)
 	if c["theme"] != "light" || c["lang"] != "fr" || c[prefCookiePrefix+"sort"] != "name" || len(c) != 3 {
 		t.Errorf("round trip cookies = %v", c)
 	}
 }
 
-func TestPreferencesWebSaveAlwaysRedirectsAndCodeOverrides(t *testing.T) {
+func TestPreferencesWebSaveAlwaysRedirectsAndIgnoresSyncCode(t *testing.T) {
 	s := newMinimalServer(config.DefaultConfig())
 	form := url.Values{"theme": {"light"}, "lang": {"en"}, "consent_form": {"1"}, "consent_preferences": {"1"}}
 	form.Set("code", base64.RawURLEncoding.EncodeToString([]byte("theme=dark&lang=fr")))
@@ -450,14 +453,66 @@ func TestPreferencesWebSaveAlwaysRedirectsAndCodeOverrides(t *testing.T) {
 		t.Fatalf("status = %d, want 303", rec.Code)
 	}
 	cookies := setCookiesOf(rec)
-	if cookies["theme"] != "dark" || cookies[i18n.CookieName()] != "fr" {
-		t.Errorf("imported code did not override form values: %v", cookies)
+	if cookies["theme"] != "light" || cookies[i18n.CookieName()] != "en" {
+		t.Errorf("save must use form values and ignore sync code: %v", cookies)
 	}
 
 	empty := httptest.NewRecorder()
 	s.handlePreferencesSet(empty, httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("")))
 	if empty.Code != http.StatusSeeOther {
 		t.Errorf("empty save status = %d, want 303", empty.Code)
+	}
+}
+
+func TestPreferencesSyncPostImportsCodeAndUsesSafeRedirect(t *testing.T) {
+	s := newMinimalServer(config.DefaultConfig())
+	form := url.Values{
+		"code":       {base64.RawURLEncoding.EncodeToString([]byte("theme=light&lang=fr&cairnbin_pref_sort=name"))},
+		"redirect":   {"/pastes?sort=name"},
+		"csrf_token": {"test"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/server/preferences/sync", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	addConsentCookie(req, `{"essential":true,"preferences":true}`)
+	rec := httptest.NewRecorder()
+	s.handlePreferencesSyncPost(rec, req)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/pastes?sort=name" || rec.Header().Get("Cache-Control") != "no-store" || rec.Body.Len() != 0 {
+		t.Fatalf("sync response = status %d, location %q, cache %q, body %q", rec.Code, rec.Header().Get("Location"), rec.Header().Get("Cache-Control"), rec.Body.String())
+	}
+	cookies := setCookiesOf(rec)
+	if cookies["theme"] != "light" || cookies[i18n.CookieName()] != "fr" || cookies[prefCookiePrefix+"sort"] != "name" {
+		t.Errorf("sync import cookies = %v", cookies)
+	}
+}
+
+func TestLegacyPreferencesPathsRedirectPermanentlyAndKeepQuery(t *testing.T) {
+	s := newMinimalServer(config.DefaultConfig())
+	for _, tc := range []struct{ old, want string }{
+		{"/server/preferences/export?x=1", "/server/preferences/sync?x=1"},
+		{"/server/preferences/import?theme=dark&lang=fr", "/server/preferences/sync/import?theme=dark&lang=fr"},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.old, nil)
+		rec := httptest.NewRecorder()
+		s.redirectLegacyPreferencesPath(rec, req)
+		if rec.Code != http.StatusPermanentRedirect || rec.Header().Get("Location") != tc.want {
+			t.Errorf("legacy %s -> (%d, %q), want (308, %q)", tc.old, rec.Code, rec.Header().Get("Location"), tc.want)
+		}
+	}
+}
+
+func TestPreferencesSyncExportUsesCanonicalImportURL(t *testing.T) {
+	s := newMinimalServer(config.DefaultConfig())
+	req := httptest.NewRequest(http.MethodGet, "http://example.test/server/preferences/sync", nil)
+	req.Header.Set("Accept", "application/json")
+	req.AddCookie(&http.Cookie{Name: "theme", Value: "dark"})
+	rec := httptest.NewRecorder()
+	s.handlePreferencesExport(rec, req)
+	var out prefsAPIOut
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || !strings.HasPrefix(out.Data.URL, "http://example.test/server/preferences/sync/import?") || out.Data.Code == "" {
+		t.Fatalf("sync export response = status %d, data %+v", rec.Code, out.Data)
 	}
 }
 

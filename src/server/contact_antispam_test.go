@@ -106,7 +106,7 @@ func TestContactHoneypotSilentlyDrops(t *testing.T) {
 	req.Header.Set("Origin", "http://example.com")
 	w := httptest.NewRecorder()
 	s.handleContactPost(w, req)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "contact-review-panel") || strings.Contains(w.Body.String(), s.cfg.Server.Pages.Contact.SuccessMessage) {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `id="contact-review-title"`) || strings.Contains(w.Body.String(), s.cfg.Server.Pages.Contact.SuccessMessage) {
 		t.Fatalf("honeypot response was not the review page: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
@@ -166,7 +166,7 @@ func TestAcceptedContactSubmissionSendsOneConfiguredSenderEmail(t *testing.T) {
 	req.Header.Set("Origin", "http://example.com")
 	w := httptest.NewRecorder()
 	s.handleContactPost(w, req)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "contact-review-panel") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `id="contact-review-title"`) {
 		t.Fatalf("contact submit did not produce review: status=%d body=%s", w.Code, w.Body.String())
 	}
 	value := func(field string) string {

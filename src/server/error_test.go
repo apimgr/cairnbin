@@ -95,8 +95,9 @@ func TestRenderErrorPageHTML(t *testing.T) {
 		"\n  <title>404 Not Found",
 		"\n  <a href=\"#main-content\"",
 		"\n  <main id=\"main-content\">",
-		"\n    <div class=\"error-page\">",
-		"\n      <h1 class=\"error-code\">",
+		"class=\"container container-sm\"",
+		"class=\"page-title\"",
+		"class=\"section-card\" aria-labelledby=\"error-actions\"",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("HTML must retain two-space nesting %q", want)

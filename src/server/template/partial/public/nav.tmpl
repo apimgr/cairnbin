@@ -16,7 +16,7 @@
     {{if .HasOwnerToken}}
     <div class="dropdown">
       <button type="button" class="dropdown-toggle header-link" aria-label="{{t .Lang "nav.preferences_and_resources"}}" aria-haspopup="true">
-        <span class="icon-preferences" aria-hidden="true">⚙️</span>
+        <svg class="header-icon icon-preferences" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-6v3m0 14v3m10-10h-3M5 12H2m17.07-7.07-2.12 2.12M7.05 16.95l-2.12 2.12m14.14 0-2.12-2.12M7.05 7.05 4.93 4.93"/></svg>
       </button>
       <div class="dropdown-menu">
         <a href="{{.OwnedResourceURL}}" class="dropdown-item" role="menuitem">{{t .Lang "nav.manage_my_paste"}}</a>
@@ -26,22 +26,21 @@
     </div>
     {{else}}
     <a href="{{.AssetPrefix}}/server/preferences" class="header-link" aria-label="{{t .Lang "common.preferences"}}" title="{{t .Lang "common.preferences"}}">
-      <span class="icon-preferences" aria-hidden="true">⚙️</span>
+      <svg class="header-icon icon-preferences" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-6v3m0 14v3m10-10h-3M5 12H2m17.07-7.07-2.12 2.12M7.05 16.95l-2.12 2.12m14.14 0-2.12-2.12M7.05 7.05 4.93 4.93"/></svg>
     </a>
     {{end}}
-    {{if ne .CurrentPath "/server/preferences"}}<form class="theme-toggle theme-toggle-form" method="post" action="{{.AssetPrefix}}/server/preferences">
+    <form class="theme-toggle theme-toggle-form" method="post" action="{{.AssetPrefix}}/server/preferences">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="theme" value="{{.NextTheme}}">
-      <button type="submit" class="theme-button" data-theme-toggle aria-label="{{t .Lang "theme.toggle"}} ({{t .Lang "common.currently"}} {{.Theme}})" title="{{t .Lang "theme.toggle"}}">
-        {{if eq .Theme "dark"}}<span class="icon-dark" aria-hidden="true">🌙</span>{{else if eq .Theme "light"}}<span class="icon-light" aria-hidden="true">☀️</span>{{else}}<span class="icon-auto" aria-hidden="true">🌗</span>{{end}}
+      <button type="submit" class="theme-button" data-theme-toggle aria-label="{{t .Lang "theme.toggle"}} ({{t .Lang "common.currently"}} {{t .Lang (print "theme." .Theme)}})" title="{{t .Lang "theme.toggle"}}">
+        {{if eq .Theme "dark"}}<svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5 8.5 8.5 0 1 0 20.5 15.5Z"/></svg>{{else if eq .Theme "light"}}<svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>{{else}}<svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M12 3v18"/><path fill="currentColor" d="M12 4a8 8 0 0 0 0 16Z"/></svg>{{end}}
       </button>
-    </form>{{end}}
+    </form>
   </div>
 {{end}}
 {{define "navdrawer"}}
   <nav class="nav-panel" id="mobile-navigation" aria-label="{{t .Lang "nav.main_navigation"}}">
-    <label for="nav-toggle" class="nav-close" aria-label="{{t .Lang "nav.close_menu"}}">✕</label>
-  {{template "navlinklist" .}}
+    {{template "navlinklist" .}}
   </nav>
   <label for="nav-toggle" class="nav-overlay" aria-label="{{t .Lang "nav.close_menu"}}"></label>
 {{end}}

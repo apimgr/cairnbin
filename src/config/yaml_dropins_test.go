@@ -67,6 +67,37 @@ func TestLoadRejectsDuplicateAndNullDropInKeys(t *testing.T) {
 	}
 }
 
+func TestLoadSecuresWritableDropInBeforeReading(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "server.yml")
+	if err := os.WriteFile(root, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dropDir := filepath.Join(dir, "yaml.d")
+	if err := os.Mkdir(dropDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dropIn := filepath.Join(dropDir, "10-listener.yml")
+	if err := os.WriteFile(dropIn, []byte("server:\n  address: 127.0.0.2\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Server.Address != "127.0.0.2" {
+		t.Fatalf("address = %q, want secured drop-in value", cfg.Server.Address)
+	}
+	info, err := os.Stat(dropIn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("drop-in permissions = %#o, want 0600", got)
+	}
+}
+
 func TestSEOFeedDefaultsAndValidation(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.Server.SEO.Feed.MaxItems != 50 {

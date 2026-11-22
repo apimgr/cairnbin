@@ -4,28 +4,26 @@
 {{end}}
 
 {{define "content"}}
-    <section class="search-section">
-      <div class="container container-sm">
-        <div class="section-header">
-          <h1 class="section-title">{{t .Lang "about.title"}} {{.SiteTitle}}</h1>
-        </div>
+    <div class="container container-sm">
+      <header class="page-header">
+        <h1 class="page-title">{{t .Lang "about.title"}} {{.SiteTitle}}</h1>
+        <p class="page-lead">{{.Tagline}}</p>
+      </header>
 
-        <div class="paste-view page-view">
-          <p class="lead">{{.Tagline}}</p>
-
-          <h2>{{tf .Lang "about.what_is" "title" .SiteTitle}}</h2>
+        <section class="section-card" aria-labelledby="about-overview-heading">
+          <h2 id="about-overview-heading">{{tf .Lang "about.what_is" "title" .SiteTitle}}</h2>
           <p>{{.Description}}</p>
 
-          <h2 class="section-mt">{{t .Lang "about.features"}}</h2>
+          <h3>{{t .Lang "about.features"}}</h3>
           <ul class="feature-list">
             {{range .Features}}<li>{{.}}</li>
             {{end}}
           </ul>
 
-          <h2 class="section-mt">{{t .Lang "about.version"}}</h2>
+          <h3>{{t .Lang "about.version"}}</h3>
           <p class="long-string">{{.Version}} ({{.BuildDate}})</p>
 
-          <h2 class="section-mt">{{t .Lang "about.source"}}</h2>
+          <h3>{{t .Lang "about.source"}}</h3>
           <p class="about-links">
             {{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Label}}</a>
             {{end}}
@@ -33,12 +31,11 @@
           <p>{{t .Lang "about.license_note"}}</p>
 
           {{if .GeoIPEnabled}}
-          <h2 class="section-mt">{{t .Lang "about.attribution"}}</h2>
+          <h3>{{t .Lang "about.attribution"}}</h3>
           <p><a href="https://db-ip.com/" target="_blank" rel="noopener">{{t .Lang "about.attribution_geoip"}}</a></p>
           <p>{{t .Lang "about.attribution_nro"}}</p>
           {{end}}
           {{if .OperatorAboutHTML}}<div class="markdown-content">{{.OperatorAboutHTML}}</div>{{end}}
-        </div>
-      </div>
-    </section>
+        </section>
+    </div>
 {{end}}

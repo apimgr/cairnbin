@@ -6,6 +6,7 @@
 package task
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,6 +24,7 @@ import (
 	"time"
 
 	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/domainutil"
 	"github.com/apimgr/cairnbin/src/common/retry"
 	"github.com/apimgr/cairnbin/src/maintenance"
 	"github.com/apimgr/cairnbin/src/service"
@@ -242,6 +245,7 @@ func SSLRenewalWithEmail(cfg SSLRenewalConfig) func(ctx context.Context) error {
 type Source struct {
 	Name string
 	URL  string
+	Type string
 }
 
 // BlocklistUpdate returns a task that refreshes the IP/domain blocklists in
@@ -260,22 +264,28 @@ func BlocklistUpdateWithClient(dataDir string, client *http.Client, sources ...S
 	return securityFetchTask("blocklist_update", filepath.Join(dataDir, "security", "blocklists"), sources, client)
 }
 
-// CVEUpdate returns a task that refreshes the CVE/security databases in
-// {dataDir}/security/cve/. Behaves identically to BlocklistUpdate: each
-// configured source is downloaded atomically with graceful degradation, and
-// with no sources configured the task only ensures the directory exists.
+// CVEUpdate is a compatibility wrapper for the NVD API updater. New server
+// code should call NVDUpdate directly to pass the data.cve API key.
 func CVEUpdate(dataDir string, sources ...Source) func(ctx context.Context) error {
 	return CVEUpdateWithClient(dataDir, nil, sources...)
 }
 
-// CVEUpdateWithClient uses the supplied shared client for configured source
-// URLs so server-wide Tor routing applies consistently.
+// CVEUpdateWithClient accepts the historical one-source signature and routes
+// requests through the shared app-owned client.
 func CVEUpdateWithClient(dataDir string, client *http.Client, sources ...Source) func(ctx context.Context) error {
-	return securityFetchTask("cve_update", filepath.Join(dataDir, "security", "cve"), sources, client)
+	if len(sources) == 0 || strings.TrimSpace(sources[0].URL) == "" {
+		return func(ctx context.Context) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return os.MkdirAll(filepath.Join(dataDir, "security", "cve"), 0o700)
+		}
+	}
+	return NVDUpdate(dataDir, NVDConfig{Source: sources[0].URL}, client)
 }
 
-// securityFetchTask builds the common download-with-graceful-degradation body
-// shared by BlocklistUpdate and CVEUpdate.
+// securityFetchTask downloads configured blocklist sources atomically while
+// preserving the last usable copy on a failed refresh.
 func securityFetchTask(name, dir string, sources []Source, client *http.Client) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -291,8 +301,14 @@ func securityFetchTask(name, dir string, sources []Source, client *http.Client) 
 				continue
 			}
 			dst := filepath.Join(dir, filepath.Base(src.Name))
-			if err := downloadFileWithClient(ctx, src.URL, dst, client); err != nil {
-				log.Printf("%s: %s: %v (keeping existing copy)", name, src.Name, err)
+			var downloadErr error
+			if name == "blocklist_update" {
+				downloadErr = downloadBlocklistFileWithClient(ctx, src.URL, dst, client, src.Type)
+			} else {
+				downloadErr = downloadFileWithClient(ctx, src.URL, dst, client)
+			}
+			if downloadErr != nil {
+				log.Printf("%s: %s: %v (keeping existing copy)", name, src.Name, downloadErr)
 				continue
 			}
 			updated++
@@ -319,7 +335,19 @@ func downloadFileWithClient(ctx context.Context, url, dst string, client *http.C
 	return retry.Do(ctx, func() error { return downloadFileOnceWithClient(ctx, url, dst, client) })
 }
 
+func downloadBlocklistFileWithClient(ctx context.Context, url, dst string, client *http.Client, sourceType string) error {
+	return retry.Do(ctx, func() error {
+		return downloadFileOnceWithValidator(ctx, url, dst, client, func(path string) error {
+			return validateBlocklistFile(path, sourceType)
+		})
+	})
+}
+
 func downloadFileOnceWithClient(ctx context.Context, url, dst string, client *http.Client) error {
+	return downloadFileOnceWithValidator(ctx, url, dst, client, nil)
+}
+
+func downloadFileOnceWithValidator(ctx context.Context, url, dst string, client *http.Client, validate func(string) error) error {
 	if client == nil {
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
@@ -355,11 +383,63 @@ func downloadFileOnceWithClient(ctx context.Context, url, dst string, client *ht
 	if n == 0 {
 		return fmt.Errorf("empty response body")
 	}
+	if validate != nil {
+		if err := validate(tmpName); err != nil {
+			return fmt.Errorf("validate downloaded file: %w", err)
+		}
+	}
 	if err := os.Chmod(tmpName, 0o640); err != nil {
 		return fmt.Errorf("chmod: %w", err)
 	}
 	if err := os.Rename(tmpName, dst); err != nil {
 		return fmt.Errorf("rename: %w", err)
+	}
+	return nil
+}
+
+func validateBlocklistFile(path, sourceType string) error {
+	if sourceType == "" {
+		sourceType = "ip"
+	}
+	if sourceType != "ip" && sourceType != "domain" {
+		return fmt.Errorf("unsupported blocklist type %q", sourceType)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	scanner := bufio.NewScanner(f)
+	valid := 0
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if comment := strings.IndexAny(line, "; \t"); comment >= 0 {
+			line = line[:comment]
+		}
+		if sourceType == "domain" {
+			if _, ok := domainutil.NormalizeEntry(line); ok {
+				valid++
+			}
+			continue
+		}
+		if strings.Contains(line, "/") {
+			if ip, _, err := net.ParseCIDR(line); err == nil && ip != nil {
+				valid++
+			}
+			continue
+		}
+		if net.ParseIP(line) != nil {
+			valid++
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if valid == 0 {
+		return fmt.Errorf("blocklist contains no valid %s entries", sourceType)
 	}
 	return nil
 }

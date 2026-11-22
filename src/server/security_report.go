@@ -396,8 +396,10 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 
 	// Seal the report at rest: prefer the project PGP key, fall back to
 	// AES-256-GCM keyed by server.security.encryption_key (PART 11).
+	database.SecurityReportEncryptionMu.Lock()
 	sealed, encMethod, err := s.encryptSecurityReport([]byte(report), key)
 	if err != nil {
+		database.SecurityReportEncryptionMu.Unlock()
 		log.Printf("security report: seal failed: %v", err)
 		fail(http.StatusInternalServerError, "Could not securely store your report. Please try again.")
 		return
@@ -425,10 +427,12 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 		DisclosureDays:   disclosureDays,
 	}
 	if err := s.db.CreateSecurityReport(rec); err != nil {
+		database.SecurityReportEncryptionMu.Unlock()
 		log.Printf("security report: store failed: %v", err)
 		fail(http.StatusInternalServerError, "Could not record your report. Please try again.")
 		return
 	}
+	database.SecurityReportEncryptionMu.Unlock()
 
 	// Notifications are best-effort: the report is already durably stored, so an
 	// email failure must not lose it — log and continue to the success response.

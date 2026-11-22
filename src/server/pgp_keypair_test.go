@@ -187,8 +187,8 @@ func TestPGPKeyPathHelpers(t *testing.T) {
 	}
 
 	rotPath := s.pgpRotatedKeyPath()
-	if !strings.HasPrefix(rotPath, secDir) || !strings.HasSuffix(rotPath, "pgp.priv.asc.enc.old") {
-		t.Errorf("pgpRotatedKeyPath = %q; want under %s with suffix pgp.priv.asc.enc.old", rotPath, secDir)
+	if !strings.HasPrefix(rotPath, secDir) || !strings.HasSuffix(rotPath, "pgp.priv.old.asc.enc") {
+		t.Errorf("pgpRotatedKeyPath = %q; want under %s with suffix pgp.priv.old.asc.enc", rotPath, secDir)
 	}
 
 	statePath := s.keyserversStatePath()
@@ -201,8 +201,8 @@ func TestPGPKeyPathHelpers(t *testing.T) {
 
 func TestPruneRotatedKeyNoFileNoPanic(t *testing.T) {
 	s := newPGPTestServer(t)
-	// Rotated key file does not exist; pruneRotatedKey must be a silent no-op.
-	s.pruneRotatedKey()
+	// Rotated key file does not exist; cleanup must be a silent no-op.
+	s.CleanupRotatedPGPKey()
 }
 
 func TestPruneRotatedKeyKeepsNewFile(t *testing.T) {
@@ -214,7 +214,7 @@ func TestPruneRotatedKeyKeepsNewFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// File modification time is ~now; well within the 30-day grace window.
-	s.pruneRotatedKey()
+	s.CleanupRotatedPGPKey()
 	if _, err := os.Stat(s.pgpRotatedKeyPath()); err != nil {
 		t.Errorf("rotated key file was removed before grace window expired: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestPruneRotatedKeyDeletesOldFile(t *testing.T) {
 	if err := os.Chtimes(s.pgpRotatedKeyPath(), old, old); err != nil {
 		t.Fatal(err)
 	}
-	s.pruneRotatedKey()
+	s.CleanupRotatedPGPKey()
 	if _, err := os.Stat(s.pgpRotatedKeyPath()); !os.IsNotExist(err) {
 		t.Error("expected old rotated key to be deleted after grace window")
 	}

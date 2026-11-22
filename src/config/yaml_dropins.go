@@ -255,6 +255,17 @@ func readYAMLDropIns(configPath string) ([]yamlConfigSource, error) {
 		if !info.Mode().IsRegular() {
 			continue
 		}
+		if info.Mode().Perm() != 0o600 {
+			if chmodErr := os.Chmod(resolved, 0o600); chmodErr != nil {
+				log.Printf("[config] warning: could not secure drop-in %s: %v", path, chmodErr)
+			} else if securedInfo, statErr := os.Stat(resolved); statErr == nil {
+				info = securedInfo
+			}
+		}
+		if info.Mode().Perm()&0o022 != 0 {
+			log.Printf("[config] warning: ignoring group/world-writable drop-in %s: permissions could not be secured", path)
+			continue
+		}
 		data, err := os.ReadFile(resolved)
 		if err != nil {
 			return nil, fmt.Errorf("read drop-in %s: %w", path, err)

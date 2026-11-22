@@ -208,13 +208,20 @@ func (s *Server) cookieSecure(r *http.Request) bool {
 // hub, export, and import-error views.
 func (s *Server) preferencesPageData(r *http.Request, theme, lang string) map[string]interface{} {
 	data := s.pageData()
-	query := preferencesExportQuery(theme, lang, appPreferencesFromRequest(r))
-	data["ExportURL"] = s.baseURL(r) + "/server/preferences/import?" + query
-	data["ExportCode"] = base64.RawURLEncoding.EncodeToString([]byte(query))
-	data["CancelURL"] = prefRedirectDest(r, r.URL.Query().Get("redirect"))
+	data["CancelURL"] = s.prefRedirectDest(r, r.URL.Query().Get("redirect"), "/")
 	data["PrefTheme"] = theme
 	data["GPCReceived"] = gpcReceived(r)
 	data["PrefLang"] = lang
+	data["PrefLangChoice"] = "auto"
+	if c, err := r.Cookie(i18n.CookieName()); err == nil && i18n.IsAvailable(c.Value) {
+		data["PrefLangChoice"] = c.Value
+	}
+	for _, language := range i18n.Languages() {
+		if language.Code == lang {
+			data["AutomaticLanguageName"] = language.NativeName
+			break
+		}
+	}
 	// App-specific guest preferences (AI.md 23485: "a control for every
 	// app-specific `{project_name}_pref_*` setting"). Gaps are filled with the
 	// hard defaults so every control renders with a definite selected option
@@ -249,18 +256,34 @@ func (s *Server) preferencesPageData(r *http.Request, theme, lang string) map[st
 		ccpaOptedOut = true
 	}
 	data["CCPAOptedOut"] = ccpaOptedOut
+	data["CCPAEnabled"] = privacy.Data.Sold
 	data["ConsentAnalyticsConfigured"] = cfg.Server.Tracking.Enabled()
+	data["RegisteredPreferences"] = s.hubPageData(s.preferencePageRegistry(), lang)
 	if primary, db, ok := s.requireOwnerForPage(r); ok {
 		data["HasOwnerPrimary"] = true
 		tokens, err := db.ListOwnerTokens(primary.OwnerID)
 		if err == nil {
 			items := make([]map[string]any, 0, len(tokens))
+			hasLinkedTokens := false
 			for _, token := range tokens {
 				items = append(items, tokenSummary(token))
+				if token.Kind == "linked" {
+					hasLinkedTokens = true
+				}
 			}
 			data["OwnerTokens"] = items
+			data["HasLinkedTokens"] = hasLinkedTokens
 		}
 	}
+	return data
+}
+
+func (s *Server) preferencesSyncPageData(r *http.Request, theme, lang string) map[string]interface{} {
+	data := s.pageData()
+	query := preferencesExportQuery(theme, lang, appPreferencesFromRequest(r))
+	data["ExportURL"] = s.baseURL(r) + "/server/preferences/sync/import?" + query
+	data["ExportCode"] = base64.RawURLEncoding.EncodeToString([]byte(query))
+	data["CancelURL"] = s.prefRedirectDest(r, r.URL.Query().Get("redirect"), "/server/preferences/sync")
 	return data
 }
 
@@ -280,16 +303,14 @@ func preferencesExportQuery(theme, lang string, extra map[string]string) string 
 	return q.Encode()
 }
 
-// handlePreferencesExport serves GET /server/preferences/export, API-mirrored
-// at GET /api/{api_version}/server/preferences/export (rule 13). It returns the
-// guest preferences as a full importable URL and as a padding-free base64url
-// short code.
+// handlePreferencesExport serves the canonical preferences sync page and its
+// API mirror. The export values are derived from the request on every load.
 func (s *Server) handlePreferencesExport(w http.ResponseWriter, r *http.Request) {
 	theme := s.themeFromRequest(r)
 	lang := i18n.LangFromRequest(r)
 	appPrefs := appPreferencesFromRequest(r)
 	query := preferencesExportQuery(theme, lang, appPrefs)
-	exportURL := s.baseURL(r) + "/server/preferences/import?" + query
+	exportURL := s.baseURL(r) + "/server/preferences/sync/import?" + query
 	code := base64.RawURLEncoding.EncodeToString([]byte(query))
 
 	switch prefsClientType(r) {
@@ -305,9 +326,38 @@ func (s *Server) handlePreferencesExport(w http.ResponseWriter, r *http.Request)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = fmt.Fprintf(w, "URL: %s\nCode: %s\n", exportURL, code)
 	default:
-		data := s.preferencesPageData(r, theme, lang)
-		s.renderTemplate(w, r, "preferences.html", data)
+		data := s.preferencesSyncPageData(r, theme, lang)
+		s.renderTemplate(w, r, "preferences_sync.html", data)
 	}
+}
+
+func (s *Server) handlePreferencesSyncPost(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		r.PostForm = url.Values{}
+	}
+	merged := decodePrefCode(r.PostFormValue("code"))
+	for name, values := range r.PostForm {
+		if prefControlFields[name] {
+			continue
+		}
+		merged[name] = values
+	}
+	valid, _, _ := validateGuestPrefs(merged)
+	s.applyGuestPrefs(w, r, valid)
+	prefSeeOther(w, s.prefRedirectDest(r, r.PostFormValue("redirect"), "/server/preferences/sync"))
+}
+
+func (s *Server) redirectLegacyPreferencesPath(w http.ResponseWriter, r *http.Request) {
+	path := "/server/preferences/sync"
+	if strings.HasSuffix(r.URL.Path, "/import") {
+		path += "/import"
+	}
+	if r.URL.RawQuery != "" {
+		path += "?" + r.URL.RawQuery
+	}
+	w.Header().Set("Location", path)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusPermanentRedirect)
 }
 
 // sortedPrefKeys returns the app-preference keys in a stable order so plain-text
@@ -321,8 +371,8 @@ func sortedPrefKeys(prefs map[string]string) []string {
 	return keys
 }
 
-// handlePreferencesImport serves GET /server/preferences/import, API-mirrored
-// at GET /api/{api_version}/server/preferences/import (rules 5-11). The
+// handlePreferencesImport serves GET /server/preferences/sync/import,
+// API-mirrored at GET /api/{api_version}/server/preferences/sync/import (rules 5-11). The
 // request's own query parameters and an optional `code` are merged (direct
 // parameters win key by key), validated, and applied additively as cookies.
 // The web route answers 303 even when nothing validated; the API route answers
@@ -351,7 +401,7 @@ func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": data})
 		return
 	}
-	prefSeeOther(w, prefRedirectDest(r, q.Get("redirect")))
+	prefSeeOther(w, s.prefRedirectDest(r, q.Get("redirect"), "/"))
 }
 
 // handlePreferencesSetAPI is the JSON mirror of the preferences form

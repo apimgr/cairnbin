@@ -74,7 +74,7 @@ func TestPreferencesSetAPI_ConsentBlockedWritesAreIgnored(t *testing.T) {
 
 func TestPreferencesImport_ConsentBlockedValuesAreIgnored(t *testing.T) {
 	s := newMinimalServer(config.DefaultConfig())
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/preferences/import?theme=light", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/preferences/sync/import?theme=light", nil)
 	rec := httptest.NewRecorder()
 	s.handlePreferencesImport(rec, req)
 	if rec.Code != http.StatusOK || len(rec.Result().Cookies()) != 0 {

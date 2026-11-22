@@ -37,8 +37,9 @@ type Handler struct {
 	themeFn func(*http.Request) string
 	// csrfTokenFn resolves the CSRF token bound to the request's csrf_token
 	// cookie, used by the no-JS theme-toggle POST form; returns "" when unset.
-	csrfTokenFn func(*http.Request) string
-	languageFn  func(*http.Request) string
+	csrfTokenFn  func(*http.Request) string
+	languageFn   func(*http.Request) string
+	pageRenderer func(http.ResponseWriter, *http.Request, string, string, string, string)
 }
 
 // New creates a Handler. baseURL can be left empty to auto-detect from the request.
@@ -104,6 +105,12 @@ func (h *Handler) SetLanguageResolver(fn func(*http.Request) string) {
 	h.languageFn = fn
 }
 
+// SetPageRenderer lets the server place the interactive viewer inside its
+// shared public page layout.
+func (h *Handler) SetPageRenderer(fn func(http.ResponseWriter, *http.Request, string, string, string, string)) {
+	h.pageRenderer = fn
+}
+
 // csrfToken returns the resolved CSRF token, or "" when unset.
 func (h *Handler) csrfToken(r *http.Request) string {
 	if h.csrfTokenFn == nil {
@@ -148,6 +155,12 @@ func (h *Handler) ServeSpec(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ServeUI(w http.ResponseWriter, r *http.Request) {
 	base := h.resolveBase(r)
 	specURL := base + "/api/swagger?lang=" + url.QueryEscape(i18n.LangFromRequest(r))
+	if h.pageRenderer != nil {
+		lang := i18n.LangFromRequest(r)
+		content := `<div class="swagger-ui" id="app" data-spec-url="` + html.EscapeString(specURL) + `"><p class="loading-message">` + html.EscapeString(i18n.Translate(lang, "swagger.loading")) + `</p></div>`
+		h.pageRenderer(w, r, i18n.Translate(lang, "swagger.ui_title"), i18n.Translate(lang, "swagger.info_description"), h.title, content)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// HTML is never cached; the build-stamp ETag makes an intermediary that
 	// ignores no-store revalidate anyway (AI.md PART 9, line 13287).
@@ -245,8 +258,8 @@ func (h *Handler) buildSpec(base string, languages ...string) map[string]interfa
 	return map[string]interface{}{
 		"openapi": "3.0.3",
 		"info": map[string]interface{}{
-			"title":   h.title,
-			"version": h.version,
+			"title":       h.title,
+			"version":     h.version,
 			"description": i18n.Translate(lang, "swagger.info_description"),
 			"license": map[string]interface{}{
 				"name": "MIT",

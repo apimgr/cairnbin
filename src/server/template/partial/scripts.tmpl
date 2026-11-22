@@ -1,6 +1,6 @@
 {{define "scripts"}}
   <div id="toast-container" aria-label="{{t .Lang "common.notifications"}}" data-position="{{.ToastPosition}}" data-duration="{{.ToastDuration}}" data-warning-duration="{{.ToastWarningDuration}}"></div>
 
-  <script type="application/json" id="pb-i18n-data"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}>{{i18njs .Lang}}</script>
+  <template id="pb-i18n-data">{{i18njs .Lang}}</template>
   <script src="{{asset .AssetPrefix "/static/js/app.js"}}"{{if .CSPNonce}} nonce="{{.CSPNonce}}"{{end}}></script>
 {{end}}

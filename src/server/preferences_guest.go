@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/apimgr/cairnbin/src/common/httputil"
 	"github.com/apimgr/cairnbin/src/common/i18n"
@@ -30,7 +31,7 @@ var prefBase64Pattern = regexp.MustCompile(`^[A-Za-z0-9_-]+={0,2}$`)
 // (padded or not). Anything undecodable or oversized yields no values.
 func decodePrefCode(code string) url.Values {
 	code = strings.TrimSpace(code)
-	if code == "" || len(code) > prefMaxCodeLen {
+	if code == "" || utf8.RuneCountInString(code) > prefMaxCodeLen {
 		return url.Values{}
 	}
 	query := code
@@ -91,7 +92,7 @@ func validateGuestPrefs(values url.Values) (valid map[string]string, accepted, i
 		if len(vals) > 0 {
 			value = strings.TrimSpace(vals[0])
 		}
-		if len(value) > 64 {
+		if utf8.RuneCountInString(value) > 64 {
 			ignored = append(ignored, name)
 			continue
 		}
@@ -199,20 +200,20 @@ func prefSafeLocalPath(p string) bool {
 		}
 	}
 	path := strings.SplitN(p, "?", 2)[0]
-	return !strings.HasPrefix(path, "/server/preferences/import") &&
-		!strings.HasPrefix(path, "/server/preferences/export") &&
-		path != "/server/preferences"
+	return path != "/server/preferences" && path != "/server/preferences/sync" &&
+		!strings.HasPrefix(path, "/server/preferences/sync/import")
 }
 
-// prefRedirectDest resolves where a preference change returns to: the
-// supplied redirect when it is a safe local path, else the same-origin
-// Referer's path and query, else the site root.
-func prefRedirectDest(r *http.Request, redirect string) string {
+// prefRedirectDest resolves where a preference change returns to: the supplied
+// redirect when it is a safe local path, else a same-origin Referer's path and
+// query, else the route-specific default.
+func (s *Server) prefRedirectDest(r *http.Request, redirect, defaultPath string) string {
 	if prefSafeLocalPath(redirect) {
 		return redirect
 	}
 	if ref := r.Header.Get("Referer"); ref != "" {
-		if u, err := url.Parse(ref); err == nil && u.Host == r.Host {
+		origin, _ := url.Parse(s.baseURL(r))
+		if u, err := url.Parse(ref); err == nil && origin != nil && strings.EqualFold(u.Scheme, origin.Scheme) && strings.EqualFold(u.Host, origin.Host) && u.User == nil {
 			dest := u.EscapedPath()
 			if u.RawQuery != "" {
 				dest += "?" + u.RawQuery
@@ -222,7 +223,7 @@ func prefRedirectDest(r *http.Request, redirect string) string {
 			}
 		}
 	}
-	return "/"
+	return defaultPath
 }
 
 // prefSeeOther answers 303 with an empty body and no-store caching, so a
@@ -241,6 +242,8 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	theme := s.themeFromRequest(r)
 	lang := i18n.LangFromRequest(r)
 	appPrefs := appPreferencesFromRequest(r)
+	pageData := s.preferencesPageData(r, theme, lang)
+	pageData["RegisteredPreferences"] = s.hubPageData(s.preferencePageRegistry(), lang)
 
 	switch prefsClientType(r) {
 	case "json":
@@ -250,7 +253,7 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		})
 	case "text":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		html, err := s.renderTemplateToString(r, "preferences.html", s.preferencesPageData(r, theme, lang))
+		html, err := s.renderTemplateToString(r, "preferences.html", pageData)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "Preferences — theme=%s lang=%s\n", theme, lang)
 			for _, k := range sortedPrefKeys(appPrefs) {
@@ -260,7 +263,7 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
 	default:
-		s.renderTemplate(w, r, "preferences.html", s.preferencesPageData(r, theme, lang))
+		s.renderTemplate(w, r, "preferences.html", pageData)
 	}
 }
 

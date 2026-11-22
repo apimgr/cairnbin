@@ -115,7 +115,7 @@ func postSecurityReport(s *Server, form url.Values) *httptest.ResponseRecorder {
 	req.Header.Set("Origin", "http://example.com")
 	rec := httptest.NewRecorder()
 	s.handleContactPost(rec, req)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "contact-review-panel") {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `id="contact-review-title"`) {
 		return rec
 	}
 	getValue := func(field string) string {

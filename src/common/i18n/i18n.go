@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -379,19 +380,17 @@ func LangFromRequest(r *http.Request) string {
 	if !enabled {
 		return def
 	}
-	// 1. Query parameter
+	// 1. A valid query parameter pins this response without writing a cookie.
 	if lang := r.URL.Query().Get("lang"); lang != "" {
 		if IsAvailable(lang) {
 			return strings.ToLower(strings.TrimSpace(lang))
 		}
-		return def
 	}
 	// 2. Cookie
 	if c, err := r.Cookie(cookie); err == nil && c.Value != "" {
 		if IsAvailable(c.Value) {
 			return strings.ToLower(strings.TrimSpace(c.Value))
 		}
-		return def
 	}
 	// 3. Accept-Language header
 	if accept := r.Header.Get("Accept-Language"); accept != "" {
@@ -404,15 +403,48 @@ func LangFromRequest(r *http.Request) string {
 
 // parseBestMatch parses an Accept-Language header and returns the best supported match.
 func parseBestMatch(header string) string {
-	// Accept-Language: en-US,en;q=0.9,es;q=0.8
+	type languagePreference struct {
+		tag   string
+		q     float64
+		order int
+	}
 	parts := strings.Split(header, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		// strip quality value
-		if idx := strings.Index(part, ";"); idx != -1 {
-			part = part[:idx]
+	preferences := make([]languagePreference, 0, len(parts))
+	for index, part := range parts {
+		params := strings.Split(part, ";")
+		lang := strings.ToLower(strings.TrimSpace(params[0]))
+		if lang == "" {
+			continue
 		}
-		lang := strings.ToLower(strings.TrimSpace(part))
+		q := 1.0
+		for _, param := range params[1:] {
+			name, value, ok := strings.Cut(strings.TrimSpace(param), "=")
+			if !ok || !strings.EqualFold(strings.TrimSpace(name), "q") {
+				continue
+			}
+			parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			if err != nil || parsed < 0 || parsed > 1 {
+				q = 0
+			} else {
+				q = parsed
+			}
+			break
+		}
+		if q > 0 {
+			preferences = append(preferences, languagePreference{tag: lang, q: q, order: index})
+		}
+	}
+	sort.SliceStable(preferences, func(i, j int) bool {
+		if preferences[i].q == preferences[j].q {
+			return preferences[i].order < preferences[j].order
+		}
+		return preferences[i].q > preferences[j].q
+	})
+	for _, preference := range preferences {
+		lang := preference.tag
+		if lang == "*" {
+			continue
+		}
 		// Try full tag first (e.g. "en-us"), then base (e.g. "en")
 		if IsAvailable(lang) {
 			return lang

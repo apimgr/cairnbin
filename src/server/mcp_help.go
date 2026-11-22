@@ -7,6 +7,14 @@ import (
 
 func (s *Server) handleHelpMCP(w http.ResponseWriter, r *http.Request) {
 	cfg := s.liveCfg()
+	if !cfg.Server.MCP.Enabled {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
+		} else {
+			http.NotFound(w, r)
+		}
+		return
+	}
 	base := strings.TrimRight(s.baseURL(r), "/")
 	version := s.apiVersion()
 	url := base + "/api/" + version + "/server/mcp"
@@ -19,7 +27,7 @@ func (s *Server) handleHelpMCP(w http.ResponseWriter, r *http.Request) {
 				"url":     url,
 				"aliases": []string{base + "/api/mcp", base + "/mcp"},
 				"auth":    map[string]string{"scheme": "Bearer"},
-				"tools":   s.mcpHandler.PublicTools(),
+				"tools":   s.publicMCPTools(),
 				"project": project,
 			},
 		})
@@ -32,9 +40,28 @@ func (s *Server) handleHelpMCP(w http.ResponseWriter, r *http.Request) {
 		"MCPURL":       url,
 		"MCPAliasAPI":  base + "/api/mcp",
 		"MCPAliasRoot": base + "/mcp",
-		"MCPTools":     s.mcpHandler.PublicTools(),
+		"MCPToolsView": s.mcpToolsView(),
 		"MCPProject":   pageContentHTML(project),
 		"ProjectName":  "cairnbin",
 	}
 	s.renderTemplate(w, r, "help_mcp.html", data)
+}
+
+func (s *Server) mcpToolsView() []map[string]interface{} {
+	tools := s.publicMCPTools()
+	view := make([]map[string]interface{}, 0, len(tools))
+	for _, tool := range tools {
+		view = append(view, map[string]interface{}{
+			"name":        tool["name"],
+			"description": renderMarkdown(tool["description"]),
+		})
+	}
+	return view
+}
+
+func (s *Server) publicMCPTools() []map[string]string {
+	if s.mcpHandler == nil {
+		return []map[string]string{}
+	}
+	return s.mcpHandler.PublicTools()
 }

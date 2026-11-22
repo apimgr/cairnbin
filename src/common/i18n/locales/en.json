@@ -7,6 +7,7 @@
     "version": "1.0.0"
   },
   "common": {
+    "breadcrumb": "Breadcrumb",
     "select_language": "Select language",
     "notifications": "Notifications",
     "save": "Save",
@@ -322,7 +323,8 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "production": "Production",
-    "development": "Development"
+    "development": "Development",
+    "configuration": "Configuration"
   },
   "status_values": {
     "online": "Online",
@@ -412,6 +414,7 @@
   },
   "help": {
     "title": "Help",
+    "more": "More help",
     "getting_started": "Getting Started",
     "features": "Features",
     "api_documentation": "API Documentation",
@@ -532,6 +535,8 @@
     "ts_403_title": "403 Forbidden on delete",
     "ts_403_body": "The delete token is missing or incorrect. Only the correct token can delete a paste.",
     "mcp_meta_description": "Connect an AI assistant to {site} through MCP",
+    "page_lead": "API usage and service help.",
+    "custom_content": "Additional information",
     "mcp_page_title": "MCP server",
     "mcp_overview_heading": "What this is",
     "mcp_overview_body": "{site} provides a remote MCP server over Streamable HTTP. Every public API operation is available to an assistant as a tool.",
@@ -545,6 +550,7 @@
     "mcp_generic_config": "Generic client configuration",
     "mcp_verify_curl": "Verify with curl",
     "mcp_tools_heading": "Tools",
+    "mcp_tool": "Tool",
     "mcp_no_tools": "No public tools are currently registered.",
     "mcp_auth_tools_note": "Authenticated callers may see additional tools when their token has the required access.",
     "mcp_behavior_heading": "Behavior and limits",
@@ -721,6 +727,11 @@
     "copy": "Copy preferences code",
     "consent_title": "Cookie Preferences",
     "consent_desc": "Change which optional cookie categories this browser allows. Essential cookies are always on and cannot be disabled.",
+    "sync_title": "Sync preferences",
+    "sync_desc": "Export preferences or apply them on another browser or device.",
+    "tokens_desc": "Create and manage API tokens for your clients.",
+    "automatic": "Automatic",
+    "more": "More preferences",
     "owner_tokens": "Owner tokens",
     "owner_reveal": "Reveal",
     "owner_rotate": "Rotate",
@@ -743,6 +754,7 @@
     "owner_restore": "Restore identity",
     "owner_primary": "Primary token",
     "owner_linked": "Linked token",
+    "owner_no_linked": "No linked tokens yet. Create one to connect a client.",
     "owner_copy": "Copy",
     "owner_active": "Active",
     "owner_expired": "Expired",
@@ -751,7 +763,7 @@
     "owner_confirm_revoke": "Revoke this linked token?",
     "owner_confirm_rotate_primary": "Rotate the primary token? Existing copies will stop working.",
     "reset": "Reset",
-    "reset_warning": "This erases this site’s saved preferences, consent choices, announcement dismissals, build stamp, temporary messages, and local browser data. It cannot be undone.",
+    "reset_warning": "This erases the theme and lang cookies, cairnbin_pref_* cookies, cookie_consent, ccpa_opt_out, cairnbin_build, dismissed_announcements, flash, any age-verification or content-acknowledgment cookies, forwarding preferences, and this site’s localStorage, sessionStorage, and IndexedDB.",
     "erase": "Erase everything"
   },
   "announcements": {
@@ -1345,7 +1357,7 @@
     "base_url": "URL path prefix",
     "daemon": "Run as daemon (detach from terminal)",
     "debug": "Enable debug mode",
-    "optional_i2p": "Enable the optional I2P eepsite (opt-in)",
+    "optional_i2p": "I2P eepsite (enabled by default in containers; use --i2p=false to disable)",
     "color": "Color output",
     "language": "Language for output",
     "service_cmd": "Service management",

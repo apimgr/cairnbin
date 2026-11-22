@@ -24,7 +24,8 @@ type Handler struct {
 	themeFn func(*http.Request) string
 	// csrfTokenFn resolves the CSRF token bound to the request's csrf_token
 	// cookie, used by the no-JS theme-toggle POST form; returns "" when unset.
-	csrfTokenFn func(*http.Request) string
+	csrfTokenFn  func(*http.Request) string
+	pageRenderer func(http.ResponseWriter, *http.Request, string, string, string, string)
 }
 
 // New creates a Handler using the given database and site title.
@@ -73,6 +74,12 @@ func (h *Handler) theme(r *http.Request) string {
 // theme-toggle POST form (double-submit cookie pattern, PART 16).
 func (h *Handler) SetCSRFTokenResolver(fn func(*http.Request) string) {
 	h.csrfTokenFn = fn
+}
+
+// SetPageRenderer lets the server place the interactive viewer inside its
+// shared public page layout.
+func (h *Handler) SetPageRenderer(fn func(http.ResponseWriter, *http.Request, string, string, string, string)) {
+	h.pageRenderer = fn
 }
 
 // csrfToken returns the resolved CSRF token, or "" when unset.
@@ -130,6 +137,13 @@ func (h *Handler) serveQuery(w http.ResponseWriter, r *http.Request, query strin
 
 // serveUI renders the self-contained GraphiQL HTML interface.
 func (h *Handler) serveUI(w http.ResponseWriter, r *http.Request) {
+	if h.pageRenderer != nil {
+		lang := i18n.LangFromRequest(r)
+		content := h.renderViewerContent(r)
+		title := i18n.TranslateFormat(lang, "graphql.title", i18n.Args("app_name", h.title))
+		h.pageRenderer(w, r, title, i18n.Translate(lang, "graphql.description"), i18n.Translate(lang, "graphql.query"), content)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// HTML is never cached; the build-stamp ETag makes an intermediary that
 	// ignores no-store revalidate anyway (AI.md PART 9, line 13287).
@@ -137,6 +151,22 @@ func (h *Handler) serveUI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", `"`+buildinfo.AssetStamp()+`"`)
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprint(w, h.renderUI(r))
+}
+
+func (h *Handler) renderViewerContent(r *http.Request) string {
+	prefix := h.assetPrefix(r)
+	lang := i18n.LangFromRequest(r)
+	t := func(key string) string { return escapeHTML(i18n.Translate(lang, key)) }
+	return `<div class="graphiql-container" id="graphiql" data-api-url="` + escapeHTML(prefix) + `/api/graphql">
+      <div class="pane">
+        <div class="pane-header"><span>` + t("graphql.query") + `</span><button class="execute-button" type="button" data-action="run-graphql-query">&#9654; ` + t("graphql.run") + `</button></div>
+        <label class="visually-hidden" for="query">` + t("graphql.query") + `</label>
+        <textarea id="query" spellcheck="false" autocomplete="off" placeholder="` + t("graphql.query_placeholder") + `">{ pastes(page: 1, limit: 5) { total page limit pastes { id title language created_at } } }</textarea>
+        <div class="vars-pane"><div class="pane-header"><span>` + t("graphql.variables_json") + `</span></div><label class="visually-hidden" for="vars">` + t("graphql.variables_json") + `</label><textarea id="vars" spellcheck="false" placeholder='{"id": "abc123"}'></textarea></div>
+      </div>
+      <div class="pane"><div class="pane-header"><span>` + t("graphql.response") + `</span></div><div class="result-window" id="result" role="region" aria-label="` + t("graphql.response") + `" aria-live="polite">` + t("graphql.result_placeholder") + `</div></div>
+      <div class="schema-panel"><h3>` + t("graphql.schema") + `</h3><pre>` + escapeHTML(localizedSchemaSDL(lang)) + `</pre></div>
+    </div>`
 }
 
 // writeJSON encodes v as indented JSON and writes it to w.

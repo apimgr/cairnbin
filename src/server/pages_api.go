@@ -69,11 +69,16 @@ func (s *Server) handlePrivacyAPI(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHelpAPI(w http.ResponseWriter, r *http.Request) {
 	base := s.baseURL(r)
 	content := s.liveCfg().Server.Pages.Help.Content
+	pages := make([]map[string]string, 0)
+	for _, page := range s.hubPageData(s.helpPageRegistry(), i18n.LangFromRequest(r)) {
+		pages = append(pages, map[string]string{"title": page.Title, "path": page.Path})
+	}
 	apiPageOK(w, map[string]interface{}{
 		"title":   s.liveCfg().Server.Branding.EffectiveTitle(),
 		"content": content,
 		"format":  "markdown",
 		"url":     base + "/server/help",
+		"pages":   pages,
 		"docs": map[string]string{
 			"swagger": base + "/server/docs/swagger",
 			"graphql": base + "/server/docs/graphql",

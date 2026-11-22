@@ -4,18 +4,17 @@
 {{end}}
 
 {{define "content"}}
-    <section class="search-section">
-      <div class="container container-sm">
-        <div class="section-header">
-          <h1 class="section-title">{{t .Lang "terms.title"}}</h1>
-        </div>
+    <div class="container container-sm">
+      <header class="page-header">
+        <h1 class="page-title">{{t .Lang "terms.title"}}</h1>
+      </header>
 
-        <div class="paste-view page-view">
+        <section class="section-card" aria-labelledby="terms-acceptance-heading">
+          <h2 id="terms-acceptance-heading">{{t .Lang "terms.acceptance"}}</h2>
           {{if .OperatorTermsHTML}}<div class="markdown-content">{{.OperatorTermsHTML}}</div>{{else}}
-          <h2>{{t .Lang "terms.acceptance"}}</h2>
           <p>{{t .Lang "terms.acceptance_text"}}</p>
 
-          <h2 class="section-mt">{{t .Lang "terms.acceptable_use"}}</h2>
+          <h3>{{t .Lang "terms.acceptable_use"}}</h3>
           <p>{{t .Lang "terms.use_intro"}}</p>
           <ul class="feature-list">
             <li>{{t .Lang "terms.use_illegal"}}</li>
@@ -25,16 +24,15 @@
           </ul>
           <p>{{t .Lang "terms.use_note"}}</p>
 
-          <h2 class="section-mt">{{t .Lang "terms.liability"}}</h2>
+          <h3>{{t .Lang "terms.liability"}}</h3>
           <p>{{t .Lang "terms.liability_text"}}</p>
 
-          <h2 class="section-mt">{{t .Lang "terms.changes"}}</h2>
+          <h3>{{t .Lang "terms.changes"}}</h3>
           <p>{{t .Lang "terms.changes_text"}}</p>
 
-          <h2 class="section-mt">{{t .Lang "terms.governing_law"}}</h2>
+          <h3>{{t .Lang "terms.governing_law"}}</h3>
           <p>{{t .Lang "terms.governing_law_text"}}</p>
           {{end}}
-        </div>
-      </div>
-    </section>
+        </section>
+    </div>
 {{end}}

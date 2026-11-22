@@ -111,7 +111,12 @@ func pageContentHTML(markdown string) template.HTML {
 	if strings.TrimSpace(markdown) == "" {
 		return ""
 	}
-	return renderMarkdown(markdown)
+	content := string(renderMarkdown(markdown))
+	content = strings.ReplaceAll(content, "<h1", "<h3")
+	content = strings.ReplaceAll(content, "</h1>", "</h3>")
+	content = strings.ReplaceAll(content, "<h2", "<h3")
+	content = strings.ReplaceAll(content, "</h2>", "</h3>")
+	return template.HTML(content)
 }
 
 func (s *Server) injectOperatorHTML(r *http.Request, data map[string]interface{}) {

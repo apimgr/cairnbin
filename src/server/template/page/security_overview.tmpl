@@ -4,18 +4,17 @@
 {{end}}
 
 {{define "content"}}
-    <section class="search-section">
-      <div class="container container-sm">
-        <div class="section-header">
-          <h1 class="section-title">{{t .Lang "security.title"}}</h1>
-          <p class="section-subtitle">{{tf .Lang "security.report_subtitle" "site" .SiteTitle}}</p>
-        </div>
+    <div class="container container-sm">
+      <header class="page-header">
+        <h1 class="page-title">{{t .Lang "security.title"}}</h1>
+        <p class="page-lead">{{tf .Lang "security.report_subtitle" "site" .SiteTitle}}</p>
+      </header>
 
-        <div class="paste-view page-view">
-          <h2>{{t .Lang "security.how_to_report"}}</h2>
+        <section class="section-card" aria-labelledby="security-report-heading">
+          <h2 id="security-report-heading">{{t .Lang "security.how_to_report"}}</h2>
           <p>{{t .Lang "security.how_to_report_text"}}</p>
 
-          <h2 class="section-mt">{{t .Lang "security.contact_channels"}}</h2>
+          <h3>{{t .Lang "security.contact_channels"}}</h3>
           <ol class="feature-list">
             {{if .ReportURL}}
             <li>
@@ -39,25 +38,25 @@
           </ol>
 
           {{if .OtherReportURL}}
-          <h2 class="section-mt">{{t .Lang "security.other_reports_title"}}</h2>
+          <h3>{{t .Lang "security.other_reports_title"}}</h3>
           <p>{{t .Lang "security.other_reports_text"}} <a href="{{.OtherReportURL}}">{{t .Lang "contact.title"}}</a>.</p>
           {{end}}
 
           {{if .HasPGPKey}}
-          <h2 class="section-mt">{{t .Lang "security.encryption"}}</h2>
+          <h3>{{t .Lang "security.encryption"}}</h3>
           <p>
             {{t .Lang "security.encryption_text"}}
             <a href="{{.AssetPrefix}}/.well-known/pgp-key.asc">/.well-known/pgp-key.asc</a>
           </p>
           {{end}}
 
-          <h2 class="section-mt">{{t .Lang "security.details"}}</h2>
+          <h3>{{t .Lang "security.details"}}</h3>
           <ul class="feature-list">
             <li><strong>{{t .Lang "security.preferred_languages"}}:</strong> {{.PreferredLanguages}}</li>
             <li><strong>{{t .Lang "security.expires"}}:</strong> <span class="long-string">{{.Expires}}</span></li>
           </ul>
 
-          <h2 class="section-mt">{{t .Lang "security.more_info"}}</h2>
+          <h3>{{t .Lang "security.more_info"}}</h3>
           <ul class="feature-list">
             <li><a href="{{.AssetPrefix}}/server/security/policy">{{t .Lang "security.link_policy"}}</a> — {{t .Lang "security.link_policy_desc"}}</li>
             <li><a href="{{.AssetPrefix}}/server/security/thanks">{{t .Lang "security.link_thanks"}}</a> — {{t .Lang "security.link_thanks_desc"}}</li>
@@ -66,7 +65,6 @@
             {{end}}
             <li><a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a> — {{t .Lang "security.link_txt_desc"}}</li>
           </ul>
-        </div>
-      </div>
-    </section>
+        </section>
+    </div>
 {{end}}

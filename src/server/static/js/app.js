@@ -102,14 +102,13 @@ const I18N_FALLBACK = {
     manage_preferences: 'Manage Preferences',
 };
 
-// loadI18nBundle parses the server-rendered <script type="application/json"
-// id="pb-i18n-data"> block into a plain object. Returns {} when the block is
-// absent or unparsable, so callers always fall back to I18N_FALLBACK.
+// loadI18nBundle parses the server-rendered inert template into a plain object.
+// Returns {} when the block is absent or unparsable, so callers always fall back to I18N_FALLBACK.
 function loadI18nBundle() {
     const el = document.getElementById('pb-i18n-data');
     if (!el) return {};
     try {
-        return JSON.parse(el.textContent || '{}');
+        return JSON.parse((el.content ? el.content.textContent : el.textContent) || '{}');
     } catch (_) {
         return {};
     }
@@ -722,8 +721,8 @@ async function fetchAPI(endpoint, options) {
 // visitor's analytics consent is known.
 //
 // The consent config itself is embedded by the server as an inert JSON
-// script block (id="pb-consent-data") rather than an executable inline
-// <script>, per project rules (no inline JS).
+// Template block (id="pb-consent-data") rather than an executable inline
+// script, per project rules (no inline JS).
 
 (function () {
     'use strict';
@@ -735,7 +734,7 @@ async function fetchAPI(endpoint, options) {
         var el = document.getElementById('pb-consent-data');
         if (!el) return {};
         try {
-            return JSON.parse(el.textContent || '{}');
+            return JSON.parse((el.content ? el.content.textContent : el.textContent) || '{}');
         } catch (e) {
             return {};
         }

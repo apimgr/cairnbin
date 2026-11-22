@@ -4,15 +4,15 @@
 {{end}}
 
 {{define "content"}}
-    <section class="search-section">
-      <div class="container container-sm">
-        <div class="section-header">
-          <h1 class="section-title">{{t .Lang "security.policy_title"}}</h1>
-          <p class="section-subtitle">{{tf .Lang "security.policy_subtitle" "site" .SiteTitle}}</p>
-        </div>
+    <div class="container container-sm">
+      <header class="page-header">
+        <nav class="breadcrumb" aria-label="{{t .Lang "common.breadcrumb"}}"><a href="{{.AssetPrefix}}/server/security">← {{t .Lang "security.title"}}</a></nav>
+        <h1 class="page-title">{{t .Lang "security.policy_title"}}</h1>
+        <p class="page-lead">{{tf .Lang "security.policy_subtitle" "site" .SiteTitle}}</p>
+      </header>
 
-        <div class="paste-view page-view">
-          <h2>{{t .Lang "security.reporting_vuln"}}</h2>
+        <section class="section-card" aria-labelledby="security-reporting-heading">
+          <h2 id="security-reporting-heading">{{t .Lang "security.reporting_vuln"}}</h2>
           <p>{{t .Lang "security.reporting_text"}}</p>
           <p><a href="{{.AssetPrefix}}/.well-known/security.txt">security.txt</a></p>
           {{if .SecurityEmail}}
@@ -28,10 +28,10 @@
           </p>
           {{end}}
 
-          <h2 class="section-mt">{{t .Lang "security.disclosure_window"}}</h2>
+          <h3>{{t .Lang "security.disclosure_window"}}</h3>
           <p>{{tf .Lang "security.disclosure_window_text" "days" .DisclosureDays}}</p>
 
-          <h2 class="section-mt">{{t .Lang "security.in_scope"}}</h2>
+          <h3>{{t .Lang "security.in_scope"}}</h3>
           <ul class="feature-list">
             <li>{{t .Lang "security.in_scope_1"}}</li>
             <li>{{t .Lang "security.in_scope_2"}} (<code>cairnbin</code>, <code>cairnbin-cli</code>)</li>
@@ -39,7 +39,7 @@
             <li>{{t .Lang "security.in_scope_4"}}</li>
           </ul>
 
-          <h2 class="section-mt">{{t .Lang "security.out_of_scope"}}</h2>
+          <h3>{{t .Lang "security.out_of_scope"}}</h3>
           <ul class="feature-list">
             <li>{{t .Lang "security.out_scope_1"}}</li>
             <li>{{t .Lang "security.out_scope_2"}}</li>
@@ -48,15 +48,14 @@
             <li>{{t .Lang "security.out_scope_5"}}</li>
           </ul>
 
-          <h2 class="section-mt">{{t .Lang "security.safe_harbor"}}</h2>
+          <h3>{{t .Lang "security.safe_harbor"}}</h3>
           <p>{{t .Lang "security.safe_harbor_text"}}</p>
 
-          <h2 class="section-mt">{{t .Lang "security.link_thanks"}}</h2>
+          <h3>{{t .Lang "security.link_thanks"}}</h3>
           <p>
             {{t .Lang "security.acknowledgments_text"}}
             <a href="{{.AssetPrefix}}/server/security/thanks">{{t .Lang "security.link_thanks"}}</a>
           </p>
-        </div>
-      </div>
-    </section>
+        </section>
+    </div>
 {{end}}

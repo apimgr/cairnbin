@@ -35,6 +35,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -158,12 +159,15 @@ type service struct {
 
 // Manager owns the I2P eepsite lifecycle.
 type Manager struct {
-	mu      sync.Mutex
-	svc     *service
-	cfg     Config
-	handler http.Handler
-	ctx     context.Context
-	cancel  context.CancelFunc
+	mu             sync.Mutex
+	enabled        atomic.Bool
+	addressMu      sync.RWMutex
+	pendingAddress string
+	svc            *service
+	cfg            Config
+	handler        http.Handler
+	ctx            context.Context
+	cancel         context.CancelFunc
 }
 
 // NewManager returns a Manager. Call Start() to launch the eepsite.
@@ -171,12 +175,14 @@ type Manager struct {
 // serves it directly, identical to how the Tor hidden service backend works.
 func NewManager(ctx context.Context, cfg Config, handler http.Handler) *Manager {
 	child, cancel := context.WithCancel(ctx)
-	return &Manager{
+	m := &Manager{
 		cfg:     cfg,
 		handler: handler,
 		ctx:     child,
 		cancel:  cancel,
 	}
+	m.enabled.Store(cfg.Enabled)
+	return m
 }
 
 // Start resolves an I2P provider and launches the eepsite. Returns nil
@@ -197,6 +203,7 @@ func (m *Manager) UpdateConfig(cfg Config) error {
 	defer m.mu.Unlock()
 	m.closeSvcLocked()
 	m.cfg = cfg
+	m.enabled.Store(cfg.Enabled)
 	if !cfg.Enabled {
 		return nil
 	}
@@ -206,9 +213,7 @@ func (m *Manager) UpdateConfig(cfg Config) error {
 // Enabled reports whether the operator opted into I2P, independent of whether
 // a provider is currently available.
 func (m *Manager) Enabled() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.cfg.Enabled
+	return m != nil && m.enabled.Load()
 }
 
 func (m *Manager) startLocked() error {
@@ -280,6 +285,7 @@ func (m *Manager) startI2PdLocked(bin string) error {
 		_ = backendServer.Close()
 		return fmt.Errorf("start i2pd: %w", err)
 	}
+	go m.watchDestination(siteDir)
 
 	addr, err := waitForKeysAddress(m.ctx, siteDir, m.cfg.BootstrapTimeout)
 	if err != nil {
@@ -287,6 +293,7 @@ func (m *Manager) startI2PdLocked(bin string) error {
 		_ = backendServer.Close()
 		return fmt.Errorf("i2p destination: %w", err)
 	}
+	m.setPendingAddress(addr)
 
 	m.svc = &service{
 		provider:      ProviderI2Pd,
@@ -295,8 +302,26 @@ func (m *Manager) startI2PdLocked(bin string) error {
 		backendLn:     rawLn,
 		backendServer: backendServer,
 	}
-	log.Printf("I2P: %s:%d -> 127.0.0.1:%d", addr, m.cfg.VirtualPort, backendPort)
+	log.Printf("I2P eepsite ready")
 	return nil
+}
+
+func (m *Manager) watchDestination(siteDir string) {
+	addr, err := waitForKeysAddress(m.ctx, siteDir, 24*time.Hour)
+	if err != nil || m.ctx.Err() != nil {
+		return
+	}
+	m.setPendingAddress(addr)
+}
+
+func (m *Manager) setPendingAddress(address string) {
+	m.addressMu.Lock()
+	newAddress := m.pendingAddress == "" && address != ""
+	m.pendingAddress = address
+	m.addressMu.Unlock()
+	if newAddress {
+		log.Printf("I2P: %s", address)
+	}
 }
 
 // startSAMLocked establishes a SAMv3 STREAM session forwarding to the
@@ -367,6 +392,9 @@ func (m *Manager) Close() {
 }
 
 func (m *Manager) closeSvcLocked() {
+	m.addressMu.Lock()
+	m.pendingAddress = ""
+	m.addressMu.Unlock()
 	if m.svc == nil {
 		return
 	}
@@ -404,12 +432,20 @@ func (m *Manager) Running() bool {
 // Address returns the full {base32}.b32.i2p address, or empty string if
 // not running.
 func (m *Manager) Address() string {
-	m.mu.Lock()
+	m.addressMu.RLock()
+	address := m.pendingAddress
+	m.addressMu.RUnlock()
+	if address != "" {
+		return address
+	}
+	if !m.mu.TryLock() {
+		return ""
+	}
 	defer m.mu.Unlock()
 	if m.svc != nil {
-		return m.svc.address
+		address = m.svc.address
 	}
-	return ""
+	return address
 }
 
 // String returns the provider name used in health responses: "i2pd", "sam",

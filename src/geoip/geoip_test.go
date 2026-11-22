@@ -253,3 +253,15 @@ func TestMiddleware_FailOpenWhenCountryUnknown(t *testing.T) {
 		t.Errorf("expected 200 (fail-open) when country is unknown, got %d", rec.Code)
 	}
 }
+
+func TestDatasetStatusesOmitDisabledAndReportMissing(t *testing.T) {
+	db, err := geoip.Open(geoip.Config{Dir: t.TempDir(), EnableASN: true, DeferDownloads: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	statuses := db.DatasetStatuses()
+	if len(statuses) != 1 || statuses[0].ID != "asn" || statuses[0].Loaded || !statuses[0].UpdatedAt.IsZero() {
+		t.Fatalf("DatasetStatuses() = %+v, want one missing ASN database", statuses)
+	}
+}

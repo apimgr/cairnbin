@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -116,7 +117,7 @@ func (m *pgpManager) securityDir() string { return filepath.Join(m.configDir, "s
 func (m *pgpManager) pubPath() string     { return filepath.Join(m.securityDir(), "pgp.pub.asc") }
 func (m *pgpManager) privPath() string    { return filepath.Join(m.securityDir(), "pgp.priv.asc.enc") }
 func (m *pgpManager) rotatedPath() string {
-	return filepath.Join(m.securityDir(), "pgp.priv.asc.enc.old")
+	return filepath.Join(m.securityDir(), "pgp.priv.old.asc.enc")
 }
 func (m *pgpManager) keyserversStatePath() string {
 	return filepath.Join(m.securityDir(), "keyservers.state")
@@ -225,6 +226,9 @@ func (m *pgpManager) generate() error {
 // parks the outgoing private key for the 30-day in-flight grace window, installs
 // the new keypair, and republishes (AI.md 14182).
 func (m *pgpManager) rotate() error {
+	database.SecurityReportEncryptionMu.Lock()
+	defer database.SecurityReportEncryptionMu.Unlock()
+
 	prev, err := m.db.GetSecurityKeypair()
 	if err != nil {
 		return fmt.Errorf("pgp rotate: read metadata: %w", err)
@@ -236,24 +240,72 @@ func (m *pgpManager) rotate() error {
 	if err != nil {
 		return fmt.Errorf("pgp rotate: %w", err)
 	}
-	// Cross-sign the new public key with the outgoing private key (AI.md 14182).
-	if oldPriv, rerr := m.readPrivateKey(m.privPath()); rerr == nil {
-		if signed, serr := pgp.SignPublicKey(oldPriv, kp.PublicArmored); serr == nil {
-			kp.PublicArmored = signed
-		} else {
-			fmt.Fprintf(os.Stderr, "warning: cross-sign rotated public key: %v\n", serr)
-		}
-	} else {
-		fmt.Fprintf(os.Stderr, "warning: read outgoing private key for cross-sign: %v\n", rerr)
+	oldPrivate, err := m.readPrivateKey(m.privPath())
+	if err != nil {
+		return fmt.Errorf("pgp rotate: read outgoing private key: %w", err)
 	}
-	// Park the outgoing private key so in-flight reports stay decryptable.
-	if _, statErr := os.Stat(m.privPath()); statErr == nil {
-		if err := os.Rename(m.privPath(), m.rotatedPath()); err != nil {
-			return fmt.Errorf("pgp rotate: park previous private key: %w", err)
+	oldPublic, err := os.ReadFile(m.pubPath())
+	if err != nil {
+		return fmt.Errorf("pgp rotate: read outgoing public key: %w", err)
+	}
+	signed, err := pgp.SignPublicKey(oldPrivate, kp.PublicArmored)
+	if err != nil {
+		return fmt.Errorf("pgp rotate: cross-sign new public key: %w", err)
+	}
+	kp.PublicArmored = signed
+	rotator, ok := m.db.(interface {
+		ReencryptPGPSecurityReports(func(old []byte) ([]byte, error)) (int, error)
+	})
+	if !ok {
+		return fmt.Errorf("pgp rotate: database does not support transactional report re-encryption")
+	}
+	updated, err := rotator.ReencryptPGPSecurityReports(func(ciphertext []byte) ([]byte, error) {
+		plain, err := pgp.Decrypt(oldPrivate, string(ciphertext))
+		if err != nil {
+			return nil, err
 		}
+		reencrypted, err := pgp.Encrypt(kp.PublicArmored, plain)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(reencrypted), nil
+	})
+	if err != nil {
+		return fmt.Errorf("pgp rotate: re-encrypt stored reports: %w", err)
+	}
+	if err := os.Rename(m.privPath(), m.rotatedPath()); err != nil {
+		_, rollbackErr := rotator.ReencryptPGPSecurityReports(func(ciphertext []byte) ([]byte, error) {
+			plain, err := pgp.Decrypt(kp.PrivateArmored, string(ciphertext))
+			if err != nil {
+				return nil, err
+			}
+			reencrypted, err := pgp.Encrypt(string(oldPublic), plain)
+			if err != nil {
+				return nil, err
+			}
+			return []byte(reencrypted), nil
+		})
+		return errors.Join(fmt.Errorf("pgp rotate: park previous private key: %w", err), rollbackErr)
 	}
 	if err := m.installKeypair(kp, true); err != nil {
-		return err
+		restoreErr := os.WriteFile(m.pubPath(), oldPublic, 0o644)
+		restoreErr = errors.Join(restoreErr, os.Rename(m.rotatedPath(), m.privPath()))
+		restoreErr = errors.Join(restoreErr, m.db.UpsertSecurityKeypair(prev))
+		rollbackErr := error(nil)
+		if restoreErr == nil {
+			_, rollbackErr = rotator.ReencryptPGPSecurityReports(func(ciphertext []byte) ([]byte, error) {
+				plain, err := pgp.Decrypt(kp.PrivateArmored, string(ciphertext))
+				if err != nil {
+					return nil, err
+				}
+				reencrypted, err := pgp.Encrypt(string(oldPublic), plain)
+				if err != nil {
+					return nil, err
+				}
+				return []byte(reencrypted), nil
+			})
+		}
+		return errors.Join(err, restoreErr, rollbackErr)
 	}
 	fmt.Printf("%s\n  %s\n  %s\n",
 		maintenanceText("pgp_rotated"),
@@ -266,6 +318,9 @@ func (m *pgpManager) rotate() error {
 		Target:   &audit.Target{Type: "pgp_keypair", ID: kp.Fingerprint},
 		Details:  map[string]any{"previous_fingerprint": prev.Fingerprint},
 	})
+	if updated > 0 {
+		fmt.Fprintf(os.Stderr, "Re-encrypted %d retained security report(s).\n", updated)
+	}
 	m.publishAll(kp.PublicArmored)
 	return nil
 }

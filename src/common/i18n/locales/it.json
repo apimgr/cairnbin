@@ -64,7 +64,8 @@
     "page_x_of_y": "Pagina {current} di {total}",
     "showing_x_of_y": "Visualizzazione di {count} di {total}",
     "last_updated": "Ultimo aggiornamento: {datetime}",
-    "made_with": "Realizzato con"
+    "made_with": "Realizzato con",
+    "breadcrumb": "Percorso di navigazione"
   },
   "theme": {
     "light": "Leggero",
@@ -322,7 +323,8 @@
     "connected": "connesso",
     "disconnected": "disconnesso",
     "production": "Produzione",
-    "development": "Sviluppo"
+    "development": "Sviluppo",
+    "configuration": "Configurazione"
   },
   "status_values": {
     "online": "in linea",
@@ -558,7 +560,11 @@
     "mcp_error_404": "MCP è disabilitato per questo server.",
     "mcp_error_405": "l'endpoint è solo POST; utilizzare POST per le richieste MCP.",
     "mcp_project_heading": "utilizzo degli strumenti cairnbin",
-    "mcp_alias_connector": "e"
+    "mcp_alias_connector": "e",
+    "more": "Altra assistenza",
+    "page_lead": "Aiuto sull’uso dell’API e del servizio.",
+    "custom_content": "Informazioni aggiuntive",
+    "mcp_tool": "Strumento"
   },
   "privacy": {
     "title": "Informativa sulla privacy",
@@ -752,7 +758,13 @@
     "owner_confirm_rotate_primary": "ruotare il token primario? Le copie esistenti smetteranno di funzionare.",
     "reset": "ripristina",
     "reset_warning": "cancella le preferenze salvate di questo sito, le scelte di consenso, le chiusure degli annunci, il timbro di build, i messaggi temporanei e i dati del browser locale. Non è possibile annullarlo.",
-    "erase": "cancella tutto"
+    "erase": "cancella tutto",
+    "sync_title": "Sincronizza preferenze",
+    "sync_desc": "Esporta le preferenze o applicale in un altro browser o dispositivo.",
+    "tokens_desc": "Crea e gestisci token API per i tuoi client.",
+    "automatic": "Automatico",
+    "more": "Altre preferenze",
+    "owner_no_linked": "Non ci sono ancora token collegati. Creane uno per connettere un client."
   },
   "announcements": {
     "warning": "Attenzione",
@@ -1345,7 +1357,7 @@
     "base_url": "prefisso del percorso URL",
     "daemon": "esegui come demone (scollega dal terminale)",
     "debug": "abilita la modalità debug",
-    "optional_i2p": "Abilita l'eepsite I2P opzionale (opt-in)",
+    "optional_i2p": "Eepsite I2P (attivo per impostazione predefinita nei container; usa --i2p=false per disattivarlo)",
     "color": "uscita a colori",
     "language": "lingua per l'output",
     "service_cmd": "Gestione del servizio",

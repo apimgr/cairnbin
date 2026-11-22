@@ -64,7 +64,8 @@
     "page_x_of_y": "Page {current} sur {total}",
     "showing_x_of_y": "Affichage de {count} sur {total}",
     "last_updated": "Dernière mise à jour : {datetime}",
-    "made_with": "Fait avec"
+    "made_with": "Fait avec",
+    "breadcrumb": "Fil d’Ariane"
   },
   "theme": {
     "light": "Clair",
@@ -178,7 +179,8 @@
     "scheduler": "Planificateur",
     "syntax_hl": "Coloration syntaxique",
     "timestamp": "Horodatage",
-    "tor_hidden": "Service caché Tor"
+    "tor_hidden": "Service caché Tor",
+    "configuration": "Configuration"
   },
   "status_values": {
     "online": "En ligne",
@@ -414,7 +416,11 @@
     "mcp_error_404": "MCP est désactivé sur ce serveur.",
     "mcp_error_405": "Le point de terminaison accepte uniquement POST ; utilisez POST pour les requêtes MCP.",
     "mcp_project_heading": "Utiliser les outils de cairnbin",
-    "mcp_alias_connector": "et"
+    "mcp_alias_connector": "et",
+    "more": "Plus d’aide",
+    "page_lead": "Aide sur l’utilisation de l’API et du service.",
+    "custom_content": "Informations complémentaires",
+    "mcp_tool": "Outil"
   },
   "privacy": {
     "title": "Politique de confidentialité",
@@ -608,7 +614,13 @@
     "owner_confirm_rotate_primary": "Renouveler le jeton principal ? Les copies existantes cesseront de fonctionner.",
     "reset": "Réinitialiser",
     "reset_warning": "Cela efface les préférences enregistrées, les choix de consentement, les annonces masquées, la version du site, les messages temporaires et les données locales du navigateur. Cette action est irréversible.",
-    "erase": "Tout effacer"
+    "erase": "Tout effacer",
+    "sync_title": "Synchroniser les préférences",
+    "sync_desc": "Exportez les préférences ou appliquez-les dans un autre navigateur ou appareil.",
+    "tokens_desc": "Créez et gérez des jetons API pour vos clients.",
+    "automatic": "Automatique",
+    "more": "Plus de préférences",
+    "owner_no_linked": "Aucun jeton lié pour le moment. Créez-en un pour connecter un client."
   },
   "announcements": {
     "warning": "Avertissement",
@@ -1201,7 +1213,7 @@
     "base_url": "Préfixe du chemin URL",
     "daemon": "Exécuter en tant que démon (détaché du terminal)",
     "debug": "Activer le mode débogage",
-    "optional_i2p": "Activer le site I2P facultatif (opt-in)",
+    "optional_i2p": "Site I2P (activé par défaut dans les conteneurs ; utilisez --i2p=false pour le désactiver)",
     "color": "Sortie en couleur",
     "language": "Langue de sortie",
     "service_cmd": "Gestion du service",

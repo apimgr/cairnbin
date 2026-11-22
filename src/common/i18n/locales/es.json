@@ -64,7 +64,8 @@
     "page_x_of_y": "Página {current} de {total}",
     "showing_x_of_y": "Mostrando {count} de {total}",
     "last_updated": "Última actualización: {datetime}",
-    "made_with": "Hecho con"
+    "made_with": "Hecho con",
+    "breadcrumb": "Ruta de navegación"
   },
   "theme": {
     "light": "Claro",
@@ -178,7 +179,8 @@
     "scheduler": "Programador",
     "syntax_hl": "Resaltado de sintaxis",
     "timestamp": "Marca de tiempo",
-    "tor_hidden": "Servicio oculto Tor"
+    "tor_hidden": "Servicio oculto Tor",
+    "configuration": "Configuración"
   },
   "status_values": {
     "online": "En línea",
@@ -414,7 +416,11 @@
     "mcp_error_404": "MCP está desactivado en este servidor.",
     "mcp_error_405": "El punto de conexión solo acepta POST; usa POST para las solicitudes MCP.",
     "mcp_project_heading": "Uso de las herramientas de cairnbin",
-    "mcp_alias_connector": "y"
+    "mcp_alias_connector": "y",
+    "more": "Más ayuda",
+    "page_lead": "Ayuda para usar la API y el servicio.",
+    "custom_content": "Información adicional",
+    "mcp_tool": "Herramienta"
   },
   "privacy": {
     "title": "Política de privacidad",
@@ -608,7 +614,13 @@
     "owner_confirm_rotate_primary": "¿Rotar el token principal? Las copias existentes dejarán de funcionar.",
     "reset": "Restablecer",
     "reset_warning": "Esto borra las preferencias guardadas, las opciones de consentimiento, los avisos descartados, la versión del sitio, los mensajes temporales y los datos locales del navegador. No se puede deshacer.",
-    "erase": "Borrar todo"
+    "erase": "Borrar todo",
+    "sync_title": "Sincronizar preferencias",
+    "sync_desc": "Exporta las preferencias o aplícalas en otro navegador o dispositivo.",
+    "tokens_desc": "Crea y administra tokens de API para tus clientes.",
+    "automatic": "Automático",
+    "more": "Más preferencias",
+    "owner_no_linked": "Aún no hay tokens vinculados. Crea uno para conectar un cliente."
   },
   "announcements": {
     "warning": "Advertencia",
@@ -1201,7 +1213,7 @@
     "base_url": "Prefijo de ruta URL",
     "daemon": "Ejecutar como demonio (separado de la terminal)",
     "debug": "Activar el modo de depuración",
-    "optional_i2p": "Activar el eepsite I2P opcional (opcional)",
+    "optional_i2p": "Eepsite I2P (activado por defecto en contenedores; use --i2p=false para desactivarlo)",
     "color": "Salida en color",
     "language": "Idioma de salida",
     "service_cmd": "Gestión del servicio",

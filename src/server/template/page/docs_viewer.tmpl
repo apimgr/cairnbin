@@ -1,0 +1,17 @@
+{{define "meta" -}}
+<title>{{.ViewerTitle}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{.ViewerLead}}">
+{{end}}
+
+{{define "content"}}
+  <div class="container container-lg">
+    <header class="page-header">
+      <h1 class="page-title">{{.ViewerTitle}}</h1>
+      <p class="page-lead">{{.ViewerLead}}</p>
+    </header>
+    <section class="section-card" aria-labelledby="api-explorer-heading">
+      <h2 id="api-explorer-heading">{{.ViewerSection}}</h2>
+      {{.ViewerContent}}
+    </section>
+  </div>
+{{end}}

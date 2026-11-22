@@ -27,15 +27,17 @@ import (
 	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/common/secretbox"
 	"github.com/apimgr/cairnbin/src/logging"
+	"github.com/apimgr/cairnbin/src/paths"
 	"github.com/apimgr/cairnbin/src/updater"
 )
 
 // Config is the top-level configuration for the cairnbin server.
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
-	Paste    PasteConfig    `yaml:"paste"`
-	Web      WebConfig      `yaml:"web"`
+	Server   ServerConfig       `yaml:"server"`
+	Database DatabaseConfig     `yaml:"database"`
+	Paste    PasteConfig        `yaml:"paste"`
+	Web      WebConfig          `yaml:"web"`
+	Data     SecurityDataConfig `yaml:"data"`
 	// FirstRun is true when Load() created server.yml because none existed.
 	// Runtime-only — never persisted (startup step 20, AI.md:10631).
 	FirstRun     bool              `yaml:"-"`
@@ -641,12 +643,12 @@ type TorConfig struct {
 	ContactEmail string `yaml:"contact_email"`
 }
 
-// I2PConfig configures the optional, opt-in I2P eepsite (PART 31.2).
-// Disabled by default — unlike Tor, no provider is contacted and no port
-// is allocated unless Enabled is explicitly set true.
+// I2PConfig configures the optional I2P eepsite (PART 31.2).
+// Its built-in default is enabled in containers and disabled elsewhere.
 type I2PConfig struct {
-	// Enabled opts into the I2P eepsite; default false (unlike Tor, which
-	// auto-enables whenever the tor binary is found).
+	// Enabled controls the I2P eepsite; the built-in default is true in a
+	// container and false elsewhere (unlike Tor, which auto-enables whenever
+	// the tor binary is found).
 	Enabled bool `yaml:"enabled"`
 
 	// Binary is the i2pd binary path; empty = auto-detect. When found, the
@@ -1403,7 +1405,8 @@ func (d DebugConfig) MaxBodyLogBytes() int {
 
 // ServerSecurityConfig is the server.security block (AI.md PART 11): at-rest
 // encryption key, IP allow/block lists, abuse detection and the downloaded
-// security data sources. The security.txt fields stay in web.security.
+// blocklist sources, and security reports. CVE and Trivy database settings
+// live in the top-level data section. Security.txt fields stay in web.security.
 type ServerSecurityConfig struct {
 	// EncryptionKey is the 32-byte AES-256-GCM key (hex-encoded) used for at-rest
 	// encryption of sensitive server data (DNS credentials, security reports, etc.).
@@ -1419,15 +1422,15 @@ type ServerSecurityConfig struct {
 	BlockedIPs []string `yaml:"blocked_ips"`
 	// AbuseDetection configures automatic detection and temporary IP blocking.
 	AbuseDetection AbuseDetectionConfig `yaml:"abuse_detection"`
-	// Blocklists configures the IP/domain blocklist sources downloaded daily by
-	// the scheduler into {data_dir}/security/blocklists/ (PART 18/19).
-	Blocklists BlocklistsConfig `yaml:"blocklists"`
-	// CVE configures the CVE database source downloaded daily by the scheduler
-	// into {data_dir}/security/cve/ (PART 18/19).
-	CVE CVEConfig `yaml:"cve"`
-	// Trivy configures the Aqua Trivy vulnerability database downloaded daily by
-	// the scheduler into {data_dir}/security/trivy/ (PART 18/19).
-	Trivy TrivyConfig `yaml:"trivy"`
+	// Blocklists configures IP/domain blocklist sources downloaded daily by the
+	// scheduler into {data_dir}/security/blocklists/ (PART 18/19).
+	Blocklists BlocklistsConfig      `yaml:"blocklists"`
+	Reports    SecurityReportsConfig `yaml:"reports"`
+}
+
+// SecurityReportsConfig controls retention of closed coordinated-disclosure reports.
+type SecurityReportsConfig struct {
+	RetentionDays int `yaml:"retention_days"`
 }
 
 // AllowlistEntry is one server.security.allowlist item (AI.md PART 11): an IP
@@ -1466,24 +1469,33 @@ func (c ServerSecurityConfig) AllowlistCIDRs() []string {
 	return out
 }
 
-// BlocklistSource is a single downloadable blocklist: File is the destination
-// filename within the blocklists directory; URL is the download source.
+var blocklistSourceIDPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
+
+// BlocklistSource is an operator-added blocklist source.
 type BlocklistSource struct {
-	File string `yaml:"file"`
-	URL  string `yaml:"url"`
+	ID      string `yaml:"id"`
+	Type    string `yaml:"type"`
+	URL     string `yaml:"url"`
+	Enabled *bool  `yaml:"enabled"`
 }
 
-// BlocklistsConfig holds the configurable blocklist download sources.
+// ValidID reports whether this source has a safe unique filename identifier.
+func (s BlocklistSource) ValidID() bool {
+	return s.ID != "" && s.ID != "firehol_level1" && blocklistSourceIDPattern.MatchString(s.ID)
+}
+
+// IsEnabled reports whether the source is enabled; omitted enabled defaults true.
+func (s BlocklistSource) IsEnabled() bool { return s.Enabled == nil || *s.Enabled }
+
+// BlocklistsConfig holds operator-added blocklist sources. The built-in
+// firehol_level1 source is managed by the application and is not configurable.
 type BlocklistsConfig struct {
-	Enabled bool              `yaml:"enabled"`
-	Sources []BlocklistSource `yaml:"sources"`
+	Enabled      bool              `yaml:"enabled"`
+	ExtraSources []BlocklistSource `yaml:"extra_sources"`
 }
 
 // CVEConfig holds the configurable CVE database download settings.
 type CVEConfig struct {
-	Enabled bool `yaml:"enabled"`
-	// File is the destination filename within the cve directory.
-	File string `yaml:"file"`
 	// Source is the download URL for the CVE feed.
 	Source string `yaml:"source"`
 	// FilterByCPE restricts the feed to CVEs matching CPE strings derived from
@@ -1491,6 +1503,14 @@ type CVEConfig struct {
 	// cleanly onto Go module paths and no derivation is defined, so guessing
 	// wrong would silently skip a real CVE. Defaults to false (full feed).
 	FilterByCPE bool `yaml:"filter_by_cpe"`
+	// APIKey is the optional NVD API key and is stored in secrets.yml.
+	APIKey string `yaml:"api_key"`
+}
+
+// SecurityDataConfig contains external security dataset sources from data.*.
+type SecurityDataConfig struct {
+	CVE   CVEConfig   `yaml:"cve"`
+	Trivy TrivyConfig `yaml:"trivy"`
 }
 
 // TrivyConfig holds the Aqua Trivy vulnerability database download settings.
@@ -1904,6 +1924,10 @@ type CSPConfig struct {
 // the "random 64xxx on first run" rule described in PART 5.
 func DefaultConfig() *Config {
 	return &Config{
+		Data: SecurityDataConfig{
+			CVE:   CVEConfig{Source: "https://services.nvd.nist.gov/rest/json/cves/2.0"},
+			Trivy: TrivyConfig{Enabled: false, Source: "ghcr.io/aquasecurity/trivy-db:2"},
+		},
 		Server: ServerConfig{
 			Debug: DebugConfig{
 				Pprof:                true,
@@ -1924,28 +1948,10 @@ func DefaultConfig() *Config {
 					AutoAlert:    true,
 				},
 				Blocklists: BlocklistsConfig{
-					Enabled: true,
-					Sources: []BlocklistSource{
-						{
-							File: "firehol_level1.txt",
-							URL:  "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
-						},
-						{
-							File: "spamhaus_drop.txt",
-							URL:  "https://www.spamhaus.org/drop/drop.txt",
-						},
-					},
+					Enabled:      true,
+					ExtraSources: []BlocklistSource{},
 				},
-				CVE: CVEConfig{
-					Enabled:     false,
-					File:        "nvd.json",
-					Source:      "https://services.nvd.nist.gov/rest/json/cves/2.0",
-					FilterByCPE: false,
-				},
-				Trivy: TrivyConfig{
-					Enabled: false,
-					Source:  "ghcr.io/aquasecurity/trivy-db:2",
-				},
+				Reports: SecurityReportsConfig{RetentionDays: 365},
 			},
 			Port:       "",
 			Address:    "[::]",
@@ -2075,7 +2081,7 @@ func DefaultConfig() *Config {
 				VirtualPort:               80,
 			},
 			I2P: I2PConfig{
-				Enabled:          false,
+				Enabled:          paths.IsContainer(),
 				Binary:           "",
 				SAMAddress:       "127.0.0.1:7656",
 				VirtualPort:      80,
@@ -3398,6 +3404,10 @@ func Validate(cfg *Config) {
 		cfg.Server.Compression.Types = d.Server.Compression.Types
 	}
 
+	if cfg.Server.Security.Reports.RetentionDays < 1 {
+		log.Printf("[config] WARNING: invalid server.security.reports.retention_days %d, using default %d", cfg.Server.Security.Reports.RetentionDays, d.Server.Security.Reports.RetentionDays)
+		cfg.Server.Security.Reports.RetentionDays = d.Server.Security.Reports.RetentionDays
+	}
 	ad := &cfg.Server.Security.AbuseDetection.RequestFlood
 	if ad.Multiplier < 1 {
 		log.Printf("[config] WARNING: invalid abuse_detection.request_flood.multiplier %d, using default 10", ad.Multiplier)
@@ -4000,6 +4010,9 @@ func stripInheritedWebhookSecrets(cfg *Config, contact *ContactConfig) {
 // file; drop-ins remain independent inputs and continue to win on reload.
 func persistGeneratedSecrets(configPath string, cfg *Config) error {
 	values := map[string]string{}
+	if cfg.Data.CVE.APIKey != "" {
+		values["data.cve.api_key"] = cfg.Data.CVE.APIKey
+	}
 	for _, key := range []string{"server.token", "server.security.encryption_key", "server.security.encryption_key_version"} {
 		source := cfg.SourceFile(key)
 		if source == "" || source == "generated" {

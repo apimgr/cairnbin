@@ -2,12 +2,13 @@ package task_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/apimgr/cairnbin/src/task"
@@ -65,15 +66,19 @@ func TestBlocklistUpdate_DownloadsSource(t *testing.T) {
 	}
 }
 
-// TestCVEUpdate_DownloadsSource verifies the CVE task downloads its source.
+// TestCVEUpdate_DownloadsSource verifies the NVD API response is stored as a
+// validated array of CVE objects rather than as the API response envelope.
 func TestCVEUpdate_DownloadsSource(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"cve":[]}`))
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("resultsPerPage") != "2000" || r.URL.Query().Get("startIndex") != "0" {
+			t.Errorf("unexpected pagination query: %s", r.URL.RawQuery)
+		}
+		_, _ = w.Write([]byte(`{"totalResults":1,"resultsPerPage":2000,"startIndex":0,"vulnerabilities":[{"cve":{"id":"CVE-2026-1234","descriptions":[]}}]}`))
 	}))
 	defer srv.Close()
 
 	dir := t.TempDir()
-	fn := task.CVEUpdate(dir, task.Source{Name: "nvd.json", URL: srv.URL})
+	fn := task.CVEUpdateWithClient(dir, srv.Client(), task.Source{Name: "nvd.json", URL: srv.URL})
 	if err := fn(context.Background()); err != nil {
 		t.Fatalf("CVEUpdate error: %v", err)
 	}
@@ -82,8 +87,12 @@ func TestCVEUpdate_DownloadsSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read downloaded file: %v", err)
 	}
-	if string(got) != `{"cve":[]}` {
-		t.Errorf("downloaded content = %q", got)
+	var records []map[string]any
+	if err := json.Unmarshal(got, &records); err != nil {
+		t.Fatalf("stored NVD records are not a JSON array: %v", err)
+	}
+	if len(records) != 1 || records[0]["id"] != "CVE-2026-1234" {
+		t.Errorf("stored records = %s", got)
 	}
 }
 
@@ -151,5 +160,80 @@ func TestBlocklistUpdate_EmptyBodyIsError(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "security", "blocklists", "firehol_level1.txt")); !os.IsNotExist(err) {
 		t.Errorf("empty body should not create file, err=%v", err)
+	}
+}
+
+func TestBlocklistUpdate_RejectsFileWithoutValidIPEntries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("not-an-ip\n# a comment only\n"))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	blDir := filepath.Join(dir, "security", "blocklists")
+	if err := os.MkdirAll(blDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(blDir, "firehol_level1.txt")
+	if err := os.WriteFile(path, []byte("192.0.2.0/24\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	fn := task.BlocklistUpdate(dir, task.Source{Name: "firehol_level1.txt", URL: srv.URL})
+	if err := fn(context.Background()); err != nil {
+		t.Fatalf("expected graceful degradation, got %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "192.0.2.0/24\n" {
+		t.Fatalf("existing valid blocklist was replaced: %q", got)
+	}
+}
+
+func TestBlocklistUpdateAcceptsValidDomainEntries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("# domains\nExample.COM.\n*.example.co.uk\n"))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	fn := task.BlocklistUpdate(dir, task.Source{Name: "domains.txt", URL: srv.URL, Type: "domain"})
+	if err := fn(context.Background()); err != nil {
+		t.Fatalf("BlocklistUpdate: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "security", "blocklists", "domains.txt"))
+	if err != nil {
+		t.Fatalf("read downloaded domain list: %v", err)
+	}
+	if string(got) != "# domains\nExample.COM.\n*.example.co.uk\n" {
+		t.Fatalf("downloaded content changed: %q", got)
+	}
+}
+
+func TestBlocklistUpdateRejectsDomainFileWithoutValidEntries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("*.com\nhttp://bad host\n127.0.0.1\n"))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "security", "blocklists", "domains.txt")
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("safe.example\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	fn := task.BlocklistUpdate(dir, task.Source{Name: "domains.txt", URL: srv.URL, Type: "domain"})
+	if err := fn(context.Background()); err != nil {
+		t.Fatalf("BlocklistUpdate should degrade gracefully: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "safe.example\n" {
+		t.Fatalf("invalid update replaced the current list: %q", got)
 	}
 }

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/hmac"
 	crand "crypto/rand"
@@ -182,14 +184,66 @@ type I2PInfo struct {
 
 // ChecksInfo reports component health as "ok" or "error".
 type ChecksInfo struct {
-	Database  string `json:"database"`
-	Cache     string `json:"cache"`
-	Disk      string `json:"disk"`
-	Scheduler string `json:"scheduler"`
-	Tor       string `json:"tor,omitempty"`
-	I2P       string `json:"i2p,omitempty"`
+	Database  string                `json:"database"`
+	Cache     string                `json:"cache"`
+	Disk      string                `json:"disk"`
+	Scheduler string                `json:"scheduler"`
+	Tor       string                `json:"tor,omitempty"`
+	I2P       string                `json:"i2p,omitempty"`
+	Datasets  []health.DatasetCheck `json:"-"`
 	// Config is an APP-SPECIFIC check (AI.md:17202 "Add your checks here").
 	Config string `json:"config"`
+}
+
+func (c ChecksInfo) MarshalJSON() ([]byte, error) {
+	var out bytes.Buffer
+	out.WriteByte('{')
+	first := true
+	write := func(key string, value string) error {
+		if !first {
+			out.WriteByte(',')
+		}
+		first = false
+		name, err := json.Marshal(key)
+		if err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		out.Write(name)
+		out.WriteByte(':')
+		out.Write(encoded)
+		return nil
+	}
+	for _, item := range []struct{ key, value string }{{"database", c.Database}, {"cache", c.Cache}, {"disk", c.Disk}, {"scheduler", c.Scheduler}} {
+		if err := write(item.key, item.value); err != nil {
+			return nil, err
+		}
+	}
+	if c.Tor != "" {
+		if err := write("tor", c.Tor); err != nil {
+			return nil, err
+		}
+	}
+	if c.I2P != "" {
+		if err := write("i2p", c.I2P); err != nil {
+			return nil, err
+		}
+	}
+	for _, check := range c.Datasets {
+		if err := write(check.Key, check.Status); err != nil {
+			return nil, err
+		}
+	}
+	if c.Config != "" {
+		if err := write("config", c.Config); err != nil {
+			return nil, err
+		}
+	}
+	out.WriteByte('}')
+	return out.Bytes(), nil
 }
 
 // StatsInfo holds public-safe aggregate statistics.
@@ -212,20 +266,24 @@ type SchedulerAPI interface {
 
 // Server owns the HTTP router and all handler dependencies.
 type Server struct {
-	router              *chi.Mux
-	db                  database.DB
-	cacheStore          cache.Cache
-	cfg                 *config.Config
-	cfgMgr              *config.ConfigManager
-	lastSMTPConfig      config.EmailConfig
-	lastEmailLanguage   string
-	lastI2PConfig       config.I2PConfig
-	emailConfigChangeFn func(config.EmailConfig, string)
-	templates           map[string]*template.Template
-	pasteHandler        *handler.PasteHandler
-	compatHandler       *compat.Handler
-	swaggerHandler      *swagger.Handler
-	mcpHandler          *mcp.Handler
+	router               *chi.Mux
+	db                   database.DB
+	cacheStore           cache.Cache
+	cfg                  *config.Config
+	cfgMgr               *config.ConfigManager
+	lastSMTPConfig       config.EmailConfig
+	lastEmailLanguage    string
+	lastI2PConfig        config.I2PConfig
+	lastBlocklistsConfig config.BlocklistsConfig
+	lastGeoIPConfig      config.GeoIPConfig
+	lastCVEConfig        config.CVEConfig
+	lastTrivyConfig      config.TrivyConfig
+	emailConfigChangeFn  func(config.EmailConfig, string)
+	templates            map[string]*template.Template
+	pasteHandler         *handler.PasteHandler
+	compatHandler        *compat.Handler
+	swaggerHandler       *swagger.Handler
+	mcpHandler           *mcp.Handler
 	// ipBlocks holds temporary (auto) IP blocks and flood counters (PART 11).
 	ipBlocks           *ipBlocks
 	graphqlHandler     *graphql.Handler
@@ -235,6 +293,12 @@ type Server struct {
 	outboundHTTPClient *http.Client
 	i2pManager         *i2p.Manager
 	i2pMonitorOnce     sync.Once
+	overlayMu          sync.RWMutex
+	torStatus          string
+	torHostname        string
+	i2pStatus          string
+	i2pHostname        string
+	i2pProvider        i2p.Provider
 	readLimiter        *rateLimiter
 	writeLimiter       *rateLimiter
 	healthLimiter      *rateLimiter
@@ -304,7 +368,11 @@ type Server struct {
 	resolvedProxyMu sync.RWMutex
 	// resolvedProxyIPs maps each DNS name in trusted_proxies.additional to its
 	// current set of resolved IP addresses.  Refreshed every 5 minutes (PART 12).
-	resolvedProxyIPs map[string][]net.IP
+	resolvedProxyIPs     map[string][]net.IP
+	blocklistCacheMu     sync.RWMutex
+	blocklistCache       *blocklistStore
+	blocklistFingerprint string
+	datasetChecks        health.CheckRegistry
 	// dnsConfigMu protects the last applied DNS credential identity across config reloads.
 	dnsConfigMu           sync.Mutex
 	lastDNSProvider       string
@@ -400,7 +468,7 @@ func (s *Server) SetPreparedListeners(listeners []net.Listener) {
 }
 
 // SetStartupBannerFn registers the startup banner callback run after listeners
-// are serving and managed overlay services have completed startup.
+// are serving and overlay startup has been scheduled.
 func (s *Server) SetStartupBannerFn(fn func()) {
 	s.startupBannerFn = fn
 }
@@ -422,6 +490,17 @@ func (s *Server) afterPrivilegeDrop(ctx context.Context, cfg *config.Config) {
 }
 
 func (s *Server) printStartupBanner() {
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		s.overlayMu.RLock()
+		torPending := s.torStatus == "starting" && s.torManager != nil
+		i2pPending := s.i2pStatus == "starting" && s.i2pManager != nil
+		s.overlayMu.RUnlock()
+		if (!torPending || s.torManager.OnionAddress() != "") && (!i2pPending || s.i2pManager.Address() != "") {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	if s.startupBannerFn != nil {
 		s.startupBannerFn()
 	}
@@ -620,6 +699,10 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		lastSMTPConfig:        cfg.Server.Notifications.Email,
 		lastEmailLanguage:     cfg.Server.Lang,
 		lastI2PConfig:         cfg.Server.I2P,
+		lastBlocklistsConfig:  cfg.Server.Security.Blocklists,
+		lastGeoIPConfig:       cfg.Server.GeoIP,
+		lastCVEConfig:         cfg.Data.CVE,
+		lastTrivyConfig:       cfg.Data.Trivy,
 		version:               version,
 		commitID:              commitID,
 		buildDate:             buildDate,
@@ -666,6 +749,11 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	s.swaggerHandler.SetThemeResolver(s.themeFromRequest)
 	s.swaggerHandler.SetCSRFTokenResolver(s.csrfTokenFromRequest)
 	s.swaggerHandler.SetLanguageResolver(i18n.LangFromRequest)
+	s.swaggerHandler.SetPageRenderer(func(w http.ResponseWriter, r *http.Request, title, lead, section, content string) {
+		data := s.pageData()
+		data["ViewerTitle"], data["ViewerLead"], data["ViewerSection"], data["ViewerContent"] = title, lead, section, template.HTML(content)
+		s.renderTemplate(w, r, "docs_viewer.html", data)
+	})
 	s.mcpHandler = mcp.New(mcp.Config{
 		APIVersion:    s.apiVersion(),
 		ServerName:    cfg.Web.SiteTitle,
@@ -678,6 +766,11 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	s.graphqlHandler.SetAssetPrefixResolver(s.assetPrefix)
 	s.graphqlHandler.SetThemeResolver(s.themeFromRequest)
 	s.graphqlHandler.SetCSRFTokenResolver(s.csrfTokenFromRequest)
+	s.graphqlHandler.SetPageRenderer(func(w http.ResponseWriter, r *http.Request, title, lead, section, content string) {
+		data := s.pageData()
+		data["ViewerTitle"], data["ViewerLead"], data["ViewerSection"], data["ViewerContent"] = title, lead, section, template.HTML(content)
+		s.renderTemplate(w, r, "docs_viewer.html", data)
+	})
 	s.metricsCollector = metric.NewWithOptions(metric.Options{
 		Version:   version,
 		Commit:    commitID,
@@ -876,7 +969,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	// (PART 11 → GPG Keypair Management). Never fails startup; falls back to
 	// AES-256-GCM report encryption when unavailable. Prune any expired parked key.
 	s.ensureSecurityKeypair()
-	s.pruneRotatedKey()
+	s.CleanupRotatedPGPKey()
 
 	// Runtime self-healing maintenance monitor (PART 20). Enters maintenance mode
 	// on a critical error (DB connection loss or file-write failure) and rejects
@@ -931,6 +1024,9 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	s.domainLearner = newDomainLearner(&cfg.Server.URLDetection)
 	// Pre-resolved DNS proxy IPs map (Gap 1); populated by refreshDNSTrustedProxies.
 	s.resolvedProxyIPs = make(map[string][]net.IP)
+	s.registerBlocklistHealthChecks(cfg)
+	s.registerSecurityDataHealthChecks(cfg)
+	s.ReloadBlocklists()
 
 	s.setupRoutes()
 	return s
@@ -978,6 +1074,9 @@ func (s *Server) buildTemplates() (map[string]*template.Template, error) {
 			return renderMarkdown(s)
 		},
 		"privacyText": localizedPrivacyText,
+		"healthCheckLabel": func(lang, key string) string {
+			return healthCheckLabel(lang, key)
+		},
 		"trackingEnabled": func() bool {
 			return s.liveCfg().Server.Tracking.Enabled()
 		},
@@ -1039,6 +1138,28 @@ func (s *Server) buildTemplates() (map[string]*template.Template, error) {
 	return pages, nil
 }
 
+func healthCheckLabel(lang, key string) string {
+	translation := i18n.Translate(lang, "health.check."+key)
+	if translation != "health.check."+key {
+		return translation
+	}
+	kind, id, found := strings.Cut(key, "_")
+	if !found {
+		return strings.ReplaceAll(key, "_", " ")
+	}
+	label := strings.ReplaceAll(id, "_", " ")
+	switch kind {
+	case "blocklist":
+		return "Blocklist: " + label
+	case "geoip":
+		return "GeoIP: " + label
+	case "data":
+		return "Data: " + label
+	default:
+		return strings.ReplaceAll(key, "_", " ")
+	}
+}
+
 // userTimeLayout is the canonical user-facing timestamp format (AI.md 19714):
 // "December 4, 2025 at 13:05:13 EST". RFC 3339 is reserved for machine-readable
 // surfaces (API responses, logs, health endpoints).
@@ -1076,6 +1197,20 @@ func fmtUserDate(t time.Time) string {
 // It updates rate limiter thresholds and tracks restart-required key changes.
 func (s *Server) OnConfigChange(next *config.Config) {
 	if next != nil {
+		datasetsChanged := !reflect.DeepEqual(s.lastBlocklistsConfig, next.Server.Security.Blocklists) ||
+			!reflect.DeepEqual(s.lastGeoIPConfig, next.Server.GeoIP) ||
+			!reflect.DeepEqual(s.lastCVEConfig, next.Data.CVE) ||
+			!reflect.DeepEqual(s.lastTrivyConfig, next.Data.Trivy)
+		if datasetsChanged {
+			s.lastBlocklistsConfig = next.Server.Security.Blocklists
+			s.lastGeoIPConfig = next.Server.GeoIP
+			s.lastCVEConfig = next.Data.CVE
+			s.lastTrivyConfig = next.Data.Trivy
+			s.datasetChecks.Reset()
+			s.registerBlocklistHealthChecks(next)
+			s.registerSecurityDataHealthChecks(next)
+			s.reloadBlocklistsWithConfig(next)
+		}
 		emailConfigChanged := !reflect.DeepEqual(s.lastSMTPConfig, next.Server.Notifications.Email)
 		languageChanged := s.lastEmailLanguage != next.Server.Lang
 		if emailConfigChanged || languageChanged {
@@ -1292,7 +1427,9 @@ func (s *Server) UpdateGeoIP() error {
 	if s.geoipDB == nil {
 		return nil
 	}
-	return s.geoipDB.Update()
+	err := s.geoipDB.Update()
+	s.datasetChecks.Refresh(time.Now())
+	return err
 }
 
 // OutboundHTTPClient returns the server's shared client for app-owned external
@@ -1690,8 +1827,11 @@ func (s *Server) setupRoutes() {
 	// below; each already content-negotiates its own response.
 	r.Get("/server/preferences", s.handlePreferences)
 	r.Get("/server/preferences/tokens", s.handleOwnerTokensPage)
-	r.Get("/server/preferences/export", s.handlePreferencesExport)
-	r.Get("/server/preferences/import", s.handlePreferencesImport)
+	r.Get("/server/preferences/sync", s.handlePreferencesExport)
+	r.Post("/server/preferences/sync", s.maybeRateLimit(s.handlePreferencesSyncPost))
+	r.Get("/server/preferences/sync/import", s.handlePreferencesImport)
+	r.Get("/server/preferences/export", s.redirectLegacyPreferencesPath)
+	r.Get("/server/preferences/import", s.redirectLegacyPreferencesPath)
 	r.Get("/server/contact", s.maybeReadRateLimit(s.handleContact))
 	r.Post("/server/contact", s.maybeStrictRateLimit(s.handleContactPost))
 	// Coordinated-disclosure public pages (PART 11, AI.md 14157-14161).
@@ -1832,8 +1972,8 @@ func (s *Server) setupRoutes() {
 		r.Post("/server/preferences/tokens/{id}/rotate", s.maybeStrictRateLimit(s.handleLinkedTokenRotate))
 		r.Patch("/server/preferences/tokens/{id}", s.maybeRateLimit(s.handleLinkedTokenUpdate))
 		r.Delete("/server/preferences/tokens/{id}", s.maybeRateLimit(s.handleLinkedTokenRevoke))
-		r.Get("/server/preferences/export", s.handlePreferencesExport)
-		r.Get("/server/preferences/import", s.handlePreferencesImport)
+		r.Get("/server/preferences/sync", s.handlePreferencesExport)
+		r.Get("/server/preferences/sync/import", s.handlePreferencesImport)
 		r.Get("/server/swagger", s.swaggerHandler.ServeSpec)
 		r.Handle("/server/mcp", s.mcpHandler)
 		r.Post("/server/reports/{name}", s.handleReports)
@@ -3013,36 +3153,99 @@ func (s *Server) startTermbin(ctx context.Context, cfg *config.Config) func() {
 	return func() { _ = ln.Close() }
 }
 
-// startManagedNetworkServices starts overlays after privilege drop and before
-// HTTP listeners bind, so their private state is owned by the service account.
+// startManagedNetworkServices schedules overlay startup after privilege drop.
+// Starting each manager in its own goroutine keeps provider bootstrap from
+// delaying the clearnet listener.
 func (s *Server) startManagedNetworkServices() {
 	if s.torManager != nil {
-		if err := s.torManager.Start(); err != nil {
-			log.Printf("tor: start failed: %v", err)
-		} else if s.torManager.Running() {
-			go s.torManager.Monitor()
-			s.persistOnionAddress()
-			if s.liveCfg().Server.Tor.UseNetwork {
-				if s.geoipDB != nil {
-					go func() {
-						if err := s.UpdateGeoIP(); err != nil {
-							log.Printf("geoip: initial Tor-routed refresh failed: %v", err)
-						}
-					}()
-				}
-				if key := s.projectPGPPublicKey(); key != "" && s.liveCfg().PublishPGPKeyEnabled() {
-					go s.publishToKeyservers(key)
-				}
-			}
+		s.overlayMu.Lock()
+		if s.torManager.Enabled() {
+			s.torStatus = "starting"
+		} else {
+			s.torStatus = "disabled"
+		}
+		s.overlayMu.Unlock()
+		if s.torManager.Enabled() {
+			go s.startTorManager()
 		}
 	}
 	if s.i2pManager != nil {
-		if err := s.i2pManager.Start(); err != nil {
-			log.Printf("i2p: start failed: %v", err)
-		} else if s.i2pManager.Running() {
-			s.startI2PMonitor()
-			s.persistB32Address()
+		if s.i2pManager.Enabled() {
+			s.overlayMu.Lock()
+			s.i2pStatus = "starting"
+			s.i2pProvider = i2p.ProviderNone
+			s.overlayMu.Unlock()
+			go s.startI2PManager()
+		} else {
+			s.overlayMu.Lock()
+			s.i2pStatus = "disabled"
+			s.i2pProvider = i2p.ProviderNone
+			s.overlayMu.Unlock()
 		}
+	}
+}
+
+func (s *Server) startTorManager() {
+	err := s.torManager.Start()
+	running := err == nil && s.torManager.Running()
+	s.overlayMu.Lock()
+	switch {
+	case running:
+		s.torStatus = "healthy"
+		s.torHostname = s.torManager.OnionAddress()
+	case err != nil:
+		s.torStatus = "unavailable"
+	default:
+		s.torStatus = "disabled"
+	}
+	s.overlayMu.Unlock()
+	if err != nil {
+		log.Printf("tor: start failed: %v", err)
+		return
+	}
+	if !running {
+		return
+	}
+	go s.torManager.Monitor()
+	s.persistOnionAddress()
+	if s.liveCfg().Server.Tor.UseNetwork {
+		if s.geoipDB != nil {
+			go func() {
+				if err := s.UpdateGeoIP(); err != nil {
+					log.Printf("geoip: initial Tor-routed refresh failed: %v", err)
+				}
+			}()
+		}
+		if key := s.projectPGPPublicKey(); key != "" && s.liveCfg().PublishPGPKeyEnabled() {
+			go s.publishToKeyservers(key)
+		}
+	}
+}
+
+func (s *Server) startI2PManager() {
+	err := s.i2pManager.Start()
+	running := err == nil && s.i2pManager.Running()
+	s.overlayMu.Lock()
+	switch {
+	case running:
+		s.i2pStatus = "healthy"
+		s.i2pHostname = s.i2pManager.Address()
+		s.i2pProvider = s.i2pManager.Provider()
+	case err != nil:
+		s.i2pStatus = "unavailable"
+		s.i2pProvider = i2p.ProviderI2Pd
+	default:
+		s.i2pStatus = "disabled"
+		s.i2pProvider = i2p.ProviderNone
+	}
+	s.overlayMu.Unlock()
+	if err != nil {
+		log.Printf("i2p: start failed: %v", err)
+		return
+	}
+	if running {
+		s.startI2PMonitor()
+		s.persistB32Address()
 	}
 }
 
@@ -3397,6 +3600,7 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		Disk:      "ok",
 		Config:    "ok",
 		Scheduler: "ok",
+		Datasets:  s.datasetChecks.Snapshot(),
 	}
 
 	if err := s.db.Ping(); err != nil {
@@ -3421,31 +3625,41 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		checks.Scheduler = "error"
 	}
 
-	// Tor health check — report only when Tor is enabled.
+	// Overlay bootstrap is non-critical: starting is healthy, while a failed
+	// provider degrades the overall status without interrupting clearnet.
 	torInfo := s.buildTorInfo()
 	if torInfo.Enabled {
-		if torInfo.Running {
-			checks.Tor = "ok"
-		} else {
-			checks.Tor = "error"
+		checks.Tor = "ok"
+		if torInfo.Status == "unavailable" {
+			checks.Tor = "degraded"
 		}
 	}
 
-	// I2P health check — report only when I2P is enabled.
+	// I2P health follows the same non-critical overlay contract as Tor.
 	i2pInfo := s.buildI2PInfo()
 	if i2pInfo.Enabled {
-		if i2pInfo.Running {
-			checks.I2P = "ok"
-		} else {
-			checks.I2P = "error"
+		checks.I2P = "ok"
+		if i2pInfo.Status == "unavailable" {
+			checks.I2P = "degraded"
 		}
 	}
 
 	status := "healthy"
 	if checks.Database == "error" || checks.Disk == "error" {
 		status = "unhealthy"
-	} else if checks.Cache == "error" || checks.Scheduler == "error" || checks.Tor == "error" || checks.I2P == "error" {
+	} else if checks.Cache == "error" || checks.Scheduler == "error" || checks.Tor == "error" || checks.I2P == "error" || checks.Tor == "degraded" || checks.I2P == "degraded" {
 		status = "degraded"
+	}
+	for _, check := range checks.Datasets {
+		if check.Status == "error" || check.Status == "degraded" {
+			if check.Critical {
+				status = "unhealthy"
+				break
+			}
+			if status == "healthy" {
+				status = "degraded"
+			}
+		}
 	}
 
 	// Maintenance mode overrides both status and mode (PART 20).
@@ -3539,11 +3753,15 @@ func (s *Server) buildTorInfo() TorInfo {
 	if s.torManager == nil || !s.torManager.Enabled() {
 		return TorInfo{Enabled: false, Running: false, Status: "disabled", Hostname: ""}
 	}
-	running := s.torManager.Running()
-	onion := s.torManager.OnionAddress()
-	status := "starting"
-	if running {
-		status = "healthy"
+	s.overlayMu.RLock()
+	status, onion := s.torStatus, s.torHostname
+	s.overlayMu.RUnlock()
+	if status == "" {
+		status = "starting"
+	}
+	running := status == "healthy"
+	if !running {
+		onion = ""
 	}
 	return TorInfo{
 		Enabled:  true,
@@ -3558,21 +3776,25 @@ func (s *Server) buildI2PInfo() I2PInfo {
 	if s.i2pManager == nil {
 		return I2PInfo{Enabled: false, Running: false, Status: "disabled", Hostname: "", Provider: "none"}
 	}
-	if !s.i2pManager.Enabled() {
+	s.overlayMu.RLock()
+	status, addr, provider := s.i2pStatus, s.i2pHostname, s.i2pProvider
+	s.overlayMu.RUnlock()
+	if !s.i2pManager.Enabled() || status == "disabled" {
 		return I2PInfo{Enabled: false, Running: false, Status: "disabled", Hostname: "", Provider: "none"}
 	}
-	running := s.i2pManager.Running()
-	addr := s.i2pManager.Address()
-	status := "starting"
-	if running {
-		status = "healthy"
+	if status == "" {
+		status = "starting"
+	}
+	running := status == "healthy"
+	if !running {
+		addr = ""
 	}
 	return I2PInfo{
 		Enabled:  true,
 		Running:  running,
 		Status:   status,
 		Hostname: addr,
-		Provider: s.i2pManager.Provider().String(),
+		Provider: provider.String(),
 	}
 }
 
@@ -3674,13 +3896,18 @@ func writeHealthText(w http.ResponseWriter, hr HealthResponse) {
 	_, _ = fmt.Fprintf(w, "checks.database: %s\n", hr.Checks.Database)
 	_, _ = fmt.Fprintf(w, "checks.cache: %s\n", hr.Checks.Cache)
 	_, _ = fmt.Fprintf(w, "checks.disk: %s\n", hr.Checks.Disk)
-	_, _ = fmt.Fprintf(w, "checks.config: %s\n", hr.Checks.Config)
 	_, _ = fmt.Fprintf(w, "checks.scheduler: %s\n", hr.Checks.Scheduler)
 	if hr.Checks.Tor != "" {
 		_, _ = fmt.Fprintf(w, "checks.tor: %s\n", hr.Checks.Tor)
 	}
 	if hr.Checks.I2P != "" {
 		_, _ = fmt.Fprintf(w, "checks.i2p: %s\n", hr.Checks.I2P)
+	}
+	for _, check := range hr.Checks.Datasets {
+		_, _ = fmt.Fprintf(w, "checks.%s: %s\n", check.Key, check.Status)
+	}
+	if hr.Checks.Config != "" {
+		_, _ = fmt.Fprintf(w, "checks.config: %s\n", hr.Checks.Config)
 	}
 	_, _ = fmt.Fprintf(w, "stats.requests_total: %d\n", hr.Stats.RequestsTotal)
 	_, _ = fmt.Fprintf(w, "stats.requests_24h: %d\n", hr.Stats.Requests24h)
@@ -4619,6 +4846,7 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 		"SiteTitle": s.liveCfg().Web.SiteTitle,
 		"Theme":     s.liveCfg().Web.Theme,
 		"BaseURL":   s.baseURL(r),
+		"MoreHelp":  s.hubPageData(s.helpPageRegistry(), i18n.LangFromRequest(r)),
 	}
 	data["PageContent"] = renderMarkdown(s.liveCfg().Server.Pages.Help.Content)
 	s.injectTermbinData(r, data)
@@ -5519,7 +5747,7 @@ func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("action") == "reset" {
 		s.resetPreferences(w, r)
 		w.Header().Set("Clear-Site-Data", `"storage"`)
-		prefSeeOther(w, prefRedirectDest(r, r.PostFormValue("redirect")))
+		prefSeeOther(w, s.prefRedirectDest(r, r.PostFormValue("redirect"), "/"))
 		return
 	}
 
@@ -5528,14 +5756,15 @@ func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 	// are dropped; a save always answers 303, never a 4xx page (rule 9).
 	merged := url.Values{}
 	for name, values := range r.PostForm {
-		if name != "code" {
+		if name != "code" && name != "redirect" && name != "csrf_token" && name != "consent_form" && name != "consent_preferences" && name != "consent_analytics" && name != "ccpa_opt_out" && name != "action" {
 			merged[name] = values
 		}
 	}
-	for name, values := range decodePrefCode(r.PostFormValue("code")) {
-		merged[name] = values
-	}
 	valid, _, _ := validateGuestPrefs(merged)
+	if r.PostForm.Has("lang") && r.PostFormValue("lang") == "auto" {
+		http.SetCookie(w, &http.Cookie{Name: i18n.CookieName(), Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
+		delete(valid, "lang")
+	}
 	var applied []string
 	if r.PostFormValue("consent_form") == "1" {
 		state := consentState{
@@ -5545,11 +5774,13 @@ func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 		}
 		encoded, _ := json.Marshal(state)
 		http.SetCookie(w, &http.Cookie{Name: "cookie_consent", Value: url.PathEscape(string(encoded)), Path: "/", MaxAge: prefCookieMaxAge, Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
-		ccpa := "false"
-		if r.PostForm.Has("ccpa_opt_out") {
-			ccpa = "true"
+		if s.liveCfg().Server.Privacy.Data.Sold {
+			ccpa := "false"
+			if r.PostForm.Has("ccpa_opt_out") {
+				ccpa = "true"
+			}
+			http.SetCookie(w, &http.Cookie{Name: "ccpa_opt_out", Value: ccpa, Path: "/", MaxAge: prefCookieMaxAge, Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
 		}
-		http.SetCookie(w, &http.Cookie{Name: "ccpa_opt_out", Value: ccpa, Path: "/", MaxAge: prefCookieMaxAge, Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
 		s.auditConsentUpdate(r, state)
 		if state.Preferences {
 			prefsReq := r.Clone(r.Context())
@@ -5569,7 +5800,7 @@ func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 	if len(applied) > 0 && refererIsPreferencesPage(r) {
 		setFlash(w, r, "preferences_saved")
 	}
-	prefSeeOther(w, prefRedirectDest(r, r.PostFormValue("redirect")))
+	prefSeeOther(w, s.prefRedirectDest(r, r.PostFormValue("redirect"), "/"))
 }
 
 func (s *Server) resetPreferences(w http.ResponseWriter, r *http.Request) {
@@ -5680,13 +5911,13 @@ const PRECACHE_ASSETS = [
 // a first install has no active worker to wait behind and activates by itself.
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    withTimeout(caches.open(CACHE_NAME), CACHE_OPERATION_TIMEOUT_MS)
       .then(async cache => {
         await Promise.all(PRECACHE_ASSETS.map(async asset => {
           try {
             const response = await withTimeout(fetch(asset), NAV_TIMEOUT_MS);
             if (response.ok && !response.redirected) {
-              await cache.put(asset, response);
+              await withTimeout(cache.put(asset, response), CACHE_OPERATION_TIMEOUT_MS);
             }
           } catch (_) {
             // A failed precache is recoverable; navigation has its own fallback.
@@ -5700,11 +5931,12 @@ self.addEventListener('install', event => {
 // ACTIVATE — purge stale caches and claim all clients
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys()
+    withTimeout(caches.keys(), CACHE_OPERATION_TIMEOUT_MS)
+      .catch(() => [])
       .then(keys => Promise.all(
         keys
           .filter(k => belongsToAppCache(k) && k !== CACHE_NAME)
-          .map(k => caches.delete(k))
+          .map(k => withTimeout(caches.delete(k), CACHE_OPERATION_TIMEOUT_MS).catch(() => false))
       ))
       .then(() => self.clients.claim())
   );
@@ -5720,6 +5952,7 @@ self.addEventListener('message', event => {
 // A navigation never waits on the network forever: its bounded wait rejects
 // after NAV_TIMEOUT_MS so the cache/offline fallbacks can render.
 const NAV_TIMEOUT_MS = 8000;
+const CACHE_OPERATION_TIMEOUT_MS = 1000;
 function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('timeout')), ms);
@@ -5732,12 +5965,9 @@ function withTimeout(promise, ms) {
 
 async function cachedResponse(request) {
   try {
-    const response = await caches.match(request);
+    const cache = await withTimeout(caches.open(CACHE_NAME), CACHE_OPERATION_TIMEOUT_MS);
+    const response = await withTimeout(cache.match(request), CACHE_OPERATION_TIMEOUT_MS);
     if (response && response.ok && !response.redirected) return response;
-    if (response) {
-      const cache = await caches.open(CACHE_NAME);
-      await cache.delete(request);
-    }
   } catch (_) {
     // Cache failures fall through to network or the synthesized fallback.
   }
@@ -5747,8 +5977,8 @@ async function cachedResponse(request) {
 async function cacheResponse(request, response) {
   if (!response.ok || response.redirected) return;
   try {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(request, response.clone());
+    const cache = await withTimeout(caches.open(CACHE_NAME), CACHE_OPERATION_TIMEOUT_MS);
+    await withTimeout(cache.put(request, response.clone()), CACHE_OPERATION_TIMEOUT_MS);
   } catch (_) {
     // Cache failures must never prevent the network response from reaching the page.
   }
@@ -5793,7 +6023,7 @@ self.addEventListener('fetch', event => {
   if (url.pathname.startsWith(appPath('/static/'))) {
     event.respondWith(
       cachedResponse(request)
-        .then(cached => cached || fetch(request).then(response => {
+        .then(cached => cached || withTimeout(fetch(request), NAV_TIMEOUT_MS).then(response => {
           event.waitUntil(cacheResponse(request, response));
           return response;
         }))
@@ -5804,7 +6034,7 @@ self.addEventListener('fetch', event => {
 
   // Everything else: network-first, then cache, then a GUARANTEED 504
   event.respondWith(
-    fetch(request)
+    withTimeout(fetch(request), NAV_TIMEOUT_MS)
       .catch(async () =>
         (await cachedResponse(request))
           || new Response('', { status: 504, statusText: 'Gateway Timeout' })
@@ -6104,6 +6334,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	// Inject language for i18n — templates access it as .Lang
 	lang := i18n.LangFromRequest(r)
 	data["Lang"] = lang
+	data["LangName"] = nativeLanguageName(lang)
 	// Inject text direction for RTL languages (Arabic) — templates access it as .Dir
 	data["Dir"] = i18n.Direction(lang)
 	data["AvailableLanguages"] = i18n.Languages()
@@ -6228,6 +6459,7 @@ func (s *Server) renderTemplateToString(r *http.Request, name string, data map[s
 	data["CurrentPath"] = r.URL.Path
 	lang := i18n.LangFromRequest(r)
 	data["Lang"] = lang
+	data["LangName"] = nativeLanguageName(lang)
 	data["Dir"] = i18n.Direction(lang)
 	data["AvailableLanguages"] = i18n.Languages()
 	// Inject the theme resolved from the server-readable `theme` cookie (AI.md 23474)
@@ -6492,6 +6724,7 @@ func (s *Server) renderErrorPage(w http.ResponseWriter, r *http.Request, status 
 	data["CurrentPath"] = r.URL.Path
 	lang := i18n.LangFromRequest(r)
 	data["Lang"] = lang
+	data["LangName"] = nativeLanguageName(lang)
 	data["Dir"] = i18n.Direction(lang)
 	data["AvailableLanguages"] = i18n.Languages()
 	theme := s.themeFromRequest(r)
@@ -6928,6 +7161,226 @@ func peerAddr(r *http.Request) string {
 		return v
 	}
 	return r.RemoteAddr
+}
+
+// loadBlocklists returns the current in-memory blocklists, loading them once
+// only when startup has not populated the cache yet.
+func (s *Server) loadBlocklists(dir string) *blocklistStore {
+	s.blocklistCacheMu.RLock()
+	cached := s.blocklistCache
+	s.blocklistCacheMu.RUnlock()
+	if cached != nil {
+		return cached
+	}
+	loaded := s.buildBlocklists(dir)
+	s.blocklistCacheMu.Lock()
+	if s.blocklistCache == nil {
+		s.blocklistCache = loaded
+	}
+	cached = s.blocklistCache
+	s.blocklistCacheMu.Unlock()
+	return cached
+}
+
+// ReloadBlocklists atomically replaces the in-memory lists after startup,
+// configuration changes, or a scheduled data refresh.
+func (s *Server) ReloadBlocklists() {
+	s.reloadBlocklistsWithConfig(s.liveCfg())
+}
+
+func (s *Server) reloadBlocklistsWithConfig(cfg *config.Config) {
+	dir := s.blocklistDir(cfg)
+	loaded := s.buildBlocklists(dir)
+	fingerprint := blocklistDirectoryFingerprint(dir)
+	s.blocklistCacheMu.Lock()
+	s.blocklistCache = loaded
+	s.blocklistFingerprint = fingerprint
+	s.blocklistCacheMu.Unlock()
+	s.datasetChecks.Refresh(time.Now())
+}
+
+func (s *Server) RefreshDatasetChecks() {
+	dir := s.blocklistDir(s.liveCfg())
+	fingerprint := blocklistDirectoryFingerprint(dir)
+	s.blocklistCacheMu.RLock()
+	changed := fingerprint != s.blocklistFingerprint
+	s.blocklistCacheMu.RUnlock()
+	if changed {
+		s.ReloadBlocklists()
+		return
+	}
+	s.datasetChecks.Refresh(time.Now())
+}
+
+func (s *Server) blocklistDir(cfg *config.Config) string {
+	dataDir := strings.TrimSpace(cfg.Server.DataDir)
+	if dataDir == "" {
+		dataDir = s.dataDir
+	}
+	return filepath.Join(dataDir, "security", "blocklists")
+}
+
+func blocklistDirectoryFingerprint(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	var fingerprint strings.Builder
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		_, _ = fmt.Fprintf(&fingerprint, "%s:%d:%d;", entry.Name(), info.Size(), info.ModTime().UnixNano())
+	}
+	return fingerprint.String()
+}
+
+func (s *Server) registerBlocklistHealthChecks(cfg *config.Config) {
+	ids := []string{"firehol_level1"}
+	if cfg.Server.Security.Blocklists.Enabled {
+		for _, source := range cfg.Server.Security.Blocklists.ExtraSources {
+			if source.ValidID() && source.IsEnabled() && (source.Type == "ip" || source.Type == "domain") {
+				ids = append(ids, source.ID)
+			}
+		}
+	}
+	for _, id := range ids {
+		sourceID := id
+		_ = s.datasetChecks.Register("blocklist_"+sourceID, false, 72*time.Hour, func() (time.Time, bool) {
+			s.blocklistCacheMu.RLock()
+			defer s.blocklistCacheMu.RUnlock()
+			if s.blocklistCache == nil {
+				return time.Time{}, false
+			}
+			state := s.blocklistCache.sources[sourceID]
+			return state.loadedAt, state.loaded
+		})
+	}
+	if cfg.Server.GeoIP.Enabled {
+		geoipIDs := []struct {
+			id      string
+			enabled bool
+		}{{"asn", cfg.Server.GeoIP.Databases.ASN}, {"country", cfg.Server.GeoIP.Databases.Country}, {"city", cfg.Server.GeoIP.Databases.City}}
+		for _, dataset := range geoipIDs {
+			if !dataset.enabled {
+				continue
+			}
+			id := dataset.id
+			_ = s.datasetChecks.Register("geoip_"+id, false, 7*24*time.Hour, func() (time.Time, bool) {
+				if s.geoipDB == nil {
+					return time.Time{}, false
+				}
+				for _, status := range s.geoipDB.DatasetStatuses() {
+					if status.ID == id {
+						return status.UpdatedAt, status.Loaded
+					}
+				}
+				return time.Time{}, false
+			})
+		}
+	}
+}
+
+func (s *Server) registerSecurityDataHealthChecks(cfg *config.Config) {
+	dataDir := cfg.Server.DataDir
+	if strings.TrimSpace(dataDir) == "" {
+		dataDir = s.dataDir
+	}
+	path := filepath.Join(dataDir, "security", "cve", "nvd.json")
+	_ = s.datasetChecks.Register("data_nvd", false, 48*time.Hour, func() (time.Time, bool) {
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() || info.Size() == 0 {
+			return time.Time{}, false
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return time.Time{}, false
+		}
+		var records []json.RawMessage
+		if json.Unmarshal(content, &records) != nil || len(records) == 0 {
+			return time.Time{}, false
+		}
+		for _, record := range records {
+			var cve struct {
+				ID string `json:"id"`
+			}
+			if json.Unmarshal(record, &cve) != nil || strings.TrimSpace(cve.ID) == "" {
+				return time.Time{}, false
+			}
+		}
+		return info.ModTime(), true
+	})
+	if trivy := cfg.Data.Trivy; trivy.Enabled {
+		path := filepath.Join(dataDir, "security", "trivy", "db.tar.gz")
+		_ = s.datasetChecks.Register("data_trivy", false, 48*time.Hour, func() (time.Time, bool) {
+			info, err := os.Stat(path)
+			if err != nil || info.IsDir() || info.Size() == 0 {
+				return time.Time{}, false
+			}
+			file, err := os.Open(path)
+			if err != nil {
+				return time.Time{}, false
+			}
+			defer file.Close()
+			gz, err := gzip.NewReader(file)
+			if err != nil {
+				return time.Time{}, false
+			}
+			defer gz.Close()
+			tarReader := tar.NewReader(gz)
+			foundDB, foundMetadata := false, false
+			for {
+				header, err := tarReader.Next()
+				if err != nil {
+					break
+				}
+				switch filepath.Base(header.Name) {
+				case "trivy.db":
+					foundDB = header.Size > 0
+				case "metadata.json":
+					foundMetadata = header.Size > 0
+				}
+			}
+			return info.ModTime(), foundDB && foundMetadata
+		})
+	}
+}
+
+// buildBlocklists removes entries that overlap the networks this server always
+// trusts before publishing the set used by request middleware.
+func (s *Server) buildBlocklists(dir string) *blocklistStore {
+	cfg := s.liveCfg()
+	trusted := append([]string(nil), cfg.Server.TrustedProxies.Additional...)
+	s.resolvedProxyMu.RLock()
+	for _, ips := range s.resolvedProxyIPs {
+		for _, ip := range ips {
+			trusted = append(trusted, ip.String())
+		}
+	}
+	s.resolvedProxyMu.RUnlock()
+	if listenIP := net.ParseIP(strings.TrimSpace(cfg.Server.Address)); listenIP != nil {
+		if ip4 := listenIP.To4(); ip4 != nil && !ip4.Equal(net.IPv4zero) {
+			mask := net.CIDRMask(24, 32)
+			trusted = append(trusted, (&net.IPNet{IP: ip4.Mask(mask), Mask: mask}).String())
+		}
+	}
+	sourceTypes := make(map[string]string, len(cfg.Server.Security.Blocklists.ExtraSources)+1)
+	sourceTypes["firehol_level1"] = "ip"
+	if cfg.Server.Security.Blocklists.Enabled {
+		for _, source := range cfg.Server.Security.Blocklists.ExtraSources {
+			if source.ValidID() && source.IsEnabled() && (source.Type == "ip" || source.Type == "domain") {
+				if _, duplicate := sourceTypes[source.ID]; duplicate {
+					continue
+				}
+				sourceTypes[source.ID] = source.Type
+			}
+		}
+	}
+	return loadBlocklistsWithTypes(dir, trusted, sourceTypes)
 }
 
 // isTrustedPeer returns true when the immediate peer's IP is a loopback,

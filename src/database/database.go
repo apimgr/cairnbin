@@ -11,11 +11,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apimgr/cairnbin/src/model"
 	_ "modernc.org/sqlite"
 )
+
+// SecurityReportEncryptionMu serializes encrypted report submissions with key
+// rotation so no report can be sealed under an outgoing key between re-encryption and key installation.
+var SecurityReportEncryptionMu sync.Mutex
 
 // APITokenRecord represents a stored resource-owner token row (PART 11).
 // The raw token is never stored — only the SHA-256 hex digest.
@@ -473,6 +478,7 @@ func ensureSchema(db *sql.DB) error {
 			created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			disclosed_at       DATETIME,
+			closed_at          DATETIME,
 			token_last_used    DATETIME
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_secreports_status  ON security_reports(status)`,
@@ -500,6 +506,7 @@ func ensureSchema(db *sql.DB) error {
 		`ALTER TABLE pastes ADD COLUMN content_type TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE pastes ADD COLUMN is_link INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE security_reports ADD COLUMN token_last_used DATETIME`,
+		`ALTER TABLE security_reports ADD COLUMN closed_at DATETIME`,
 		`ALTER TABLE api_tokens ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE api_tokens ADD COLUMN kind TEXT NOT NULL DEFAULT 'primary'`,
 		`ALTER TABLE api_tokens ADD COLUMN name TEXT`,

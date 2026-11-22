@@ -312,6 +312,9 @@ var securityStatusStages = []string{
 // is closed at all. Disclosed uses disclosed_at; Won't Fix uses updated_at (the
 // state has no dedicated timestamp).
 func securityReportClosedAt(rep *database.SecurityReport) (time.Time, bool) {
+	if rep.ClosedAt != nil {
+		return *rep.ClosedAt, true
+	}
 	switch rep.Status {
 	case database.SecStatusDisclosed:
 		if rep.DisclosedAt != nil {

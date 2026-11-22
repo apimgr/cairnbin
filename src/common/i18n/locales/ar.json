@@ -64,7 +64,8 @@
     "page_x_of_y": "الصفحة {current} من {total}",
     "showing_x_of_y": "عرض {count} من {total}",
     "last_updated": "آخر تحديث: {datetime}",
-    "made_with": "صُنع بـ"
+    "made_with": "صُنع بـ",
+    "breadcrumb": "مسار التنقل"
   },
   "theme": {
     "light": "فاتح",
@@ -322,7 +323,8 @@
     "connected": "متصل",
     "disconnected": "منقطع",
     "production": "إنتاج",
-    "development": "تطوير"
+    "development": "تطوير",
+    "configuration": "الإعدادات"
   },
   "status_values": {
     "online": "متصل",
@@ -558,7 +560,11 @@
     "mcp_error_404": "تم تعطيل MCP لهذا الخادم.",
     "mcp_error_405": "نقطة النهاية تقبل POST فقط؛ استخدم POST لطلبات MCP.",
     "mcp_project_heading": "استخدام أدوات cairnbin",
-    "mcp_alias_connector": "و"
+    "mcp_alias_connector": "و",
+    "more": "مزيد من المساعدة",
+    "page_lead": "مساعدة استخدام واجهة API والخدمة.",
+    "custom_content": "معلومات إضافية",
+    "mcp_tool": "أداة"
   },
   "privacy": {
     "title": "سياسة الخصوصية",
@@ -752,7 +758,13 @@
     "owner_confirm_rotate_primary": "هل تريد تدوير الرمز الأساسي؟ ستتوقف النسخ الحالية عن العمل.",
     "reset": "إعادة الضبط",
     "reset_warning": "سيؤدي ذلك إلى مسح التفضيلات المحفوظة وخيارات الموافقة والإعلانات التي تم إخفاؤها وعلامة الإصدار والرسائل المؤقتة والبيانات المحلية للمتصفح لهذا الموقع. لا يمكن التراجع عن ذلك.",
-    "erase": "محو الكل"
+    "erase": "محو الكل",
+    "sync_title": "مزامنة التفضيلات",
+    "sync_desc": "صدّر التفضيلات أو طبّقها في متصفح أو جهاز آخر.",
+    "tokens_desc": "أنشئ رموز API لعملائك وأدرها.",
+    "automatic": "تلقائي",
+    "more": "مزيد من التفضيلات",
+    "owner_no_linked": "لا توجد رموز مرتبطة بعد. أنشئ رمزًا لربط عميل."
   },
   "announcements": {
     "warning": "تحذير",
@@ -1345,7 +1357,7 @@
     "base_url": "بادئة مسار URL",
     "daemon": "التشغيل كخدمة منفصلة عن الطرفية",
     "debug": "تمكين وضع التصحيح",
-    "optional_i2p": "تمكين موقع I2P الاختياري (بموافقة صريحة)",
+    "optional_i2p": "موقع I2P (مفعّل افتراضيًا في الحاويات؛ استخدم --i2p=false لتعطيله)",
     "color": "إخراج ملون",
     "language": "لغة الإخراج",
     "service_cmd": "إدارة الخدمة",

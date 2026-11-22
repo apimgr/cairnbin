@@ -4,19 +4,17 @@
 {{end}}
 
 {{define "content"}}
-    <section class="search-section">
-      <div class="container container-sm">
-        <div class="section-header">
-          <h1 class="section-title">{{t .Lang "help.title"}}</h1>
-        </div>
-
-        <div class="paste-view page-view">
-
+    <div class="container container-lg">
+      <header class="page-header">
+        <h1 class="page-title">{{t .Lang "help.title"}}</h1>
+        <p class="page-lead">{{t .Lang "help.page_lead"}}</p>
+      </header>
+      <section class="section-card" aria-labelledby="api">
           <h2 id="api">{{t .Lang "help.rest_title"}}</h2>
           <p>{{tfh .Lang "help.rest_intro" "endpoint" (print .BaseURL .APIBase) "ok_example" `{"ok": true, "data": ...}` "error_example" `{"ok": false, "error": "CODE", "message": "..."}`}}</p>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_method"}}</th><th scope="col">{{t .Lang "help.col_path"}}</th><th scope="col">{{t .Lang "help.col_description"}}</th></tr></thead><tbody>
               <tr><td>POST</td><td><code>{{.APIBase}}/pastes</code></td><td>{{t .Lang "help.row_create_paste"}}</td></tr>
               <tr><td>GET</td><td><code>{{.APIBase}}/pastes</code></td><td>{{t .Lang "help.row_list_pastes"}}</td></tr>
               <tr><td>GET</td><td><code>{{.APIBase}}/pastes/{id}</code></td><td>{{t .Lang "help.row_get_paste"}}</td></tr>
@@ -27,84 +25,76 @@
               <tr><td>GET</td><td><code>{{.APIBase}}/server/contact</code></td><td>{{t .Lang "help.row_contact_get"}}</td></tr>
               <tr><td>POST</td><td><code>{{.APIBase}}/server/contact</code></td><td>{{t .Lang "help.row_contact_post"}}</td></tr>
               <tr><td>GET</td><td><code>{{.APIBase}}/server/auth/check</code></td><td>{{t .Lang "help.row_auth_check"}}</td></tr>
-            </table>
+            </tbody></table>
           </div>
           <p>{{t .Lang "help.interactive_docs"}}</p>
           <ul>
             <li><a href="{{.AssetPrefix}}/server/docs/swagger">Swagger UI</a> — {{t .Lang "help.docs_swagger_desc"}}</li>
             <li><a href="{{.AssetPrefix}}/server/docs/graphql">GraphiQL</a> — {{t .Lang "help.docs_graphql_desc"}}</li>
-            <li><a href="{{.AssetPrefix}}/server/help/mcp">{{t .Lang "mcp_page_title"}}</a> — {{tf .Lang "mcp_meta_description" "site" .SiteTitle}}</li>
           </ul>
           <p>{{tfh .Lang "help.graphql_endpoint" "graphql" (print .BaseURL .APIBase "/server/graphql") "swagger" (print .BaseURL .APIBase "/server/swagger")}}</p>
 
           <h3>{{t .Lang "help.h_create_paste"}}</h3>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-json-create" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-json-create">curl -q -LSsf -H "Content-Type: application/json" \
      -H "Accept: application/json" \
      -d '{"content":"Hello","language":"text","expires_in":"1d"}' \
   {{.BaseURL}}{{.APIBase}}/pastes</code></pre>
           </div>
 
-          <h3 class="section-mt">{{t .Lang "help.h_get_raw"}}</h3>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <h3>{{t .Lang "help.h_get_raw"}}</h3>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-get-raw" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-get-raw">curl -q -LSsf {{.BaseURL}}/raw/{id}</code></pre>
           </div>
 
-          <h3 class="section-mt">{{t .Lang "help.h_delete_paste"}}</h3>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <h3>{{t .Lang "help.h_delete_paste"}}</h3>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-delete" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-delete">curl -q -LSsf -X DELETE \
      -H "Authorization: Bearer {delete_token}" \
   "{{.BaseURL}}{{.APIBase}}/pastes/{id}"</code></pre>
           </div>
 
 
-          <h2 class="section-mt">{{t .Lang "help.web_create_title"}}</h2>
+      </section>
+      <section class="section-card" aria-labelledby="help-section-2-heading">
+          <h2 id="help-section-2-heading">{{t .Lang "help.web_create_title"}}</h2>
           <p>{{tfh .Lang "help.web_create_body" "url" (print .AssetPrefix "/create")}}</p>
 
-          <h2 class="section-mt">{{t .Lang "help.curl_raw_title"}}</h2>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+      </section>
+      <section class="section-card" aria-labelledby="help-section-3-heading">
+          <h2 id="help-section-3-heading">{{t .Lang "help.curl_raw_title"}}</h2>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-curl-raw" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-curl-raw">curl -q -LSsf --data-binary @file.txt {{.BaseURL}}/pastes</code></pre>
           </div>
 
-          <h2 class="section-mt">{{t .Lang "help.pipe_title"}}</h2>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+      </section>
+      <section class="section-card" aria-labelledby="help-section-4-heading">
+          <h2 id="help-section-4-heading">{{t .Lang "help.pipe_title"}}</h2>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-pipe" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-pipe">cat myfile.py | curl -q -LSsf --data-binary @- {{.BaseURL}}/pastes</code></pre>
           </div>
 
-          <h2 class="section-mt">{{t .Lang "help.expiry_title"}}</h2>
+      </section>
+      <section class="section-card" aria-labelledby="help-section-5-heading">
+          <h2 id="help-section-5-heading">{{t .Lang "help.expiry_title"}}</h2>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_value"}}</th><th>{{t .Lang "help.col_duration"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_value"}}</th><th scope="col">{{t .Lang "help.col_duration"}}</th></tr></thead><tbody>
               <tr><td><code>1h</code></td><td>{{t .Lang "help.exp_1h"}}</td></tr>
               <tr><td><code>1d</code></td><td>{{t .Lang "help.exp_1d"}}</td></tr>
               <tr><td><code>1w</code></td><td>{{t .Lang "help.exp_1w"}}</td></tr>
@@ -116,13 +106,17 @@
               <tr><td><code>2y</code></td><td>{{t .Lang "help.exp_2y"}}</td></tr>
               <tr><td><code>never</code></td><td>{{t .Lang "help.exp_never"}}</td></tr>
               <tr><td><em>N</em></td><td>{{t .Lang "help.exp_seconds"}}</td></tr>
-            </table>
+            </tbody></table>
           </div>
 
-          <h2 class="section-mt">{{t .Lang "help.burn_title"}}</h2>
+      </section>
+      <section class="section-card" aria-labelledby="help-section-6-heading">
+          <h2 id="help-section-6-heading">{{t .Lang "help.burn_title"}}</h2>
           <p>{{th .Lang "help.burn_body"}}</p>
 
-          <h2 class="section-mt" id="compat">{{t .Lang "help.compat_title"}}</h2>
+      </section>
+      <section class="section-card" aria-labelledby="compat">
+          <h2 id="compat">{{t .Lang "help.compat_title"}}</h2>
           <p>{{t .Lang "help.compat_intro"}}</p>
           <ul>
             <li><a href="#compat-pastebin">pastebin.com</a>, <a href="#compat-microbin">microbin</a>, <a href="#compat-lenpaste">lenpaste</a>, <a href="#compat-stikked">stikked</a>, <a href="#compat-hastebin">hastebin</a>, <a href="#compat-dpaste">dpaste</a></li>
@@ -133,139 +127,118 @@
 
           <h3 id="compat-pastebin">pastebin.com</h3>
           <p>{{tfh .Lang "help.wire_compat" "url" "https://pastebin.com/doc_api" "name" "pastebin.com"}}</p>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-compat-pastebin" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-compat-pastebin">curl -q -LSsf -d "api_dev_key=x&api_paste_code=Hello&api_option=paste" \
   {{.BaseURL}}/api/api_post.php</code></pre>
           </div>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_method"}}</th><th scope="col">{{t .Lang "help.col_path"}}</th><th scope="col">{{t .Lang "help.col_description"}}</th></tr></thead><tbody>
               <tr><td>POST</td><td><code>/api/api_post.php</code></td><td>{{th .Lang "help.pb_row_create"}}</td></tr>
               <tr><td>GET</td><td><code>/api/api_raw.php</code></td><td>{{th .Lang "help.pb_row_raw"}}</td></tr>
               <tr><td>POST</td><td><code>/api/api_login.php</code></td><td>{{t .Lang "help.pb_row_login"}}</td></tr>
-            </table>
+            </tbody></table>
           </div>
 
-          <h3 class="section-mt" id="compat-microbin">microbin</h3>
+          <h3  id="compat-microbin">microbin</h3>
           <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/szabodanika/microbin" "name" "microbin"}}</p>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-compat-microbin" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-compat-microbin">curl -q -LSsf -d "content=Hello" {{.BaseURL}}{{.APIBase}}/pasta</code></pre>
           </div>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_method"}}</th><th scope="col">{{t .Lang "help.col_path"}}</th><th scope="col">{{t .Lang "help.col_description"}}</th></tr></thead><tbody>
               <tr><td>POST</td><td><code>{{.APIBase}}/pasta</code></td><td>{{t .Lang "help.row_create_short"}}</td></tr>
               <tr><td>GET</td><td><code>{{.APIBase}}/pasta</code></td><td>{{t .Lang "help.row_list_short"}}</td></tr>
               <tr><td>GET</td><td><code>{{.APIBase}}/pasta/{id}</code></td><td>{{t .Lang "help.row_get_by_id"}}</td></tr>
               <tr><td>DELETE</td><td><code>{{.APIBase}}/pasta/{id}</code></td><td>{{t .Lang "help.row_delete_by_id"}}</td></tr>
-            </table>
+            </tbody></table>
           </div>
 
-          <h3 class="section-mt" id="compat-lenpaste">lenpaste</h3>
+          <h3  id="compat-lenpaste">lenpaste</h3>
           <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/forksmgr/lcomrade-lenpaste" "name" "lenpaste"}}</p>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-compat-lenpaste" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-compat-lenpaste">curl -q -LSsf -d "body=Hello&expiration=86400" {{.BaseURL}}/api/new</code></pre>
           </div>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_method"}}</th><th scope="col">{{t .Lang "help.col_path"}}</th><th scope="col">{{t .Lang "help.col_description"}}</th></tr></thead><tbody>
               <tr><td>POST</td><td><code>/api/new</code> {{t .Lang "help.or"}} <code>{{.APIBase}}/new</code></td><td>{{t .Lang "help.row_create_short"}}</td></tr>
               <tr><td>GET</td><td><code>/api/get</code> {{t .Lang "help.or"}} <code>{{.APIBase}}/get</code></td><td>{{th .Lang "help.lp_row_get"}}</td></tr>
               <tr><td>DELETE</td><td><code>/api/remove</code> {{t .Lang "help.or"}} <code>{{.APIBase}}/remove</code></td><td>{{th .Lang "help.lp_row_delete"}}</td></tr>
               <tr><td>GET</td><td><code>/api/list</code> {{t .Lang "help.or"}} <code>{{.APIBase}}/list</code></td><td>{{t .Lang "help.row_list_short"}}</td></tr>
               <tr><td>GET</td><td><code>{{.APIBase}}/getServerInfo</code></td><td>{{t .Lang "help.lp_row_info"}}</td></tr>
-            </table>
+            </tbody></table>
           </div>
 
-          <h3 class="section-mt" id="compat-stikked">stikked</h3>
+          <h3  id="compat-stikked">stikked</h3>
           <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/claudehohl/Stikked" "name" "stikked"}}</p>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-compat-stikked" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-compat-stikked">curl -q -LSsf -d "text=Hello&title=Test&lang=text" {{.BaseURL}}/api/create</code></pre>
           </div>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_method"}}</th><th scope="col">{{t .Lang "help.col_path"}}</th><th scope="col">{{t .Lang "help.col_description"}}</th></tr></thead><tbody>
               <tr><td>POST</td><td><code>/api/create</code></td><td>{{tfh .Lang "help.sk_row_create" "view_url" (print .BaseURL "/view/{id}")}}</td></tr>
               <tr><td>GET</td><td><code>/view/{id}</code></td><td>{{t .Lang "help.sk_row_view"}}</td></tr>
               <tr><td>GET</td><td><code>/view/raw/{id}</code></td><td>{{t .Lang "help.sk_row_raw"}}</td></tr>
               <tr><td>GET</td><td><code>/api/paste/{id}</code></td><td>{{th .Lang "help.sk_row_json"}}</td></tr>
-            </table>
+            </tbody></table>
           </div>
 
-          <h3 class="section-mt" id="compat-hastebin">hastebin / haste-server</h3>
+          <h3  id="compat-hastebin">hastebin / haste-server</h3>
           <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/toptal/haste-server" "name" "haste-server"}}</p>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-compat-hastebin" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-compat-hastebin">curl -q -LSsf -X POST --data-binary "Hello" {{.BaseURL}}/documents
 # returns {"key":"AbCdEfGh"}
 curl -q -LSsf {{.BaseURL}}/documents/AbCdEfGh</code></pre>
           </div>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_method"}}</th><th scope="col">{{t .Lang "help.col_path"}}</th><th scope="col">{{t .Lang "help.col_description"}}</th></tr></thead><tbody>
               <tr><td>POST</td><td><code>/documents</code></td><td>{{tfh .Lang "help.hb_row_create" "key_example" `{"key":"…"}`}}</td></tr>
               <tr><td>GET</td><td><code>/documents/{key}</code></td><td>{{tfh .Lang "help.hb_row_get" "data_example" `{"data":"...","key":"..."}` "missing_example" `404 {"message":"..."}`}}</td></tr>
               <tr><td>GET</td><td><code>/raw/{key}</code></td><td>{{t .Lang "help.hb_row_raw"}}</td></tr>
-            </table>
+            </tbody></table>
           </div>
 
-          <h3 class="section-mt" id="compat-dpaste">dpaste</h3>
+          <h3  id="compat-dpaste">dpaste</h3>
           <p>{{tfh .Lang "help.wire_compat" "url" "https://github.com/bartTC/dpaste" "name" "dpaste"}}</p>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-compat-dpaste" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-compat-dpaste">curl -q -LSsf -d "content=Hello&lexer=text&expires=86400&format=url" \
   {{.BaseURL}}/api/</code></pre>
           </div>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_method"}}</th><th scope="col">{{t .Lang "help.col_path"}}</th><th scope="col">{{t .Lang "help.col_description"}}</th></tr></thead><tbody>
               <tr><td>POST</td><td><code>/api/</code> {{t .Lang "help.or"}} <code>/api/v2/</code></td><td>{{th .Lang "help.dp_row_create"}}</td></tr>
-            </table>
+            </tbody></table>
           </div>
 
-          <h3 class="section-mt" id="compat-curlupload">{{t .Lang "help.curlupload_title"}}</h3>
+          <h3  id="compat-curlupload">{{t .Lang "help.curlupload_title"}}</h3>
           <p>{{t .Lang "help.curlupload_intro"}}</p>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-compat-curlupload" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-compat-curlupload"># 0x0.st style
 curl -q -LSsf -F "file=@file.txt" {{.BaseURL}}/
 
@@ -276,23 +249,20 @@ cat file.txt | curl -q -LSsf -F "sprunge=&lt;-" {{.BaseURL}}/
 curl -q -LSsf -F "f:1=&lt;-" {{.BaseURL}}/</code></pre>
           </div>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_method"}}</th><th>{{t .Lang "help.col_path"}}</th><th>{{t .Lang "help.col_description"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_method"}}</th><th scope="col">{{t .Lang "help.col_path"}}</th><th scope="col">{{t .Lang "help.col_description"}}</th></tr></thead><tbody>
               <tr><td>POST</td><td><code>/</code></td><td>{{tfh .Lang "help.curlupload_row" "raw_url" (print .BaseURL "/raw/{id}")}}</td></tr>
-            </table>
+            </tbody></table>
           </div>
           <p>{{th .Lang "help.curlupload_token"}}</p>
 
           {{if .TermbinEnabled}}
-          <h3 class="section-mt" id="termbin">{{t .Lang "help.termbin_title"}}</h3>
+          <h3  id="termbin">{{t .Lang "help.termbin_title"}}</h3>
           <p>{{th .Lang "help.termbin_intro"}}</p>
-          <div class="code-block-multi">
-            <div class="code-header">
-              <span class="code-lang">Bash</span>
+          <div class="code-block">
               <button type="button" class="copy-btn" data-copy-target="help-termbin" aria-live="polite" aria-label="{{t .Lang "common.copy"}}">
-                <span class="copy-icon" aria-hidden="true">📋</span><span class="copy-text">{{t .Lang "common.copy"}}</span>
+                <span class="copy-text">{{t .Lang "common.copy"}}</span>
               </button>
-            </div>
             <pre><code id="help-termbin">echo "Hello" | nc {{.TermbinHost}} {{.TermbinPort}}
 cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
           </div>
@@ -300,11 +270,11 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
           {{end}}
 
 
-          <h3 class="section-mt" id="compat-subdomains">{{t .Lang "help.compat_subdomains_link"}}</h3>
+          <h3  id="compat-subdomains">{{t .Lang "help.compat_subdomains_link"}}</h3>
           <p>{{th .Lang "help.subdomain_intro"}}</p>
           <div class="table-wrapper">
-            <table class="help-table">
-              <tr><th>{{t .Lang "help.col_label"}}</th><th>{{t .Lang "help.col_target"}}</th></tr>
+            <table class="data-table">
+              <thead><tr><th scope="col">{{t .Lang "help.col_label"}}</th><th scope="col">{{t .Lang "help.col_target"}}</th></tr></thead><tbody>
               <tr><td><code>pb</code>, <code>pastebin</code></td><td>pastebin.com</td></tr>
               <tr><td><code>lp</code>, <code>lenpaste</code></td><td>lenpaste</td></tr>
               <tr><td><code>sk</code>, <code>stikked</code></td><td>stikked</td></tr>
@@ -315,15 +285,16 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
               <tr><td><code>ix</code></td><td>ix.io</td></tr>
               <tr><td><code>sprunge</code></td><td>sprunge.us</td></tr>
               <tr><td><code>0x0</code>, <code>st</code></td><td>0x0.st</td></tr>
-            </table>
+            </tbody></table>
           </div>
 
-          {{if and .TorEnabled .TorRunning .OnionAddress}}
-          <h2 class="section-mt" id="tor-access">{{t .Lang "help.tor_access"}}</h2>
+      </section>
+      {{if and .TorEnabled .TorRunning .OnionAddress}}
+      <section class="section-card" aria-labelledby="tor-access">
+          <h2 id="tor-access">{{t .Lang "help.tor_access"}}</h2>
           <p>{{t .Lang "help.tor_intro"}}</p>
           <h3>{{t .Lang "help.onion_address"}}</h3>
           <div class="code-block">
-            <div class="code-header"><span class="code-lang">Onion</span></div>
             <div class="code-content"><pre class="long-string">{{.OnionAddress}}</pre></div>
             <button type="button" class="copy-btn" data-copy="{{.OnionAddress}}" aria-live="polite" aria-label="{{t .Lang "footer.copy_onion"}}">
               <span class="copy-text">📋</span>
@@ -336,14 +307,15 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
             <li>{{t .Lang "help.tor_step_paste"}}</li>
           </ol>
           <p>{{t .Lang "help.tor_privacy_note"}}</p>
+      </section>
           {{end}}
 
           {{if and .I2PEnabled .I2PRunning .I2PAddress}}
-          <h2 class="section-mt" id="i2p-access">{{t .Lang "help.i2p_title"}}</h2>
+      <section class="section-card" aria-labelledby="i2p-access">
+          <h2 id="i2p-access">{{t .Lang "help.i2p_title"}}</h2>
           <p>{{t .Lang "help.i2p_intro"}}</p>
           <h3>{{t .Lang "help.i2p_address"}}</h3>
           <div class="code-block">
-            <div class="code-header"><span class="code-lang">I2P</span></div>
             <div class="code-content"><pre class="long-string">{{.I2PAddress}}</pre></div>
             <button type="button" class="copy-btn" data-copy="{{.I2PAddress}}" aria-live="polite" aria-label="{{t .Lang "footer.copy_i2p"}}">
               <span class="copy-text">📋</span>
@@ -356,9 +328,11 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
             <li>{{th .Lang "help.i2p_step_paste"}}</li>
           </ol>
           <p>{{th .Lang "help.i2p_note"}}</p>
+      </section>
           {{end}}
 
-          <h2 class="section-mt" id="faq">{{t .Lang "help.faq_title"}}</h2>
+      <section class="section-card" aria-labelledby="faq">
+          <h2 id="faq">{{t .Lang "help.faq_title"}}</h2>
           <h3>{{t .Lang "help.faq_q_account"}}</h3>
           <p>{{th .Lang "help.faq_a_account"}}</p>
           <h3>{{t .Lang "help.faq_q_retention"}}</h3>
@@ -368,7 +342,9 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
           <h3>{{t .Lang "help.faq_q_scripts"}}</h3>
           <p>{{th .Lang "help.faq_a_scripts"}}</p>
 
-          <h2 class="section-mt" id="troubleshooting">{{t .Lang "help.troubleshooting"}}</h2>
+      </section>
+      <section class="section-card" aria-labelledby="troubleshooting">
+          <h2 id="troubleshooting">{{t .Lang "help.troubleshooting"}}</h2>
           <h3>{{t .Lang "help.ts_404_title"}}</h3>
           <p>{{th .Lang "help.ts_404_body"}}</p>
           <h3>{{t .Lang "help.ts_413_title"}}</h3>
@@ -377,8 +353,15 @@ cat file.txt | nc {{.TermbinHost}} {{.TermbinPort}}</code></pre>
           <p>{{th .Lang "help.ts_429_body"}}</p>
           <h3>{{t .Lang "help.ts_403_title"}}</h3>
           <p>{{th .Lang "help.ts_403_body"}}</p>
-          {{if .PageContent}}<div class="markdown-content">{{.PageContent}}</div>{{end}}
-        </div>
-      </div>
-    </section>
+      </section>
+      {{if .PageContent}}<section class="section-card" aria-labelledby="configured-help"><h2 id="configured-help">{{t .Lang "help.custom_content"}}</h2><div class="markdown-content">{{.PageContent}}</div></section>{{end}}
+      <section class="section-card" aria-labelledby="more-help">
+        <h2 id="more-help">{{t .Lang "help.more"}}</h2>
+        <ul class="hub-list">
+          {{range .MoreHelp}}
+          <li class="hub-item"><a class="hub-link" href="{{.Path}}"><span class="hub-title">{{.Title}}</span><span class="hub-desc">{{.Description}}</span></a></li>
+          {{end}}
+        </ul>
+      </section>
+    </div>
 {{end}}

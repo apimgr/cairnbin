@@ -12,18 +12,24 @@ func TestBlocklistSources_Enabled(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Security.Blocklists = config.BlocklistsConfig{
 		Enabled: true,
-		Sources: []config.BlocklistSource{
-			{File: "a.txt", URL: "https://example.test/a"},
-			{File: "", URL: "https://example.test/skip"},
-			{File: "b.txt", URL: ""},
+		ExtraSources: []config.BlocklistSource{
+			{ID: "a", Type: "ip", URL: "https://example.test/a"},
+			{ID: "domains", Type: "domain", URL: "https://example.test/domains"},
+			{ID: "firehol_level1", Type: "ip", URL: "https://example.test/override"},
+			{ID: "bad-id", Type: "ip", URL: "https://example.test/invalid-id"},
+			{ID: "bad-type", Type: "ua", URL: "https://example.test/invalid-type"},
+			{ID: "a", Type: "domain", URL: "https://example.test/duplicate"},
+			{ID: "", Type: "ip", URL: "https://example.test/skip"},
+			{ID: "b", Type: "ip", URL: ""},
+			{ID: "disabled", Type: "ip", URL: "https://example.test/disabled", Enabled: boolPointer(false)},
 		},
 	}
 	got := blocklistSources(cfg)
-	if len(got) != 1 {
-		t.Fatalf("len = %d, want 1 (incomplete entries dropped); got %+v", len(got), got)
+	if len(got) != 3 {
+		t.Fatalf("len = %d, want built-in plus two valid extras; got %+v", len(got), got)
 	}
-	if got[0].Name != "a.txt" || got[0].URL != "https://example.test/a" {
-		t.Errorf("source = %+v", got[0])
+	if got[0].Name != "firehol_level1.txt" || got[1].Name != "a.txt" || got[1].URL != "https://example.test/a" || got[2].Name != "domains.txt" || got[2].Type != "domain" {
+		t.Errorf("sources = %+v", got)
 	}
 }
 
@@ -31,36 +37,22 @@ func TestBlocklistSources_Enabled(t *testing.T) {
 func TestBlocklistSources_Disabled(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Security.Blocklists.Enabled = false
-	if got := blocklistSources(cfg); got != nil {
-		t.Errorf("expected nil sources when disabled, got %+v", got)
+	if got := blocklistSources(cfg); len(got) != 1 || got[0].Name != "firehol_level1.txt" {
+		t.Errorf("expected only immutable built-in source when extra lists are disabled, got %+v", got)
 	}
 }
 
-// TestCVESources_Enabled verifies an enabled, fully configured CVE source maps
-// to a single task.Source.
-func TestCVESources_Enabled(t *testing.T) {
+func boolPointer(value bool) *bool { return &value }
+
+// TestNVDTaskConfigMapsCanonicalDataSettings verifies data.cve values reach
+// the scheduled updater, including its secret API key.
+func TestNVDTaskConfigMapsCanonicalDataSettings(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.Security.CVE = config.CVEConfig{
-		Enabled: true,
-		File:    "nvd.json",
-		Source:  "https://example.test/cve",
+	cfg.Data.CVE = config.CVEConfig{
+		Source: "https://example.test/cve", APIKey: "test-key",
 	}
-	got := cveSources(cfg)
-	if len(got) != 1 || got[0].Name != "nvd.json" || got[0].URL != "https://example.test/cve" {
+	got := nvdTaskConfig(cfg)
+	if got.Source != "https://example.test/cve" || got.APIKey != "test-key" {
 		t.Fatalf("got %+v", got)
-	}
-}
-
-// TestCVESources_DisabledOrIncomplete verifies disabled or incomplete CVE
-// config yields no sources.
-func TestCVESources_DisabledOrIncomplete(t *testing.T) {
-	cfg := config.DefaultConfig()
-	// Default config has CVE disabled.
-	if got := cveSources(cfg); got != nil {
-		t.Errorf("expected nil for default (disabled) CVE config, got %+v", got)
-	}
-	cfg.Server.Security.CVE = config.CVEConfig{Enabled: true, File: "", Source: "https://x"}
-	if got := cveSources(cfg); got != nil {
-		t.Errorf("expected nil when File empty, got %+v", got)
 	}
 }

@@ -3,13 +3,17 @@
 {{end}}
 
 {{define "content"}}
-    <div class="error-page">
-      <h1 class="error-code">{{.StatusCode}}</h1>
-      <h2 class="error-title">{{.StatusText}}</h2>
-      <p class="error-message">{{.Message}}</p>
-      <div class="error-actions">
+    <div class="container container-sm">
+      <header class="page-header">
+        <h1 class="page-title">{{.StatusCode}} {{.StatusText}}</h1>
+        <p class="page-lead">{{.Message}}</p>
+      </header>
+      <section class="section-card" aria-labelledby="error-actions">
+        <h2 id="error-actions">{{t .Lang "common.actions"}}</h2>
+        <div class="form-actions">
         <a href="{{.AssetPrefix}}/" class="btn btn-primary">{{t .Lang "nav.home"}}</a>
         <a href="{{.AssetPrefix}}/server/help" class="btn btn-secondary">{{t .Lang "footer.help"}}</a>
+        </div>
+      </section>
       </div>
-    </div>
 {{end}}

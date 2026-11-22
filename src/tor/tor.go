@@ -240,6 +240,8 @@ var startTorRuntime = func(ctx context.Context, conf *binettor.StartConf) (manag
 // Manager owns the Tor process lifecycle.
 type Manager struct {
 	mu                  sync.Mutex
+	addressMu           sync.RWMutex
+	pendingAddress      string
 	svc                 *service
 	outboundDialContext func(context.Context, string, string) (net.Conn, error)
 	cfg                 Config
@@ -345,6 +347,7 @@ func (m *Manager) startLocked() error {
 		_ = backendServer.Close()
 		return fmt.Errorf("start tor: %w", err)
 	}
+	go m.watchHostname(siteDir)
 
 	bootstrapTimeout := time.Duration(m.cfg.BootstrapTimeout) * time.Second
 	dialCtx, cancel := context.WithTimeout(m.ctx, bootstrapTimeout)
@@ -373,6 +376,7 @@ func (m *Manager) startLocked() error {
 		_ = backendServer.Close()
 		return fmt.Errorf("tor hostname: %w", err)
 	}
+	m.setPendingAddress(onion)
 
 	svc := &service{
 		t:             t,
@@ -393,8 +397,26 @@ func (m *Manager) startLocked() error {
 	}
 
 	m.svc = svc
-	log.Printf("Tor: %s:%d → 127.0.0.1:%d", onion, m.cfg.VirtualPort, backendPort)
+	log.Printf("Tor hidden service ready")
 	return nil
+}
+
+func (m *Manager) watchHostname(siteDir string) {
+	onion, err := waitForHostname(m.ctx, siteDir)
+	if err != nil || m.ctx.Err() != nil {
+		return
+	}
+	m.setPendingAddress(onion)
+}
+
+func (m *Manager) setPendingAddress(address string) {
+	m.addressMu.Lock()
+	newAddress := m.pendingAddress == "" && address != ""
+	m.pendingAddress = address
+	m.addressMu.Unlock()
+	if newAddress {
+		log.Printf("Tor: %s", address)
+	}
 }
 
 // waitForHostname polls the hidden service's hostname file (written by Tor
@@ -464,6 +486,9 @@ func (m *Manager) Close() {
 }
 
 func (m *Manager) closeSvcLocked() {
+	m.addressMu.Lock()
+	m.pendingAddress = ""
+	m.addressMu.Unlock()
 	if m.svc == nil {
 		m.outboundDialContext = nil
 		return
@@ -495,14 +520,20 @@ func (m *Manager) Enabled() bool {
 
 // OnionAddress returns the full .onion address, or empty string if not running.
 func (m *Manager) OnionAddress() string {
+	m.addressMu.RLock()
+	address := m.pendingAddress
+	m.addressMu.RUnlock()
+	if address != "" {
+		return address
+	}
 	if !m.mu.TryLock() {
 		return ""
 	}
 	defer m.mu.Unlock()
 	if m.svc != nil {
-		return m.svc.onionAddress
+		address = m.svc.onionAddress
 	}
-	return ""
+	return address
 }
 
 // GetHTTPClient returns a direct or Tor-routed HTTP client.
