@@ -105,6 +105,14 @@ $RECYCLE.BIN/
 # PROJECT-SPECIFIC (add below default section)
 # ============================================
 
+# Local environment and runtime files
+.env
+app.env
+default.env
+*.log
+*.tmp
+*.temp
+
 # Build output
 binaries/
 releases/

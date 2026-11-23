@@ -131,7 +131,7 @@ func TestServerPagesAPI(t *testing.T) {
 	s.cfg.Server.Pages.Contact.Captcha = "simple"
 
 	for name, h := range map[string]http.HandlerFunc{
-		"about": s.handleAboutAPI, "privacy": s.handlePrivacyAPI,
+		"about": s.handleAboutAPI, "privacy": s.handlePrivacyAPI, "dpo": s.handleDPOAPI,
 		"help": s.handleHelpAPI, "terms": s.handleTermsAPI,
 	} {
 		w := httptest.NewRecorder()

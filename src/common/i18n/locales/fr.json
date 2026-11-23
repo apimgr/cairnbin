@@ -422,6 +422,17 @@
     "custom_content": "Informations complémentaires",
     "mcp_tool": "Outil"
   },
+  "dpo": {
+    "title": "Délégué à la protection des données",
+    "meta_description": "Coordonnées relatives à la protection des données pour {site}.",
+    "page_lead": "Coordonnées pour les demandes de protection des données adressées à {site}.",
+    "contact_heading": "Contact pour la protection des données",
+    "name_label": "Nom",
+    "email_label": "E-mail",
+    "no_email": "Aucune adresse e-mail directe pour la protection des données n’est publiée. Consultez la page sécurité et signalements pour les demandes relatives à la confidentialité.",
+    "security_link": "Sécurité et signalements",
+    "privacy_link": "Politique de confidentialité"
+  },
   "privacy": {
     "title": "Politique de confidentialité",
     "last_updated": "Dernière mise à jour :",

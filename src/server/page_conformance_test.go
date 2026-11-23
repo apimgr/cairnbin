@@ -59,6 +59,7 @@ func TestRegisteredPagesConform(t *testing.T) {
 
 	pages := map[string]http.HandlerFunc{
 		"/server/about":           s.handleAbout,
+		"/server/dpo":             s.handleDPO,
 		"/server/contact":         s.handleContact,
 		"/server/privacy":         s.handlePrivacy,
 		"/server/terms":           s.handleTerms,

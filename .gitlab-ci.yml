@@ -13,6 +13,7 @@ variables:
 stages:
   - build
   - test
+  - security
   - package
   - release
   - docker
@@ -193,6 +194,62 @@ test:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
     - if: $CI_COMMIT_BRANCH == "beta"
+
+# =============================================================================
+# SECURITY
+# =============================================================================
+
+security:secret-scan:
+  stage: security
+  image: trufflesecurity/trufflehog:latest
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "$CI_COMMIT_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+        trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
+      else
+        trufflehog git file://. --since-commit HEAD~1 --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "schedule"
+
+security:workflow-policy:
+  stage: security
+  image: $BUILD_IMAGE
+  script:
+    - |
+      bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
+      if [ -n "$bad" ]; then
+        echo "Unpinned workflow actions found:"
+        echo "$bad"
+        exit 1
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "schedule"
+
+security:vulnerability-scan:
+  stage: security
+  image: $BUILD_IMAGE
+  script:
+    - govulncheck ./...
+  rules:
+    - exists:
+        - go.sum
+
+security:image-scan:
+  stage: security
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker build -t local/scan-target:ci -f docker/Dockerfile .
+    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --exit-code 1 --severity CRITICAL,HIGH local/scan-target:ci
+  rules:
+    - exists:
+        - docker/Dockerfile
 
 # =============================================================================
 # RELEASE (GitLab Release)

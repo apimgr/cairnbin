@@ -422,6 +422,17 @@
     "custom_content": "其他信息",
     "mcp_tool": "工具"
   },
+  "dpo": {
+    "title": "数据保护官",
+    "meta_description": "{site} 的数据保护联系方式。",
+    "page_lead": "向 {site} 提交数据保护请求的联系方式。",
+    "contact_heading": "数据保护联系信息",
+    "name_label": "姓名",
+    "email_label": "电子邮件",
+    "no_email": "未公布专用的数据保护电子邮件地址。有关隐私请求的信息，请参阅安全与报告页面。",
+    "security_link": "安全与报告",
+    "privacy_link": "隐私政策"
+  },
   "privacy": {
     "title": "隐私政策",
     "last_updated": "最后更新：",

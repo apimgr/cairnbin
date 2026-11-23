@@ -566,6 +566,17 @@
     "mcp_project_heading": "Using cairnbin tools",
     "mcp_alias_connector": "and"
   },
+  "dpo": {
+    "title": "Data Protection Officer",
+    "meta_description": "Data protection contact information for {site}.",
+    "page_lead": "Contact information for data protection requests to {site}.",
+    "contact_heading": "Data protection contact",
+    "name_label": "Name",
+    "email_label": "Email",
+    "no_email": "No direct data protection email is published. See the security and reporting page for information about privacy requests.",
+    "security_link": "Security and reporting",
+    "privacy_link": "Privacy policy"
+  },
   "privacy": {
     "title": "Privacy Policy",
     "last_updated": "Last updated:",

@@ -1793,6 +1793,7 @@ func (s *Server) setupRoutes() {
 		http.Redirect(w, r, "/server/about", http.StatusMovedPermanently)
 	})
 	r.Get("/server/about", s.handleAbout)
+	r.Get("/server/dpo", s.handleDPO)
 	r.Get("/server/help", s.handleHelp)
 	r.Get("/server/help/mcp", s.handleHelpMCP)
 	r.Get("/server/privacy", s.handlePrivacy)
@@ -5351,6 +5352,25 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 	s.renderTemplate(w, r, "privacy.html", s.privacyPageData(r))
 }
 
+// handleDPO serves the public data-protection contact page.
+func (s *Server) handleDPO(w http.ResponseWriter, r *http.Request) {
+	data := s.pageData()
+	cfg := s.liveCfg()
+	data["DPOName"] = strings.TrimSpace(cfg.Server.Contact.DPO.Name)
+	data["DPOEmail"] = cfg.DPOEmailPublic()
+	if detectClientType(r) == "text" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		html, err := s.renderTemplateToString(r, "dpo.html", data)
+		if err != nil {
+			_, _ = fmt.Fprintf(w, "Data Protection Officer — %s/server/dpo\n", s.baseURL(r))
+			return
+		}
+		_, _ = fmt.Fprint(w, httputil.HTML2TextConverter(html, 80))
+		return
+	}
+	s.renderTemplate(w, r, "dpo.html", data)
+}
+
 // privacyPageData builds the template data for the privacy page from live config
 // (PART 31). Templates access the privacy tree via .Privacy.*, the analytics
 // platform via .Tracking.*, the auto-merged third-party list via
@@ -5369,6 +5389,8 @@ func (s *Server) privacyPageData(r *http.Request) map[string]interface{} {
 	data["Tracking"] = &tracking
 	data["CCPAOptedOut"] = ccpaOptedOut
 	data["ThirdPartyServices"] = cfg.EffectiveThirdParty()
+	data["DPOName"] = strings.TrimSpace(cfg.Server.Contact.DPO.Name)
+	data["DPOEmail"] = cfg.DPOEmailPublic()
 	return data
 }
 

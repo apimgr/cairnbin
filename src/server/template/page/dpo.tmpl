@@ -1,0 +1,24 @@
+{{define "meta" -}}
+<title>{{t .Lang "dpo.title"}}{{.TitleSeparator}}{{.SiteTitle}}</title>
+<meta name="description" content="{{tf .Lang "dpo.meta_description" "site" .SiteTitle}}">
+{{end}}
+
+{{define "content"}}
+    <div class="container container-sm">
+      <header class="page-header">
+        <h1 class="page-title">{{t .Lang "dpo.title"}}</h1>
+        <p class="page-lead">{{tf .Lang "dpo.page_lead" "site" .SiteTitle}}</p>
+      </header>
+
+      <section class="section-card" aria-labelledby="dpo-contact-heading">
+        <h2 id="dpo-contact-heading">{{t .Lang "dpo.contact_heading"}}</h2>
+        {{if .DPOName}}<p><strong>{{t .Lang "dpo.name_label"}}:</strong> {{.DPOName}}</p>{{end}}
+        {{if .DPOEmail}}
+        <p><strong>{{t .Lang "dpo.email_label"}}:</strong> <a class="long-string" href="mailto:{{.DPOEmail}}">{{.DPOEmail}}</a></p>
+        {{else}}
+        <p>{{t .Lang "dpo.no_email"}} <a href="{{.AssetPrefix}}/server/security">{{t .Lang "dpo.security_link"}}</a>.</p>
+        {{end}}
+        <p><a href="{{.AssetPrefix}}/server/privacy">{{t .Lang "dpo.privacy_link"}}</a></p>
+      </section>
+    </div>
+{{end}}

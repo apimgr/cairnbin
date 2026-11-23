@@ -116,6 +116,13 @@ server:
       city: true
   tor:
     binary: /__cairnbin_e2e__/tor
+  security:
+    blocklists:
+      enabled: true
+      extra_sources:
+        - id: e2e_blocklist
+          type: ip
+          url: http://cairnbin-e2e-runner:64980/blocklist
   contact:
     admin:
       email: e2e-admin@example.test
@@ -128,17 +135,9 @@ server:
         tls: none
       events:
         scheduler_error: true
-web:
-  security:
-    blocklists:
-      enabled: true
-      sources:
-        - file: e2e-blocklist.txt
-          url: http://cairnbin-e2e-runner:64980/blocklist
-    cve:
-      enabled: true
-      file: e2e-cves.json
-      source: http://cairnbin-e2e-runner:64980/cve
+data:
+  cve:
+    source: http://cairnbin-e2e-runner:64980/cve
 EOF
 chmod 600 "${E2E_TEMP_DIR}/volumes/config/cairnbin/server.yml"
 __info "Temp dir: ${E2E_TEMP_DIR}"

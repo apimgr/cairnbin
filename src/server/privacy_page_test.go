@@ -166,6 +166,79 @@ func TestPrivacyPageLocalizesDefaultMarkdownAndPreservesOperatorOverride(t *test
 	}
 }
 
+func TestPrivacyPageShowsOnlyPublicDPOContact(t *testing.T) {
+	s := pagesServer(t)
+	s.cfg.Server.Contact.Admin.Email = "admin-secret@example.test"
+	s.cfg.Server.Contact.General.Email = "general@example.test"
+	s.cfg.Server.Contact.DPO.Name = "Data Officer"
+	s.cfg.Server.Contact.DPO.Email = "dpo@example.test"
+
+	get := func() string {
+		r := httptest.NewRequest(http.MethodGet, "/server/privacy", nil)
+		r.Header.Set("Accept", "text/html")
+		w := httptest.NewRecorder()
+		s.handlePrivacy(w, r)
+		return w.Body.String()
+	}
+	body := get()
+	if !strings.Contains(body, "Data Officer") || !strings.Contains(body, `mailto:dpo@example.test`) {
+		t.Error("privacy page did not show the configured DPO name and email")
+	}
+	if strings.Contains(body, "admin-secret@example.test") || strings.Contains(body, "general@example.test") {
+		t.Error("privacy page exposed an address other than the configured DPO address")
+	}
+
+	s.cfg.Server.Contact.DPO.Email = ""
+	body = get()
+	if !strings.Contains(body, `mailto:general@example.test`) || strings.Contains(body, "admin-secret@example.test") {
+		t.Error("privacy page did not use the public general address fallback safely")
+	}
+
+	s.cfg.Server.Contact.General.Email = ""
+	body = get()
+	if !strings.Contains(body, `href="/server/security"`) || strings.Contains(body, "mailto:") || strings.Contains(body, "admin-secret@example.test") {
+		t.Error("privacy page did not link to security when no public contact address resolves")
+	}
+}
+
+func TestDPOPageUsesPublicAddressFallback(t *testing.T) {
+	s := pagesServer(t)
+	s.cfg.Server.Contact.Admin.Email = "admin-secret@example.test"
+	s.cfg.Server.Contact.General.Email = "general@example.test"
+	s.cfg.Server.Contact.DPO.Name = "Data Officer"
+	s.cfg.Server.Contact.DPO.Email = "dpo@example.test"
+
+	get := func() string {
+		r := httptest.NewRequest(http.MethodGet, "/server/dpo", nil)
+		r.Header.Set("Accept", "text/html")
+		w := httptest.NewRecorder()
+		s.handleDPO(w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("DPO page status = %d: %s", w.Code, w.Body.String())
+		}
+		return w.Body.String()
+	}
+	body := get()
+	if !strings.Contains(body, "Data Officer") || !strings.Contains(body, `mailto:dpo@example.test`) || !strings.Contains(body, `href="/server/privacy"`) {
+		t.Error("DPO page did not show the configured name, email, and privacy link")
+	}
+	if strings.Contains(body, "admin-secret@example.test") || strings.Contains(body, "general@example.test") {
+		t.Error("DPO page exposed an address other than the configured DPO address")
+	}
+
+	s.cfg.Server.Contact.DPO.Email = ""
+	body = get()
+	if !strings.Contains(body, `mailto:general@example.test`) || strings.Contains(body, "admin-secret@example.test") {
+		t.Error("DPO page did not use the public general address fallback safely")
+	}
+
+	s.cfg.Server.Contact.General.Email = ""
+	body = get()
+	if !strings.Contains(body, `href="/server/security"`) || strings.Contains(body, "mailto:") || strings.Contains(body, "admin-secret@example.test") {
+		t.Error("DPO page did not link to security when no public address resolves")
+	}
+}
+
 // findCookie returns the named cookie from a slice, or nil.
 func findCookie(cookies []*http.Cookie, name string) *http.Cookie {
 	for _, c := range cookies {

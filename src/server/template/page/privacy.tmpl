@@ -157,9 +157,15 @@
           {{if .OperatorPrivacyHTML}}<section class="section-card" aria-labelledby="operator-privacy-heading"><h2 id="operator-privacy-heading">{{t .Lang "help.custom_content"}}</h2><div class="markdown-content">{{.OperatorPrivacyHTML}}</div></section>{{end}}
           <section id="contact" class="section-card" aria-labelledby="contact-heading">
           <h2 id="contact-heading">{{t .Lang "privacy.contact_us"}}</h2>
+          {{if .DPOEmail}}
           <p>
-            {{t .Lang "privacy.contact_intro"}} <a href="{{.AssetPrefix}}/server/security">{{t .Lang "privacy.contact_page_link"}}</a>.
+            {{t .Lang "privacy.privacy_inquiries"}}
+            {{if .DPOName}}<strong>{{.DPOName}}:</strong> {{end}}
+            <a class="long-string" href="mailto:{{.DPOEmail}}">{{.DPOEmail}}</a>.
           </p>
+          {{else}}
+          <p>{{t .Lang "privacy.contact_intro"}} <a href="{{.AssetPrefix}}/server/security">{{t .Lang "privacy.contact_page_link"}}</a>.</p>
+          {{end}}
           </section>
     </div>
 {{end}}

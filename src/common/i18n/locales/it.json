@@ -566,6 +566,17 @@
     "custom_content": "Informazioni aggiuntive",
     "mcp_tool": "Strumento"
   },
+  "dpo": {
+    "title": "Responsabile della protezione dei dati",
+    "meta_description": "Informazioni di contatto sulla protezione dei dati per {site}.",
+    "page_lead": "Informazioni di contatto per le richieste sulla protezione dei dati a {site}.",
+    "contact_heading": "Contatto per la protezione dei dati",
+    "name_label": "Nome",
+    "email_label": "E-mail",
+    "no_email": "Non è pubblicato un indirizzo e-mail diretto per la protezione dei dati. Consulta la pagina Sicurezza e segnalazioni per informazioni sulle richieste relative alla privacy.",
+    "security_link": "Sicurezza e segnalazioni",
+    "privacy_link": "Informativa sulla privacy"
+  },
   "privacy": {
     "title": "Informativa sulla privacy",
     "last_updated": "Ultimo aggiornamento:",

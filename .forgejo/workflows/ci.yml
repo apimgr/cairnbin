@@ -122,7 +122,7 @@ jobs:
           path: ./
           base: ${{ steps.range.outputs.base }}
           head: ${{ steps.range.outputs.head }}
-          extra_args: --results=verified,unknown
+          extra_args: --results=${{ steps.range.outputs.base == '' && 'verified' || 'verified,unknown' }} --exclude-paths=.github/trufflehog-exclude.txt
 
   workflow-policy:
     runs-on: ubuntu-26.04

@@ -422,6 +422,17 @@
     "custom_content": "追加情報",
     "mcp_tool": "ツール"
   },
+  "dpo": {
+    "title": "データ保護責任者",
+    "meta_description": "{site} のデータ保護に関する連絡先情報。",
+    "page_lead": "{site} へのデータ保護に関するお問い合わせ先です。",
+    "contact_heading": "データ保護に関する連絡先",
+    "name_label": "名前",
+    "email_label": "メールアドレス",
+    "no_email": "データ保護に関する直接のメールアドレスは公開されていません。プライバシーに関する依頼については、セキュリティと報告のページをご覧ください。",
+    "security_link": "セキュリティと報告",
+    "privacy_link": "プライバシーポリシー"
+  },
   "privacy": {
     "title": "プライバシーポリシー",
     "last_updated": "最終更新:",

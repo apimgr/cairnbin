@@ -422,6 +422,17 @@
     "custom_content": "Zusätzliche Informationen",
     "mcp_tool": "Werkzeug"
   },
+  "dpo": {
+    "title": "Datenschutzbeauftragte:r",
+    "meta_description": "Kontaktinformationen zum Datenschutz für {site}.",
+    "page_lead": "Kontaktinformationen für Datenschutzanfragen an {site}.",
+    "contact_heading": "Datenschutzkontakt",
+    "name_label": "Name",
+    "email_label": "E-Mail",
+    "no_email": "Es ist keine direkte Datenschutz-E-Mail-Adresse veröffentlicht. Informationen zu Datenschutzanfragen finden Sie auf der Seite für Sicherheit und Meldungen.",
+    "security_link": "Sicherheit und Meldungen",
+    "privacy_link": "Datenschutzerklärung"
+  },
   "privacy": {
     "title": "Datenschutzrichtlinie",
     "last_updated": "Zuletzt aktualisiert:",

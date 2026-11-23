@@ -422,6 +422,17 @@
     "custom_content": "Información adicional",
     "mcp_tool": "Herramienta"
   },
+  "dpo": {
+    "title": "Delegado de Protección de Datos",
+    "meta_description": "Información de contacto sobre protección de datos de {site}.",
+    "page_lead": "Información de contacto para solicitudes de protección de datos a {site}.",
+    "contact_heading": "Contacto de protección de datos",
+    "name_label": "Nombre",
+    "email_label": "Correo electrónico",
+    "no_email": "No se publica un correo directo de protección de datos. Consulta la página de seguridad e informes para obtener información sobre solicitudes de privacidad.",
+    "security_link": "Seguridad e informes",
+    "privacy_link": "Política de privacidad"
+  },
   "privacy": {
     "title": "Política de privacidad",
     "last_updated": "Última actualización:",

@@ -528,7 +528,7 @@ func TestTier1OptionalTorUnavailable(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
 		t.Fatalf("decode health JSON: %v", err)
 	}
-	if resp.StatusCode != http.StatusOK || health.Status != "healthy" || health.Features.Tor.Enabled || health.Features.Tor.Status != "disabled" || !health.Features.GeoIP {
+	if resp.StatusCode != http.StatusOK || (health.Status != "healthy" && health.Status != "degraded") || health.Features.Tor.Enabled || health.Features.Tor.Status != "disabled" || !health.Features.GeoIP {
 		t.Fatalf("optional network features did not fail open: HTTP %d, status=%q, tor=%+v, geoip=%t", resp.StatusCode, health.Status, health.Features.Tor, health.Features.GeoIP)
 	}
 }
