@@ -65,6 +65,7 @@
 | `/server/security/policy` | Disclosure policy |
 | `/server/security/thanks` | Acknowledgment after a report is received |
 | `/server/security/report/{tracking_id}` | Researcher status page; the acknowledgment email's token can be used once per day and expires 30 days after the report closes |
+| `/server/dpo` | Public data-protection contact page; shows the configured DPO address or general contact address, and never exposes the admin address |
 | `/server/healthz` | Health page (HTML, text or JSON by content negotiation) |
 | `/api/v1/server/healthz`, `/api/healthz` | Health as JSON by default; text via `.txt`, `Accept: text/plain` or curl-style clients (same handler, no redirect) |
 

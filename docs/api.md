@@ -178,6 +178,7 @@ GET https://pste.us/api/healthz
 ```
 GET  https://pste.us/api/v1/server/about
 GET  https://pste.us/api/v1/server/privacy
+GET  https://pste.us/api/v1/server/dpo
 GET  https://pste.us/api/v1/server/help
 GET  https://pste.us/api/v1/server/help/mcp   # 404 when MCP is disabled
 GET  https://pste.us/api/v1/server/terms
@@ -185,6 +186,8 @@ GET  https://pste.us/api/v1/server/contact
 POST https://pste.us/api/v1/server/contact
 GET  https://pste.us/api/v1/server/auth/check
 ```
+
+`GET /api/v1/server/dpo` returns the public contact name and email plus the resolved absolute privacy-page URL. The email uses the configured DPO address, then the general contact address; the admin address is never exposed. If neither public address is configured, `email` is empty.
 
 The GET routes return `{"ok": true, "data": {...}}` with the same facts the matching `/server/*` page shows. `GET /api/v1/server/contact` describes the report fields, conditional requirements, character limits, captcha provider, available types, security URL and public abuse email; it never returns recipient addresses. It also returns a signed `form_token`. Submit `type` as `abuse`, `dmca` or `privacy`, include the required fields for that type, and send an empty `website` honeypot field only on browser forms. Request bodies are limited to 256 KiB and email must be one address. Name, email, subject and message limits are 100, 254, 200 and 5000 Unicode characters after trimming. For the `simple` captcha, GET returns a one-use `captcha_id` and question; POST accepts `captcha_id` with `captcha_answer`. Provider captchas accept `g-recaptcha-response` or `h-captcha-response`, with the simple challenge available as the no-JavaScript fallback. A browser form POST must include a same-origin `Origin`, `Referer` or `Sec-Fetch-Site` header.
 

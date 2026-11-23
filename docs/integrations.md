@@ -97,6 +97,7 @@ curl -q -LSsf -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
 | `/server/docs/swagger`, `/server/docs/graphql` | Swagger UI and GraphiQL |
 | `/server/help`, `/server/help/mcp` | General API help and the MCP connection guide |
 | `/server/preferences`, `/server/preferences/tokens` | Guest preferences and owner-token management |
+| `/server/dpo` | Public Data Protection Officer contact page (uses the configured DPO address, then the general contact address; never exposes the admin address) |
 | `/server/security`, `/server/security/policy`, `/server/security/thanks`, `/server/security/report/{tracking_id}` | Security overview, disclosure policy, report acknowledgment, and researcher status |
 | `/api/swagger`, `/api/graphql`, `/api/healthz` | Unversioned aliases of the versioned `/api/v1/server/*` routes (served directly, never redirected) |
 | `/.well-known/llms.txt`, `/llms.txt` | AI-agent discovery document |

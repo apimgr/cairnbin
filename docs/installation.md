@@ -1,6 +1,18 @@
 # Installation
 
-## Binary (recommended)
+## Docker (recommended)
+
+```bash
+docker run -d \
+  --name cairnbin \
+  -p 172.17.0.1:64580:80 \
+  -p 9999:9999 \
+  -v cairnbin-config:/config \
+  -v cairnbin-data:/data \
+  ghcr.io/apimgr/cairnbin:latest
+```
+
+## Binary
 
 Download the latest binary for your platform from [GitHub Releases](https://github.com/apimgr/cairnbin/releases).
 
@@ -22,18 +34,6 @@ curl -q -LSsf https://github.com/apimgr/cairnbin/raw/main/scripts/install.sh | b
 
 Set `INSTALL_DIR` to choose the destination directory (default: `/usr/local/bin`).
 Set `VERSION` to install a specific release tag; otherwise the latest release is used.
-
-## Docker
-
-```bash
-docker run -d \
-  --name cairnbin \
-  -p 172.17.0.1:64580:80 \
-  -p 9999:9999 \
-  -v cairnbin-config:/config \
-  -v cairnbin-data:/data \
-  ghcr.io/apimgr/cairnbin:latest
-```
 
 ## Docker Compose
 
