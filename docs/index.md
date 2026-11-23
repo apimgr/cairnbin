@@ -70,7 +70,7 @@ On first run the server binds all interfaces on a random port in the 64000-64999
 - [Official Site](https://pste.us)
 - [Live Demo](https://pste.us)
 - [API Documentation](https://pste.us/server/docs/swagger) (Swagger UI)
-- [GraphQL Playground](https://pste.us/server/docs/graphql)
+- [GraphiQL](https://pste.us/server/docs/graphql)
 - [Source on GitHub](https://github.com/apimgr/cairnbin)
 
 ## License

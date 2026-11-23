@@ -10,8 +10,8 @@ PROJECT_ORG  := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^
 # future renames.
 INTERNAL_NAME := $(PROJECT_NAME)
 
-# Version precedence: release.txt (wins if it exists) > VERSION env var > "devel" fallback
-VERSION := $(shell cat release.txt 2>/dev/null || echo "$${VERSION:-devel}")
+# Local builds: user VERSION override > non-empty release.txt > short commit id > devel outside git.
+VERSION ?= $(shell v=; [ -r release.txt ] && v=$$(tr -d '[:space:]' < release.txt); if [ -n "$$v" ]; then echo "$$v"; else git rev-parse --short=7 HEAD 2>/dev/null || echo devel; fi)
 RELEASE_VERSION := $(patsubst v%,%,$(VERSION))
 RELEASE_TAG := v$(RELEASE_VERSION)
 
@@ -68,7 +68,7 @@ TEST_NETWORK  ?= $(PROJECT_NAME)-test-net
 GO_DOCKER_RUN := docker run --rm --name $(PROJECT_NAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) --memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) -v $(PWD):/app -v $(GO_CACHE):/usr/local/share/go/pkg/mod -v $(GO_BUILD):/usr/local/share/go/cache -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false $(EXTRA_ENV)
 GO_DOCKER := $(GO_DOCKER_RUN) casjaysdev/go:latest
 
-.PHONY: build local release docker test dev clean
+.PHONY: build local release release-check docker test dev clean
 .DEFAULT_GOAL := build
 
 # =============================================================================
@@ -136,11 +136,10 @@ local: clean
 # =============================================================================
 # RELEASE - Manual local release (stable only)
 # =============================================================================
-release: build
-	@if ! printf '%s\n' "$(VERSION)" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		echo "ERROR: make release requires a stable SemVer version (X.Y.Z) in release.txt or VERSION"; \
-		exit 1; \
-	fi
+release-check:
+	@echo "$(VERSION)" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$$' >/dev/null || { echo "ERROR: make release needs a stable SemVer X.Y.Z in release.txt (got '$(VERSION)')" >&2; exit 78; }
+
+release: release-check build
 	@mkdir -p $(RELDIR)
 	@echo "Preparing release $(RELEASE_TAG)..."
 

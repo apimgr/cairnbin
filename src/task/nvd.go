@@ -62,7 +62,7 @@ func updateNVD(ctx context.Context, dataDir string, cfg NVDConfig, client *http.
 		source = defaultNVDSource
 	}
 	parsed, err := url.Parse(source)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+	if err != nil || !validNVDSource(parsed) {
 		return fmt.Errorf("cve_update: invalid NVD API source")
 	}
 	if client == nil {

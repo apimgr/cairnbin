@@ -48,6 +48,11 @@ func TestMain(m *testing.M) {
 			http.Error(w, "local update fixture failure", http.StatusInternalServerError)
 			return
 		}
+		if r.URL.Path == "/cve" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"totalResults":1,"resultsPerPage":2000,"startIndex":0,"vulnerabilities":[{"cve":{"id":"CVE-2099-0001","descriptions":[]}}]}`)
+			return
+		}
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = io.WriteString(w, "127.0.0.1/32 # local e2e fixture\n")
 	})}

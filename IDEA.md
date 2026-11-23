@@ -49,7 +49,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - Raw paste view, file download, iframe-embeddable view with copy-ready HTML and Markdown embed snippets offered on the paste view page, and a QR code available as both a page and a PNG image
 - View count tracking; automatic background cleanup of expired and burned pastes
 - Full web frontend (server-side Go templates, dark/light/auto theme, installable PWA with offline recovery at the root or under a mounted base path, mobile-first)
-- Static info pages: about, help, health check, privacy, terms
+- Static info pages: about, help, health check, privacy, data protection officer contact, terms
 - CLI client (`cairnbin-cli`) — full API access from the terminal
 - OpenAPI/Swagger docs
 - GraphQL read-only query interface (create and delete are REST-only)
