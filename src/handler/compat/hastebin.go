@@ -18,7 +18,7 @@ import (
 // The request body is the raw paste content. Responds {"key":"<id>"} on success;
 // raw retrieval is served by the native GET /raw/{id} route.
 func (c *Handler) HastebinCreate(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, c.ph.EffectiveReadLimit()))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, c.effectiveReadLimit()))
 	if err != nil {
 		status := http.StatusBadRequest
 		if isMaxBytesErr(err) {

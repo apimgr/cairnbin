@@ -36,7 +36,7 @@ func (c *Handler) RootUpload(w http.ResponseWriter, r *http.Request) {
 	// configured paste.max_size before any field is read, so a large
 	// "file" part can't spool unbounded data to disk and the sprunge/ix.io
 	// text fields honor the same limit as every other create path.
-	r.Body = http.MaxBytesReader(w, r.Body, c.ph.EffectiveReadLimit())
+	r.Body = http.MaxBytesReader(w, r.Body, c.effectiveReadLimit())
 	// Explicitly parse the form first: for a urlencoded body (sprunge/f:1),
 	// r.FormFile below would call ParseMultipartForm, which short-circuits
 	// on a non-multipart Content-Type via ErrNotMultipart *before* checking
@@ -66,7 +66,7 @@ func (c *Handler) RootUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	if file, _, err := r.FormFile("file"); err == nil {
 		defer func() { _ = file.Close() }()
-		body, _ := io.ReadAll(io.LimitReader(file, c.ph.EffectiveReadLimit()))
+		body, _ := io.ReadAll(io.LimitReader(file, c.effectiveReadLimit()))
 		c.zeroXRespond(w, r, string(body), r.FormValue("expires"))
 		return
 	} else if isMaxBytesErr(err) {

@@ -1234,6 +1234,11 @@ func fmtUserDate(t time.Time) string {
 // It updates rate limiter thresholds and tracks restart-required key changes.
 func (s *Server) OnConfigChange(next *config.Config) {
 	if next != nil {
+		// paste.max_size is hot-reloadable. Keep request enforcement in sync
+		// with liveCfg so a page's displayed limit and create paths cannot drift.
+		if s.pasteHandler != nil {
+			s.pasteHandler.SetMaxSize(next.Paste.MaxSizeBytes)
+		}
 		datasetsChanged := !reflect.DeepEqual(s.lastBlocklistsConfig, next.Server.Security.Blocklists) ||
 			!reflect.DeepEqual(s.lastGeoIPConfig, next.Server.GeoIP) ||
 			!reflect.DeepEqual(s.lastCVEConfig, next.Data.CVE) ||

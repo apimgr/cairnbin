@@ -643,6 +643,39 @@ func TestCreateFromForm_EmptyContent(t *testing.T) {
 	}
 }
 
+func TestCreateFromForm_ExceedsConfiguredMaxSize(t *testing.T) {
+	h, _ := newTestHandler(t)
+	h.SetMaxSize(8)
+
+	form := url.Values{"content": {"content exceeds the configured request limit"}}
+	req := httptest.NewRequest(http.MethodPost, "/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_, status, err := h.CreateFromForm(req)
+	if err == nil || status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("CreateFromForm oversized urlencoded body: status=%d err=%v; want 413", status, err)
+	}
+}
+
+func TestCreateFromForm_RejectsOversizedMultipartTextField(t *testing.T) {
+	h, _ := newTestHandler(t)
+	h.SetMaxSize(64)
+
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	if err := w.WriteField("content", strings.Repeat("x", 100)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/create", &body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	_, status, err := h.CreateFromForm(req)
+	if err == nil || status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("CreateFromForm oversized multipart text field: status=%d err=%v; want 413", status, err)
+	}
+}
+
 // ─── CreatePaste — binary content handling ───────────────────────────────────
 
 // TestCreatePaste_JSONBinaryDetectedAndEncoded verifies that raw non-text

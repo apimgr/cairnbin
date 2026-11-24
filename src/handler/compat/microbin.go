@@ -32,7 +32,7 @@ type microbinCreateFields struct {
 // MicrobinCreate implements the MicroBin-compatible create endpoint. It uses
 // the compatibility delete token and never creates native owner credentials.
 func (c *Handler) MicrobinCreate(w http.ResponseWriter, r *http.Request) {
-	limit := c.ph.EffectiveReadLimit()
+	limit := c.effectiveReadLimit()
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	var body microbinCreateFields
 	contentType := r.Header.Get("Content-Type")

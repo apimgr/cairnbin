@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image/png"
 	"io"
+	"math"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -2384,6 +2385,28 @@ func TestBlocklistMiddleware(t *testing.T) {
 // ─── Server.OnConfigChange ────────────────────────────────────────────────────
 
 func TestOnConfigChange(t *testing.T) {
+	t.Run("paste max size updates immediately", func(t *testing.T) {
+		initial := config.DefaultConfig()
+		s := newServerWithPasteHandler(initial, &stubDB{})
+		s.pasteHandler.SetMaxSize(initial.Paste.MaxSizeBytes)
+
+		for _, tc := range []struct {
+			value string
+			want  int64
+		}{
+			{value: "256kb", want: 256 << 10},
+			{value: "0", want: math.MaxInt64 - 1},
+		} {
+			next := config.DefaultConfig()
+			next.Paste.MaxSize = tc.value
+			config.Validate(next)
+			s.OnConfigChange(next)
+			if got := s.pasteHandler.EffectiveReadLimit(); got != tc.want {
+				t.Errorf("paste.max_size %q effective limit = %d, want %d", tc.value, got, tc.want)
+			}
+		}
+	})
+
 	t.Run("I2P settings update the manager", func(t *testing.T) {
 		initial := &config.Config{}
 		s := newMinimalServer(initial)

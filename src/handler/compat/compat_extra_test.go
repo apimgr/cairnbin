@@ -384,10 +384,42 @@ func TestTermbinHTTPRespond_EmptyContent(t *testing.T) {
 // ─── compat create endpoints honor paste.max_size ──────────────────────────────
 //
 // createFromRequest (the native create path) enforces server.yml's
-// paste.max_size via SetMaxSize/maxSize(); these compat routes must
-// enforce the exact same configured limit rather than falling back to Go's
-// stdlib ParseForm default, so a small (or large) operator-configured limit
-// applies uniformly across every third-party-compatible API surface.
+// paste.max_size via SetMaxSize/maxSize(), subject to the 10 MiB compatibility
+// body cap, rather than falling back to Go's stdlib ParseForm default.
+
+func TestEffectiveReadLimitCombinesConfiguredAndCompatibilityCaps(t *testing.T) {
+	h, _ := newCompatHandler(t)
+	tests := []struct {
+		name string
+		set  int64
+		want int64
+	}{
+		{name: "smaller configured limit", set: 8, want: 8},
+		{name: "compatibility cap", set: maxCompatBodySize, want: maxCompatBodySize},
+		{name: "larger configured limit", set: 20 << 20, want: maxCompatBodySize},
+		{name: "unlimited native limit", set: 0, want: maxCompatBodySize},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h.ph.SetMaxSize(tt.set)
+			if got := h.effectiveReadLimit(); got != tt.want {
+				t.Fatalf("effectiveReadLimit() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHastebinCreateRejectsBodyAboveCompatibilityCap(t *testing.T) {
+	h, _ := newCompatHandler(t)
+	h.ph.SetMaxSize(20 << 20)
+	req := httptest.NewRequest(http.MethodPost, "/documents", strings.NewReader(strings.Repeat("x", int(maxCompatBodySize+1))))
+	req.Header.Set("Content-Type", "text/plain")
+	rr := httptest.NewRecorder()
+	h.HastebinCreate(rr, req)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", rr.Code)
+	}
+}
 
 func TestPastebinPost_ExceedsConfiguredMaxSize(t *testing.T) {
 	ch, _ := newCompatHandler(t)

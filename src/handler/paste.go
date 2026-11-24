@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
@@ -67,6 +68,7 @@ type PasteHandler struct {
 	// maxSizeSet is true; zero means the operator explicitly configured no
 	// limit ("0" or a negative paste.max_size). Unit tests that never call
 	// SetMaxSize fall back to the 10MiB default via maxSize().
+	maxSizeMu    sync.RWMutex
 	maxSizeBytes int64
 	// maxSizeSet reports whether SetMaxSize has been called, distinguishing
 	// "operator configured unlimited (0)" from "never configured".
@@ -82,6 +84,8 @@ const defaultMaxSizeBytes int64 = 10 << 20
 // defaultMaxSizeBytes when SetMaxSize was never called. A return value of
 // 0 means the operator configured an unlimited paste size.
 func (h *PasteHandler) maxSize() int64 {
+	h.maxSizeMu.RLock()
+	defer h.maxSizeMu.RUnlock()
 	if h.maxSizeSet {
 		return h.maxSizeBytes
 	}
@@ -135,6 +139,8 @@ func (h *PasteHandler) SetMaxSize(n int64) {
 	if n < 0 {
 		n = 0
 	}
+	h.maxSizeMu.Lock()
+	defer h.maxSizeMu.Unlock()
 	h.maxSizeBytes = n
 	h.maxSizeSet = true
 }
@@ -330,7 +336,14 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 		}
 
 	case strings.HasPrefix(ct, "multipart/form-data"):
+		// ParseMultipartForm's argument is only an in-memory threshold, not a
+		// request-body limit. Bound the full form so a text field cannot bypass
+		// the content-size check that file uploads already receive.
+		r.Body = http.MaxBytesReader(nil, r.Body, limit)
 		if err := r.ParseMultipartForm(limit); err != nil {
+			if isMaxBytesError(err) {
+				return nil, http.StatusRequestEntityTooLarge, fmt.Errorf("paste exceeds maximum size of %d bytes", limit)
+			}
 			return nil, http.StatusBadRequest, fmt.Errorf("failed to parse form")
 		}
 		file, header, err := r.FormFile("files")
@@ -365,7 +378,12 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 		}
 
 	case strings.HasPrefix(ct, "application/x-www-form-urlencoded"):
+		// ParseForm otherwise reads an unbounded urlencoded request body.
+		r.Body = http.MaxBytesReader(nil, r.Body, limit)
 		if err := r.ParseForm(); err != nil {
+			if isMaxBytesError(err) {
+				return nil, http.StatusRequestEntityTooLarge, fmt.Errorf("paste exceeds maximum size of %d bytes", limit)
+			}
 			return nil, http.StatusBadRequest, fmt.Errorf("failed to parse form")
 		}
 		req.Content = r.FormValue("content")
@@ -822,6 +840,11 @@ var uploadContentTypes = map[string]string{
 	".xml": "text/plain; charset=utf-8", ".yaml": "text/plain; charset=utf-8", ".yml": "text/plain; charset=utf-8",
 	".toml": "text/plain; charset=utf-8", ".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8",
 	".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8",
+}
+
+func isMaxBytesError(err error) bool {
+	var maxBytesErr *http.MaxBytesError
+	return errors.As(err, &maxBytesErr)
 }
 
 // readLimited reads r up to limit bytes and reports whether the stream had

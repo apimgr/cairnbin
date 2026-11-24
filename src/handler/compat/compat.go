@@ -24,6 +24,8 @@ import (
 	"github.com/apimgr/cairnbin/src/handler"
 )
 
+const maxCompatBodySize int64 = 10 << 20
+
 // errCompatBodyTooLarge is returned by parseFormLimited when the request body
 // exceeds the configured paste.max_size limit.
 var errCompatBodyTooLarge = errors.New("request body exceeds maximum paste size")
@@ -40,15 +42,12 @@ func New(ph *handler.PasteHandler, db database.DB, version string) *Handler {
 	return &Handler{ph: ph, db: db, version: version}
 }
 
-// parseFormLimited wraps r.Body with http.MaxBytesReader (bounded by the
-// configured paste.max_size, the same limit createFromRequest
-// enforces) before calling r.ParseForm(), so form-encoded compat create
-// endpoints honor the operator's configured size instead of falling back to
-// Go stdlib's own hardcoded default. Returns errCompatBodyTooLarge when the
-// limit is exceeded so callers can respond with a 413 in their protocol's
-// own error format.
+// parseFormLimited wraps r.Body with http.MaxBytesReader using the lower of
+// configured paste.max_size and the compatibility cap before calling
+// r.ParseForm(). Returns errCompatBodyTooLarge when the limit is exceeded so
+// callers can respond with a 413 in their protocol's own error format.
 func (c *Handler) parseFormLimited(w http.ResponseWriter, r *http.Request) error {
-	r.Body = http.MaxBytesReader(w, r.Body, c.ph.EffectiveReadLimit())
+	r.Body = http.MaxBytesReader(w, r.Body, c.effectiveReadLimit())
 	if err := r.ParseForm(); err != nil {
 		if isMaxBytesErr(err) {
 			return errCompatBodyTooLarge
@@ -56,6 +55,16 @@ func (c *Handler) parseFormLimited(w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 	return nil
+}
+
+// effectiveReadLimit applies both the configured native paste limit and the
+// fixed 10 MiB compatibility-protocol cap described in IDEA.md.
+func (c *Handler) effectiveReadLimit() int64 {
+	limit := c.ph.EffectiveReadLimit()
+	if limit > maxCompatBodySize {
+		return maxCompatBodySize
+	}
+	return limit
 }
 
 // isMaxBytesErr reports whether err (or one it wraps) is the overflow error
