@@ -131,7 +131,7 @@ The following settings use these dotted paths in the merged configuration. The a
 | `server.contact.{admin,security,abuse,general}` | `email`, `webhooks` | Per-role notification destinations; empty roles use the documented fallback chain. |
 | `server.pages.contact` | `enabled`, `captcha`, `captcha_site_key`, `captcha_secret_key`, `antispam.*`, `success_message` | Contact form behavior. Help content remains configuration-driven; other page content is in `yaml.d/branding.yml`. |
 | `database` | `driver`, `url`, `token`, `pool.max_open`, `pool.max_idle`, `pool.max_lifetime`, `pool.max_idle_time` | SQLite or remote libSQL/Turso storage and connection pooling. SQLite is the local default. |
-| `paste` | `max_size`, `default_expiry`, `default_language`, `max_burn_after`, `allow_unlisted` | Paste size, expiry, language, burn-after-read, and visibility defaults. |
+| `paste` | `max_size`, `default_expiry`, `default_language`, `max_burn_after`, `allow_unlisted` | Paste size, expiry, language, burn-after-read, and visibility defaults. `max_size` defaults to `10mb`, hot-reloads from config files, and accepts `0` for unlimited native pastes. |
 | `server.cache` | `type`, `url`, `host`, `port`, `username`, `password`, `db`, `tls`, `tls_skip_verify`, `pool_size`, `min_idle`, `timeout`, `prefix`, `ttl` | In-memory or remote Redis/Valkey cache. `url` takes precedence over individual connection fields. |
 | `server.metrics` | `enabled`, `include_system`, `include_runtime`, `token` (legacy Prometheus token), `auth.allow_unauthenticated`, `auth.tokens.{prometheus,grafana,loki}`, `root.enabled`, `loki.{max_entries,max_age}`, `duration_buckets`, `size_buckets` | Internal metrics services, their credentials, optional `/metrics` alias, and bounded Loki output. |
 | `server.geoip` | `enabled`, `dir`, `deny_countries`, `allow_countries`, `presets`, `databases.{asn,country,city}` | Local GeoIP databases and country filtering. `allow_countries` takes precedence when both country lists are set. |
@@ -158,6 +158,17 @@ The following settings use these dotted paths in the merged configuration. The a
 | `server.healthz.root.enabled` | boolean | Opt-in root `/healthz` alias; `/server/healthz` remains canonical. |
 | `server.compression` | `enabled`, `level`, `types` | Response compression and MIME types. |
 | `server.debug` | `pprof`, `log_queries`, `log_cache`, `log_bodies`, `max_body_log_size`, `block_profile_rate`, `mutex_profile_fraction`, `runtime_endpoints` | Debug-only profiling and diagnostics. These settings require debug mode. |
+
+### Paste size
+
+Set the native create-body limit in `server.yml`; changes take effect on the next config reload:
+
+```yaml
+paste:
+  max_size: 10mb # Default: 10 MiB; use 0 for no native paste-size limit.
+```
+
+Size suffixes are binary (`kb`, `mb`, `gb`, or `tb`). Bare numbers mean MiB. The limit applies to JSON, raw, URL-encoded, and multipart create requests. Compatibility endpoints use the lower of `paste.max_size` and their fixed 10 MiB request-body cap.
 
 The generated first-run `server.yml` contains node settings only. Area files are created when migration or an explicit configuration writer moves or saves those settings. The area-file homes are:
 
