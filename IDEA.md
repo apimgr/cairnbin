@@ -19,7 +19,7 @@ license: MIT
 binary: cairnbin
 client_binary: cairnbin-cli
 api_version: v1
-owner_token: cairnbin_owner_token_rU3uW5Ze
+owner_token: cairnbin_owner_token_karmassz
 tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, 0x0.st, sprunge.us, ix.io, and termbin/fiche.
 
 ## Business logic
@@ -45,7 +45,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - Burn after N reads: paste is permanently deleted once its view count reaches a user-set threshold (1–9999); `0` = disabled
 - Visibility: public (listed in recent pastes) or unlisted (URL-only, not listed)
 - Owner token: an `own_`-prefixed cryptographically random token issued on first resource creation or explicit request and returned as `owner_token`; reusable across pastes created by the same caller; stored as a SHA-256 hash with an encrypted recoverable copy; required to delete the paste before natural expiry and viewable, masked by default, in `/server/preferences/tokens`
-- Token reuse: callers may supply an existing owner token on paste creation to link the new paste to that token; the web UI saves the token to the `cairnbin_owner_token_rU3uW5Ze` cookie (HttpOnly, primary) and, as a JS convenience copy, to `localStorage` under the same key; the create form is pre-filled by JS only, never load-bearing
+- Token reuse: callers may supply an existing owner token on paste creation to link the new paste to that token; the web UI saves the token to the `cairnbin_owner_token_karmassz` cookie (HttpOnly, primary) and, as a JS convenience copy, to `localStorage` under the same key; the create form is pre-filled by JS only, never load-bearing
 - Raw paste view, file download, iframe-embeddable view with copy-ready HTML and Markdown embed snippets offered on the paste view page, and a QR code available as both a page and a PNG image
 - View count tracking; automatic background cleanup of expired and burned pastes
 - Full web frontend (server-side Go templates, dark/light/auto theme, installable PWA with offline recovery at the root or under a mounted base path, mobile-first)
@@ -224,6 +224,14 @@ The routes below are the Cairnbin paste API and the external wire-compatible API
 | GET | `/api/{api_version}/pasta` | None | List pastes using the microbin-compatible response format selected by `Accept`. |
 | GET | `/api/{api_version}/pasta/{id}` | None | Retrieve a microbin-compatible paste using the response format selected by `Accept`. |
 | DELETE | `/api/{api_version}/pasta/{id}` | Compat delete token | Delete a microbin-compatible paste; returns the protocol result. |
+| GET | `/api/{api_version}/schedulers` | None | List registered background schedulers and their current status. |
+| GET | `/api/{api_version}/schedulers/{id}` | None | Return the configuration and current status of one scheduler. |
+| GET | `/api/{api_version}/schedulers/{id}/history` | None | Return recent execution history for one scheduler. |
+| POST | `/api/{api_version}/schedulers/{id}/run` | Operator Bearer token | Trigger one scheduler run; returns the run result. |
+| POST | `/api/{api_version}/schedulers/{id}/enable` | Operator Bearer token | Enable one scheduler; returns its updated status. |
+| POST | `/api/{api_version}/schedulers/{id}/disable` | Operator Bearer token | Disable one scheduler; returns its updated status. |
+| POST | `/upload` | None | Create a microbin-compatible paste using its upload form; returns the protocol response and compat delete token. |
+| GET | `/upload/{id}` | None | Render a microbin-compatible paste view. |
 | POST | `/api/create` | None; supplied `apikey` is ignored | Create a stikked-compatible paste from form fields; returns a view URL or `Error: <message>`. |
 | GET | `/api/paste/{id}` | None | Retrieve a paste using the stikked JSON response shape. |
 | GET | `/view/{id}` | None | Render the stikked-compatible paste detail page without redirecting link pastes. |
