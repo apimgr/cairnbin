@@ -235,6 +235,12 @@ Every response carries `{"ok":true,"data":{"theme","lang","prefs"}}`; `prefs` is
 
 The HTML page is `GET /server/preferences/tokens`. Its web action forms use the primary owner cookie and CSRF protection. The API mirror requires the primary owner's Bearer token; linked tokens cannot manage tokens.
 
+Web actions that display a token return `303 See Other` to the matching card. A
+one-use, 60-second HttpOnly, Secure, SameSite=Strict cookie identifies that
+card; the redirected page decrypts and displays only that token for the page
+load, then clears the cookie. The page response uses `Cache-Control: no-store`.
+API actions return token secrets in their JSON response body without a redirect.
+
 | Method | API route | Purpose |
 |--------|-----------|---------|
 | `GET` | `/api/v1/server/preferences/tokens` | List masked owner tokens |

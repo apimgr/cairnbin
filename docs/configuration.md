@@ -55,10 +55,13 @@ server:
     allow_credentials: true
     max_age: 86400
   rate_limit:
-    enabled: true
+    # Always on. Anonymous clients use per-IP counters; valid Bearer clients
+    # use per-token counters. Failed authentication is always counted per IP.
     read: {requests: 120, window: 60}
     write: {requests: 10, window: 60}
     health: {requests: 120, window: 60}
+    strict: {requests: 10, window: 900}
+    auth_failures: {requests: 5, window: 900}
     global_burst: 240
   termbin:
     # Raw-TCP termbin/fiche listener (on by default).
@@ -141,7 +144,7 @@ The following settings use these dotted paths in the merged configuration. The a
 | `server.privacy` | `data.{sold,stored_on_server,sharing}`, `retention.{period,export_available,deletion_available}`, `consent.*`, `cookies.{essential,preferences,analytics}`, `third_party.services` | Data-disclosure and consent behavior. Privacy text is built in and may be extended with `server.branding.content.privacy`. |
 | `server.tracking` | `type`, `id`, `url` | Optional analytics provider; empty or `none` disables tracking. |
 | `server.security` | `encryption_key`, `allowlist`, `blocked_ips`, `abuse_detection.{request_flood,auto_block_ip,auto_alert}`, `blocklists.{enabled,extra_sources}`, `reports.retention_days`, `cve.*`, `trivy.*` | At-rest encryption key, IP controls, abuse response, and downloaded security data. Closed security reports are retained for 365 days by default; the built-in `firehol_level1` IPv4 source is always active, while `extra_sources` adds operator-managed lists. |
-| `server.rate_limit` | `read.{requests,window}`, `write.{requests,window}`, `health.{requests,window}`, `global_burst` | Always-on per-IP request limits by endpoint class. |
+| `server.rate_limit` | `read.{requests,window}`, `write.{requests,window}`, `health.{requests,window}`, `strict.{requests,window}`, `auth_failures.{requests,window}`, `global_burst` | Always-on sliding-window request limits. Anonymous requests use per-IP counters; valid Bearer requests use per-token counters; failed authentication uses per-IP counters. Counters persist in `server.db` by default or use the configured Valkey/Redis cache. |
 | `server.limits` | `max_body_size`, `read_timeout`, `write_timeout`, `idle_timeout` | HTTP request and connection limits. |
 | `server.trusted_proxies` | `additional` | Additional trusted proxy IPs/CIDRs beyond the built-in private ranges. |
 | `server.url_detection` | `learning`, `min_samples`, `sample_window`, `log_changes`, `live_reload` | Hostname learning behavior. |
