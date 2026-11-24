@@ -78,22 +78,24 @@ AI clients (Claude, IDE agents, other MCP clients) can use the paste API as tool
 | `POST https://pste.us/api/mcp`, `POST https://pste.us/mcp` | Aliases, same handler |
 
 - Connection instructions, the live public tool list, and project usage notes are at `https://pste.us/server/help/mcp`; the JSON mirror is `GET /api/v1/server/help/mcp`. Both help routes are always available.
-- Authentication is the API's own `Authorization: Bearer tok_...` header. There is no MCP token. Create a linked token on `/server/preferences/tokens` for each MCP client so it can be revoked on its own.
+- Authentication is the API's own `Authorization: Bearer own_...` header. There is no MCP token. Create a linked token on `/server/preferences/tokens` for each MCP client so it can be revoked on its own.
 - Tools are generated from the API routes: `getApiV1Pastes`, `postApiV1Pastes`, `getApiV1PastesId`, `getApiV1PastesIdRaw`, `deleteApiV1PastesId`, `getApiV1ServerHealthz`, and `getApiV1ServerVersion`. Token management is never a tool.
 - `getApiV1Pastes` lists public pastes by default; pass `scope: "owned"` with an owner or linked Bearer token to list that owner's public and unlisted pastes.
-- An anonymous `postApiV1Pastes` call returns the `owner_token` in the tool result; store it to keep control of the paste.
+- The MCP endpoint requires the same API Bearer token on every request, including `tools/list`; use a separately created linked token for each client. Token issuance is never exposed as a tool.
 - `GET` and `DELETE` return `405`. MCP is always available.
 
 ```bash
 curl -q -LSsf -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+  -H 'Authorization: Bearer own_...' -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/list' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}'
 ```
 
 ## Discovery & Protocol Endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
-| `/api/autodiscover` | Unversioned client bootstrap: server name, version, API version, base URL, feature flags and `cli_min_version` |
+| `/api/autodiscover` | Unversioned client bootstrap: `name`, `version`, `api`, `urls`, exposed overlay addresses, `cli_versions`, and `cli_min_version`; no settings or config schema |
 | `/server/docs/swagger`, `/server/docs/graphql` | Swagger UI and GraphiQL |
 | `/server/help`, `/server/help/mcp` | General API help and the MCP connection guide |
 | `/server/preferences`, `/server/preferences/tokens` | Guest preferences and owner-token management |

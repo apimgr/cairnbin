@@ -40,7 +40,7 @@ POST https://pste.us/api/v1/pastes
     "views": 0,
     "created_at": "2025-01-01T00:00:00Z",
     "link": "https://pste.us/abc12345",
-    "owner_token": "tok_AbCdEfGh12345678ijklMNOP87654321"
+    "owner_token": "own_AbCdEfGh12345678ijklMNOP87654321"
   }
 }
 ```
@@ -180,7 +180,7 @@ GET  https://pste.us/api/v1/server/about
 GET  https://pste.us/api/v1/server/privacy
 GET  https://pste.us/api/v1/server/dpo
 GET  https://pste.us/api/v1/server/help
-GET  https://pste.us/api/v1/server/help/mcp   # 404 when MCP is disabled
+GET  https://pste.us/api/v1/server/help/mcp   # MCP is always enabled
 GET  https://pste.us/api/v1/server/terms
 GET  https://pste.us/api/v1/server/contact
 POST https://pste.us/api/v1/server/contact

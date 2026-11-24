@@ -95,10 +95,10 @@ fi
 # Unit tests
 make test
 
-# Container integration tests
-bash tests/docker.sh
+# Docker-only basic binary validation
+bash tests/run_tests.sh
 
-# Incus VM tests
+# Full application and systemd integration tests in an Incus container
 bash tests/incus.sh
 ```
 

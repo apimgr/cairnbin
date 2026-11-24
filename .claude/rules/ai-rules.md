@@ -54,7 +54,7 @@
 - Always run the Mandatory Verification Steps checklist before saying "done"
 - Always keep `IDEA.md` in sync with features; `AI.md` stays read-only
 - Always check `.claude/rules/` exists on first session with a project; create/update the 13 rule files if missing or AI.md is newer
-- Always translate all user-facing text added or modified (see Translation Rule); update `en.json`/`es.json` and note other locales need the key
+- Always translate all user-facing text added or modified in every supported locale; keep every locale key set in sync
 - Always write and re-read `{project_dir}/.git/COMMIT_MESS` before running `gitcommit`
 - Always use `gitcommit --dir {dir} all` for commits, never plain git
 - Always verify own work with real tools (tests, curl, build, browser) per change-type — never rely on "looks right"

@@ -114,7 +114,7 @@ cairnbin-cli --server https://your-server.example.com create myfile.txt
 
 ```
 URL:          https://pste.us/abc12345
-Delete Token: tok_AbCdEfGh12345678ijklMNOP87654321
+Delete Token: own_AbCdEfGh12345678ijklMNOP87654321
 ```
 
 The owner token remains viewable, masked by default, at `/server/preferences/tokens`. CLI delete requests send it as `Authorization: Bearer {token}`.
@@ -195,7 +195,7 @@ cairnbin-cli delete <id> <delete-token>
 **Example:**
 
 ```bash
-cairnbin-cli delete abc12345 tok_AbCdEfGh12345678ijklMNOP87654321
+cairnbin-cli delete abc12345 own_AbCdEfGh12345678ijklMNOP87654321
 ```
 
 ### list

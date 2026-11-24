@@ -9,7 +9,7 @@
 
 ## Owner Tokens
 
-- Generated from cryptographically secure randomness as `tok_` plus 32 base62 characters
+- Generated from cryptographically secure randomness as `own_` plus 32 base62 characters
 - Stored as a SHA-256 hash and an AES-256-GCM encrypted copy; plaintext is never logged or stored unencrypted
 - Returned in the response when a new owner is created and viewable, masked by default, at `/server/preferences/tokens`
 - Native API credentials use `Authorization: Bearer {token}` only; alternate headers and query tokens are ignored
@@ -100,19 +100,20 @@ Only these `/.well-known/*` entries are served: `security.txt`, `pgp-key.asc` (w
 
 ## Tor Privacy
 
-Requests whose `Host` matches the configured `tor.onion_address` are
+Requests whose `Host` matches the runtime onion hostname read from Tor's
+HiddenServiceDir `hostname` file are
 treated as Tor hidden-service traffic:
 
 - All absolute URLs (base URL, `security.txt` links, pagination, API
   docs) use `http://{onion}` — the clearnet FQDN never appears
 - `/.well-known/security.txt` serves a Tor variant: onion URLs only,
-  `Contact: mailto:` uses `tor.contact_email` (omitted entirely when
+  `Contact: mailto:` uses `server.tor.contact_email` (omitted entirely when
   unset — never the clearnet email), and `Preferred-Languages` is
   omitted to reduce fingerprinting
 - CORS headers answer with the onion origin; the clearnet or
   operator-configured origin is never emitted on Tor responses
 - Contact, abuse, and security emails shown on Tor pages come from
-  `tor.contact_email` only; when unset, no email is disclosed
+  `server.tor.contact_email` only; when unset, no email is disclosed
 
 ## Secret Rotation
 

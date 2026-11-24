@@ -60,7 +60,7 @@
 | Format | `Subject: ...` line, `---` separator, plain-text body with `{variable}` syntax |
 | Reset to default | Delete the custom template file |
 | Templates | `security_alert`, `backup_complete`, `backup_failed`, `ssl_expiring`, `ssl_renewed`, `ssl_renewal_failed`, `scheduler_error`, `update_available`, `update_installed`, `test` |
-| Test send | `{project_name} email test`; subject prefixed `[TEST]`; logged to audit log |
+| Test send | `{project_name} --maintenance email test [--to ADDRESS]`; requires root or operator token; `--dry-run` validates all templates without sending |
 
 ### SMTP auto-detection priority
 1. `127.0.0.1` (loopback)

@@ -58,17 +58,17 @@
 ### Required Test Scripts (`tests/` dir, executable, WTFPL license header)
 | Script | Purpose |
 |--------|---------|
-| `tests/run_tests.sh` | Auto-detects incus/docker, dispatches |
-| `tests/docker.sh` | Full integration tests, Docker Alpine |
-| `tests/incus.sh` | Full integration + systemd tests, Debian |
+| `tests/run_tests.sh` | Docker-only basic runner; invokes `tests/docker.sh` and never selects Incus |
+| `tests/docker.sh` | Basic binary validation in Docker Alpine (routes, CLI, Tor/I2P health) |
+| `tests/incus.sh` | Full application and systemd integration tests in a Debian Incus container |
 | `tests/e2e.sh` | Standalone browser testing with headless Chromium; run separately |
 
 ### Container Images
 | Purpose | Image |
 |---------|-------|
 | Building Go | `casjaysdev/go:latest` |
-| Container testing | `alpine:latest` |
-| Full OS testing | `debian:latest` (Incus, preferred: `images:debian/trixie`) |
+| Basic binary validation | Docker `alpine:latest` |
+| Full application testing | Debian Incus container (preferred: `images:debian/trixie`) |
 
 ### Temp Directory Pattern
 `/tmp/{project_org}/{internal_name}-XXXXXX/` — the ONLY acceptable pattern. Subpaths: `volumes/config/`, `volumes/data/`.

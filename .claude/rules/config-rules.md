@@ -132,7 +132,7 @@ Response: HTTP 503, body `{"ok":false,"error":"MAINTENANCE","message":"...","det
 ### Trusted proxies (always trusted, no config)
 `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`, `169.254.0.0/16`, `fe80::/10`, same `/24` as listen address. Extend via `server.trusted_proxies.additional` (IP/CIDR/DNS, refreshed every 5 min).
 
-### Tor (`tor.onion_address`, `tor.contact_email`)
+### Tor (`server.tor.contact_email`; onion hostname is runtime state)
 Priority-0 FQDN match on Host header. Proto always `http://`, port always stripped. No clearnet FQDN/email/`Preferred-Languages` in any Tor response. CORS auto-adds onion origin, never leaks clearnet origin.
 
 ### Rate limiting defaults

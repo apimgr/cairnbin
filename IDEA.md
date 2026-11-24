@@ -44,7 +44,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - Expiry options: `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never` (default), or a custom duration in seconds
 - Burn after N reads: paste is permanently deleted once its view count reaches a user-set threshold (1–9999); `0` = disabled
 - Visibility: public (listed in recent pastes) or unlisted (URL-only, not listed)
-- Owner token: a `tok_`-prefixed cryptographically random token returned in every API create response; reusable across pastes created by the same caller; stored as a SHA-256 hash with an encrypted recoverable copy; required to delete the paste before natural expiry and viewable, masked by default, in `/server/preferences/tokens`
+- Owner token: an `own_`-prefixed cryptographically random token issued on first resource creation or explicit request and returned as `owner_token`; reusable across pastes created by the same caller; stored as a SHA-256 hash with an encrypted recoverable copy; required to delete the paste before natural expiry and viewable, masked by default, in `/server/preferences/tokens`
 - Token reuse: callers may supply an existing owner token on paste creation to link the new paste to that token; the web UI saves the token to the `cairnbin_owner_token_rU3uW5Ze` cookie (HttpOnly, primary) and, as a JS convenience copy, to `localStorage` under the same key; the create form is pre-filled by JS only, never load-bearing
 - Raw paste view, file download, iframe-embeddable view with copy-ready HTML and Markdown embed snippets offered on the paste view page, and a QR code available as both a page and a PNG image
 - View count tracking; automatic background cleanup of expired and burned pastes
@@ -53,7 +53,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - CLI client (`cairnbin-cli`) — full API access from the terminal
 - OpenAPI/Swagger docs
 - GraphQL read-only query interface (create and delete are REST-only)
-- MCP (Model Context Protocol) endpoint so AI clients can use the paste API as tools: Streamable HTTP JSON-RPC at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`), on by default (`server.mcp.enabled`), same Bearer tokens as the API (no MCP-specific token), tools generated from the API routes (create/get/list/delete paste, health, version); list pastes defaults to public and supports `scope=owned` with a valid owner or linked Bearer token to retrieve that owner's non-expired public and unlisted pastes; an anonymous create tool call returns the `owner_token` exactly like the REST API; token management is never exposed as a tool
+- MCP (Model Context Protocol) endpoint so AI clients can use the paste API as tools: Streamable HTTP JSON-RPC at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`), always enabled with no configuration toggle; every request requires an API Bearer token (no MCP-specific token); tools are generated from the API routes (create/get/list/delete paste, health, version); list pastes defaults to public and supports `scope=owned` with a valid owner or linked Bearer token to retrieve that owner's non-expired public and unlisted pastes; owner-token issuance is only available through the REST API or web token page and is never a tool; token management is never exposed as a tool
 - Drop-in compat layer for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (0x0.st, sprunge.us, ix.io), and termbin/fiche (raw-TCP listener, enabled by default; disable via `server.termbin.enabled: false` or `TERMBIN_ENABLED=false`) — compat routes use their own delete-token mechanism (stored in paste row) separate from the owner token system
 - Two-tier operator token: server operator may set a `server.token` in `server.yml`; this operator token allows deleting any paste unconditionally
 - i18n: 8 supported locales (en, es, fr, de, it, zh, ar, ja); automatic language selection via `Accept-Language` header; RTL layout for Arabic (`dir="rtl"` on `<html>`); fallback to English when locale unknown
@@ -89,7 +89,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - **Expiry options** — `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never` (default), or a custom duration in seconds
 - **Burn after N reads** — paste is permanently deleted once its view count reaches a user-set threshold (1–9999)
 - **Visibility control** — public (listed in recent pastes) or unlisted (URL-only)
-- **Owner token deletion** — a `tok_`-prefixed token returned at creation; reusable across pastes by the same caller; required to delete a paste before natural expiry and viewable, masked by default, in token management
+- **Owner token deletion** — a `own_`-prefixed token returned at creation; reusable across pastes by the same caller; required to delete a paste before natural expiry and viewable, masked by default, in token management
 - **URL shortening** — a paste whose entire content is exactly one `http`/`https` URL auto-becomes a redirecting short link; the raw and download views always return the literal stored URL text instead of redirecting
 - **Raw view, file download, and embeds** — raw content view, download-as-file, an iframe-embeddable view with copy-ready HTML/Markdown snippets, and a QR code page plus PNG image for every paste
 - **View count tracking** with automatic background cleanup of expired and burned pastes
@@ -157,7 +157,7 @@ Every subdomain-forced compat create path continues to honor the operator-config
 ### Business rules
 
 - Paste IDs are 8-character random alphanumeric strings generated from a cryptographic random source; there are no vanity or user-chosen IDs
-- Owner tokens are `tok_` + 32 random base62 characters; a SHA-256 hash and encrypted recoverable copy are stored; raw values are shown at creation and remain viewable, masked by default, in token management
+- Owner tokens are `own_` + 32 random base62 characters; a SHA-256 hash and encrypted recoverable copy are stored; raw values are shown at creation and remain viewable, masked by default, in token management
 - Maximum paste size is operator-configured (`paste.max_size`, default 10 MiB, `0` = unlimited) and enforced at the HTTP body layer on every create path, native and compat alike, before the body is read into memory
 - Compat request bodies are additionally capped at 10 MiB regardless of `paste.max_size`, because raw-body compat protocols read the whole body into memory
 - Expiry is chosen at creation from `1h`, `1d`, `1w`, `1m`, `3m`, `6m`, `1y`, `18m`, `2y`, `never` (default), or a custom duration in seconds; pastes are immutable after creation, so expiry cannot be changed later

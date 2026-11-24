@@ -29,7 +29,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Burn after N reads — paste deleted once view count reaches threshold
 - Public and unlisted visibility
 - Link pastes — auto-detected when content is exactly one `http://`/`https://` URL and nothing else; visiting the paste 302-redirects to the target (`/{id}/raw` returns the target URL as text instead)
-- Owner token — cryptographically random `tok_...` value returned at creation as `owner_token`, required to delete a paste, and viewable masked by default in `/server/preferences/tokens`
+- Owner token — cryptographically random `own_...` value issued with a new owner and returned as `owner_token`, required to delete a paste, and viewable masked by default in `/server/preferences/tokens`
 - Raw paste view at `/raw/{id}` and `/{id}/raw`
 - Download at `/dl/{id}`
 - Embedded view at `/emb/{id}` (iframe-embeddable)

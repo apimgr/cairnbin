@@ -133,7 +133,7 @@ The following settings use these dotted paths in the merged configuration. The a
 | `server.metrics` | `enabled`, `include_system`, `include_runtime`, `token` (legacy Prometheus token), `auth.allow_unauthenticated`, `auth.tokens.{prometheus,grafana,loki}`, `root.enabled`, `loki.{max_entries,max_age}`, `duration_buckets`, `size_buckets` | Internal metrics services, their credentials, optional `/metrics` alias, and bounded Loki output. |
 | `server.geoip` | `enabled`, `dir`, `deny_countries`, `allow_countries`, `presets`, `databases.{asn,country,city}` | Local GeoIP databases and country filtering. `allow_countries` takes precedence when both country lists are set. |
 | `server.i2p` | `enabled`, `binary`, `sam_address`, `virtual_port`, `inbound_length`, `outbound_length`, `inbound_quantity`, `outbound_quantity`, `signature_type`, `bootstrap_timeout`, `b32_address` | Optional I2P eepsite; enabled by the computed default in containers and disabled elsewhere. An explicit config value, `I2P_ENABLED`, or `--i2p` overrides the default. Overlay startup is asynchronous and does not delay the HTTP listener. |
-| `server.tor` | `binary`, `use_network`, `max_circuits`, `circuit_timeout`, `bootstrap_timeout`, `safe_logging`, `max_streams_per_circuit`, `close_circuit_on_stream_limit`, `bandwidth_rate`, `bandwidth_burst`, `max_monthly_bandwidth`, `num_intro_points`, `virtual_port`, `onion_address`, `contact_email` | Tor hidden-service settings; the service is auto-enabled when a Tor binary is found. Overlay startup is asynchronous and does not delay the HTTP listener. When `use_network: true`, app-owned downloads and configured keyserver requests use Tor and fail closed until Tor is ready. Caller-supplied webhook/report destinations stay direct; branding URLs keep their SSRF-safe fetch path. |
+| `server.tor` | `binary`, `use_network`, `max_circuits`, `circuit_timeout`, `bootstrap_timeout`, `safe_logging`, `max_streams_per_circuit`, `close_circuit_on_stream_limit`, `bandwidth_rate`, `bandwidth_burst`, `max_monthly_bandwidth`, `num_intro_points`, `virtual_port`, `contact_email` | Tor hidden-service settings; the service is auto-enabled when a Tor binary is found. Overlay startup is asynchronous and does not delay the HTTP listener. When `use_network: true`, app-owned downloads and configured keyserver requests use Tor and fail closed until Tor is ready. Caller-supplied webhook/report destinations stay direct; branding URLs keep their SSRF-safe fetch path. The onion hostname is runtime state read from the Tor HiddenServiceDir `hostname` file, not a configuration setting. |
 | `server.ssl` | `enabled`, `cert`, `key`, `min_version`, `letsencrypt.{enabled,email,challenge,staging,dns_provider,dns_credentials}` | HTTPS certificates and ACME. DNS credentials use a flat map of lego environment-variable names; plaintext values are atomically rewritten as `enc:v1:` ciphertext under `server.security.encryption_key`. |
 | `server.notifications.email` | `enabled`, `smtp.{host,port,username,password,tls}`, `from.{name,email}`, `reply_to`, `template_dir`, `events.{startup,shutdown,...}` | SMTP transport, sender identity, custom template directory, and per-event email switches. Startup and graceful-shutdown emails default off; TLS accepts `auto`, `starttls`, `tls`, or `none`. |
 | `server.notifications.webui` | `position`, `duration`, `warning_duration` | Visitor toast position (`top-right`, `top-left`, `bottom-right`, `bottom-left`) and auto-dismiss seconds. A duration of `0` disables auto-dismiss; errors always require manual dismissal. |
@@ -257,12 +257,13 @@ handler runs. The built-in `firehol_level1` IP source remains active.
 ### Tor (`server.tor`)
 
 Tor hidden-service support is auto-enabled when a Tor binary is found —
-there is no on/off toggle. Two keys matter for privacy:
+there is no on/off toggle. The onion hostname is read from the HiddenServiceDir
+`hostname` file after Tor publishes it; it is not stored in or configured by
+`server.yml`. The only Tor contact key is:
 
 | Key | Behavior |
 |-----|----------|
-| `tor.onion_address` | v3 `.onion` hostname (no `http://` prefix). Set automatically on the first successful Tor bootstrap and persisted to `server.yml`; enables Tor request detection (onion base URLs, Tor `security.txt`, Tor CORS). Never overwritten once set. |
-| `tor.contact_email` | Contact address shown on Tor responses. When unset, no email is shown on Tor — the clearnet contact/security/abuse emails are never disclosed to Tor visitors. |
+| `server.tor.contact_email` | Contact address shown on Tor responses. When unset, no email is shown on Tor — the clearnet contact/security/abuse emails are never disclosed to Tor visitors. |
 
 ### Logging (`server.logs`)
 
@@ -333,7 +334,7 @@ Retention keys under `backup.retention`:
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `max_backups` | `1` | Daily full backups kept (at least 1) |
+| `max_backups` | `1` | Daily full backups kept (at least 1; zero/falsey values warn and use `1`) |
 | `keep_weekly` | `0` | Sunday backups kept |
 | `keep_monthly` | `0` | First-of-month backups kept |
 | `keep_yearly` | `0` | Jan 1st backups kept |
@@ -447,7 +448,7 @@ they are read individually (no `.env` file is ever loaded).
 | `SMTP_FROM_NAME` | From display name (default: app name) |
 | `SMTP_FROM_EMAIL` | From address (default: `no-reply@{fqdn}`) |
 
-Verify the SMTP setup with `cairnbin email test [recipient]`. It checks the SMTP handshake, sends the `test` template (subject prefixed `[TEST]`) to the admin contact or the given recipient, and records the result in the audit log. Without SMTP configured it exits 1 with "email features require SMTP configuration".
+Verify the SMTP setup with `cairnbin --maintenance email test [--to ADDRESS]`. It requires root or the configured operator token, checks the SMTP handshake, sends the `test` template (subject prefixed `[TEST]`) to the configured reply-to address or the given recipient, and records the result in the audit log. `--dry-run` validates and renders every email template without sending. Without SMTP configured a real send exits 1 with "email features require SMTP configuration".
 
 Custom email templates in `{config_dir}/template/email/{name}.txt` are validated when loaded. A file with an unknown `{variable}` (the log suggests the closest match), an empty subject or body, or a missing `Subject:` line or `---` separator is logged and ignored, and the built-in default is used instead. Subjects over 78 characters only log a warning.
 
