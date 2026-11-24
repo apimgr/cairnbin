@@ -95,7 +95,7 @@ curl -q -LSsf -X POST https://pste.us/mcp -H 'Content-Type: application/json' \
 
 | Endpoint | Purpose |
 |----------|---------|
-| `/api/autodiscover` | Unversioned client bootstrap: `name`, `version`, `api`, `urls`, exposed overlay addresses, `cli_versions`, and `cli_min_version`; no settings or config schema |
+| `/api/autodiscover` | Unversioned client bootstrap: `name`, `version`, `api`, `urls`, `cli_versions`, and `cli_min_version`; live onion and I2P addresses appear only when that overlay is enabled, its `server.tor.expose` or `server.i2p.expose` setting is true, and the address is available. No settings or config schema is returned. |
 | `/server/docs/swagger`, `/server/docs/graphql` | Swagger UI and GraphiQL |
 | `/server/help`, `/server/help/mcp` | General API help and the MCP connection guide |
 | `/server/preferences`, `/server/preferences/tokens` | Guest preferences and owner-token management |

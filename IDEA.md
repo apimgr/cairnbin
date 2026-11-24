@@ -219,13 +219,13 @@ Yes — pipe content to the create endpoint with `curl`, or use the `cairnbin-cl
 Yes — the compat layer is wire-compatible with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family, and termbin/fiche; existing scripts work unmodified.
 
 **Is there a rate limit?**
-Yes, per-endpoint and IP-based; configurable in `server.yml`.
+Yes. Rate limiting is always on: anonymous requests use per-IP counters, valid Bearer requests use per-token counters, and failed authentication is counted per IP. Read, write, health, global-burst, strict token-action, and auth-failure limits are configurable under `server.rate_limit`. Counters persist in `server.db` by default or use the configured Redis/Valkey cache; cache failure falls back to per-instance memory and degrades cache health.
 
 **Can I access it over Tor?**
-Yes, when the `tor` binary is present the server auto-enables a persistent `.onion` hidden service address, shown on `/server/help`.
+Yes, when the `tor` binary is present the server auto-enables a persistent `.onion` hidden service address, shown on `/server/help`. `/api/autodiscover` includes it only when `server.tor.expose: true` (default false).
 
 **Can I access it over I2P?**
-In containers by default, and elsewhere only when the operator opts in (`server.i2p.enabled` / `I2P_ENABLED` / `--i2p`). When enabled and a provider (i2pd or a local SAM bridge) is available, a persistent `.b32.i2p` eepsite address is shown on `/server/help`.
+In containers by default, and elsewhere only when the operator opts in (`server.i2p.enabled` / `I2P_ENABLED` / `--i2p`). When enabled and a provider (i2pd or a local SAM bridge) is available, a persistent `.b32.i2p` eepsite address is shown on `/server/help`. `/api/autodiscover` includes it only when `server.i2p.expose: true` (default false).
 
 ### Roles & permissions
 

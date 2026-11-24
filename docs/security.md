@@ -49,8 +49,9 @@
 
 ## Rate Limiting
 
-- Defaults, per IP per minute: 120 reads, 10 writes (create/delete), 120 health checks, 240 total (global burst)
-- Configurable under `server.rate_limit` (`read`, `write`, `health`, `global_burst`) in the merged configuration
+- Rate limiting is always on. Defaults: 120 reads/minute, 10 writes/minute, 120 health checks/minute, and a 240/minute global burst. Anonymous requests use per-IP counters; valid Bearer requests use per-token counters; failed Bearer authentication is counted per IP.
+- `server.rate_limit.strict` limits token reveal, rotation, and restore to 10 attempts per IP or owner per 15 minutes. `auth_failures` locks an IP after 5 invalid, revoked, or expired Bearer tokens in 15 minutes; a valid credential remains blocked while that counter is at its limit.
+- Configure all classes under `server.rate_limit`. Sliding-window counters persist in `server.db` by default or use the configured Redis/Valkey cache. If an external cache fails, the server falls back to per-instance memory counters and reports degraded cache health.
 - A client that sends more than 10x the read limit in a minute is blocked for an hour (`server.security.abuse_detection`)
 - Rate limiting protects the server against abuse — it is not a usage cap
 
