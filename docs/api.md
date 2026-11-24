@@ -224,17 +224,12 @@ curl -q -LSsf -X POST https://pste.us/api/v1/server/preferences \
   -H 'Content-Type: application/json' \
   -d '{"theme":"light","lang":"es","cairnbin_pref_sort":"name"}'
 
-# A non-empty import code takes precedence over the submitted preference fields
-curl -q -LSsf -X POST https://pste.us/api/v1/server/preferences \
-  -H 'Content-Type: application/json' \
-  -d '{"code":"bGFuZz1mciZ0aGVtZT1kYXJr"}'
-
 # Export and import (stateless; the code or URL IS the preference values)
-curl -q -LSsf -H 'Accept: application/json' https://pste.us/api/v1/server/preferences/export
-curl -q -LSsf 'https://pste.us/api/v1/server/preferences/import?code=bGFuZz1mciZ0aGVtZT1kYXJr'
+curl -q -LSsf -H 'Accept: application/json' https://pste.us/api/v1/server/preferences/sync
+curl -q -LSsf 'https://pste.us/api/v1/server/preferences/sync/import?code=bGFuZz1mciZ0aGVtZT1kYXJr'
 ```
 
-Every response carries `{"ok":true,"data":{"theme","lang","prefs"}}`; `prefs` is keyed by the bare preference key and is `{}` when none are set. Export adds `url` and `code`. Import and save add `applied` and `ignored` arrays of parameter names. Invalid values are listed in `ignored` instead of failing the request; save returns `400 VALIDATION_FAILED` only when no supplied value was valid. Only `theme`, `lang` and `cairnbin_pref_*` are ever read or written; consent and credential cookies are never part of the exchange. A non-empty import `code` overrides preference fields in the same request. The web `GET /server/preferences/import` and `POST /server/preferences` answer `303 See Other`.
+Every response carries `{"ok":true,"data":{"theme","lang","prefs"}}`; `prefs` is keyed by the bare preference key and is `{}` when none are set. Export at `/server/preferences/sync` adds `url` and `code`. Import and save add `applied` and `ignored` arrays of parameter names. Invalid values are listed in `ignored` instead of failing the request; API save returns `400 VALIDATION_FAILED` only when no supplied value was valid. When the browser has not accepted the Preferences cookie category, valid writes are ignored and the API response includes `consent_required: true`; the web route redirects with `consent_required=1` and shows a notice linking to the cookie-consent toggle. This flag is omitted when consent is not the reason writes were blocked. Only `theme`, `lang` and `cairnbin_pref_*` are ever read or written; consent and credential cookies are never part of the exchange. A non-empty import `code` overrides preference fields on the sync import route. A `code` submitted to the save route is ignored. The web `GET /server/preferences/sync/import` and `POST /server/preferences` or `/server/preferences/sync` answer `303 See Other`.
 
 ### Owner Token Management
 

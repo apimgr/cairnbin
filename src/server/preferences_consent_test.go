@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,6 +71,9 @@ func TestPreferencesSetAPI_ConsentBlockedWritesAreIgnored(t *testing.T) {
 	if out.Data.Theme != "dark" || len(out.Data.Applied) != 0 || len(out.Data.Ignored) != 1 || out.Data.Ignored[0] != "theme" {
 		t.Errorf("response state=%+v, want default theme, no applied values, theme ignored", out.Data)
 	}
+	if out.Data.ConsentRequired == nil || !*out.Data.ConsentRequired {
+		t.Errorf("consent_required = %v, want true", out.Data.ConsentRequired)
+	}
 }
 
 func TestPreferencesImport_ConsentBlockedValuesAreIgnored(t *testing.T) {
@@ -86,6 +90,93 @@ func TestPreferencesImport_ConsentBlockedValuesAreIgnored(t *testing.T) {
 	}
 	if out.Data.Theme != "dark" || len(out.Data.Applied) != 0 || len(out.Data.Ignored) != 1 || out.Data.Ignored[0] != "theme" {
 		t.Errorf("response state=%+v, want default theme, no applied values, theme ignored", out.Data)
+	}
+	if out.Data.ConsentRequired == nil || !*out.Data.ConsentRequired {
+		t.Errorf("consent_required = %v, want true", out.Data.ConsentRequired)
+	}
+}
+
+func TestPreferencesAPI_PrivacySignalDoesNotRequireConsentNotice(t *testing.T) {
+	s := newMinimalServer(config.DefaultConfig())
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences", strings.NewReader(`{"theme":"light"}`))
+	req.Header.Set("Content-Type", "application/json")
+	addConsentCookie(req, `{"essential":true,"preferences":true,"analytics":false,"timestamp":1}`)
+	req = req.WithContext(context.WithValue(req.Context(), privacyOptOutKey{}, true))
+	rec := httptest.NewRecorder()
+	s.handlePreferencesSetAPI(rec, req)
+	if rec.Code != http.StatusOK || len(rec.Result().Cookies()) != 0 {
+		t.Fatalf("status=%d cookies=%v, want 200 with privacy-blocked writes", rec.Code, rec.Result().Cookies())
+	}
+	var out prefsAPIOut
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Data.ConsentRequired != nil {
+		t.Errorf("consent_required = %v, want absent because consent was granted", *out.Data.ConsentRequired)
+	}
+}
+
+func TestPreferencesConsentRequiredWebRedirectAndNotice(t *testing.T) {
+	s := newMinimalServer(config.DefaultConfig())
+	templates, err := s.buildTemplates()
+	if err != nil {
+		t.Fatalf("build templates: %v", err)
+	}
+	s.templates = templates
+
+	tests := []struct {
+		name string
+		run  func(*httptest.ResponseRecorder)
+	}{
+		{
+			name: "GET import",
+			run: func(rec *httptest.ResponseRecorder) {
+				req := httptest.NewRequest(http.MethodGet, "/server/preferences/sync/import?theme=light", nil)
+				s.handlePreferencesImport(rec, req)
+			},
+		},
+		{
+			name: "POST sync",
+			run: func(rec *httptest.ResponseRecorder) {
+				req := httptest.NewRequest(http.MethodPost, "/server/preferences/sync", strings.NewReader("code=theme%3Dlight"))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				s.handlePreferencesSyncPost(rec, req)
+			},
+		},
+		{
+			name: "POST preferences decline",
+			run: func(rec *httptest.ResponseRecorder) {
+				req := httptest.NewRequest(http.MethodPost, "/server/preferences", strings.NewReader("theme=light&consent_form=1&redirect=%2Fserver%2Fpreferences%2Fsync"))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				s.handlePreferencesSet(rec, req)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			tc.run(rec)
+			if rec.Code != http.StatusSeeOther {
+				t.Fatalf("status=%d, want 303", rec.Code)
+			}
+			location, err := url.Parse(rec.Header().Get("Location"))
+			if err != nil || location.Query().Get("consent_required") != "1" {
+				t.Fatalf("Location=%q, want consent_required=1", rec.Header().Get("Location"))
+			}
+			for _, cookie := range rec.Result().Cookies() {
+				if cookie.Name == "theme" || strings.HasPrefix(cookie.Name, prefCookiePrefix) {
+					t.Errorf("blocked preference cookie was written: %s", cookie.Name)
+				}
+			}
+		})
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences/sync?consent_required=1", nil)
+	req.Header.Set("Accept", "text/html")
+	rec := httptest.NewRecorder()
+	s.handlePreferencesExport(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Preferences were not applied") || !strings.Contains(rec.Body.String(), `href="/server/preferences#preferences-privacy"`) {
+		t.Errorf("sync page status=%d missing consent notice or cookie-toggle link", rec.Code)
 	}
 }
 

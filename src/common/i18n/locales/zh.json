@@ -572,6 +572,7 @@
     "intro": "这些偏好设置仅保存在此浏览器的 Cookie 中——没有账户,服务器也不会保存任何内容。",
     "current": "当前偏好设置",
     "gpc_notice": "已收到 Global Privacy Control 信号：本次请求已禁用非必要 Cookie 和个性化。",
+    "consent_required_notice": "由于此浏览器尚未接受“偏好设置”Cookie 类别，因此未应用这些偏好设置。请先接受，然后重新打开导入链接。",
     "saved": "偏好设置已保存。",
     "theme_label": "主题",
     "theme_desc": "选择此浏览器中网站的外观。",

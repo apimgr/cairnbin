@@ -716,6 +716,7 @@
     "intro": "Queste preferenze vengono memorizzate nei cookie solo su questo browser: non esiste un account e nulla viene salvato sul server.",
     "current": "preferenze attuali",
     "gpc_notice": "Segnale di controllo globale della privacy ricevuto: i cookie non essenziali e la personalizzazione sono disabilitati per questa richiesta.",
+    "consent_required_notice": "Le preferenze non sono state applicate perché questo browser non ha accettato la categoria di cookie Preferenze. Accettala e riapri il link di importazione.",
     "saved": "preferenze salvate.",
     "theme_label": "tema",
     "theme_desc": "scegli l'aspetto del sito su questo browser.",

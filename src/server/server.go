@@ -5783,11 +5783,13 @@ func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	valid, _, _ := validateGuestPrefs(merged)
-	if r.PostForm.Has("lang") && r.PostFormValue("lang") == "auto" {
-		http.SetCookie(w, &http.Cookie{Name: i18n.CookieName(), Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
+	resetLang := r.PostForm.Has("lang") && r.PostFormValue("lang") == "auto"
+	if resetLang {
 		delete(valid, "lang")
 	}
 	var applied []string
+	var blocked []string
+	prefsReq := r
 	if r.PostFormValue("consent_form") == "1" {
 		state := consentState{
 			Essential: true, Preferences: r.PostForm.Has("consent_preferences"),
@@ -5804,25 +5806,31 @@ func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 			http.SetCookie(w, &http.Cookie{Name: "ccpa_opt_out", Value: ccpa, Path: "/", MaxAge: prefCookieMaxAge, Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
 		}
 		s.auditConsentUpdate(r, state)
-		if state.Preferences {
-			prefsReq := r.Clone(r.Context())
-			cookiePairs := make([]string, 0, len(r.Cookies())+1)
-			for _, cookie := range r.Cookies() {
-				if cookie.Name != "cookie_consent" {
-					cookiePairs = append(cookiePairs, cookie.Name+"="+cookie.Value)
-				}
+		prefsReq = r.Clone(r.Context())
+		cookiePairs := make([]string, 0, len(r.Cookies())+1)
+		for _, cookie := range r.Cookies() {
+			if cookie.Name != "cookie_consent" {
+				cookiePairs = append(cookiePairs, cookie.Name+"="+cookie.Value)
 			}
-			cookiePairs = append(cookiePairs, "cookie_consent="+url.PathEscape(string(encoded)))
-			prefsReq.Header.Set("Cookie", strings.Join(cookiePairs, "; "))
-			applied, _ = s.applyGuestPrefs(w, prefsReq, valid)
 		}
-	} else {
-		applied, _ = s.applyGuestPrefs(w, r, valid)
+		cookiePairs = append(cookiePairs, "cookie_consent="+url.PathEscape(string(encoded)))
+		prefsReq.Header.Set("Cookie", strings.Join(cookiePairs, "; "))
 	}
+	if resetLang {
+		if preferenceCookiesAllowed(prefsReq) {
+			http.SetCookie(w, &http.Cookie{Name: i18n.CookieName(), Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), Secure: s.cookieSecure(r), SameSite: http.SameSiteLaxMode})
+		} else {
+			blocked = append(blocked, "lang")
+		}
+	}
+	applied, blockedPrefs := s.applyGuestPrefs(w, prefsReq, valid)
+	blocked = append(blocked, blockedPrefs...)
 	if len(applied) > 0 && refererIsPreferencesPage(r) {
 		setFlash(w, r, "preferences_saved")
 	}
-	prefSeeOther(w, s.prefRedirectDest(r, r.PostFormValue("redirect"), "/"))
+	dest := s.prefRedirectDest(r, r.PostFormValue("redirect"), "/")
+	dest = preferencesConsentRedirect(dest, len(applied) == 0 && len(blocked) > 0 && preferenceConsentMissing(prefsReq))
+	prefSeeOther(w, dest)
 }
 
 func (s *Server) resetPreferences(w http.ResponseWriter, r *http.Request) {
@@ -6353,6 +6361,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	}
 	// Inject the request path so nav.tmpl can mark the active nav-link
 	data["CurrentPath"] = r.URL.Path
+	data["PreferencesConsentRequired"] = r.URL.Query().Get("consent_required") == "1"
 	// Inject language for i18n — templates access it as .Lang
 	lang := i18n.LangFromRequest(r)
 	data["Lang"] = lang
@@ -6479,6 +6488,7 @@ func (s *Server) renderTemplateToString(r *http.Request, name string, data map[s
 		data = make(map[string]interface{})
 	}
 	data["CurrentPath"] = r.URL.Path
+	data["PreferencesConsentRequired"] = r.URL.Query().Get("consent_required") == "1"
 	lang := i18n.LangFromRequest(r)
 	data["Lang"] = lang
 	data["LangName"] = nativeLanguageName(lang)

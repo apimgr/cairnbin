@@ -167,6 +167,20 @@ func preferenceCookiesAllowed(r *http.Request) bool {
 	return ok && st.Preferences && !privacyOptOut(r)
 }
 
+// preferenceConsentMissing reports whether the visitor has accepted the
+// Preferences cookie category. Privacy signals are separate because they can
+// block writes even after this category was accepted.
+func preferenceConsentMissing(r *http.Request) bool {
+	st, ok := priorConsentState(r)
+	return !ok || !st.Preferences
+}
+
+func addPreferencesConsentRequired(data map[string]interface{}, r *http.Request, applied, blocked []string) {
+	if len(applied) == 0 && len(blocked) > 0 && preferenceConsentMissing(r) {
+		data["consent_required"] = true
+	}
+}
+
 // rememberPreference persists an explicit query-param choice as the visitor's
 // saved preference, but only when the value passes the exact same allowlist
 // parseAppPref applies on read. A /pastes query legitimately accepts a wider
@@ -343,8 +357,10 @@ func (s *Server) handlePreferencesSyncPost(w http.ResponseWriter, r *http.Reques
 		merged[name] = values
 	}
 	valid, _, _ := validateGuestPrefs(merged)
-	s.applyGuestPrefs(w, r, valid)
-	prefSeeOther(w, s.prefRedirectDest(r, r.PostFormValue("redirect"), "/server/preferences/sync"))
+	applied, blocked := s.applyGuestPrefs(w, r, valid)
+	dest := s.prefRedirectDest(r, r.PostFormValue("redirect"), "/server/preferences/sync")
+	dest = preferencesConsentRedirect(dest, len(applied) == 0 && len(blocked) > 0 && preferenceConsentMissing(r))
+	prefSeeOther(w, dest)
 }
 
 func (s *Server) redirectLegacyPreferencesPath(w http.ResponseWriter, r *http.Request) {
@@ -398,10 +414,13 @@ func (s *Server) handlePreferencesImport(w http.ResponseWriter, r *http.Request)
 		data := prefsJSON(theme, lang, prefs)
 		data["applied"] = applied
 		data["ignored"] = ignored
+		addPreferencesConsentRequired(data, r, applied, blocked)
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": data})
 		return
 	}
-	prefSeeOther(w, s.prefRedirectDest(r, q.Get("redirect"), "/"))
+	dest := s.prefRedirectDest(r, q.Get("redirect"), "/")
+	dest = preferencesConsentRedirect(dest, len(applied) == 0 && len(blocked) > 0 && preferenceConsentMissing(r))
+	prefSeeOther(w, dest)
 }
 
 // handlePreferencesSetAPI is the JSON mirror of the preferences form
@@ -440,6 +459,9 @@ func (s *Server) handlePreferencesSetAPI(w http.ResponseWriter, r *http.Request)
 		}
 		values = r.PostForm
 	}
+	for name := range prefControlFields {
+		delete(values, name)
+	}
 
 	valid, _, ignored := validateGuestPrefs(values)
 	if len(valid) == 0 {
@@ -453,5 +475,6 @@ func (s *Server) handlePreferencesSetAPI(w http.ResponseWriter, r *http.Request)
 	data := prefsJSON(theme, lang, prefs)
 	data["applied"] = applied
 	data["ignored"] = ignored
+	addPreferencesConsentRequired(data, r, applied, blocked)
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": data})
 }

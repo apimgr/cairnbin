@@ -226,6 +226,22 @@ func (s *Server) prefRedirectDest(r *http.Request, redirect, defaultPath string)
 	return defaultPath
 }
 
+// preferencesConsentRedirect adds the one-request notice flag to the selected
+// same-site destination when missing consent blocked preference writes.
+func preferencesConsentRedirect(dest string, required bool) string {
+	u, err := url.Parse(dest)
+	if err != nil {
+		return dest
+	}
+	q := u.Query()
+	q.Del("consent_required")
+	if required {
+		q.Set("consent_required", "1")
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 // prefSeeOther answers 303 with an empty body and no-store caching, so a
 // preference change is never cached or replayed.
 func prefSeeOther(w http.ResponseWriter, dest string) {

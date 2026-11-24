@@ -572,6 +572,7 @@
     "intro": "Diese Einstellungen werden nur in Cookies dieses Browsers gespeichert — es gibt kein Konto, und auf dem Server wird nichts gespeichert.",
     "current": "Aktuelle Einstellungen",
     "gpc_notice": "Global-Privacy-Control-Signal empfangen: Nicht notwendige Cookies und Personalisierung sind für diese Anfrage deaktiviert.",
+    "consent_required_notice": "Die Einstellungen wurden nicht angewendet, weil dieser Browser der Cookie-Kategorie „Einstellungen“ nicht zugestimmt hat. Stimmen Sie ihr zu und öffnen Sie den Import-Link erneut.",
     "saved": "Einstellungen gespeichert.",
     "theme_label": "Design",
     "theme_desc": "Wählen Sie, wie die Website in diesem Browser aussieht.",

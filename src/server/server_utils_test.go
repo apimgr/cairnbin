@@ -103,6 +103,7 @@ func TestHandlePreferencesSet_RedirectsToReferer(t *testing.T) {
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Referer", "http://example.com/pastes")
 	r.Host = "example.com"
+	addConsentCookie(r, `{"essential":true,"preferences":true}`)
 	w := httptest.NewRecorder()
 	s.handlePreferencesSet(w, r)
 
@@ -119,6 +120,7 @@ func TestHandlePreferencesSet_CrossOriginReferer_RedirectsToRoot(t *testing.T) {
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Referer", "http://evil.com/phish")
 	r.Host = "example.com"
+	addConsentCookie(r, `{"essential":true,"preferences":true}`)
 	w := httptest.NewRecorder()
 	s.handlePreferencesSet(w, r)
 

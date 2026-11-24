@@ -716,6 +716,7 @@
     "intro": "These preferences are stored in cookies on this browser only — there is no account and nothing is saved on the server.",
     "current": "Current preferences",
     "gpc_notice": "Global Privacy Control signal received: non-essential cookies and personalization are disabled for this request.",
+    "consent_required_notice": "Preferences were not applied because this browser has not accepted the Preferences cookie category. Accept it and reopen the import link.",
     "saved": "Preferences saved.",
     "theme_label": "Theme",
     "theme_desc": "Choose how the site looks on this browser.",

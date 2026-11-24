@@ -255,13 +255,14 @@ func postPrefsAPI(t *testing.T, body string) *httptest.ResponseRecorder {
 type prefsAPIOut struct {
 	OK   bool `json:"ok"`
 	Data struct {
-		Theme   string            `json:"theme"`
-		Lang    string            `json:"lang"`
-		URL     string            `json:"url"`
-		Code    string            `json:"code"`
-		Prefs   map[string]string `json:"prefs"`
-		Applied []string          `json:"applied"`
-		Ignored []string          `json:"ignored"`
+		Theme           string            `json:"theme"`
+		Lang            string            `json:"lang"`
+		URL             string            `json:"url"`
+		Code            string            `json:"code"`
+		Prefs           map[string]string `json:"prefs"`
+		Applied         []string          `json:"applied"`
+		Ignored         []string          `json:"ignored"`
+		ConsentRequired *bool             `json:"consent_required"`
 	} `json:"data"`
 }
 
@@ -286,11 +287,28 @@ func TestPreferencesSetAPI_AppliesValidFields(t *testing.T) {
 	if !out.OK || out.Data.Theme != "light" || out.Data.Lang != "es" || out.Data.Prefs["sort"] != "name" {
 		t.Errorf("state = %+v", out.Data)
 	}
+	if out.Data.ConsentRequired != nil {
+		t.Errorf("consent_required = %v, want absent when writes are allowed", *out.Data.ConsentRequired)
+	}
 	if strings.Join(out.Data.Applied, ",") != "cairnbin_pref_sort,lang,theme" {
 		t.Errorf("applied = %v", out.Data.Applied)
 	}
 	if strings.Join(out.Data.Ignored, ",") != "cairnbin_pref_order,cookie_consent" {
 		t.Errorf("ignored = %v", out.Data.Ignored)
+	}
+}
+
+func TestPreferencesSetAPI_IgnoresImportCode(t *testing.T) {
+	rec := postPrefsAPI(t, `{"theme":"light","code":"theme=dark"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var out prefsAPIOut
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Data.Theme != "light" || len(out.Data.Ignored) != 0 {
+		t.Errorf("save response = %+v, want direct theme and no ignored code", out.Data)
 	}
 }
 

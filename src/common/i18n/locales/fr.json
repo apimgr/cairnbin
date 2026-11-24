@@ -572,6 +572,7 @@
     "intro": "Ces préférences sont stockées uniquement dans les cookies de ce navigateur — il n'y a pas de compte et rien n'est enregistré sur le serveur.",
     "current": "Préférences actuelles",
     "gpc_notice": "Signal Global Privacy Control reçu : les cookies non essentiels et la personnalisation sont désactivés pour cette requête.",
+    "consent_required_notice": "Les préférences n’ont pas été appliquées, car ce navigateur n’a pas accepté la catégorie de cookies Préférences. Acceptez-la, puis rouvrez le lien d’importation.",
     "saved": "Préférences enregistrées.",
     "theme_label": "Thème",
     "theme_desc": "Choisissez l'apparence du site sur ce navigateur.",
