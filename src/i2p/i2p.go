@@ -424,7 +424,12 @@ func (m *Manager) Restart() error {
 
 // Running returns true when the eepsite is active.
 func (m *Manager) Running() bool {
-	m.mu.Lock()
+	// Startup and restart hold mu while waiting for the provider destination.
+	// Status checks happen on request paths, so do not block the HTTP server
+	// behind that potentially long wait.
+	if !m.mu.TryLock() {
+		return false
+	}
 	defer m.mu.Unlock()
 	return m.svc != nil
 }

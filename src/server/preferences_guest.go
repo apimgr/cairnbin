@@ -12,6 +12,7 @@ import (
 
 	"github.com/apimgr/cairnbin/src/common/httputil"
 	"github.com/apimgr/cairnbin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/database"
 )
 
 // prefMaxCodeLen bounds the length of an import `code` so an oversized value
@@ -285,6 +286,7 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleOwnerTokensPage(w http.ResponseWriter, r *http.Request) {
 	data := s.preferencesPageData(r, s.themeFromRequest(r), i18n.LangFromRequest(r))
+	s.consumeTokenView(w, r, data)
 	if detectClientType(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		html, err := s.renderTemplateToString(r, "preferences_tokens.html", data)
@@ -296,4 +298,40 @@ func (s *Server) handleOwnerTokensPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderTemplate(w, r, "preferences_tokens.html", data)
+}
+
+func (s *Server) consumeTokenView(w http.ResponseWriter, r *http.Request, data map[string]interface{}) {
+	cookie, err := r.Cookie(tokenViewCookieName)
+	if err != nil {
+		return
+	}
+	clearTokenViewCookie(w)
+	w.Header().Set("Cache-Control", "no-store")
+	primary, db, ok := s.requireOwnerForPage(r)
+	if !ok || cookie.Value == "" {
+		return
+	}
+	var record *database.APITokenRecord
+	if cookie.Value == "primary" {
+		record, err = db.GetOwnerTokenByID(primary.OwnerID, primary.ID)
+	} else {
+		record, err = db.GetOwnerTokenByPublicID(primary.OwnerID, cookie.Value)
+	}
+	if err != nil || record == nil || record.RevokedAt != nil {
+		return
+	}
+	if cookie.Value == "primary" && record.Kind == "primary" {
+		plain, decryptErr := s.decryptOwnerToken(record.TokenEnc)
+		if decryptErr == nil {
+			data["RevealedOwnerToken"] = plain
+		}
+		return
+	}
+	if cookie.Value != "primary" && record.Kind == "linked" {
+		plain, decryptErr := s.decryptOwnerToken(record.TokenEnc)
+		if decryptErr == nil {
+			data["RevealedLinkedToken"] = plain
+			data["RevealedLinkedTokenID"] = record.PublicID
+		}
+	}
 }

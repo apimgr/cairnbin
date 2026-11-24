@@ -7,19 +7,12 @@ import (
 
 func (s *Server) handleHelpMCP(w http.ResponseWriter, r *http.Request) {
 	cfg := s.liveCfg()
-	if !cfg.Server.MCP.Enabled {
-		if strings.HasPrefix(r.URL.Path, "/api/") {
-			writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
-		} else {
-			http.NotFound(w, r)
-		}
-		return
-	}
+	apiPath := strings.HasPrefix(r.URL.Path, "/api/")
 	base := strings.TrimRight(s.baseURL(r), "/")
 	version := s.apiVersion()
 	url := base + "/api/" + version + "/server/mcp"
 	project := cfg.Server.Pages.Help.MCP
-	if strings.HasPrefix(r.URL.Path, "/api/") {
+	if apiPath {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"ok": true,
 			"data": map[string]interface{}{

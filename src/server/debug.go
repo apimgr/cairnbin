@@ -122,6 +122,8 @@ func (s *Server) handleDebugCache(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		if err := s.cacheStore.Ping(ctx); err != nil {
 			status = "error"
+		} else if s.cacheDegraded {
+			status = "degraded"
 		} else {
 			status = "ok"
 		}

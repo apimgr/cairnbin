@@ -7,6 +7,7 @@ package config_test
 // WebhookTargets, contactRole helpers.
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -257,40 +258,32 @@ func TestSetUpdateBranch_UpdatesExisting(t *testing.T) {
 	}
 }
 
-// ─── SetOnionAddress ──────────────────────────────────────────────────────────
+// ─── Runtime-only onion hostname ──────────────────────────────────────────────
 
-func TestSetOnionAddress_CreatesFile(t *testing.T) {
+func TestTorOnionAddressLegacyConfigKeyIsRejected(t *testing.T) {
 	path := tempConfigPath(t)
-	addr := "abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrstuvwx.onion"
-	if err := config.SetOnionAddress(path, addr); err != nil {
-		t.Fatalf("SetOnionAddress: %v", err)
+	if err := os.WriteFile(path, []byte("server:\n  tor:\n    onion_address: legacyaddress.onion\n    contact_email: tor@example.test\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("Load after SetOnionAddress: %v", err)
-	}
-	if cfg.Server.Tor.OnionAddress != addr {
-		t.Errorf("Tor.OnionAddress = %q, want %q", cfg.Server.Tor.OnionAddress, addr)
+	if _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "onion_address") {
+		t.Fatalf("Load legacy onion_address: err=%v, want unknown-key error", err)
 	}
 }
 
-func TestSetOnionAddress_UpdatesExistingWithoutLosingSettings(t *testing.T) {
+func TestTorContactEmailLoadsWithoutOnionConfig(t *testing.T) {
 	path := tempConfigPath(t)
-	if err := config.SetUpdateBranch(path, "beta"); err != nil {
-		t.Fatalf("SetUpdateBranch: %v", err)
-	}
-	if err := config.SetOnionAddress(path, "example234567abcdefghijklmnopqrstuvwxyz234567abcdefghijk.onion"); err != nil {
-		t.Fatalf("SetOnionAddress: %v", err)
+	if err := os.WriteFile(path, []byte("server:\n  tor:\n    contact_email: tor@example.test\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Server.Tor.OnionAddress == "" {
-		t.Error("Tor.OnionAddress not persisted")
+	if cfg.Server.Tor.OnionAddress != "" {
+		t.Errorf("Tor.OnionAddress = %q, want empty runtime state", cfg.Server.Tor.OnionAddress)
 	}
-	if cfg.Server.Update.Branch != "beta" {
-		t.Errorf("Update.Branch = %q, want %q (existing settings must survive)", cfg.Server.Update.Branch, "beta")
+	if cfg.Server.Tor.ContactEmail != "tor@example.test" {
+		t.Errorf("Tor.ContactEmail = %q, want preserved contact setting", cfg.Server.Tor.ContactEmail)
 	}
 }
 

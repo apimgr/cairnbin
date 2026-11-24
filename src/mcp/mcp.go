@@ -9,6 +9,7 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
@@ -27,7 +29,7 @@ const maxRequestBytes = 10 << 20
 
 // supportedVersions lists the MCP protocol revisions this server negotiates,
 // newest first.
-var supportedVersions = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
+var supportedVersions = []string{"2026-07-28"}
 
 // JSON-RPC 2.0 error codes.
 const (
@@ -35,7 +37,7 @@ const (
 	codeInvalidRequest = -32600
 	codeMethodNotFound = -32601
 	codeInvalidParams  = -32602
-	codeHeaderMismatch = -32001
+	codeHeaderMismatch = -32020
 )
 
 type ctxKey struct{}
@@ -56,9 +58,9 @@ type Config struct {
 	ServerVersion string
 	// Dispatch is the server's full router; tool calls run through it.
 	Dispatch http.Handler
-	// Enabled reports server.mcp.enabled, read per request so a config reload
-	// takes effect without restart.
-	Enabled func() bool
+	// Authenticated validates the same operator and owner Bearer credentials as
+	// the API. MCP never accepts browser cookies.
+	Authenticated func(r *http.Request) bool
 	// OriginAllowed validates a present Origin header (DNS-rebinding guard).
 	OriginAllowed func(r *http.Request) bool
 	// IsOperator reports whether the request carries the operator token.
@@ -201,15 +203,9 @@ type rpcResponse struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
-func (h *Handler) enabled() bool { return h.cfg.Enabled == nil || h.cfg.Enabled() }
-
 // ServeHTTP handles POST (JSON-RPC); GET and DELETE are 405 because the server
 // keeps no sessions and opens no standalone stream.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !h.enabled() {
-		http.NotFound(w, r)
-		return
-	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{
@@ -223,9 +219,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if v := r.Header.Get("MCP-Protocol-Version"); v != "" && !versionSupported(v) {
-		writeRPCError(w, http.StatusBadRequest, nil, codeInvalidRequest, "Unsupported protocol version",
-			map[string]interface{}{"supported": supportedVersions, "requested": v})
+	if h.cfg.Authenticated != nil && !h.cfg.Authenticated(r) {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		writeRPCError(w, http.StatusUnauthorized, nil, -32000, "Unauthorized", nil)
 		return
 	}
 
@@ -236,22 +232,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	trimmed := bytes.TrimSpace(body)
 	if len(trimmed) > 0 && trimmed[0] == '[' {
-		var batch []rpcRequest
-		if err := json.Unmarshal(trimmed, &batch); err != nil {
-			writeRPCError(w, http.StatusBadRequest, nil, codeParseError, "parse error", nil)
-			return
-		}
-		var out []rpcResponse
-		for _, req := range batch {
-			if resp, ok := h.handle(r, req); ok {
-				out = append(out, resp)
-			}
-		}
-		if len(out) == 0 {
-			w.WriteHeader(http.StatusAccepted)
-			return
-		}
-		writeJSON(w, http.StatusOK, out)
+		writeRPCError(w, http.StatusBadRequest, nil, codeInvalidRequest, "Batch requests are not supported", nil)
 		return
 	}
 
@@ -260,19 +241,46 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeRPCError(w, http.StatusBadRequest, nil, codeParseError, "parse error", nil)
 		return
 	}
-	if hm := r.Header.Get("Mcp-Method"); hm != "" && hm != req.Method {
+	versionHeader := r.Header.Get("MCP-Protocol-Version")
+	if req.Method == "initialize" || (versionHeader != "" && !versionSupported(versionHeader)) {
+		writeRPCError(w, http.StatusBadRequest, req.ID, codeInvalidRequest, "Unsupported protocol version",
+			map[string]interface{}{"supported": supportedVersions, "requested": versionHeader})
+		return
+	}
+	var metaEnvelope struct {
+		Meta map[string]json.RawMessage `json:"_meta"`
+	}
+	protocolVersion := ""
+	if err := json.Unmarshal(trimmed, &metaEnvelope); err == nil {
+		_ = json.Unmarshal(metaEnvelope.Meta["io.modelcontextprotocol/protocolVersion"], &protocolVersion)
+	}
+	if versionHeader == "" || protocolVersion != versionHeader {
+		writeRPCError(w, http.StatusBadRequest, req.ID, codeHeaderMismatch, "HeaderMismatch: protocol version does not match the request body", nil)
+		return
+	}
+	if hm := r.Header.Get("Mcp-Method"); hm == "" || hm != req.Method {
 		writeRPCError(w, http.StatusBadRequest, req.ID, codeHeaderMismatch, "HeaderMismatch: Mcp-Method does not match the request body", nil)
 		return
 	}
-	if hn := r.Header.Get("Mcp-Name"); hn != "" && req.Method == "tools/call" {
+	if req.Method == "tools/call" || req.Method == "resources/read" || req.Method == "prompts/get" {
 		var p struct {
 			Name string `json:"name"`
+			URI  string `json:"uri"`
 		}
 		_ = json.Unmarshal(req.Params, &p)
-		if p.Name != hn {
+		want := p.Name
+		if req.Method == "resources/read" {
+			want = p.URI
+		}
+		got, valid := decodeMCPName(r.Header.Get("Mcp-Name"))
+		if want == "" || !valid || got != want {
 			writeRPCError(w, http.StatusBadRequest, req.ID, codeHeaderMismatch, "HeaderMismatch: Mcp-Name does not match the tool name", nil)
 			return
 		}
+	}
+	if !knownMethod(req.Method) {
+		writeRPCError(w, http.StatusNotFound, req.ID, codeMethodNotFound, "Method not found", nil)
+		return
 	}
 	resp, ok := h.handle(r, req)
 	if !ok {
@@ -280,6 +288,38 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func decodeMCPName(value string) (string, bool) {
+	if value == "" {
+		return "", false
+	}
+	if !strings.HasPrefix(value, "=?base64?") || !strings.HasSuffix(value, "?=") {
+		for _, r := range value {
+			if r < 0x20 || r > 0x7e {
+				return "", false
+			}
+		}
+		return value, true
+	}
+	payload := strings.TrimSuffix(strings.TrimPrefix(value, "=?base64?"), "?=")
+	decoded, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil || !utf8.Valid(decoded) {
+		return "", false
+	}
+	return string(decoded), true
+}
+
+func knownMethod(method string) bool {
+	if strings.HasPrefix(method, "notifications/") {
+		return true
+	}
+	switch method {
+	case "initialize", "ping", "tools/list", "tools/call":
+		return true
+	default:
+		return false
+	}
 }
 
 func versionSupported(v string) bool {
@@ -346,11 +386,28 @@ func (h *Handler) listTools(r *http.Request) []map[string]interface{} {
 		if !h.visible(r, t) {
 			continue
 		}
-		out = append(out, map[string]interface{}{
+		toolEntry := map[string]interface{}{
 			"name":        t.name,
 			"description": t.description,
 			"inputSchema": t.inputSchema(),
-		})
+		}
+		annotations := map[string]bool{}
+		switch t.method {
+		case http.MethodGet:
+			annotations["readOnlyHint"] = true
+		case http.MethodDelete:
+			annotations["destructiveHint"] = true
+			annotations["idempotentHint"] = true
+		case http.MethodPut:
+			annotations["readOnlyHint"] = false
+			annotations["idempotentHint"] = true
+		case http.MethodPost, http.MethodPatch:
+			annotations["readOnlyHint"] = false
+		}
+		if len(annotations) > 0 {
+			toolEntry["annotations"] = annotations
+		}
+		out = append(out, toolEntry)
 	}
 	return out
 }
@@ -386,10 +443,42 @@ func (h *Handler) callTool(r *http.Request, raw json.RawMessage) (interface{}, *
 		return nil, &rpcError{Code: codeInvalidParams, Message: "unknown tool"}
 	}
 	status, respBody := h.dispatch(r, *t, p.Arguments)
+	respBody = removeCredentialFields(respBody)
 	return map[string]interface{}{
 		"content": []map[string]interface{}{{"type": "text", "text": string(respBody)}},
 		"isError": status >= 400,
 	}, nil
+}
+
+func removeCredentialFields(body []byte) []byte {
+	var value any
+	if json.Unmarshal(body, &value) != nil {
+		return body
+	}
+	removeCredentialFieldsFromValue(value)
+	cleaned, err := json.Marshal(value)
+	if err != nil {
+		return body
+	}
+	return cleaned
+}
+
+func removeCredentialFieldsFromValue(value any) {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, nested := range v {
+			switch strings.ToLower(key) {
+			case "owner_token", "linked_token", "access_token", "refresh_token", "api_key", "password":
+				delete(v, key)
+			default:
+				removeCredentialFieldsFromValue(nested)
+			}
+		}
+	case []any:
+		for _, nested := range v {
+			removeCredentialFieldsFromValue(nested)
+		}
+	}
 }
 
 // dispatch maps tool arguments onto an API request and runs it through the

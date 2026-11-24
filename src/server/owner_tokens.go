@@ -16,13 +16,30 @@ import (
 	"unicode/utf8"
 
 	"github.com/apimgr/cairnbin/src/audit"
-	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/common/secretbox"
 	"github.com/apimgr/cairnbin/src/database"
 	"github.com/go-chi/chi/v5"
 )
 
 const ownerCookieName = "cairnbin_owner_token_rU3uW5Ze"
+const tokenViewCookieName = "cairnbin_token_view"
+
+func (s *Server) setTokenViewCookie(w http.ResponseWriter, target string) {
+	http.SetCookie(w, &http.Cookie{Name: tokenViewCookieName, Value: target, Path: "/server/preferences/tokens", MaxAge: 60, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+}
+
+func clearTokenViewCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{Name: tokenViewCookieName, Value: "", Path: "/server/preferences/tokens", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+}
+
+func tokenViewRedirect(w http.ResponseWriter, r *http.Request, target string) {
+	anchor := "#primary"
+	if target != "primary" {
+		anchor = "#token-" + target
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, "/server/preferences/tokens"+anchor, http.StatusSeeOther)
+}
 
 func (s *Server) ownerDB() (database.OwnerDB, bool) {
 	db, ok := s.db.(database.OwnerDB)
@@ -103,11 +120,20 @@ func (s *Server) handleOwnerTokensAPI(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
 		return
 	}
-	items := make([]map[string]any, 0, len(tokens))
+	primaryToken := map[string]any{}
+	linked := make([]map[string]any, 0, len(tokens))
 	for _, t := range tokens {
-		items = append(items, tokenSummary(t))
+		if t.Kind == "primary" {
+			primaryToken = tokenSummary(t)
+		} else {
+			linked = append(linked, tokenSummary(t))
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": map[string]any{"tokens": items}})
+	max := s.liveCfg().Server.Tokens.MaxLinked
+	if max <= 0 {
+		max = 25
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": map[string]any{"primary": primaryToken, "linked": linked, "max_linked": max}})
 }
 
 func tokenSummary(t *database.APITokenRecord) map[string]any {
@@ -117,11 +143,18 @@ func tokenSummary(t *database.APITokenRecord) map[string]any {
 	} else if t.ExpiresAt != nil && !t.ExpiresAt.After(time.Now()) {
 		status = "expired"
 	}
-	masked := "tok_••••••••••••••••••••••••????"
+	masked := "own_...????"
 	if len(t.TokenSuffix) == 4 {
-		masked = "tok_••••••••••••••••••••••••" + t.TokenSuffix
+		masked = "own_..." + t.TokenSuffix
 	}
-	return map[string]any{"id": t.ID, "kind": t.Kind, "name": t.Name, "token": masked, "token_prefix": t.TokenPrefix, "created_at": t.CreatedAt, "last_used_at": t.LastUsedAt, "expires_at": t.ExpiresAt, "status": status}
+	return map[string]any{"id": t.PublicID, "kind": t.Kind, "name": t.Name, "token_masked": masked, "created_at": t.CreatedAt.UTC().Format(time.RFC3339), "last_used_at": utcTimeValue(t.LastUsedAt), "expires_at": utcTimeValue(t.ExpiresAt), "status": status}
+}
+
+func utcTimeValue(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 func (s *Server) revealOwnerPrimary(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -158,13 +191,12 @@ func (s *Server) handleOwnerTokenRevealAPI(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleOwnerTokenRevealWeb(w http.ResponseWriter, r *http.Request) {
-	token, ok := s.revealOwnerPrimary(w, r)
+	_, _, ok := s.requirePrimaryOwner(w, r)
 	if !ok {
 		return
 	}
-	data := s.preferencesPageData(r, s.themeFromRequest(r), i18n.LangFromRequest(r))
-	data["RevealedOwnerToken"] = token
-	s.renderTemplate(w, r, "preferences_tokens.html", data)
+	s.setTokenViewCookie(w, "primary")
+	tokenViewRedirect(w, r, "primary")
 	s.tokenAudit(r, "token.revealed", "primary", "")
 }
 
@@ -177,7 +209,7 @@ func createOwnerCredential() (string, [32]byte, string, error) {
 	for i, b := range raw {
 		raw[i] = alphabet[int(b)%len(alphabet)]
 	}
-	token := "tok_" + string(raw)
+	token := "own_" + string(raw)
 	sum := sha256.Sum256([]byte(token))
 	prefix := token[:12]
 	return token, sum, prefix, nil
@@ -222,24 +254,13 @@ func (s *Server) handleOwnerTokenRotateAPI(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleOwnerTokenRotateWeb(w http.ResponseWriter, r *http.Request) {
-	token, primary, ok := s.rotateOwnerPrimary(w, r)
+	token, _, ok := s.rotateOwnerPrimary(w, r)
 	if !ok {
 		return
 	}
 	s.setOwnerCookie(w, r, token)
-	data := s.preferencesPageData(r, s.themeFromRequest(r), i18n.LangFromRequest(r))
-	data["RevealedOwnerToken"] = token
-	data["HasOwnerPrimary"] = true
-	if db, ok := s.ownerDB(); ok {
-		if tokens, err := db.ListOwnerTokens(primary.OwnerID); err == nil {
-			items := make([]map[string]any, 0, len(tokens))
-			for _, item := range tokens {
-				items = append(items, tokenSummary(item))
-			}
-			data["OwnerTokens"] = items
-		}
-	}
-	s.renderTemplate(w, r, "preferences_tokens.html", data)
+	s.setTokenViewCookie(w, "primary")
+	tokenViewRedirect(w, r, "primary")
 }
 
 func (s *Server) setOwnerCookie(w http.ResponseWriter, r *http.Request, token string) {
@@ -308,10 +329,15 @@ func (s *Server) ownerRestoreFailureLimited(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		ip = r.RemoteAddr
 	}
-	if s.restoreFailLimiter.allow(ip) {
+	allowed, retry := s.restoreFailLimiter.allowWithRetry("ip:" + ip + ":auth_failures")
+	if allowed {
 		return false
 	}
-	w.Header().Set("Retry-After", strconv.Itoa(int(s.restoreFailLimiter.window.Seconds())))
+	seconds := int(retry.Seconds())
+	if seconds < 1 {
+		seconds = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(seconds))
 	s.renderErrorPage(w, r, http.StatusTooManyRequests, "Too many invalid restore attempts")
 	return true
 }
@@ -336,28 +362,34 @@ func (s *Server) tokenAuditOwner(r *http.Request, ownerID, event, kind, prefix s
 	s.auditLog(r, audit.Entry{Event: event, Category: "security", Severity: audit.SeverityInfo, Result: audit.ResultSuccess, Target: &audit.Target{Type: "owner", ID: ownerID}, Details: details})
 }
 
-func (s *Server) ownerTokenByID(db database.OwnerDB, ownerID string, id int64) (*database.APITokenRecord, error) {
-	return db.GetOwnerTokenByID(ownerID, id)
+func (s *Server) ownerTokenByID(db database.OwnerDB, ownerID, publicID string) (*database.APITokenRecord, error) {
+	return db.GetOwnerTokenByPublicID(ownerID, publicID)
 }
 
 func (s *Server) linkedTokenCreateFields(r *http.Request) (string, string, error) {
 	name, expiry := "", ""
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		var body struct {
-			Name        string `json:"name"`
-			Expires     string `json:"expires"`
-			ExpiresDate string `json:"expires_date"`
+			Name      string `json:"name"`
+			Expires   string `json:"expires"`
+			ExpiresOn string `json:"expires_on"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&body); err != nil {
 			return "", "", err
 		}
 		name, expiry = body.Name, body.Expires
-		if body.ExpiresDate != "" {
-			expiry = body.ExpiresDate
+		if body.Expires != "" && body.ExpiresOn != "" {
+			return "", "", fmt.Errorf("expires and expires_on cannot both be set")
+		}
+		if body.Expires != "" && body.Expires != "never" && body.Expires != "7d" && body.Expires != "30d" && body.Expires != "90d" && body.Expires != "1y" {
+			return "", "", fmt.Errorf("expires must be never, 7d, 30d, 90d, or 1y")
+		}
+		if body.ExpiresOn != "" {
+			expiry = body.ExpiresOn
 		}
 	} else {
 		name, expiry = r.FormValue("name"), r.FormValue("expires")
-		if date := r.FormValue("expires_date"); date != "" {
+		if date := r.FormValue("expires_on"); date != "" {
 			expiry = date
 		}
 	}
@@ -384,7 +416,10 @@ func expiryFromChoice(choice string) (*time.Time, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid expiry")
 		}
-		t = day.Add(24*time.Hour - time.Second)
+		if day.Before(now.Truncate(24 * time.Hour)) {
+			return nil, fmt.Errorf("expiry date must be today or later in UTC")
+		}
+		t = day.AddDate(0, 0, 1)
 	}
 	if !t.After(now) {
 		return nil, fmt.Errorf("expiry must be in the future")
@@ -460,8 +495,15 @@ func (s *Server) handleLinkedTokenCreate(w http.ResponseWriter, r *http.Request)
 		s.tokenActionError(w, r, http.StatusConflict, "token name already exists")
 		return
 	}
+	record, err := db.GetOwnerTokenByID(primary.OwnerID, id)
+	if err != nil {
+		s.tokenActionError(w, r, http.StatusInternalServerError, "token storage error")
+		return
+	}
 	s.tokenAudit(r, "token.created", "linked", prefix)
-	s.tokenActionSuccess(w, r, map[string]any{"id": id, "name": name, "token": token})
+	result := tokenSummary(record)
+	result["linked_token"] = token
+	s.tokenActionSuccess(w, r, result)
 }
 
 func (s *Server) handleLinkedTokenReveal(w http.ResponseWriter, r *http.Request) {
@@ -469,24 +511,26 @@ func (s *Server) handleLinkedTokenReveal(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		s.tokenActionError(w, r, 404, "token not found")
-		return
-	}
-	token, err := s.ownerTokenByID(db, primary.OwnerID, id)
+	token, err := s.ownerTokenByID(db, primary.OwnerID, chi.URLParam(r, "id"))
 	if err != nil || token.Kind != "linked" || token.RevokedAt != nil {
 		s.tokenActionError(w, r, 404, "token not found")
 		return
 	}
-	plain, err := s.decryptOwnerToken(token.TokenEnc)
-	if err != nil {
-		s.tokenActionError(w, r, 500, "token unavailable")
+	s.tokenAudit(r, "token.revealed", "linked", token.TokenPrefix)
+	result := tokenSummary(token)
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		plain, err := s.decryptOwnerToken(token.TokenEnc)
+		if err != nil {
+			s.tokenActionError(w, r, 500, "token unavailable")
+			return
+		}
+		result["linked_token"] = plain
+	} else {
+		s.setTokenViewCookie(w, token.PublicID)
+		tokenViewRedirect(w, r, token.PublicID)
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	s.tokenAudit(r, "token.revealed", "linked", token.TokenPrefix)
-	s.tokenActionSuccess(w, r, map[string]any{"id": id, "token": plain})
+	s.tokenActionSuccess(w, r, result)
 }
 
 func (s *Server) handleLinkedTokenRotate(w http.ResponseWriter, r *http.Request) {
@@ -494,12 +538,7 @@ func (s *Server) handleLinkedTokenRotate(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		s.tokenActionError(w, r, 404, "token not found")
-		return
-	}
-	old, err := s.ownerTokenByID(db, primary.OwnerID, id)
+	old, err := s.ownerTokenByID(db, primary.OwnerID, chi.URLParam(r, "id"))
 	if err != nil || old.Kind != "linked" || old.RevokedAt != nil {
 		s.tokenActionError(w, r, 404, "token not found")
 		return
@@ -519,13 +558,16 @@ func (s *Server) handleLinkedTokenRotate(w http.ResponseWriter, r *http.Request)
 		s.tokenActionError(w, r, 500, "token rotation failed")
 		return
 	}
-	if err := db.RotateOwnerToken(primary.OwnerID, id, hex.EncodeToString(sum[:]), prefix, token[len(token)-4:], base64.StdEncoding.EncodeToString(sealed)); err != nil {
+	if err := db.RotateOwnerToken(primary.OwnerID, old.ID, hex.EncodeToString(sum[:]), prefix, token[len(token)-4:], base64.StdEncoding.EncodeToString(sealed)); err != nil {
 		s.tokenActionError(w, r, 500, "token rotation failed")
 		return
 	}
 	s.tokenAuditOwner(r, primary.OwnerID, "token.rotated", "linked", prefix)
 	w.Header().Set("Cache-Control", "no-store")
-	s.tokenActionSuccess(w, r, map[string]any{"id": id, "token": token})
+	old.TokenPrefix, old.TokenSuffix = prefix, token[len(token)-4:]
+	result := tokenSummary(old)
+	result["linked_token"] = token
+	s.tokenActionSuccess(w, r, result)
 }
 
 func (s *Server) handleLinkedTokenUpdate(w http.ResponseWriter, r *http.Request) {
@@ -533,17 +575,12 @@ func (s *Server) handleLinkedTokenUpdate(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		s.tokenActionError(w, r, 404, "token not found")
-		return
-	}
 	name, choice, err := s.linkedTokenCreateFields(r)
 	if err != nil {
 		s.tokenActionError(w, r, 400, err.Error())
 		return
 	}
-	old, err := s.ownerTokenByID(db, primary.OwnerID, id)
+	old, err := s.ownerTokenByID(db, primary.OwnerID, chi.URLParam(r, "id"))
 	if err != nil || old.Kind != "linked" {
 		s.tokenActionError(w, r, 404, "token not found")
 		return
@@ -554,6 +591,17 @@ func (s *Server) handleLinkedTokenUpdate(w http.ResponseWriter, r *http.Request)
 	if n := utf8.RuneCountInString(name); n < 1 || n > 64 {
 		s.tokenActionError(w, r, 400, "name must be 1 to 64 characters")
 		return
+	}
+	tokens, err := db.ListOwnerTokens(primary.OwnerID)
+	if err != nil {
+		s.tokenActionError(w, r, 500, "token storage error")
+		return
+	}
+	for _, token := range tokens {
+		if token.ID != old.ID && token.Kind == "linked" && token.Name == name {
+			s.tokenActionError(w, r, http.StatusConflict, "token name already exists")
+			return
+		}
 	}
 	expiry := old.ExpiresAt
 	if choice != "" {
@@ -567,11 +615,12 @@ func (s *Server) handleLinkedTokenUpdate(w http.ResponseWriter, r *http.Request)
 	if max <= 0 {
 		max = 25
 	}
-	if err := db.UpdateOwnerToken(primary.OwnerID, id, name, expiry, max); err != nil {
+	if err := db.UpdateOwnerToken(primary.OwnerID, old.ID, name, expiry, max); err != nil {
 		s.tokenActionError(w, r, 404, "token not found")
 		return
 	}
-	s.tokenActionSuccess(w, r, map[string]any{"id": id, "name": name, "expires_at": expiry})
+	old.Name, old.ExpiresAt = name, expiry
+	s.tokenActionSuccess(w, r, tokenSummary(old))
 }
 
 func (s *Server) handleLinkedTokenRevoke(w http.ResponseWriter, r *http.Request) {
@@ -579,17 +628,12 @@ func (s *Server) handleLinkedTokenRevoke(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		s.tokenActionError(w, r, 404, "token not found")
-		return
-	}
-	token, err := s.ownerTokenByID(db, primary.OwnerID, id)
+	token, err := s.ownerTokenByID(db, primary.OwnerID, chi.URLParam(r, "id"))
 	if err != nil || token.Kind != "linked" {
 		s.tokenActionError(w, r, 404, "token not found")
 		return
 	}
-	if err := db.RevokeOwnerToken(primary.OwnerID, id); err != nil {
+	if err := db.RevokeOwnerToken(primary.OwnerID, token.ID); err != nil {
 		s.tokenActionError(w, r, 404, "token not found")
 		return
 	}
@@ -598,7 +642,7 @@ func (s *Server) handleLinkedTokenRevoke(w http.ResponseWriter, r *http.Request)
 	if csd := s.liveCfg().Web.Headers.ClearSiteData; csd.OnTokenRevocation {
 		w.Header().Set("Clear-Site-Data", clearSiteDataValue(csd))
 	}
-	s.tokenActionSuccess(w, r, map[string]any{"id": id, "revoked": true})
+	s.tokenActionSuccess(w, r, map[string]any{"id": token.PublicID, "status": "revoked"})
 }
 
 func (s *Server) decryptOwnerToken(encoded string) (string, error) {
@@ -633,11 +677,10 @@ func (s *Server) tokenActionSuccess(w http.ResponseWriter, r *http.Request, data
 		return
 	}
 	if values, ok := data.(map[string]any); ok {
-		if token, yes := values["token"].(string); yes {
-			w.Header().Set("Cache-Control", "no-store")
-			pageData := s.preferencesPageData(r, s.themeFromRequest(r), i18n.LangFromRequest(r))
-			pageData["RevealedLinkedToken"] = token
-			s.renderTemplate(w, r, "preferences_tokens.html", pageData)
+		if _, yes := values["linked_token"].(string); yes {
+			id, _ := values["id"].(string)
+			s.setTokenViewCookie(w, id)
+			tokenViewRedirect(w, r, id)
 			return
 		}
 	}

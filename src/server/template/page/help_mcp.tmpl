@@ -6,7 +6,7 @@
 {{define "content"}}
   <div class="container container-md">
     <header class="page-header">
-      <nav class="breadcrumb" aria-label="{{t .Lang "common.breadcrumb"}}"><a href="/server/help">← {{t .Lang "help.title"}}</a></nav>
+      <nav class="breadcrumb" aria-label="{{t .Lang "common.breadcrumb"}}"><a href="{{.AssetPrefix}}/server/help">← {{t .Lang "help.title"}}</a></nav>
       <h1 class="page-title">{{t .Lang "help.mcp_page_title"}}</h1>
       <p class="page-lead">{{tf .Lang "help.mcp_meta_description" "site" .SiteTitle}}</p>
     </header>
@@ -38,9 +38,10 @@
       <div class="code-block"><pre><code id="mcp-curl">curl -q -LSsf -X POST '{{.MCPURL}}' \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -H 'MCP-Protocol-Version: 2025-06-18' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/list' \
   -H "Authorization: Bearer $MCP_TOKEN" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'</code></pre><button type="button" class="copy-btn" data-copy-target="mcp-curl" aria-label="{{t .Lang "common.copy"}}" aria-live="polite">{{t .Lang "common.copy"}}</button></div>
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}'</code></pre><button type="button" class="copy-btn" data-copy-target="mcp-curl" aria-label="{{t .Lang "common.copy"}}" aria-live="polite">{{t .Lang "common.copy"}}</button></div>
     </section>
 
     <section id="tools" class="section-card" aria-labelledby="tools-heading">
@@ -55,7 +56,7 @@
 
     <section id="limits" class="section-card" aria-labelledby="limits-heading">
       <h2 id="limits-heading">{{t .Lang "help.mcp_behavior_heading"}}</h2>
-      <p>{{t .Lang "help.mcp_behavior_body"}} 2025-06-18, 2025-03-26, 2024-11-05.</p>
+      <p>{{t .Lang "help.mcp_behavior_body"}} 2026-07-28.</p>
     </section>
 
     <section id="troubleshooting" class="section-card" aria-labelledby="troubleshooting-heading">

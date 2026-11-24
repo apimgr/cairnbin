@@ -6,7 +6,7 @@
 {{define "content"}}
   <div class="container container-md">
     <header class="page-header">
-      <nav class="breadcrumb" aria-label="{{t .Lang "common.breadcrumb"}}"><a href="/server/preferences">← {{t .Lang "preferences.title"}}</a></nav>
+      <nav class="breadcrumb" aria-label="{{t .Lang "common.breadcrumb"}}"><a href="{{.AssetPrefix}}/server/preferences">← {{t .Lang "preferences.title"}}</a></nav>
       <h1 class="page-title">{{t .Lang "preferences.sync_title"}}</h1>
       <p class="page-lead">{{t .Lang "preferences.sync_desc"}}</p>
     </header>
@@ -27,7 +27,7 @@
     <section class="section-card" aria-labelledby="preferences-import">
       <h2 id="preferences-import">{{t .Lang "preferences.import_title"}}</h2>
       <p>{{t .Lang "preferences.import_desc"}}</p>
-      <form method="post" action="/server/preferences/sync">
+      <form method="post" action="{{.AssetPrefix}}/server/preferences/sync">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input type="hidden" name="redirect" value="{{.CancelURL}}">
         <div class="form-group">

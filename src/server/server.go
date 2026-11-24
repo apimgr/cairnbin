@@ -269,6 +269,7 @@ type Server struct {
 	router               *chi.Mux
 	db                   database.DB
 	cacheStore           cache.Cache
+	cacheDegraded        bool
 	cfg                  *config.Config
 	cfgMgr               *config.ConfigManager
 	lastSMTPConfig       config.EmailConfig
@@ -304,6 +305,7 @@ type Server struct {
 	healthLimiter      *rateLimiter
 	burstLimiter       *rateLimiter
 	strictLimiter      *rateLimiter
+	authFailureLimiter *rateLimiter
 	captchaMu          sync.Mutex
 	captchaChallenges  map[string]simpleCaptchaState
 	contactSpamMu      sync.Mutex
@@ -759,7 +761,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		ServerName:    cfg.Web.SiteTitle,
 		ServerVersion: version,
 		Dispatch:      s.router,
-		Enabled:       func() bool { return true },
+		Authenticated: s.validBearer,
 		OriginAllowed: s.mcpOriginAllowed,
 	})
 	s.graphqlHandler = graphql.New(db, cfg.Web.SiteTitle)
@@ -862,6 +864,8 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	})
 
 	// Initialize cache driver (PART 9/12). Falls back to in-process memory on error.
+	externalCacheConfigured := strings.EqualFold(cfg.Server.Cache.Type, "redis") || strings.EqualFold(cfg.Server.Cache.Type, "valkey")
+	externalCacheReady := false
 	cacheCfg := cache.Config{
 		Type:          cfg.Server.Cache.Type,
 		URL:           cfg.Server.Cache.URL,
@@ -884,12 +888,16 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	}
 	if cs, err := cache.New(cacheCfg); err != nil {
 		log.Printf("warning: cache init failed (%v); falling back to memory", err)
+		if externalCacheConfigured {
+			s.cacheDegraded = true
+		}
 		fallback := cache.DefaultConfig()
 		fallback.Prefix = cacheCfg.Prefix
 		fallback.TTL = cacheCfg.TTL
 		s.cacheStore, _ = cache.New(fallback)
 	} else {
 		s.cacheStore = cs
+		externalCacheReady = externalCacheConfigured
 	}
 	s.cacheStore = &debugCache{Cache: s.cacheStore, s: s}
 	configureReportLimits(cfg.Web.Reports.RateLimitPerMinute, cfg.Web.Reports.RateLimitPerIPBurst)
@@ -899,10 +907,12 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	// the create path so the operator-set limit is actually enforced.
 	s.pasteHandler.SetMaxSize(cfg.Paste.MaxSizeBytes)
 
-	if cfg.Server.RateLimit.Enabled {
+	{
 		readReqs := cfg.Server.RateLimit.Read.Requests
 		writeReqs := cfg.Server.RateLimit.Write.Requests
 		healthReqs := cfg.Server.RateLimit.Health.Requests
+		strictReqs := cfg.Server.RateLimit.Strict.Requests
+		authFailuresReqs := cfg.Server.RateLimit.AuthFailures.Requests
 		if readReqs <= 0 {
 			readReqs = 120
 		}
@@ -912,9 +922,17 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		if healthReqs <= 0 {
 			healthReqs = 120
 		}
+		if strictReqs <= 0 {
+			strictReqs = 10
+		}
+		if authFailuresReqs <= 0 {
+			authFailuresReqs = 5
+		}
 		readWin := time.Duration(cfg.Server.RateLimit.Read.Window) * time.Second
 		writeWin := time.Duration(cfg.Server.RateLimit.Write.Window) * time.Second
 		healthWin := time.Duration(cfg.Server.RateLimit.Health.Window) * time.Second
+		strictWin := time.Duration(cfg.Server.RateLimit.Strict.Window) * time.Second
+		authFailuresWin := time.Duration(cfg.Server.RateLimit.AuthFailures.Window) * time.Second
 		if readWin <= 0 {
 			readWin = time.Minute
 		}
@@ -924,6 +942,12 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		if healthWin <= 0 {
 			healthWin = time.Minute
 		}
+		if strictWin <= 0 {
+			strictWin = 15 * time.Minute
+		}
+		if authFailuresWin <= 0 {
+			authFailuresWin = 15 * time.Minute
+		}
 		burstReqs := cfg.Server.RateLimit.GlobalBurst
 		if burstReqs <= 0 {
 			burstReqs = 240
@@ -931,16 +955,29 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		s.readLimiter = newRateLimiter(readReqs, readWin)
 		s.writeLimiter = newRateLimiter(writeReqs, writeWin)
 		s.healthLimiter = newRateLimiter(healthReqs, healthWin)
+		s.strictLimiter = newRateLimiter(strictReqs, strictWin)
+		s.authFailureLimiter = newRateLimiter(authFailuresReqs, authFailuresWin)
 		// Absolute ceiling across all endpoint classes combined (AI.md:16187,
 		// 240 req/min per IP). Applied as the step-7 global RateLimitMiddleware;
 		// the per-class limiters above remain attached to their routes as the
 		// tighter per-class quotas.
 		s.burstLimiter = newRateLimiter(burstReqs, time.Minute)
 	}
-	// Token disclosure, rotation, and identity restoration are login-like
-	// operations and use a stricter per-IP limit than ordinary writes.
-	s.strictLimiter = newRateLimiter(10, 15*time.Minute)
-	s.restoreFailLimiter = newRateLimiter(5, 15*time.Minute)
+	var rateStore rateLimitCounter
+	if externalCacheConfigured {
+		if externalCacheReady {
+			rateStore = cacheRateLimitCounter{Cache: s.cacheStore}
+		}
+	} else if store, ok := db.(database.RateLimitDB); ok {
+		rateStore = store
+	}
+	if rateStore != nil {
+		for _, limiter := range []*rateLimiter{s.readLimiter, s.writeLimiter, s.healthLimiter, s.strictLimiter, s.authFailureLimiter, s.burstLimiter} {
+			limiter.store = rateStore
+		}
+	}
+	// Restoration failures share the authentication-failure quota.
+	s.restoreFailLimiter = s.authFailureLimiter
 
 	tmpl, err := s.buildTemplates()
 	if err != nil {
@@ -1239,15 +1276,26 @@ func (s *Server) OnConfigChange(next *config.Config) {
 	applyI18nConfig(next)
 	if s.readLimiter != nil && next.Server.RateLimit.Read.Requests > 0 {
 		s.readLimiter.UpdateLimit(next.Server.RateLimit.Read.Requests)
+		s.readLimiter.UpdateWindow(time.Duration(next.Server.RateLimit.Read.Window) * time.Second)
 	}
 	if s.writeLimiter != nil && next.Server.RateLimit.Write.Requests > 0 {
 		s.writeLimiter.UpdateLimit(next.Server.RateLimit.Write.Requests)
+		s.writeLimiter.UpdateWindow(time.Duration(next.Server.RateLimit.Write.Window) * time.Second)
 	}
 	if s.healthLimiter != nil && next.Server.RateLimit.Health.Requests > 0 {
 		s.healthLimiter.UpdateLimit(next.Server.RateLimit.Health.Requests)
+		s.healthLimiter.UpdateWindow(time.Duration(next.Server.RateLimit.Health.Window) * time.Second)
 	}
 	if s.burstLimiter != nil && next.Server.RateLimit.GlobalBurst > 0 {
 		s.burstLimiter.UpdateLimit(next.Server.RateLimit.GlobalBurst)
+	}
+	if s.strictLimiter != nil && next.Server.RateLimit.Strict.Requests > 0 {
+		s.strictLimiter.UpdateLimit(next.Server.RateLimit.Strict.Requests)
+		s.strictLimiter.UpdateWindow(time.Duration(next.Server.RateLimit.Strict.Window) * time.Second)
+	}
+	if s.authFailureLimiter != nil && next.Server.RateLimit.AuthFailures.Requests > 0 {
+		s.authFailureLimiter.UpdateLimit(next.Server.RateLimit.AuthFailures.Requests)
+		s.authFailureLimiter.UpdateWindow(time.Duration(next.Server.RateLimit.AuthFailures.Window) * time.Second)
 	}
 
 	// Detect restart-required changes and record them for healthz. Settings
@@ -1465,9 +1513,12 @@ func (s *Server) TorRestart() error {
 // TorOnionAddress returns the .onion address, or empty string if not running.
 func (s *Server) TorOnionAddress() string {
 	if s.torManager == nil {
-		return ""
+		return strings.TrimSpace(s.liveCfg().Server.Tor.OnionAddress)
 	}
-	return s.torManager.OnionAddress()
+	if addr := strings.TrimSpace(s.torManager.OnionAddress()); addr != "" {
+		return addr
+	}
+	return strings.TrimSpace(s.liveCfg().Server.Tor.OnionAddress)
 }
 
 // TorRegenerateAddress deletes the current hidden-service identity and has
@@ -1565,7 +1616,7 @@ func (s *Server) maybeReadRateLimit(h http.HandlerFunc) http.HandlerFunc {
 	if s.readLimiter == nil {
 		return h
 	}
-	mw := rateLimitMiddleware(s.readLimiter, "read")
+	mw := s.rateLimitMiddleware(s.readLimiter, "read")
 	return mw(h).ServeHTTP
 }
 
@@ -1574,7 +1625,7 @@ func (s *Server) maybeRateLimit(h http.HandlerFunc) http.HandlerFunc {
 	if s.writeLimiter == nil {
 		return h
 	}
-	mw := rateLimitMiddleware(s.writeLimiter, "write")
+	mw := s.rateLimitMiddleware(s.writeLimiter, "write")
 	return mw(h).ServeHTTP
 }
 
@@ -1584,7 +1635,7 @@ func (s *Server) maybeStrictRateLimit(h http.HandlerFunc) http.HandlerFunc {
 	if s.strictLimiter == nil {
 		return h
 	}
-	return rateLimitMiddleware(s.strictLimiter, "strict")(h).ServeHTTP
+	return s.rateLimitMiddleware(s.strictLimiter, "strict")(h).ServeHTTP
 }
 
 // maybeDeleteRateLimit wraps h with the write rate limiter (DELETE is a write operation, PART 12).
@@ -1592,7 +1643,7 @@ func (s *Server) maybeDeleteRateLimit(h http.HandlerFunc) http.HandlerFunc {
 	if s.writeLimiter == nil {
 		return h
 	}
-	mw := rateLimitMiddleware(s.writeLimiter, "write")
+	mw := s.rateLimitMiddleware(s.writeLimiter, "write")
 	return mw(h).ServeHTTP
 }
 
@@ -1601,8 +1652,12 @@ func (s *Server) maybeHealthRateLimit(h http.HandlerFunc) http.HandlerFunc {
 	if s.healthLimiter == nil {
 		return h
 	}
-	mw := rateLimitMiddleware(s.healthLimiter, "health")
+	mw := s.rateLimitMiddleware(s.healthLimiter, "health")
 	return mw(h).ServeHTTP
+}
+
+func (s *Server) rateLimitMiddleware(rl *rateLimiter, class string) func(http.Handler) http.Handler {
+	return rateLimitMiddlewareWithKey(rl, class, s.rateLimitKey)
 }
 
 func (s *Server) setupRoutes() {
@@ -1661,7 +1716,7 @@ func (s *Server) setupRoutes() {
 	// Tighter per-class read/write/health quotas stay attached to their routes
 	// via maybeReadRateLimit / maybeRateLimit / maybeHealthRateLimit.
 	if s.burstLimiter != nil {
-		r.Use(rateLimitMiddleware(s.burstLimiter, "global_burst"))
+		r.Use(s.rateLimitMiddleware(s.burstLimiter, "global_burst"))
 	}
 	if s.geoipDB != nil {
 		r.Use(s.geoipDB.Middleware())
@@ -2179,7 +2234,7 @@ func (s *Server) txtExtensionMiddleware(next http.Handler) http.Handler {
 // corsAllowedHeaders is the full set of headers PART 16 requires the
 // Access-Control-Allow-Headers response to name explicitly, including
 // Authorization and CSRF headers.
-const corsAllowedHeaders = "Content-Type, Accept, X-Requested-With, Authorization, X-CSRF-Token, X-XSRF-Token"
+const corsAllowedHeaders = "Content-Type, Accept, X-Requested-With, Authorization, X-CSRF-Token, X-XSRF-Token, MCP-Protocol-Version, Mcp-Method, Mcp-Name"
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3208,7 +3263,7 @@ func (s *Server) startTorManager() {
 		return
 	}
 	go s.torManager.Monitor()
-	s.persistOnionAddress()
+	s.captureOnionAddress()
 	if s.liveCfg().Server.Tor.UseNetwork {
 		if s.geoipDB != nil {
 			go func() {
@@ -3613,6 +3668,8 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		if err := s.cacheStore.Ping(ctx); err != nil {
 			checks.Cache = "error"
+		} else if s.cacheDegraded {
+			checks.Cache = "degraded"
 		}
 		cancel()
 	}
@@ -3648,7 +3705,7 @@ func (s *Server) buildHealthResponse() HealthResponse {
 	status := "healthy"
 	if checks.Database == "error" || checks.Disk == "error" {
 		status = "unhealthy"
-	} else if checks.Cache == "error" || checks.Scheduler == "error" || checks.Tor == "error" || checks.I2P == "error" || checks.Tor == "degraded" || checks.I2P == "degraded" {
+	} else if checks.Cache == "error" || checks.Cache == "degraded" || checks.Scheduler == "error" || checks.Tor == "error" || checks.I2P == "error" || checks.Tor == "degraded" || checks.I2P == "degraded" {
 		status = "degraded"
 	}
 	for _, check := range checks.Datasets {
@@ -4025,31 +4082,33 @@ func (s *Server) handleAPIInfo(w http.ResponseWriter, r *http.Request) {
 // update metadata (PART 32 / PART 14). Non-versioned by design: clients use it
 // before knowing which API version the server supports.
 func (s *Server) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
-	cfg := s.liveCfg()
 	base := strings.TrimRight(s.baseURL(r), "/")
+	data := map[string]interface{}{
+		"name":    "cairnbin",
+		"version": s.version,
+		"api":     map[string]string{"current_version": s.apiVersion()},
+		"urls":    []string{base},
 
+		// CLI update metadata (PART 32).
+		// cli_versions maps os-arch → {version, sha256} for each CLI binary this
+		// server hosts at /cli/binaries/{name}; empty when none are available.
+		"cli_versions":    s.cliVersionsPayload(),
+		"cli_min_version": s.liveCfg().Server.Update.CLIMinVersion,
+	}
+	cfg := s.liveCfg()
+	if cfg.Server.Tor.Expose && s.buildTorInfo().Enabled {
+		if address := s.TorOnionAddress(); address != "" {
+			data["onion"] = address
+		}
+	}
+	if cfg.Server.I2P.Expose && s.buildI2PInfo().Enabled {
+		if address := s.I2PAddress(); address != "" {
+			data["i2p"] = address
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok": true,
-		"data": map[string]interface{}{
-			// Server identity
-			"server":      "cairnbin",
-			"version":     s.version,
-			"api_version": s.apiVersion(),
-			"base_url":    base,
-
-			// CLI update metadata (PART 32).
-			// cli_versions maps os-arch → {version, sha256} for each CLI binary this
-			// server hosts at /cli/binaries/{name}; empty when none are available.
-			"cli_versions":    s.cliVersionsPayload(),
-			"cli_min_version": s.liveCfg().Server.Update.CLIMinVersion,
-
-			// Feature flags visible to clients
-			"features": map[string]interface{}{
-				"tor":     s.torManager != nil && s.torManager.Running(),
-				"i2p":     s.i2pManager != nil && s.i2pManager.Running(),
-				"metrics": cfg.Server.Metrics.Enabled,
-			},
-		},
+		"ok":   true,
+		"data": data,
 	})
 }
 
@@ -6812,14 +6871,9 @@ func renderFallbackError(w http.ResponseWriter, r *http.Request, status int) {
 	_, _ = fmt.Fprintf(w, "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <title>%d %s</title>\n  </head>\n  <body>\n    <h1>%d %s</h1>\n  </body>\n</html>\n", status, text, status, text)
 }
 
-// persistOnionAddress records the generated .onion hostname under
-// server.tor.onion_address on the first successful Tor bootstrap (PART 12:
-// "Set automatically on first successful Tor bootstrap"). The stored address
-// is what enables Tor request detection (baseURL priority 0, the Tor
-// security.txt variant, and Tor CORS). Runs in Run() before HTTP serving
-// starts, so writing s.cfg here is race-free. Already-set addresses are
-// never overwritten.
-func (s *Server) persistOnionAddress() {
+// captureOnionAddress retains the Tor manager's runtime hostname in memory for
+// request detection. The address is never persisted to server.yml.
+func (s *Server) captureOnionAddress() {
 	onion := strings.TrimSpace(s.TorOnionAddress())
 	if onion == "" || strings.TrimSpace(s.cfg.Server.Tor.OnionAddress) != "" {
 		return
@@ -6828,15 +6882,10 @@ func (s *Server) persistOnionAddress() {
 	if live := s.liveCfg(); live != s.cfg {
 		live.Server.Tor.OnionAddress = onion
 	}
-	cfgPath := filepath.Join(s.configDir, "server.yml")
-	if err := config.SetOnionAddress(cfgPath, onion); err != nil {
-		log.Printf("tor: persisting onion address to %s failed: %v", cfgPath, err)
-	}
 }
 
 // persistB32Address writes the .b32.i2p address to server.i2p.b32_address on
-// the first successful I2P bootstrap (PART 31.2, mirroring
-// persistOnionAddress's PART 12 behavior). The stored address enables I2P
+// the first successful I2P bootstrap (PART 31.2). The stored address enables I2P
 // request detection (baseURL priority 0, contact-email privacy rules).
 // Runs in Run() before HTTP serving starts, so writing s.cfg here is
 // race-free. Already-set addresses are never overwritten.
@@ -6855,10 +6904,10 @@ func (s *Server) persistB32Address() {
 	}
 }
 
-// torRequestOnion returns the configured onion address when the request
+// torRequestOnion returns the runtime onion hostname when the request
 // arrived via the Tor hidden service — the request Host (after port
-// stripping) matches tor.onion_address (PART 12 priority-0 Tor detection).
-// Returns "" for clearnet requests or when no onion address is configured.
+// stripping) matches the hostname read from the Tor HiddenServiceDir (PART 12).
+// Returns "" for clearnet requests or when no runtime hostname is available.
 func (s *Server) torRequestOnion(r *http.Request) string {
 	if r == nil {
 		return ""
@@ -6938,7 +6987,7 @@ func (s *Server) publicSecurityEmail(r *http.Request) string {
 
 // baseURL constructs the base URL for the current request (PART 12).
 // Resolution order (highest priority first):
-//  0. Tor: when Host matches tor.onion_address → http://{onion_address} (no port, always http)
+//  0. Tor: when Host matches the runtime onion hostname → http://{onion_address} (no port, always http)
 //  1. Config/CLI: server.base_url
 //  2. X-Forwarded-Prefix header (from trusted reverse proxy)
 //  3. X-Forwarded-Path header (alternative prefix header)
@@ -6948,7 +6997,7 @@ func (s *Server) publicSecurityEmail(r *http.Request) string {
 // X-Forwarded-* headers are only honored when the immediate peer is a trusted
 // proxy (loopback, private ranges, or server.trusted_proxies.additional).
 func (s *Server) baseURL(r *http.Request) string {
-	// Priority 0: Tor hidden service — when the request Host matches the configured
+	// Priority 0: Tor hidden service — when the request Host matches the runtime
 	// onion address, resolve unconditionally as http://{onion_address}. No port, always
 	// http, no proxy header inspection, no IP check (PART 12 priority-0 rule).
 	if onion := s.torRequestOnion(r); onion != "" {
@@ -7357,12 +7406,12 @@ func (s *Server) registerSecurityDataHealthChecks(cfg *config.Config) {
 			if err != nil {
 				return time.Time{}, false
 			}
-			defer file.Close()
+			defer func() { _ = file.Close() }()
 			gz, err := gzip.NewReader(file)
 			if err != nil {
 				return time.Time{}, false
 			}
-			defer gz.Close()
+			defer func() { _ = gz.Close() }()
 			tarReader := tar.NewReader(gz)
 			foundDB, foundMetadata := false, false
 			for {

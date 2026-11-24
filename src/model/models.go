@@ -60,7 +60,7 @@ type CreateResponse struct {
 	Views      int        `json:"views"`
 	CreatedAt  time.Time  `json:"created_at"`
 	Link       string     `json:"link"`
-	// Plaintext tok_... returned only when a new owner identity is issued.
+	// Plaintext own_... returned only when a new owner identity is issued.
 	OwnerToken string `json:"owner_token,omitempty"`
 }
 

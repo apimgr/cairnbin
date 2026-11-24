@@ -187,6 +187,8 @@ docker:
 		-t $(REGISTRY):$(VERSION) \
 		-t $(REGISTRY):latest \
 		.
+	@docker pull $(REGISTRY):$(VERSION)
+	@sh tests/image_check.sh $(REGISTRY):$(VERSION)
 	@echo "✓ Docker build complete: $(REGISTRY):$(VERSION)"
 
 # =============================================================================

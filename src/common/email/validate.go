@@ -3,6 +3,8 @@ package email
 import (
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -91,6 +93,59 @@ func ValidateTemplate(text string) (errs, warnings []string) {
 		errs = append(errs, msg)
 	}
 	return errs, warnings
+}
+
+// ValidateTemplates validates and renders every embedded template, checking
+// configured overrides without sending mail. Invalid overrides are reported
+// while the embedded default remains available for the render check.
+func (m *Mailer) ValidateTemplates() []string {
+	entries, err := fs.ReadDir(defaultTemplatesFS, "templates")
+	if err != nil {
+		return []string{"could not list embedded email templates: " + err.Error()}
+	}
+	vars := map[string]string{}
+	for name := range knownTemplateVars() {
+		vars[name] = "sample"
+	}
+	issues := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".txt" {
+			continue
+		}
+		name := strings.TrimSuffix(entry.Name(), ".txt")
+		path := ""
+		if cfg := m.config(); cfg != nil && cfg.TemplateDir != "" {
+			path = filepath.Join(cfg.TemplateDir, entry.Name())
+		}
+		raw, readErr := defaultTemplatesFS.ReadFile("templates/" + entry.Name())
+		if readErr != nil {
+			issues = append(issues, name+": embedded template could not be read: "+readErr.Error())
+			continue
+		}
+		if path != "" {
+			if override, overrideErr := os.ReadFile(path); overrideErr == nil {
+				if errs, _ := ValidateTemplate(string(override)); len(errs) > 0 {
+					for _, validationErr := range errs {
+						issues = append(issues, name+": "+validationErr)
+					}
+				} else {
+					raw = override
+				}
+			} else if !os.IsNotExist(overrideErr) {
+				issues = append(issues, name+": override could not be read: "+overrideErr.Error())
+			}
+		}
+		if errs, _ := ValidateTemplate(string(raw)); len(errs) > 0 {
+			for _, validationErr := range errs {
+				issues = append(issues, name+": "+validationErr)
+			}
+			continue
+		}
+		if _, _, renderErr := m.Render(name, vars); renderErr != nil {
+			issues = append(issues, name+": "+renderErr.Error())
+		}
+	}
+	return issues
 }
 
 // closestVar returns the known variable within edit distance 2 of v, or "".

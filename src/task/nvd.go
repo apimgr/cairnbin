@@ -274,7 +274,7 @@ func atomicWriteNVD(path string, content []byte) error {
 		return err
 	}
 	tempName := temp.Name()
-	defer os.Remove(tempName)
+	defer func() { _ = os.Remove(tempName) }()
 	if err := temp.Chmod(0o640); err != nil {
 		_ = temp.Close()
 		return err

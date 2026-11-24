@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"image/png"
 	"io"
 	"mime/multipart"
@@ -922,6 +923,27 @@ func TestIPBucketAllow(t *testing.T) {
 			t.Error("request after window expiry should be allowed")
 		}
 	})
+
+	t.Run("weights previous fixed window", func(t *testing.T) {
+		b := &ipBucket{}
+		window := time.Minute
+		start := time.Unix(120, 0)
+		for i := 0; i < 4; i++ {
+			if !b.allowAt(4, window, start) {
+				t.Fatal("initial-window request should be allowed")
+			}
+		}
+		atHalfWindow := start.Add(window + 30*time.Second)
+		if !b.allowAt(4, window, atHalfWindow) {
+			t.Fatal("weighted request below the limit should be allowed")
+		}
+		if !b.allowAt(4, window, atHalfWindow) {
+			t.Error("second weighted request should still be below the limit")
+		}
+		if b.allowAt(4, window, atHalfWindow) {
+			t.Error("third weighted request should reach the limit")
+		}
+	})
 }
 
 func TestNewRateLimiter(t *testing.T) {
@@ -940,6 +962,33 @@ func TestNewRateLimiter(t *testing.T) {
 			t.Error("third request should be rejected when limit=2")
 		}
 	})
+}
+
+func TestRateLimiterFallbackBucketsUseBoundedLRU(t *testing.T) {
+	rl := newRateLimiter(100, time.Minute)
+	rl.store = nil
+	if !rl.allow("2001:db8::1") || !rl.allow("2001:db8::2") {
+		t.Fatal("initial distinct address buckets were unexpectedly rejected")
+	}
+	for i := 0; i < maxInMemoryRateLimitBuckets-2; i++ {
+		if !rl.allow(fmt.Sprintf("2001:db8::%x", i+3)) {
+			t.Fatalf("address bucket %d was unexpectedly rejected", i)
+		}
+	}
+	if !rl.allow("2001:db8::1") {
+		t.Fatal("recently used address was evicted from the bounded LRU")
+	}
+	if !rl.allow("2001:db8::ffff") {
+		t.Fatal("new address bucket was unexpectedly rejected")
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if len(rl.buckets) != maxInMemoryRateLimitBuckets {
+		t.Fatalf("fallback buckets=%d, want bounded cap %d", len(rl.buckets), maxInMemoryRateLimitBuckets)
+	}
+	if rl.buckets["2001:db8::1"] == nil || rl.buckets["2001:db8::2"] != nil {
+		t.Fatal("LRU did not retain the recently used full IPv6 address and evict the least-recently-used one")
+	}
 }
 
 func TestRateLimiterIndependentIPs(t *testing.T) {
@@ -1609,11 +1658,63 @@ func TestHandleAutodiscover(t *testing.T) {
 			if w.Code != http.StatusOK {
 				t.Errorf("autodiscover status = %d, want 200", w.Code)
 			}
-			body := w.Body.String()
-			if !strings.Contains(body, tc.want) {
-				t.Errorf("autodiscover body should contain %q; got: %q", tc.want, body[:min(len(body), 200)])
+			var envelope struct {
+				Data map[string]any `json:"data"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
+				t.Fatalf("autodiscover response is invalid JSON: %v", err)
+			}
+			urls, ok := envelope.Data["urls"].([]any)
+			if !ok || len(urls) != 1 || urls[0] != tc.want {
+				t.Errorf("autodiscover urls = %#v, want [%q]", envelope.Data["urls"], tc.want)
+			}
+			api, ok := envelope.Data["api"].(map[string]any)
+			if !ok || api["current_version"] != "v1" {
+				t.Errorf("autodiscover api = %#v, want current_version v1", envelope.Data["api"])
+			}
+			for _, forbidden := range []string{"server", "api_version", "base_url", "features", "config", "schema", "options"} {
+				if _, exists := envelope.Data[forbidden]; exists {
+					t.Errorf("autodiscover exposed forbidden field %q", forbidden)
+				}
 			}
 		})
+	}
+}
+
+func TestAutodiscoverOverlayAddressesRequireExplicitExposure(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Tor.Expose = true
+	cfg.Server.Tor.Binary = "/bin/sh"
+	cfg.Server.Tor.OnionAddress = "abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrstuvwxyz234567.onion"
+	cfg.Server.I2P.Enabled = true
+	cfg.Server.I2P.Expose = true
+	s := &Server{version: "1.0", cfg: cfg, torManager: tor.NewManager(context.Background(), 8080, tor.Config{Binary: cfg.Server.Tor.Binary}, nil), i2pManager: i2p.NewManager(context.Background(), i2p.Config{Enabled: true}, nil)}
+	r := httptest.NewRequest(http.MethodGet, "/api/autodiscover", nil)
+	w := httptest.NewRecorder()
+	s.handleAutodiscover(w, r)
+	var envelope struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Data["onion"] != cfg.Server.Tor.OnionAddress {
+		t.Errorf("opted-in onion address=%v, want %q", envelope.Data["onion"], cfg.Server.Tor.OnionAddress)
+	}
+	if _, exists := envelope.Data["i2p"]; exists {
+		t.Error("I2P address was exposed before the manager published one")
+	}
+	cfg.Server.Tor.Expose = false
+	w = httptest.NewRecorder()
+	s.handleAutodiscover(w, r)
+	envelope = struct {
+		Data map[string]any `json:"data"`
+	}{}
+	if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := envelope.Data["onion"]; exists {
+		t.Error("onion address was exposed without explicit opt-in")
 	}
 }
 
@@ -2662,9 +2763,11 @@ func (d *stubDB) GetPasteByID(id string) (*model.Paste, error) {
 	}
 	return nil, nil
 }
+
 func (d *stubDB) GetPublicPastes(page, limit int) ([]model.PasteListItem, int, error) {
 	return nil, 0, nil
 }
+
 func (d *stubDB) SearchPublicPastes(page, limit int, search, sortBy, order string, pasteType ...string) ([]model.PasteListItem, int, error) {
 	return nil, 0, nil
 }
@@ -2684,11 +2787,17 @@ func (d *stubDB) RecordTaskHistory(h *database.TaskHistory) error { return nil }
 func (d *stubDB) ListTaskHistory(taskID string, limit int) ([]*database.TaskHistory, error) {
 	return d.taskHistory, d.historyErr
 }
+
 func (d *stubDB) CreateAPIToken(hash, prefix, rtype, rid string, exp *time.Time) error { return nil }
-func (d *stubDB) VerifyAPIToken(hash [32]byte, rtype, rid string) error                { return d.verifyAPITokenErr }
-func (d *stubDB) ValidateAPIToken(hash [32]byte, rtype string) error                   { return nil }
-func (d *stubDB) RevokeAPIToken(prefix, reason string) error                           { return nil }
-func (d *stubDB) ListAPITokens() ([]*database.APITokenRecord, error)                   { return nil, nil }
+
+func (d *stubDB) VerifyAPIToken(hash [32]byte, rtype, rid string) error { return d.verifyAPITokenErr }
+
+func (d *stubDB) ValidateAPIToken(hash [32]byte, rtype string) error { return nil }
+
+func (d *stubDB) RevokeAPIToken(prefix, reason string) error { return nil }
+
+func (d *stubDB) ListAPITokens() ([]*database.APITokenRecord, error) { return nil, nil }
+
 func (d *stubDB) GetAPITokenByPrefix(prefix string) (*database.APITokenRecord, error) {
 	return nil, nil
 }
@@ -2881,22 +2990,26 @@ func newStubScheduler(tasks ...database.TaskState) *stubSchedulerAPI {
 func (s *stubSchedulerAPI) GetTasks() []database.TaskState {
 	return s.tasks
 }
+
 func (s *stubSchedulerAPI) GetTask(id string) (database.TaskState, bool) {
 	t, ok := s.taskMap[id]
 	return t, ok
 }
+
 func (s *stubSchedulerAPI) RunNow(id string) error {
 	if s.runNowFn != nil {
 		return s.runNowFn(id)
 	}
 	return nil
 }
+
 func (s *stubSchedulerAPI) EnableTask(id string) {
 	if ts, ok := s.taskMap[id]; ok {
 		ts.Enabled = true
 		s.taskMap[id] = ts
 	}
 }
+
 func (s *stubSchedulerAPI) DisableTask(id string) {
 	if ts, ok := s.taskMap[id]; ok {
 		ts.Enabled = false
@@ -4286,10 +4399,9 @@ func TestNewWithToken(t *testing.T) {
 	}
 }
 
-func TestNewWithRateLimitEnabled(t *testing.T) {
+func TestNewAlwaysConfiguresRateLimiters(t *testing.T) {
 	db := &stubDB{}
 	cfg := config.DefaultConfig()
-	cfg.Server.RateLimit.Enabled = true
 	cfg.Server.RateLimit.Write.Requests = 5
 	cfg.Server.RateLimit.Read.Requests = 60
 	s := New(db, cfg, nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())

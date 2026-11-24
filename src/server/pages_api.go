@@ -151,7 +151,7 @@ func (s *Server) handleSecurityAPI(w http.ResponseWriter, r *http.Request) {
 	if expires == "" {
 		expires = time.Now().AddDate(1, 0, 0).UTC().Format(time.RFC3339)
 	}
-	var pgpData map[string]interface{} = map[string]interface{}{"available": false, "url": nil, "fingerprint": nil}
+	pgpData := map[string]interface{}{"available": false, "url": nil, "fingerprint": nil}
 	if s.hasPGPKey() {
 		pgpData["available"] = true
 		pgpData["url"] = base + "/.well-known/pgp-key.asc"
@@ -450,12 +450,11 @@ func (s *Server) handleContactAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if guard != "" {
-			if guard == "banned" {
+			switch guard {
+			case "banned":
 				w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(contactAntispam(cfg))))
 				s.writeContactAPIErrorWithRefresh(w, r, cfg, http.StatusTooManyRequests, "RATE_LIMITED", "errors.rate_limited", nil)
-			} else if guard == "fill_time" {
-				s.writeContactAPIErrorWithRefresh(w, r, cfg, http.StatusBadRequest, "VALIDATION_FAILED", "errors.invalid_format", nil)
-			} else {
+			default:
 				s.writeContactAPIErrorWithRefresh(w, r, cfg, http.StatusBadRequest, "VALIDATION_FAILED", "errors.invalid_format", nil)
 			}
 			return
@@ -527,10 +526,17 @@ func (s *Server) handleContactAPI(w http.ResponseWriter, r *http.Request) {
 			name, value string
 			limit       int
 		}{
-			{"name", req.Name, 100}, {"email", req.Email, 254}, {"researcher_gpg", req.ResearcherGPG, 16384},
-			{"component", req.Component, 255}, {"component_other", req.ComponentOther, 255}, {"endpoint", req.Endpoint, 2048},
-			{"summary", req.Summary, 200}, {"steps", req.Steps, 10000}, {"impact", req.Impact, 5000},
-			{"suggested_fix", req.SuggestedFix, 5000}, {"credit_name", req.CreditName, 100},
+			{"name", req.Name, 100},
+			{"email", req.Email, 254},
+			{"researcher_gpg", req.ResearcherGPG, 16384},
+			{"component", req.Component, 255},
+			{"component_other", req.ComponentOther, 255},
+			{"endpoint", req.Endpoint, 2048},
+			{"summary", req.Summary, 200},
+			{"steps", req.Steps, 10000},
+			{"impact", req.Impact, 5000},
+			{"suggested_fix", req.SuggestedFix, 5000},
+			{"credit_name", req.CreditName, 100},
 		}
 		for _, field := range securityFields {
 			if field.name == "credit_name" && req.CreditPreference != "handle" {
@@ -590,8 +596,10 @@ func (s *Server) handleContactAPI(w http.ResponseWriter, r *http.Request) {
 		value string
 		limit int
 	}{
-		{"name", name, 100}, {"email", from, 254},
-		{"subject", subject, 200}, {"message", message, 5000},
+		{"name", name, 100},
+		{"email", from, 254},
+		{"subject", subject, 200},
+		{"message", message, 5000},
 	} {
 		if utf8.RuneCountInString(field.value) > field.limit {
 			s.recordContactBlock(contactAntispam(cfg), r, "shape", false, time.Now())
@@ -625,12 +633,11 @@ func (s *Server) handleContactAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if guard != "" {
-		if guard == "banned" {
+		switch guard {
+		case "banned":
 			w.Header().Set("Retry-After", strconv.Itoa(contactBanRetryAfter(contactAntispam(cfg))))
 			s.writeContactAPIErrorWithRefresh(w, r, cfg, http.StatusTooManyRequests, "RATE_LIMITED", "errors.rate_limited", nil)
-		} else if guard == "fill_time" {
-			s.writeContactAPIErrorWithRefresh(w, r, cfg, http.StatusBadRequest, "VALIDATION_FAILED", "errors.invalid_format", nil)
-		} else {
+		default:
 			s.writeContactAPIErrorWithRefresh(w, r, cfg, http.StatusBadRequest, "VALIDATION_FAILED", "errors.invalid_format", nil)
 		}
 		return

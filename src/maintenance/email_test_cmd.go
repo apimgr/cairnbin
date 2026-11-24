@@ -1,6 +1,6 @@
-// email_test_cmd.go implements `{project_name} email test` (AI.md PART 17):
-// it proves the configured SMTP server actually delivers by sending the
-// embedded (or customised) "test" template to the admin contact.
+// email_test_cmd.go implements `{project_name} --maintenance email test` (AI.md PART 17):
+// it validates templates locally or sends the "test" template to the
+// configured reply-to address.
 package maintenance
 
 import (
@@ -21,10 +21,19 @@ type EmailOptions struct {
 	ConfigDir string
 	DBPath    string
 	LogDir    string
-	// To overrides the recipient; empty means the admin contact.
+	// To overrides the recipient; empty uses server.notifications.email.reply_to.
 	To     string
+	DryRun bool
 	Stdout io.Writer
 	Lang   string
+}
+
+// TemplateValidationError marks dry-run failures that use the CLI's data-error
+// exit status.
+type TemplateValidationError struct{ Count int }
+
+func (e *TemplateValidationError) Error() string {
+	return fmt.Sprintf("email template validation failed with %d error(s)", e.Count)
 }
 
 // RunEmail executes `email <action>`. Only "test" exists.
@@ -40,19 +49,30 @@ func RunEmail(action string, opts EmailOptions) error {
 	if err != nil {
 		return fmt.Errorf("email test: load config: %w", err)
 	}
+	mailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, cfg.StartupBaseURL(), cfg.Server.FQDN, cfg.Server.Lang)
+	if opts.DryRun {
+		issues := mailer.ValidateTemplates()
+		for _, issue := range issues {
+			_, _ = fmt.Fprintln(opts.Stdout, issue)
+		}
+		if len(issues) > 0 {
+			return &TemplateValidationError{Count: len(issues)}
+		}
+		_, _ = fmt.Fprintln(opts.Stdout, i18n.TranslateFormat(lang, "cli.email_templates_valid", nil))
+		return nil
+	}
 	if cfg.Server.Notifications.Email.SMTP.Host == "" {
 		return errors.New(i18n.TranslateFormat(lang, "cli.email_smtp_required", nil))
 	}
 	to := strings.TrimSpace(opts.To)
 	if to == "" {
-		to = strings.TrimSpace(cfg.AdminEmail())
+		to = strings.TrimSpace(cfg.Server.Notifications.Email.ReplyTo)
 	}
 	if to == "" {
 		return errors.New(i18n.TranslateFormat(lang, "cli.email_recipient_required", nil))
 	}
 	auth := AuthOptions{ConfigDir: opts.ConfigDir, DBPath: opts.DBPath, LogDir: opts.LogDir}
 	cfg.Server.Notifications.Email.Enabled = true
-	mailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, cfg.StartupBaseURL(), cfg.Server.FQDN, cfg.Server.Lang)
 	if err := mailer.TestSMTP(); err != nil {
 		AuditMaintenanceEvent(auth, "email.test_failed", map[string]any{"stage": "connect"})
 		return fmt.Errorf("%s: %w", i18n.TranslateFormat(lang, "cli.email_smtp_failed", nil), err)

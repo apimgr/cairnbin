@@ -230,6 +230,9 @@ jobs:
       - name: Build image for scanning
         if: hashFiles('docker/Dockerfile') != ''
         run: docker build -t local/scan-target:ci -f docker/Dockerfile .
+      - name: Check image contract and overlay health
+        if: hashFiles('docker/Dockerfile') != ''
+        run: sh tests/image_check.sh local/scan-target:ci
       - name: Scan image (Trivy)
         if: hashFiles('docker/Dockerfile') != ''
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0

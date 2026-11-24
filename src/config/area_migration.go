@@ -191,9 +191,10 @@ func moveAreaSections(root *yaml.Node, areas map[string]*yaml.Node, currentArea 
 			continue
 		}
 		area := "app.yml"
-		if key == "tor" {
+		switch key {
+		case "tor":
 			area = "tor.yml"
-		} else if key == "data" {
+		case "data":
 			area = "security.yml"
 		}
 		if area == currentArea {

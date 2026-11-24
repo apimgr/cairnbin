@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apimgr/cairnbin/src/model"
@@ -22,10 +23,13 @@ import (
 // rotation so no report can be sealed under an outgoing key between re-encryption and key installation.
 var SecurityReportEncryptionMu sync.Mutex
 
+var lastRateLimitCleanup atomic.Int64
+
 // APITokenRecord represents a stored resource-owner token row (PART 11).
 // The raw token is never stored — only the SHA-256 hex digest.
 type APITokenRecord struct {
 	ID            int64
+	PublicID      string
 	OwnerID       string
 	Kind          string
 	Name          string
@@ -136,6 +140,13 @@ type DB interface {
 	UpsertSecurityKeypair(kp *SecurityKeypair) error
 }
 
+// RateLimitDB stores abuse counters for deployments using the server database
+// as their configured counter backend.
+type RateLimitDB interface {
+	CheckRateLimit(key string, now time.Time, limit int, window time.Duration) (bool, time.Duration, error)
+	RateLimitExceeded(key string, now time.Time, limit int, window time.Duration) (bool, error)
+}
+
 // OwnerDB provides the owner and linked-token lifecycle without expanding the
 // general database contract used by services that do not manage credentials.
 type OwnerDB interface {
@@ -146,6 +157,7 @@ type OwnerDB interface {
 	GetOwnerTokenByHash(tokenHash [32]byte) (*APITokenRecord, error)
 	GetOwnerTokenByHashReadOnly(tokenHash [32]byte) (*APITokenRecord, error)
 	GetOwnerTokenByID(ownerID string, id int64) (*APITokenRecord, error)
+	GetOwnerTokenByPublicID(ownerID, publicID string) (*APITokenRecord, error)
 	CreateLinkedToken(ownerID, tokenHash, tokenPrefix, tokenSuffix, name, tokenEnc string, expiresAt *time.Time, maxActive int) (int64, error)
 	ListOwnerTokens(ownerID string) ([]*APITokenRecord, error)
 	RotateOwnerToken(ownerID string, id int64, tokenHash, tokenPrefix, tokenSuffix, tokenEnc string) error
@@ -163,7 +175,7 @@ func (s *SQLiteDB) GetOwnerTokenByHashReadOnly(tokenHash [32]byte) (*APITokenRec
 	var stored string
 	var expires, lastUsed, revoked sql.NullInt64
 	var created int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, owner_id, kind, COALESCE(name,''), token_prefix, token_enc, resource_type, resource_id, token_hash, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE token_hash = ?`, hashHex).Scan(&rec.ID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &stored, &created, &expires, &lastUsed, &revoked)
+	err := s.db.QueryRowContext(ctx, `SELECT id, public_id, owner_id, kind, COALESCE(name,''), token_prefix, token_enc, resource_type, resource_id, token_hash, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE token_hash = ?`, hashHex).Scan(&rec.ID, &rec.PublicID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &stored, &created, &expires, &lastUsed, &revoked)
 	if err != nil {
 		return nil, err
 	}
@@ -395,6 +407,7 @@ func ensureSchema(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS rate_limits (
 			key          TEXT PRIMARY KEY,
 			count        INTEGER NOT NULL DEFAULT 1,
+			prev_count   INTEGER NOT NULL DEFAULT 0,
 			window_start INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
 			updated_at   INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 		)`,
@@ -435,6 +448,7 @@ func ensureSchema(db *sql.DB) error {
 		// The server.token (server.yml) is NOT stored here — validated directly from config.
 		`CREATE TABLE IF NOT EXISTS api_tokens (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			public_id     TEXT NOT NULL DEFAULT '',
 			owner_id      TEXT NOT NULL DEFAULT '',
 			kind          TEXT NOT NULL DEFAULT 'primary',
 			name          TEXT,
@@ -512,6 +526,7 @@ func ensureSchema(db *sql.DB) error {
 		`ALTER TABLE api_tokens ADD COLUMN name TEXT`,
 		`ALTER TABLE api_tokens ADD COLUMN token_enc TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE api_tokens ADD COLUMN token_suffix TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE api_tokens ADD COLUMN public_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE api_tokens ADD COLUMN rotated_at INTEGER`,
 	}
 
@@ -531,8 +546,21 @@ func ensureSchema(db *sql.DB) error {
 			}
 		}
 	}
+	if err := ensureRateLimitPreviousCount(ctx, db); err != nil {
+		return fmt.Errorf("schema rate limit migration: %w", err)
+	}
 	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_api_tokens_owner ON api_tokens(owner_id)`); err != nil {
 		return fmt.Errorf("schema owner index: %w", err)
+	}
+	publicUUID := `lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',(random() & 3) + 1,1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))`
+	if _, err := db.ExecContext(ctx, `UPDATE api_tokens SET public_id = `+publicUUID+` WHERE public_id = ''`); err != nil {
+		return fmt.Errorf("schema token public id migration: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_public_id ON api_tokens(public_id) WHERE public_id <> ''`); err != nil {
+		return fmt.Errorf("schema token public id index: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TRIGGER IF NOT EXISTS trg_api_tokens_public_id AFTER INSERT ON api_tokens WHEN NEW.public_id = '' BEGIN UPDATE api_tokens SET public_id = `+publicUUID+` WHERE id = NEW.id; END`); err != nil {
+		return fmt.Errorf("schema token public id trigger: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_owner_name ON api_tokens(owner_id, name) WHERE kind = 'linked' AND name IS NOT NULL`); err != nil {
 		return fmt.Errorf("schema owner token name index: %w", err)
@@ -545,6 +573,35 @@ func ensureSchema(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func ensureRateLimitPreviousCount(ctx context.Context, db *sql.DB) (resultErr error) {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(rate_limits)`)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := rows.Close(); resultErr == nil && closeErr != nil {
+			resultErr = closeErr
+		}
+	}()
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return err
+		}
+		if name == "prev_count" {
+			return rows.Err()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, `ALTER TABLE rate_limits ADD COLUMN prev_count INTEGER NOT NULL DEFAULT 0`)
+	return err
 }
 
 // migrateLegacyOwners upgrades resource-bound tokens to stable anonymous owners.
@@ -622,6 +679,103 @@ func (s *SQLiteDB) Ping() error {
 	return s.db.PingContext(ctx)
 }
 
+// CheckRateLimit atomically increments a persistent two-window counter and
+// evaluates its weighted sliding-window count.
+func (s *SQLiteDB) CheckRateLimit(key string, now time.Time, limit int, window time.Duration) (bool, time.Duration, error) {
+	if key == "" || limit <= 0 || window <= 0 {
+		return false, 0, fmt.Errorf("invalid rate limit parameters")
+	}
+	ctx, cancel := dbCtx(dbWriteTimeout)
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	nowUnix := now.Unix()
+	lastCleanup := lastRateLimitCleanup.Load()
+	if nowUnix-lastCleanup >= 300 && lastRateLimitCleanup.CompareAndSwap(lastCleanup, nowUnix) {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM rate_limits WHERE window_start < ?`, nowUnix-3600); err != nil {
+			return false, 0, err
+		}
+	}
+	windowSeconds := int64(window / time.Second)
+	var count, previous int
+	var start int64
+	err = tx.QueryRowContext(ctx, `SELECT count, prev_count, window_start FROM rate_limits WHERE key = ?`, key).Scan(&count, &previous, &start)
+	if err == sql.ErrNoRows {
+		count, previous, start = 0, 0, nowUnix
+	} else if err != nil {
+		return false, 0, err
+	} else if nowUnix >= start+windowSeconds {
+		if nowUnix < start+2*windowSeconds {
+			previous = count
+		} else {
+			previous = 0
+		}
+		count = 0
+		if nowUnix < start+2*windowSeconds {
+			start += windowSeconds
+		} else {
+			start = nowUnix
+		}
+	}
+	elapsed := nowUnix - start
+	weight := 1 - float64(elapsed)/float64(windowSeconds)
+	if weight < 0 {
+		weight = 0
+	}
+	weighted := float64(previous)*weight + float64(count)
+	allowed := weighted < float64(limit)
+	if allowed {
+		count++
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO rate_limits(key,count,prev_count,window_start,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET count=excluded.count, prev_count=excluded.prev_count, window_start=excluded.window_start, updated_at=excluded.updated_at`, key, count, previous, start, nowUnix); err != nil {
+		return false, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, 0, err
+	}
+	if allowed {
+		return true, 0, nil
+	}
+	return false, time.Duration(windowSeconds-elapsed) * time.Second, nil
+}
+
+// RateLimitExceeded checks a persisted weighted window without consuming a
+// request. It is used to keep a failed-authentication lockout active for
+// otherwise-valid credentials from the same source IP.
+func (s *SQLiteDB) RateLimitExceeded(key string, now time.Time, limit int, window time.Duration) (bool, error) {
+	if key == "" || limit <= 0 || window <= 0 {
+		return false, fmt.Errorf("invalid rate limit parameters")
+	}
+	ctx, cancel := dbCtx(dbReadTimeout)
+	defer cancel()
+	var count, previous int
+	var start int64
+	err := s.db.QueryRowContext(ctx, `SELECT count, prev_count, window_start FROM rate_limits WHERE key = ?`, key).Scan(&count, &previous, &start)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	windowSeconds := int64(window / time.Second)
+	if now.Unix() >= start+windowSeconds {
+		if now.Unix() >= start+2*windowSeconds {
+			return false, nil
+		}
+		start += windowSeconds
+		previous, count = count, 0
+	}
+	elapsed := now.Unix() - start
+	weight := 1 - float64(elapsed)/float64(windowSeconds)
+	if weight < 0 {
+		weight = 0
+	}
+	return float64(previous)*weight+float64(count) >= float64(limit), nil
+}
+
 // CreatePaste inserts a new paste.
 func (s *SQLiteDB) CreatePaste(p *model.Paste) error {
 	preparePaste(p)
@@ -647,7 +801,6 @@ func preparePaste(p *model.Paste) {
 	if p.Language == "" && !p.IsLink {
 		p.Language = "text"
 	}
-
 }
 
 // CreatePasteWithPrimaryToken atomically creates a paste, its anonymous owner,
@@ -1253,7 +1406,7 @@ func (s *SQLiteDB) GetOwnerTokenByHash(tokenHash [32]byte) (*APITokenRecord, err
 	var stored string
 	var expires, lastUsed, revoked sql.NullInt64
 	var created int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, owner_id, kind, COALESCE(name,''), token_prefix, token_enc, resource_type, resource_id, token_hash, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE token_hash = ?`, hashHex).Scan(&rec.ID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &stored, &created, &expires, &lastUsed, &revoked)
+	err := s.db.QueryRowContext(ctx, `SELECT id, public_id, owner_id, kind, COALESCE(name,''), token_prefix, token_enc, resource_type, resource_id, token_hash, created_at, expires_at, last_used_at, revoked_at FROM api_tokens WHERE token_hash = ?`, hashHex).Scan(&rec.ID, &rec.PublicID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &stored, &created, &expires, &lastUsed, &revoked)
 	if err != nil {
 		return nil, err
 	}
@@ -1290,7 +1443,7 @@ func (s *SQLiteDB) GetOwnerTokenByID(ownerID string, id int64) (*APITokenRecord,
 	rec := &APITokenRecord{}
 	var created int64
 	var expires, used, revoked sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT id, owner_id, kind, COALESCE(name,''), token_prefix, token_suffix, token_enc, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, COALESCE(revoked_reason,'') FROM api_tokens WHERE owner_id = ? AND id = ?`, ownerID, id).Scan(&rec.ID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenSuffix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &created, &expires, &used, &revoked, &rec.RevokedReason)
+	err := s.db.QueryRowContext(ctx, `SELECT id, public_id, owner_id, kind, COALESCE(name,''), token_prefix, token_suffix, token_enc, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, COALESCE(revoked_reason,'') FROM api_tokens WHERE owner_id = ? AND id = ?`, ownerID, id).Scan(&rec.ID, &rec.PublicID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenSuffix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &created, &expires, &used, &revoked, &rec.RevokedReason)
 	if err != nil {
 		return nil, err
 	}
@@ -1308,6 +1461,37 @@ func (s *SQLiteDB) GetOwnerTokenByID(ownerID string, id int64) (*APITokenRecord,
 		rec.RevokedAt = &v
 	}
 	return rec, nil
+}
+
+// GetOwnerTokenByPublicID resolves an opaque public token ID within one owner.
+func (s *SQLiteDB) GetOwnerTokenByPublicID(ownerID, publicID string) (*APITokenRecord, error) {
+	ctx, cancel := dbCtx(dbReadTimeout)
+	defer cancel()
+	rec := &APITokenRecord{}
+	var created int64
+	var expires, used, revoked sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT id, public_id, owner_id, kind, COALESCE(name,''), token_prefix, token_suffix, token_enc, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, COALESCE(revoked_reason,'') FROM api_tokens WHERE owner_id = ? AND public_id = ?`, ownerID, publicID).Scan(&rec.ID, &rec.PublicID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenSuffix, &rec.TokenEnc, &rec.ResourceType, &rec.ResourceID, &created, &expires, &used, &revoked, &rec.RevokedReason)
+	if err != nil {
+		return nil, err
+	}
+	populateTokenTimes(rec, created, expires, used, revoked)
+	return rec, nil
+}
+
+func populateTokenTimes(rec *APITokenRecord, created int64, expires, used, revoked sql.NullInt64) {
+	rec.CreatedAt = time.Unix(created, 0)
+	if expires.Valid {
+		v := time.Unix(expires.Int64, 0)
+		rec.ExpiresAt = &v
+	}
+	if used.Valid {
+		v := time.Unix(used.Int64, 0)
+		rec.LastUsedAt = &v
+	}
+	if revoked.Valid {
+		v := time.Unix(revoked.Int64, 0)
+		rec.RevokedAt = &v
+	}
 }
 
 // CreateLinkedToken stores an encrypted linked credential for an owner.
@@ -1335,7 +1519,7 @@ func (s *SQLiteDB) CreateLinkedToken(ownerID, tokenHash, tokenPrefix, tokenSuffi
 func (s *SQLiteDB) ListOwnerTokens(ownerID string) ([]*APITokenRecord, error) {
 	ctx, cancel := dbCtx(dbReadTimeout)
 	defer cancel()
-	rows, err := s.db.QueryContext(ctx, `SELECT id, owner_id, kind, COALESCE(name,''), token_prefix, token_suffix, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, COALESCE(revoked_reason,'') FROM api_tokens WHERE owner_id = ? ORDER BY kind, created_at`, ownerID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, public_id, owner_id, kind, COALESCE(name,''), token_prefix, token_suffix, resource_type, resource_id, created_at, expires_at, last_used_at, revoked_at, COALESCE(revoked_reason,'') FROM api_tokens WHERE owner_id = ? ORDER BY kind, created_at`, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -1345,7 +1529,7 @@ func (s *SQLiteDB) ListOwnerTokens(ownerID string) ([]*APITokenRecord, error) {
 		rec := &APITokenRecord{}
 		var created int64
 		var expires, lastUsed, revoked sql.NullInt64
-		if err := rows.Scan(&rec.ID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenSuffix, &rec.ResourceType, &rec.ResourceID, &created, &expires, &lastUsed, &revoked, &rec.RevokedReason); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.PublicID, &rec.OwnerID, &rec.Kind, &rec.Name, &rec.TokenPrefix, &rec.TokenSuffix, &rec.ResourceType, &rec.ResourceID, &created, &expires, &lastUsed, &revoked, &rec.RevokedReason); err != nil {
 			return nil, err
 		}
 		rec.CreatedAt = time.Unix(created, 0)

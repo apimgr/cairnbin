@@ -1,8 +1,10 @@
 package cache
 
 import (
+	"container/list"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +25,8 @@ type Cache interface {
 	Delete(ctx context.Context, key string) error
 	// Ping verifies the cache connection is alive.
 	Ping(ctx context.Context) error
+	CheckRateLimit(ctx context.Context, key string, now time.Time, limit int, window time.Duration) (bool, time.Duration, error)
+	RateLimitExceeded(ctx context.Context, key string, now time.Time, limit int, window time.Duration) (bool, error)
 	// Close releases underlying resources.
 	Close() error
 }
@@ -99,13 +103,29 @@ type memEntry struct {
 type memoryCache struct {
 	mu         sync.RWMutex
 	data       map[string]memEntry
+	limits     map[string]memoryRateLimitEntry
+	limitLRU   *list.List
+	limitByKey map[string]*list.Element
 	prefix     string
 	defaultTTL time.Duration
 }
 
+type memoryRateLimitEntry struct {
+	count, previous int
+	windowStart     int64
+	expiresAt       time.Time
+}
+
+const maxMemoryRateLimitEntries = 10000
+
+type memoryRateLimitLRUEntry struct{ key string }
+
 func newMemoryCache(prefix string, defaultTTL time.Duration) *memoryCache {
 	c := &memoryCache{
 		data:       make(map[string]memEntry),
+		limits:     make(map[string]memoryRateLimitEntry),
+		limitLRU:   list.New(),
+		limitByKey: make(map[string]*list.Element),
 		prefix:     prefix,
 		defaultTTL: defaultTTL,
 	}
@@ -165,6 +185,101 @@ func (c *memoryCache) Delete(_ context.Context, key string) error {
 func (c *memoryCache) Ping(_ context.Context) error { return nil }
 func (c *memoryCache) Close() error                 { return nil }
 
+func (c *memoryCache) CheckRateLimit(_ context.Context, key string, now time.Time, limit int, window time.Duration) (bool, time.Duration, error) {
+	if limit <= 0 || window < time.Second {
+		return false, 0, fmt.Errorf("invalid rate limit parameters")
+	}
+	windowSeconds, nowUnix := int64(window/time.Second), now.Unix()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	storageKey := c.key(key)
+	entry, exists := c.limits[storageKey]
+	if !exists {
+		entry = c.newRateLimitEntryLocked(storageKey)
+	} else {
+		c.touchRateLimitEntryLocked(storageKey)
+	}
+	if entry.windowStart == 0 {
+		entry.windowStart = nowUnix
+	}
+	if nowUnix >= entry.windowStart+windowSeconds {
+		if nowUnix < entry.windowStart+2*windowSeconds {
+			entry.previous = entry.count
+		} else {
+			entry.previous = 0
+		}
+		entry.count = 0
+		if nowUnix < entry.windowStart+2*windowSeconds {
+			entry.windowStart += windowSeconds
+		} else {
+			entry.windowStart = nowUnix
+		}
+	}
+	elapsed := nowUnix - entry.windowStart
+	weight := 1 - float64(elapsed)/float64(windowSeconds)
+	if weight < 0 {
+		weight = 0
+	}
+	allowed := float64(entry.previous)*weight+float64(entry.count) < float64(limit)
+	if allowed {
+		entry.count++
+	}
+	entry.expiresAt = now.Add(2 * window)
+	c.limits[storageKey] = entry
+	if allowed {
+		return true, 0, nil
+	}
+	return false, time.Duration(windowSeconds-elapsed) * time.Second, nil
+}
+
+func (c *memoryCache) RateLimitExceeded(_ context.Context, key string, now time.Time, limit int, window time.Duration) (bool, error) {
+	if limit <= 0 || window < time.Second {
+		return false, fmt.Errorf("invalid rate limit parameters")
+	}
+	windowSeconds, nowUnix := int64(window/time.Second), now.Unix()
+	c.mu.Lock()
+	storageKey := c.key(key)
+	entry, exists := c.limits[storageKey]
+	if exists {
+		c.touchRateLimitEntryLocked(storageKey)
+	}
+	c.mu.Unlock()
+	if entry.windowStart == 0 || !entry.expiresAt.After(now) {
+		return false, nil
+	}
+	if nowUnix >= entry.windowStart+2*windowSeconds {
+		return false, nil
+	}
+	if nowUnix >= entry.windowStart+windowSeconds {
+		entry.previous, entry.count = entry.count, 0
+		entry.windowStart += windowSeconds
+	}
+	weight := 1 - float64(nowUnix-entry.windowStart)/float64(windowSeconds)
+	if weight < 0 {
+		weight = 0
+	}
+	return float64(entry.previous)*weight+float64(entry.count) >= float64(limit), nil
+}
+
+func (c *memoryCache) newRateLimitEntryLocked(key string) memoryRateLimitEntry {
+	if len(c.limits) >= maxMemoryRateLimitEntries {
+		if oldest := c.limitLRU.Back(); oldest != nil {
+			entry := oldest.Value.(memoryRateLimitLRUEntry)
+			delete(c.limits, entry.key)
+			delete(c.limitByKey, entry.key)
+			c.limitLRU.Remove(oldest)
+		}
+	}
+	c.limitByKey[key] = c.limitLRU.PushFront(memoryRateLimitLRUEntry{key: key})
+	return memoryRateLimitEntry{}
+}
+
+func (c *memoryCache) touchRateLimitEntryLocked(key string) {
+	if element := c.limitByKey[key]; element != nil {
+		c.limitLRU.MoveToFront(element)
+	}
+}
+
 // reaperTickInterval controls how often the reaper sweeps for expired entries.
 // Overridden in tests to avoid waiting 5 minutes.
 var reaperTickInterval = 5 * time.Minute
@@ -180,6 +295,16 @@ func (c *memoryCache) reaper() {
 		for k, e := range c.data {
 			if !e.expiresAt.IsZero() && now.After(e.expiresAt) {
 				delete(c.data, k)
+				evicted++
+			}
+		}
+		for k, e := range c.limits {
+			if !e.expiresAt.After(now) {
+				delete(c.limits, k)
+				if element := c.limitByKey[k]; element != nil {
+					delete(c.limitByKey, k)
+					c.limitLRU.Remove(element)
+				}
 				evicted++
 			}
 		}
@@ -203,6 +328,12 @@ func (c *noopCache) Set(_ context.Context, _, _ string, _ time.Duration) error {
 func (c *noopCache) Delete(_ context.Context, _ string) error                  { return nil }
 func (c *noopCache) Ping(_ context.Context) error                              { return nil }
 func (c *noopCache) Close() error                                              { return nil }
+func (c *noopCache) CheckRateLimit(context.Context, string, time.Time, int, time.Duration) (bool, time.Duration, error) {
+	return false, 0, fmt.Errorf("cache unavailable")
+}
+func (c *noopCache) RateLimitExceeded(context.Context, string, time.Time, int, time.Duration) (bool, error) {
+	return false, fmt.Errorf("cache unavailable")
+}
 
 // ── Redis / Valkey driver ─────────────────────────────────────────────────────
 
@@ -307,6 +438,87 @@ func (c *redisCache) Delete(ctx context.Context, key string) error {
 
 func (c *redisCache) Ping(ctx context.Context) error {
 	return c.client.Ping(ctx).Err()
+}
+
+var redisRateLimitScript = redis.NewScript(`
+local now = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+local window = tonumber(ARGV[3])
+local count = tonumber(redis.call('HGET', KEYS[1], 'count') or '0')
+local previous = tonumber(redis.call('HGET', KEYS[1], 'previous') or '0')
+local start = tonumber(redis.call('HGET', KEYS[1], 'start') or now)
+if now >= start + window then
+  if now < start + 2 * window then previous = count else previous = 0 end
+  count = 0
+  if now < start + 2 * window then start = start + window else start = now end
+end
+local elapsed = now - start
+local weight = 1 - elapsed / window
+if weight < 0 then weight = 0 end
+local allowed = previous * weight + count < limit
+if allowed then count = count + 1 end
+redis.call('HSET', KEYS[1], 'count', count, 'previous', previous, 'start', start)
+redis.call('EXPIRE', KEYS[1], window * 2)
+if allowed then return {1, 0} end
+return {0, window - elapsed}
+`)
+
+var redisRateLimitPeekScript = redis.NewScript(`
+local now = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+local window = tonumber(ARGV[3])
+local count = tonumber(redis.call('HGET', KEYS[1], 'count') or '0')
+local previous = tonumber(redis.call('HGET', KEYS[1], 'previous') or '0')
+local start = tonumber(redis.call('HGET', KEYS[1], 'start') or '0')
+if start == 0 or now >= start + 2 * window then return 0 end
+if now >= start + window then previous = count; count = 0; start = start + window end
+local weight = 1 - (now - start) / window
+if weight < 0 then weight = 0 end
+if previous * weight + count >= limit then return 1 end
+return 0
+`)
+
+func (c *redisCache) CheckRateLimit(ctx context.Context, key string, now time.Time, limit int, window time.Duration) (bool, time.Duration, error) {
+	seconds := int64(window / time.Second)
+	if limit <= 0 || seconds < 1 {
+		return false, 0, fmt.Errorf("invalid rate limit parameters")
+	}
+	result, err := redisRateLimitScript.Run(ctx, c.client, []string{c.key("ratelimit:" + key)}, now.Unix(), limit, seconds).Slice()
+	if err != nil {
+		return false, 0, fmt.Errorf("cache rate-limit counter: %w", err)
+	}
+	if len(result) != 2 {
+		return false, 0, fmt.Errorf("cache rate-limit counter returned invalid result")
+	}
+	allowed, err := redisInt(result[0])
+	if err != nil {
+		return false, 0, err
+	}
+	retry, err := redisInt(result[1])
+	if err != nil {
+		return false, 0, err
+	}
+	return allowed == 1, time.Duration(retry) * time.Second, nil
+}
+
+func (c *redisCache) RateLimitExceeded(ctx context.Context, key string, now time.Time, limit int, window time.Duration) (bool, error) {
+	seconds := int64(window / time.Second)
+	if limit <= 0 || seconds < 1 {
+		return false, fmt.Errorf("invalid rate limit parameters")
+	}
+	value, err := redisRateLimitPeekScript.Run(ctx, c.client, []string{c.key("ratelimit:" + key)}, now.Unix(), limit, seconds).Int()
+	return value == 1, err
+}
+
+func redisInt(value interface{}) (int64, error) {
+	switch number := value.(type) {
+	case int64:
+		return number, nil
+	case string:
+		return strconv.ParseInt(number, 10, 64)
+	default:
+		return 0, fmt.Errorf("unexpected cache integer type %T", value)
+	}
 }
 
 func (c *redisCache) Close() error { return c.client.Close() }

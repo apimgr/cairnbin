@@ -1,9 +1,12 @@
 package server
 
 import (
+	"crypto/sha256"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apimgr/cairnbin/src/config"
 )
@@ -20,6 +23,36 @@ func TestAuthCheckRejectsMissingAndInvalidBearer(t *testing.T) {
 		if w.Code != 401 || (authorization != "" && strings.Contains(w.Body.String(), authorization)) {
 			t.Errorf("authorization %q: status=%d response=%q", authorization, w.Code, w.Body.String())
 		}
+	}
+}
+
+func TestInvalidBearerLockoutBlocksValidCredentialByIP(t *testing.T) {
+	valid := "operator-secret"
+	s := &Server{authFailureLimiter: newRateLimiter(2, time.Minute), operatorTokenHash: sha256.Sum256([]byte(valid))}
+	handler := s.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	for i := 0; i < 2; i++ {
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/pastes", nil)
+		r.Header.Set("Authorization", "Bearer invalid-token")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("invalid request %d status=%d, want request to reach route", i+1, w.Code)
+		}
+	}
+	anonymous := httptest.NewRequest(http.MethodGet, "/api/v1/pastes", nil)
+	anonymousResult := httptest.NewRecorder()
+	handler.ServeHTTP(anonymousResult, anonymous)
+	if anonymousResult.Code != http.StatusTooManyRequests || anonymousResult.Header().Get("Retry-After") == "" {
+		t.Fatalf("anonymous request during lockout status=%d retry=%q", anonymousResult.Code, anonymousResult.Header().Get("Retry-After"))
+	}
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/pastes", nil)
+	r.Header.Set("Authorization", "Bearer "+valid)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != http.StatusTooManyRequests || w.Header().Get("Retry-After") == "" {
+		t.Fatalf("valid credential during lockout status=%d retry=%q body=%s", w.Code, w.Header().Get("Retry-After"), w.Body.String())
 	}
 }
 

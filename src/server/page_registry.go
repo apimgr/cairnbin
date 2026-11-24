@@ -34,9 +34,6 @@ func (s *Server) preferencePageRegistry() []hubPageDefinition {
 }
 
 func (s *Server) helpPageRegistry() []hubPageDefinition {
-	if !s.liveCfg().Server.MCP.Enabled {
-		return nil
-	}
 	return []hubPageDefinition{{
 		Path: "/server/help/mcp", TitleKey: "help.mcp_page_title",
 		DescriptionKey: "help.mcp_meta_description", Order: 10,

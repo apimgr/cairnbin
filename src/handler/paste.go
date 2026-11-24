@@ -211,7 +211,7 @@ func generateID() (string, error) {
 const tokenCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 // generateOwnerToken generates a spec-compliant resource-owner token.
-// Format: "tok_" prefix + 32 random base62 chars.
+// Format: "own_" prefix + 32 random base62 chars.
 // Returns the raw plaintext token and its SHA-256 [32]byte hash.
 func generateOwnerToken() (plaintext string, tokenHash [32]byte, err error) {
 	raw := make([]byte, 32)
@@ -222,7 +222,7 @@ func generateOwnerToken() (plaintext string, tokenHash [32]byte, err error) {
 	for i, v := range raw {
 		b[i] = tokenCharset[int(v)%len(tokenCharset)]
 	}
-	plaintext = "tok_" + string(b)
+	plaintext = "own_" + string(b)
 	tokenHash = sha256.Sum256([]byte(plaintext))
 	return plaintext, tokenHash, nil
 }
@@ -494,7 +494,7 @@ func (h *PasteHandler) createFromRequest(r *http.Request) (*model.CreateResponse
 	}
 
 	// Resolve owner token: reuse an existing valid token if the caller provides one,
-	// otherwise generate a fresh tok_+32base62 token (PART 11).
+	// otherwise generate a fresh own_+32base62 token (PART 11).
 	// An invalid/unknown provided token is non-fatal — a new token is generated instead,
 	// so web-UI users who paste a stale token from CLI still get a working paste.
 	var plainToken string
@@ -929,7 +929,7 @@ func (h *PasteHandler) DeletePaste(w http.ResponseWriter, r *http.Request) {
 
 	token := extractOwnerToken(r)
 	if token == "" {
-		sendAPIError(w, r, "UNAUTHORIZED", "owner token required (Authorization: Bearer tok_...)")
+		sendAPIError(w, r, "UNAUTHORIZED", "owner token required (Authorization: Bearer own_...)")
 		return
 	}
 

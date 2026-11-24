@@ -11,7 +11,7 @@
     </header>
 
     {{if .GPCReceived}}<p class="alert alert-info" role="status">{{t .Lang "preferences.gpc_notice"}}</p>{{end}}
-    <form method="post" action="/server/preferences">
+    <form method="post" action="{{.AssetPrefix}}/server/preferences">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="consent_form" value="1">
       <input type="hidden" name="redirect" value="{{.CancelURL}}">

@@ -232,7 +232,7 @@ func printStartupBannerFull(w io.Writer, cfg BannerConfig, size terminal.Termina
 	}
 
 	if art := asciiArt(cfg.AppName, width); art != "" {
-		fmt.Fprint(w, colorize(art, "1;36"))
+		_, _ = fmt.Fprint(w, colorize(art, "1;36"))
 	}
 
 	line := strings.Repeat("─", width-2)
@@ -241,7 +241,7 @@ func printStartupBannerFull(w io.Writer, cfg BannerConfig, size terminal.Termina
 		if pad < 0 {
 			pad = 0
 		}
-		fmt.Fprintln(w, colorize("│", "36")+text+strings.Repeat(" ", pad)+colorize("│", "36"))
+		_, _ = fmt.Fprintln(w, colorize("│", "36")+text+strings.Repeat(" ", pad)+colorize("│", "36"))
 	}
 	wrappedRow := func(text string) {
 		for i, part := range wrapBannerText(text, width-6) {
@@ -251,9 +251,9 @@ func printStartupBannerFull(w io.Writer, cfg BannerConfig, size terminal.Termina
 			row(part)
 		}
 	}
-	sep := func() { fmt.Fprintln(w, colorize("├"+line+"┤", "36")) }
+	sep := func() { _, _ = fmt.Fprintln(w, colorize("├"+line+"┤", "36")) }
 
-	fmt.Fprintln(w, colorize("╭"+line+"╮", "36"))
+	_, _ = fmt.Fprintln(w, colorize("╭"+line+"╮", "36"))
 	wrappedRow(fmt.Sprintf("  🚀 %s · 📦 %s", cfg.AppName, cfg.Version))
 	sep()
 	wrappedRow(fmt.Sprintf("  %s Running in mode: %s%s", modeIcon(cfg.AppMode), cfg.AppMode, modeSuffix(cfg.Debug)))
@@ -270,7 +270,7 @@ func printStartupBannerFull(w io.Writer, cfg BannerConfig, size terminal.Termina
 		wrappedRow(fmt.Sprintf("  📡 Listening on %s", url))
 	}
 	wrappedRow(fmt.Sprintf("  ✅ Server started on %s", startupDatetime(cfg.StartedAt)))
-	fmt.Fprintln(w, colorize("╰"+line+"╯", "36"))
+	_, _ = fmt.Fprintln(w, colorize("╰"+line+"╯", "36"))
 }
 
 // printStartupBannerCompact prints the compact banner for 60-79 cols:
@@ -309,10 +309,10 @@ func printStartupBannerMicro(w io.Writer, cfg BannerConfig, width int) {
 		setup = " [SETUP]"
 	}
 	if port == "" {
-		fmt.Fprintln(w, truncateBannerText(cfg.AppName+setup, width))
+		_, _ = fmt.Fprintln(w, truncateBannerText(cfg.AppName+setup, width))
 		return
 	}
-	fmt.Fprintln(w, truncateBannerText(fmt.Sprintf("%s %s%s", cfg.AppName, port, setup), width))
+	_, _ = fmt.Fprintln(w, truncateBannerText(fmt.Sprintf("%s %s%s", cfg.AppName, port, setup), width))
 }
 
 // printStartupBannerPlain prints the raw-text banner for NO_COLOR / TERM=dumb:
@@ -340,7 +340,7 @@ func writeCompactLines(w io.Writer, text string, width int, color string) {
 		if color != "" {
 			part = colorize(part, color)
 		}
-		fmt.Fprintln(w, part)
+		_, _ = fmt.Fprintln(w, part)
 	}
 }
 

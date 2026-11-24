@@ -737,6 +737,18 @@ func TestRunMaintenanceBackup(t *testing.T) {
 	_ = code
 }
 
+func TestRunMaintenanceEmailRejectsInvalidOptions(t *testing.T) {
+	for _, args := range [][]string{
+		{"--maintenance", "email", "test", "--unknown"},
+		{"--maintenance", "email", "test", "--to"},
+	} {
+		code, _, errOut := runCapture(args...)
+		if code != 2 || !strings.Contains(errOut, "--maintenance email test") {
+			t.Errorf("run(%v) = %d, stderr %q; want usage error", args, code, errOut)
+		}
+	}
+}
+
 // TestRunStatusWithConfig covers --config DIR with the --status probe. The
 // directory need not hold a server.yml; config.Load handles missing files
 // gracefully. run() exits before entering the server-startup section.

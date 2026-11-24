@@ -47,9 +47,10 @@ func (s *Server) operatorHTML(r *http.Request, name string) template.HTML {
 		log.Printf("[config] invalid or oversized server.branding.content.%s.body; using built-in content", name)
 		return ""
 	}
-	if format == "md" {
+	switch format {
+	case "md":
 		body = string(renderMarkdown(body))
-	} else if format == "txt" {
+	case "txt":
 		paragraphs := strings.Split(strings.TrimSpace(body), "\n\n")
 		for i := range paragraphs {
 			paragraphs[i] = "<p>" + html.EscapeString(strings.TrimSpace(paragraphs[i])) + "</p>"

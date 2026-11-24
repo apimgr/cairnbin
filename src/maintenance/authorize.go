@@ -156,6 +156,16 @@ func AuthorizeSecretOp(opts AuthOptions) error {
 	return errors.New("secret rotation requires administrator authorization: run as root or provide the operator token")
 }
 
+// AuthorizeEmailOp requires root or the configured operator token before a
+// test message can be sent or templates inspected through the maintenance CLI.
+func AuthorizeEmailOp(opts AuthOptions) error {
+	a := newAuthorizer(opts)
+	if a.isRootFn() {
+		return nil
+	}
+	return a.requireOperatorToken("Testing server email requires operator authorization.")
+}
+
 func (a *authorizer) authorizeDataOp() error {
 	if a.isRootFn() {
 		return nil

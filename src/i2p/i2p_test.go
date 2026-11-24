@@ -454,6 +454,22 @@ func TestManager_StartDisabled_NoOp(t *testing.T) {
 	m.Close()
 }
 
+func TestManager_RunningDoesNotBlockDuringStartup(t *testing.T) {
+	m := NewManager(context.Background(), Config{Enabled: true}, http.NewServeMux())
+	m.mu.Lock()
+	done := make(chan bool, 1)
+	go func() { done <- m.Running() }()
+	select {
+	case running := <-done:
+		if running {
+			t.Fatal("Running() should report false while startup holds the manager lock")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Running() blocked while startup held the manager lock")
+	}
+	m.mu.Unlock()
+}
+
 func TestManager_StartEnabledNoHandler_NoOp(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

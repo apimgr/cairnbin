@@ -1,5 +1,5 @@
 # GitLab CI/CD Pipeline for cairnbin
-# Equivalent to GitHub Actions: release.yml, beta.yml, devel.yml, docker.yml
+# Equivalent to GitHub Actions: release.yml, beta.yml, devel.yml, docker.yml and CI security/coverage jobs
 
 variables:
   PROJECT_NAME: "cairnbin"
@@ -11,9 +11,10 @@ variables:
   BUILD_IMAGE: "casjaysdev/go:latest"
 
 stages:
+  - lint
+  - security
   - build
   - test
-  - security
   - package
   - release
   - docker
@@ -40,6 +41,92 @@ stages:
         export OFFICIAL_SITE="${OFFICIAL_SITE:-}"
       fi
     - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
+
+# =============================================================================
+# CI JOBS
+# =============================================================================
+
+lint:
+  <<: *go-build
+  stage: lint
+  script:
+    - go vet ./...
+    - staticcheck ./...
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+
+secret-scan:
+  stage: security
+  image:
+    name: trufflesecurity/trufflehog:latest
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ -z "$CI_COMMIT_BEFORE_SHA" ] || [ "$CI_COMMIT_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+        trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
+      else
+        trufflehog git file://. --since-commit "$CI_COMMIT_BEFORE_SHA" --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
+      fi
+
+workflow-policy:
+  stage: security
+  image: $BUILD_IMAGE
+  script:
+    - |
+      bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
+      if [ -n "$bad" ]; then echo "unpinned actions found:"; echo "$bad"; exit 1; fi
+
+vuln-scan:
+  stage: security
+  image: $BUILD_IMAGE
+  variables:
+    GOFLAGS: -buildvcs=false
+  script:
+    - govulncheck ./...
+  rules:
+    - exists:
+        - go.sum
+
+image-build:
+  stage: security
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t local/scan-target:ci -f docker/Dockerfile .
+    - sh tests/image_check.sh local/scan-target:ci
+    - docker save local/scan-target:ci -o image.tar
+  artifacts:
+    paths:
+      - image.tar
+    expire_in: 1 hour
+  rules:
+    - exists:
+        - docker/Dockerfile
+
+image-scan:
+  stage: security
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  needs: [image-build]
+  script:
+    - trivy image --exit-code 1 --severity CRITICAL,HIGH --input image.tar
+  rules:
+    - exists:
+        - docker/Dockerfile
+
+coverage:
+  <<: *go-build
+  stage: test
+  script:
+    - mkdir -p "/tmp/${CI_PROJECT_NAMESPACE}"
+    - COVDIR=$(mktemp -d "/tmp/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}-XXXXXX")
+    - go test -v -cover -coverprofile="$COVDIR/coverage.out" ./...
+    - PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+    - if [ "$PCT" -lt 60 ]; then echo "coverage ${PCT}% is below the 60% threshold"; exit 1; fi
 
 # =============================================================================
 # RELEASE BUILDS (Tag Push: v* or semver)
@@ -180,76 +267,6 @@ build:freebsd-arm64:
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
-
-# =============================================================================
-# TEST
-# =============================================================================
-
-test:
-  <<: *go-build
-  stage: test
-  script:
-    - go test -v -cover ./...
-  rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
-    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_BRANCH == "beta"
-
-# =============================================================================
-# SECURITY
-# =============================================================================
-
-security:secret-scan:
-  stage: security
-  image: trufflesecurity/trufflehog:latest
-  variables:
-    GIT_DEPTH: "0"
-  script:
-    - |
-      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "$CI_COMMIT_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
-        trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail
-      else
-        trufflehog git file://. --since-commit HEAD~1 --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail
-      fi
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "schedule"
-
-security:workflow-policy:
-  stage: security
-  image: $BUILD_IMAGE
-  script:
-    - |
-      bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
-      if [ -n "$bad" ]; then
-        echo "Unpinned workflow actions found:"
-        echo "$bad"
-        exit 1
-      fi
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "schedule"
-
-security:vulnerability-scan:
-  stage: security
-  image: $BUILD_IMAGE
-  script:
-    - govulncheck ./...
-  rules:
-    - exists:
-        - go.sum
-
-security:image-scan:
-  stage: security
-  image: docker:latest
-  services:
-    - docker:dind
-  variables:
-    DOCKER_TLS_CERTDIR: "/certs"
-  script:
-    - docker build -t local/scan-target:ci -f docker/Dockerfile .
-    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --exit-code 1 --severity CRITICAL,HIGH local/scan-target:ci
-  rules:
-    - exists:
-        - docker/Dockerfile
 
 # =============================================================================
 # RELEASE (GitLab Release)

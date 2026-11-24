@@ -53,7 +53,8 @@ ARG BUILD_EPOCH
 ARG COMMIT_ID
 ARG LICENSE=MIT
 
-# Required runtime packages per PART 26: git, curl, bash, tini, tor
+# Required runtime packages per PART 26: git, curl, bash, tini, tor, i2pd,
+# tzdata, and ca-certificates.
 # apk upgrade pulls latest security patches (e.g. openssl/libcrypto3) for
 # the base image at build time, not just the packages added below
 # NOTE: Tor binary installed but NOT configured here - binary handles all Tor setup (see PART 31)
@@ -64,7 +65,10 @@ RUN apk upgrade --no-cache && \
     bash \
     shadow \
     tini \
-    tor
+    tor \
+    i2pd \
+    tzdata \
+    ca-certificates
 
 # NO directory creation - binary handles ALL setup based on env vars
 # This allows users to override CONFIG_DIR, DATA_DIR, etc.

@@ -13,10 +13,13 @@
       {{if .HasOwnerPrimary}}
       <div>
         <div>
-          <section class="section-card" aria-labelledby="owner-token-heading-1">
+          <section id="primary" class="section-card" aria-labelledby="owner-token-heading-1">
             <h2 id="owner-token-heading-1">{{t .Lang "preferences.owner_primary"}}</h2>
             {{range .OwnerTokens}}
-            {{if eq .kind "primary"}}<p><code class="copy-value">{{.token}}</code></p>{{end}}
+            {{if eq .kind "primary"}}<p><code class="copy-value">{{.token_masked}}</code></p>
+            <p>{{t $.Lang "preferences.owner_created_at"}} <time>{{.created_at}}</time> UTC</p>
+            {{if .last_used_at}}<p>{{t $.Lang "preferences.owner_last_used_at"}} <time>{{.last_used_at}}</time> UTC</p>{{end}}
+            {{if .expires_at}}<p>{{t $.Lang "preferences.owner_expires_at"}} <time>{{.expires_at}}</time> UTC</p>{{end}}{{end}}
             {{end}}
             <div>
               <form method="post" action="{{.AssetPrefix}}/server/preferences/token/reveal">
@@ -35,6 +38,7 @@
             </div>
             {{if .RevealedOwnerToken}}
             <p><code class="copy-value">{{.RevealedOwnerToken}}</code> <button type="button" class="copy-btn" data-copy="{{.RevealedOwnerToken}}" aria-label="{{t .Lang "preferences.owner_copy"}}">{{t .Lang "preferences.owner_copy"}}</button></p>
+            <p>{{t .Lang "preferences.owner_shown_once"}}</p>
             {{end}}
           </section>
           <section class="section-card" aria-labelledby="owner-token-heading-2">
@@ -48,7 +52,7 @@
               <details >
                 <summary>{{t .Lang "preferences.owner_custom_date"}}</summary>
                 <label for="linked-token-date" class="form-label">{{t .Lang "preferences.owner_expires_on"}}</label>
-                <input id="linked-token-date" type="date" name="expires_date" class="form-input">
+                <input id="linked-token-date" type="date" name="expires_on" class="form-input">
               </details>
               <button type="submit" class="btn btn-primary">{{t .Lang "preferences.owner_create"}}</button>
             </form>
@@ -64,10 +68,14 @@
           {{if not .HasLinkedTokens}}<p class="empty-state">{{t .Lang "preferences.owner_no_linked"}}</p>{{end}}
           {{range .OwnerTokens}}
           {{if eq .kind "linked"}}
-          <article>
+          <article id="token-{{.id}}">
             <h3>{{.name}}</h3>
             <p>{{t $.Lang "preferences.owner_linked"}} · {{t $.Lang (print "preferences.owner_" .status)}}</p>
-            <p><code class="copy-value">{{.token}}</code></p>
+            <p><code class="copy-value">{{.token_masked}}</code></p>
+            <p>{{t $.Lang "preferences.owner_created_at"}} <time>{{.created_at}}</time> UTC</p>
+            {{if .last_used_at}}<p>{{t $.Lang "preferences.owner_last_used_at"}} <time>{{.last_used_at}}</time> UTC</p>{{end}}
+            {{if .expires_at}}<p>{{t $.Lang "preferences.owner_expires_at"}} <time>{{.expires_at}}</time> UTC</p>{{end}}
+            {{if and $.RevealedLinkedToken (eq $.RevealedLinkedTokenID .id)}}<p><code class="copy-value">{{$.RevealedLinkedToken}}</code> <button type="button" class="copy-btn" data-copy="{{$.RevealedLinkedToken}}">{{t $.Lang "preferences.owner_copy"}}</button></p><p>{{t $.Lang "preferences.owner_shown_once"}}</p>{{end}}
             <div>
           <form method="post" action="{{$.AssetPrefix}}/server/preferences/tokens/{{.id}}/reveal" >
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
@@ -91,7 +99,7 @@
             <details >
               <summary>{{t $.Lang "preferences.owner_custom_date"}}</summary>
               <label class="form-label" for="tok-{{.id}}-date">{{t $.Lang "preferences.owner_expires_on"}}</label>
-              <input id="tok-{{.id}}-date" type="date" name="expires_date" class="form-input">
+              <input id="tok-{{.id}}-date" type="date" name="expires_on" class="form-input">
             </details>
             <button type="submit" class="btn btn-secondary">{{t $.Lang "preferences.owner_save"}}</button>
             </form>
@@ -108,9 +116,6 @@
             </div>
           </article>
           {{end}}
-          {{end}}
-          {{if .RevealedLinkedToken}}
-          <p>{{t .Lang "preferences.owner_linked"}}: <code class="copy-value">{{.RevealedLinkedToken}}</code> <button type="button" class="copy-btn" data-copy="{{.RevealedLinkedToken}}">{{t .Lang "preferences.owner_copy"}}</button></p>
           {{end}}
         </section>
       </div>

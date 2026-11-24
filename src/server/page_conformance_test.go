@@ -87,9 +87,6 @@ func TestRegisteredPagesConform(t *testing.T) {
 		if strings.HasSuffix(path, "/tokens") && cfg.Server.Tokens.MaxLinked == 0 {
 			continue
 		}
-		if strings.HasSuffix(path, "/mcp") && !cfg.Server.MCP.Enabled {
-			continue
-		}
 		response := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "http://example.test"+path, nil)
 		request.Header.Set("Accept", "text/html")
@@ -124,7 +121,7 @@ func TestRegisteredPagesConform(t *testing.T) {
 		}
 	}
 
-	if cfg.Server.MCP.Enabled {
+	{
 		response := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "http://example.test/api/v1/server/help", nil)
 		s.handleHelpAPI(response, request)
@@ -176,7 +173,7 @@ func configurePageConformanceRouter(s *Server, cfg *config.Config) {
 	s.metricsCollector = metric.NewWithOptions(metric.Options{})
 	s.pasteHandler = handler.NewPasteHandler(s.db, cfg.Server.BaseURL, [32]byte{})
 	s.compatHandler = compat.New(s.pasteHandler, s.db, "test")
-	s.mcpHandler = mcp.New(mcp.Config{APIVersion: "v1", Dispatch: s.router, Enabled: func() bool { return true }})
+	s.mcpHandler = mcp.New(mcp.Config{APIVersion: "v1", Dispatch: s.router})
 	s.setupRoutes()
 }
 

@@ -33,8 +33,10 @@ import (
 
 const e2eOperatorToken = "e2e-operator-token-only"
 
-var e2eDoubleHits sync.Map
-var e2eSMTPMessages = make(chan string, 8)
+var (
+	e2eDoubleHits   sync.Map
+	e2eSMTPMessages = make(chan string, 8)
+)
 
 func TestMain(m *testing.M) {
 	listener, err := net.Listen("tcp", ":64980")
@@ -368,15 +370,18 @@ func TestTier1OwnerAndLinkedTokenLifecycleAPI(t *testing.T) {
 	}
 	var list struct {
 		Data struct {
-			Tokens []struct {
-				ID    int64  `json:"id"`
-				Kind  string `json:"kind"`
-				Token string `json:"token"`
-				Name  string `json:"name"`
-			} `json:"tokens"`
+			Primary struct {
+				ID          string `json:"id"`
+				Kind        string `json:"kind"`
+				TokenMasked string `json:"token_masked"`
+			} `json:"primary"`
+			Linked []struct {
+				ID string `json:"id"`
+			} `json:"linked"`
+			MaxLinked int `json:"max_linked"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &list); err != nil || len(list.Data.Tokens) != 1 || list.Data.Tokens[0].Kind != "primary" {
+	if err := json.Unmarshal(body, &list); err != nil || !validPublicTokenID(list.Data.Primary.ID) || list.Data.Primary.Kind != "primary" || list.Data.Primary.TokenMasked == "" || len(list.Data.Linked) != 0 || list.Data.MaxLinked <= 0 {
 		t.Fatalf("invalid masked token list: %s (%v)", body, err)
 	}
 	if strings.Contains(string(body), primary) {
@@ -393,33 +398,33 @@ func TestTier1OwnerAndLinkedTokenLifecycleAPI(t *testing.T) {
 	}
 	var linked struct {
 		Data struct {
-			ID    int64  `json:"id"`
-			Token string `json:"token"`
+			ID          string `json:"id"`
+			LinkedToken string `json:"linked_token"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &linked); err != nil || linked.Data.ID == 0 || linked.Data.Token == "" {
+	if err := json.Unmarshal(body, &linked); err != nil || !validPublicTokenID(linked.Data.ID) || linked.Data.LinkedToken == "" {
 		t.Fatalf("invalid linked token response: %s (%v)", body, err)
 	}
 	linkedID := linked.Data.ID
-	resp, body = request(http.MethodGet, "/api/v1/server/preferences/tokens", linked.Data.Token, nil)
+	resp, body = request(http.MethodGet, "/api/v1/server/preferences/tokens", linked.Data.LinkedToken, nil)
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("linked token management status=%d body=%s, want 403", resp.StatusCode, body)
 	}
 	resp, body = request(http.MethodGet, "/api/v1/server/preferences/tokens", primary, nil)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "automation") || strings.Contains(string(body), linked.Data.Token) {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "automation") || strings.Contains(string(body), linked.Data.LinkedToken) {
 		t.Fatalf("updated token list status=%d body=%s", resp.StatusCode, body)
 	}
-	resp, body = request(http.MethodPost, fmt.Sprintf("/api/v1/server/preferences/tokens/%d/reveal", linkedID), primary, nil)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), linked.Data.Token) {
+	resp, body = request(http.MethodPost, fmt.Sprintf("/api/v1/server/preferences/tokens/%s/reveal", linkedID), primary, nil)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), linked.Data.LinkedToken) {
 		t.Fatalf("linked reveal status=%d body=%s", resp.StatusCode, body)
 	}
-	resp, body = request(http.MethodPost, fmt.Sprintf("/api/v1/server/preferences/tokens/%d/rotate", linkedID), primary, nil)
+	resp, body = request(http.MethodPost, fmt.Sprintf("/api/v1/server/preferences/tokens/%s/rotate", linkedID), primary, nil)
 	var rotatedLinked struct {
 		Data struct {
-			Token string `json:"token"`
+			Token string `json:"linked_token"`
 		} `json:"data"`
 	}
-	if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &rotatedLinked) != nil || rotatedLinked.Data.Token == "" || rotatedLinked.Data.Token == linked.Data.Token {
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &rotatedLinked) != nil || rotatedLinked.Data.Token == "" || rotatedLinked.Data.Token == linked.Data.LinkedToken {
 		t.Fatalf("linked rotation failed: status=%d", resp.StatusCode)
 	}
 	createdOwned, ownedBody := request(http.MethodPost, "/api/v1/pastes", primary, strings.NewReader(`{"content":"linked token rotation authorization"}`))
@@ -431,7 +436,7 @@ func TestTier1OwnerAndLinkedTokenLifecycleAPI(t *testing.T) {
 	if createdOwned.StatusCode != http.StatusCreated || json.Unmarshal(ownedBody, &ownedPaste) != nil || ownedPaste.Data.ID == "" {
 		t.Fatalf("create paste for linked-token rotation: status=%d", createdOwned.StatusCode)
 	}
-	resp, body = request(http.MethodDelete, "/api/v1/pastes/"+ownedPaste.Data.ID, linked.Data.Token, nil)
+	resp, body = request(http.MethodDelete, "/api/v1/pastes/"+ownedPaste.Data.ID, linked.Data.LinkedToken, nil)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("rotated-away linked token still authorized deletion: status=%d body=%s", resp.StatusCode, body)
 	}
@@ -440,11 +445,11 @@ func TestTier1OwnerAndLinkedTokenLifecycleAPI(t *testing.T) {
 		t.Fatalf("rotated linked token delete status=%d body=%s", resp.StatusCode, body)
 	}
 	updateBody := strings.NewReader(`{"name":"automation-updated","expires":"30d"}`)
-	resp, body = request(http.MethodPatch, fmt.Sprintf("/api/v1/server/preferences/tokens/%d", linkedID), primary, updateBody)
+	resp, body = request(http.MethodPatch, fmt.Sprintf("/api/v1/server/preferences/tokens/%s", linkedID), primary, updateBody)
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "automation-updated") {
 		t.Fatalf("linked token update status=%d body=%s", resp.StatusCode, body)
 	}
-	resp, body = request(http.MethodDelete, fmt.Sprintf("/api/v1/server/preferences/tokens/%d", linkedID), primary, nil)
+	resp, body = request(http.MethodDelete, fmt.Sprintf("/api/v1/server/preferences/tokens/%s", linkedID), primary, nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("linked token revoke status=%d body=%s", resp.StatusCode, body)
 	}
@@ -1769,7 +1774,12 @@ func TestTier2NoJS(t *testing.T) {
 	}
 
 	const linkTarget = "https://example.invalid/no-js-link"
-	if err := chromedp.Run(ctx,
+	linkCtx, linkCancel := browserContext(t)
+	defer linkCancel()
+	linkWaitCtx, linkWaitCancel := context.WithTimeout(linkCtx, 30*time.Second)
+	defer linkWaitCancel()
+	if err := chromedp.Run(linkWaitCtx,
+		emulation.SetScriptExecutionDisabled(true),
 		chromedp.Navigate(base+"/create"),
 		chromedp.WaitVisible(`#paste-form`, chromedp.ByQuery),
 		chromedp.SendKeys(`#content`, linkTarget),
@@ -1777,7 +1787,10 @@ func TestTier2NoJS(t *testing.T) {
 		chromedp.WaitVisible(`.result a.long-string`, chromedp.ByQuery),
 		chromedp.AttributeValue(`.result a.long-string`, "href", &viewLink, nil, chromedp.ByQuery),
 	); err != nil {
-		t.Fatalf("create link paste without JavaScript: %v", err)
+		_ = chromedp.Run(linkCtx, chromedp.OuterHTML("html", &html))
+		currentURL := ""
+		_ = chromedp.Run(linkCtx, chromedp.Location(&currentURL))
+		t.Fatalf("create link paste without JavaScript: %v; url=%s; page=%s", err, currentURL, html)
 	}
 	linkURL, err := url.Parse(viewLink)
 	if err != nil {
@@ -1820,6 +1833,7 @@ func TestTier2OwnerTokenManagementFormsWithoutJavaScript(t *testing.T) {
 	base := baseURL(t)
 	_, primary := createPaste(t, base, map[string]interface{}{"content": "tier 2 owner token forms"})
 	formClient, csrf := csrfClient(t, base)
+	formClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
 	postForm := func(path string, values url.Values, token string) (*http.Response, []byte) {
 		t.Helper()
 		values.Set("csrf_token", csrf)
@@ -1828,6 +1842,7 @@ func TestTier2OwnerTokenManagementFormsWithoutJavaScript(t *testing.T) {
 			t.Fatal(err)
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Accept", "text/html")
 		req.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
 		addCSRFToken(req, csrf)
 		req.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_rU3uW5Ze", Value: token})
@@ -1842,32 +1857,68 @@ func TestTier2OwnerTokenManagementFormsWithoutJavaScript(t *testing.T) {
 		}
 		return resp, body
 	}
+	consumeView := func(resp *http.Response, owner string) (*http.Response, []byte) {
+		t.Helper()
+		if resp.StatusCode != http.StatusSeeOther {
+			t.Fatalf("token action status=%d, want 303", resp.StatusCode)
+		}
+		var viewCookie *http.Cookie
+		for _, cookie := range resp.Cookies() {
+			if cookie.Name == "cairnbin_token_view" {
+				viewCookie = cookie
+			} else if cookie.Name == "cairnbin_owner_token_rU3uW5Ze" {
+				owner = cookie.Value
+			}
+		}
+		if viewCookie == nil || !viewCookie.Secure || !viewCookie.HttpOnly || viewCookie.SameSite != http.SameSiteStrictMode || viewCookie.MaxAge != 60 {
+			t.Fatalf("token view cookie does not meet one-use requirements: %#v", viewCookie)
+		}
+		req, err := http.NewRequest(http.MethodGet, base+"/server/preferences/tokens", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Accept", "text/html")
+		req.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_rU3uW5Ze", Value: owner})
+		req.AddCookie(viewCookie)
+		view, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer view.Body.Close()
+		page, err := io.ReadAll(view.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return view, page
+	}
 	revealed, body := postForm("/server/preferences/token/reveal", url.Values{}, primary)
-	if revealed.StatusCode != http.StatusOK || revealed.Header.Get("Cache-Control") != "no-store" || extractRawOwnerToken(body) != primary {
-		t.Fatalf("no-JS primary reveal failed: status=%d", revealed.StatusCode)
+	revealedPage, body := consumeView(revealed, primary)
+	if revealedPage.StatusCode != http.StatusOK || revealedPage.Header.Get("Cache-Control") != "no-store" || extractRawOwnerToken(body) != primary {
+		t.Fatalf("no-JS primary reveal failed: status=%d", revealedPage.StatusCode)
 	}
 	created, body := postForm("/server/preferences/tokens", url.Values{"name": {"tier2-automation"}, "expires": {"7d"}}, primary)
+	createdPage, body := consumeView(created, primary)
 	linked := extractRawOwnerToken(body)
-	if created.StatusCode != http.StatusOK || linked == "" || linked == primary {
-		t.Fatalf("no-JS linked-token creation failed: status=%d", created.StatusCode)
-	}
 	linkedID := extractLinkedTokenID(body)
-	if linkedID == "" {
-		t.Fatal("no-JS linked-token response omitted its management controls")
+	if createdPage.StatusCode != http.StatusOK || linked == "" || linked == primary || linkedID == "" {
+		t.Fatalf("no-JS linked-token creation failed: status=%d path=%q fragment=%q token_present=%t is_primary=%t token_id=%q token_card=%t reveal_form=%t body_bytes=%d", createdPage.StatusCode, createdPage.Request.URL.Path, createdPage.Request.URL.Fragment, linked != "", linked == primary, linkedID, strings.Contains(string(body), `id="token-`), strings.Contains(string(body), `/reveal`), len(body))
 	}
 	revealedLinked, body := postForm("/server/preferences/tokens/"+linkedID+"/reveal", url.Values{}, primary)
-	if revealedLinked.StatusCode != http.StatusOK || extractRawOwnerToken(body) != linked {
-		t.Fatalf("no-JS linked-token reveal failed: status=%d", revealedLinked.StatusCode)
+	revealedLinkedPage, body := consumeView(revealedLinked, primary)
+	if revealedLinkedPage.StatusCode != http.StatusOK || extractRawOwnerToken(body) != linked {
+		t.Fatalf("no-JS linked-token reveal failed: status=%d", revealedLinkedPage.StatusCode)
 	}
 	rotatedLinked, body := postForm("/server/preferences/tokens/"+linkedID+"/rotate", url.Values{}, primary)
+	rotatedLinkedPage, body := consumeView(rotatedLinked, primary)
 	newLinked := extractRawOwnerToken(body)
-	if rotatedLinked.StatusCode != http.StatusOK || newLinked == "" || newLinked == linked {
-		t.Fatalf("no-JS linked-token rotation failed: status=%d", rotatedLinked.StatusCode)
+	if rotatedLinkedPage.StatusCode != http.StatusOK || newLinked == "" || newLinked == linked {
+		t.Fatalf("no-JS linked-token rotation failed: status=%d", rotatedLinkedPage.StatusCode)
 	}
 	rotated, body := postForm("/server/preferences/token/rotate", url.Values{}, primary)
+	rotatedPage, body := consumeView(rotated, primary)
 	newPrimary := extractRawOwnerToken(body)
-	if rotated.StatusCode != http.StatusOK || newPrimary == "" || newPrimary == primary {
-		t.Fatalf("no-JS primary rotation failed: status=%d", rotated.StatusCode)
+	if rotatedPage.StatusCode != http.StatusOK || newPrimary == "" || newPrimary == primary {
+		t.Fatalf("no-JS primary rotation failed: status=%d", rotatedPage.StatusCode)
 	}
 }
 
@@ -1896,7 +1947,7 @@ func TestTier3OwnerTokenManagementWithJavaScript(t *testing.T) {
 		setOwnerCookie()
 		pathJSON, _ := json.Marshal(path)
 		valuesJSON, _ := json.Marshal(values)
-		expression := fmt.Sprintf(`(async()=>{const csrf=document.querySelector('[name="csrf_token"]')?.value;if(!csrf)throw new Error('CSRF token missing');const r=await fetch(%s,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':csrf},body:new URLSearchParams(%s)});return JSON.stringify({status:r.status,body:await r.text()})})()`, pathJSON, valuesJSON)
+		expression := fmt.Sprintf(`(async()=>{const csrf=document.querySelector('[name="csrf_token"]')?.value;if(!csrf)throw new Error('CSRF token missing');const r=await fetch(%s,{method:'POST',redirect:'manual',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':csrf},body:new URLSearchParams(%s)});return JSON.stringify({status:r.status,body:await r.text()})})()`, pathJSON, valuesJSON)
 		var encoded string
 		if err := chromedp.Run(ctx, chromedp.Evaluate(expression, &encoded, func(params *runtime.EvaluateParams) *runtime.EvaluateParams {
 			return params.WithAwaitPromise(true)
@@ -1912,18 +1963,29 @@ func TestTier3OwnerTokenManagementWithJavaScript(t *testing.T) {
 		}
 		return result.Status, []byte(result.Body)
 	}
-	status, body := post("/server/preferences/token/reveal", map[string]string{})
-	if status != http.StatusOK || extractRawOwnerToken(body) != primary {
+	status, _ := post("/server/preferences/token/reveal", map[string]string{})
+	if status != 0 {
 		t.Fatalf("browser primary reveal failed: status=%d", status)
 	}
-	status, body = post("/server/preferences/tokens", map[string]string{"name": "tier3-browser", "expires": "7d"})
-	linked := extractRawOwnerToken(body)
-	linkedID := extractLinkedTokenID(body)
-	if status != http.StatusOK || linked == "" || linkedID == "" {
+	status, _ = post("/server/preferences/tokens", map[string]string{"name": "tier3-browser", "expires": "7d"})
+	if status != 0 {
 		t.Fatalf("browser linked-token creation failed: status=%d", status)
 	}
-	status, body = post("/server/preferences/tokens/"+linkedID+"/rotate", map[string]string{})
-	if status != http.StatusOK || extractRawOwnerToken(body) == "" || extractRawOwnerToken(body) == linked {
+	var tokenForms string
+	setOwnerCookie()
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(base+"/server/preferences/tokens"),
+		chromedp.WaitReady("body", chromedp.ByQuery),
+		chromedp.Evaluate(`Array.from(document.querySelectorAll('form')).map(form=>form.action).join("\n")`, &tokenForms),
+	); err != nil {
+		t.Fatalf("read browser token management forms: %v", err)
+	}
+	linkedID := extractLinkedTokenID([]byte(tokenForms))
+	if linkedID == "" {
+		t.Fatalf("browser linked-token creation failed: status=%d", status)
+	}
+	status, _ = post("/server/preferences/tokens/"+linkedID+"/rotate", map[string]string{})
+	if status != 0 {
 		t.Fatalf("browser linked-token rotation failed: status=%d", status)
 	}
 }
@@ -1940,14 +2002,7 @@ func extractLinkedTokenID(body []byte) string {
 		endOffset := strings.IndexByte(value[start:], '/')
 		if endOffset > 0 {
 			id := value[start : start+endOffset]
-			valid := true
-			for _, char := range id {
-				if char < '0' || char > '9' {
-					valid = false
-					break
-				}
-			}
-			if valid {
+			if validPublicTokenID(id) {
 				return id
 			}
 		}
@@ -1956,8 +2011,26 @@ func extractLinkedTokenID(body []byte) string {
 	return ""
 }
 
+func validPublicTokenID(id string) bool {
+	if len(id) != 36 || id[8] != '-' || id[13] != '-' || id[18] != '-' || id[23] != '-' || id[14] != '4' {
+		return false
+	}
+	if !strings.ContainsRune("89ab", rune(id[19])) {
+		return false
+	}
+	for i, char := range id {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			continue
+		}
+		if !(char >= '0' && char <= '9' || char >= 'a' && char <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 func extractRawOwnerToken(body []byte) string {
-	const prefix = "tok_"
+	const prefix = "own_"
 	for offset := 0; ; {
 		index := strings.Index(string(body[offset:]), prefix)
 		if index < 0 {
@@ -2074,7 +2147,7 @@ func TestTier2OptionalTorUnavailable(t *testing.T) {
 
 func TestTier2RecentSearchWithoutJavaScript(t *testing.T) {
 	base := baseURL(t)
-	createPaste(t, base, map[string]interface{}{"content": "no-js recent fixture", "title": "e2e-nojs-recent-target", "expires_in": "never"})
+	targetID, _ := createPaste(t, base, map[string]interface{}{"content": "no-js recent fixture", "title": "e2e-nojs-recent-target", "expires_in": "never"})
 	ctx, cancel := browserContext(t)
 	defer cancel()
 	var pageHTML string
@@ -2085,7 +2158,7 @@ func TestTier2RecentSearchWithoutJavaScript(t *testing.T) {
 		chromedp.SetValue(`#recent-sort`, "name", chromedp.ByQuery),
 		chromedp.SetValue(`#recent-order`, "asc", chromedp.ByQuery),
 		chromedp.Click(`.filter-bar button[type="submit"]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`.paste-item`, chromedp.ByQuery),
+		chromedp.WaitVisible(`a[href="/`+targetID+`"]`, chromedp.ByQuery),
 		chromedp.OuterHTML("html", &pageHTML),
 	); err != nil {
 		t.Fatalf("submit recent search without JavaScript: %v", err)

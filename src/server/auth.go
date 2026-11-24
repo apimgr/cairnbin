@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -45,6 +46,25 @@ func TokenFromContext(ctx context.Context) (string, string) {
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, source := extractRequestToken(r)
+		if s.authFailureLimiter != nil {
+			key := "ip:" + clientIP(r) + ":auth_failures"
+			if s.authFailureLimiter.limited(key) {
+				s.writeAuthFailureLimit(w, r)
+				return
+			}
+			if token != "" && !s.validBearer(r) {
+				allowed, retry := s.authFailureLimiter.allowWithRetry(key)
+				if !allowed {
+					seconds := int(retry.Seconds())
+					if seconds < 1 {
+						seconds = 1
+					}
+					w.Header().Set("Retry-After", strconv.Itoa(seconds))
+					writeAPIError(w, r, http.StatusTooManyRequests, "RATE_LIMITED", "errors.rate_limited")
+					return
+				}
+			}
+		}
 		if token == "" {
 			next.ServeHTTP(w, r)
 			return
@@ -53,4 +73,13 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ctxKeyAuthSource, source)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (s *Server) writeAuthFailureLimit(w http.ResponseWriter, r *http.Request) {
+	seconds := int(s.authFailureLimiter.window.Seconds())
+	if seconds < 1 {
+		seconds = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(seconds))
+	writeAPIError(w, r, http.StatusTooManyRequests, "RATE_LIMITED", "errors.rate_limited")
 }

@@ -10,7 +10,7 @@ import (
 
 // footerPolicy is the strict sanitization policy for operator footer branding
 // (PART 16). It permits only basic text-formatting tags, safe links, and images
-// from https/data URLs; scripts, event handlers, javascript: URLs, forms, and
+// from https and relative URLs; scripts, event handlers, javascript: URLs, forms, and
 // the style attribute are stripped.
 func footerPolicy() *bluemonday.Policy {
 	p := bluemonday.NewPolicy()
@@ -21,7 +21,8 @@ func footerPolicy() *bluemonday.Policy {
 	p.AllowAttrs("href", "title", "target", "rel").OnElements("a")
 	p.RequireNoReferrerOnLinks(true)
 	p.AllowAttrs("src", "alt", "title", "width", "height").OnElements("img")
-	p.AllowURLSchemes("https", "data")
+	p.AllowURLSchemes("https")
+	p.AllowRelativeURLs(true)
 	p.AllowAttrs("class", "id").Globally()
 	return p
 }

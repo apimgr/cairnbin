@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -41,6 +42,23 @@ func newTestDB(t *testing.T) database.DB {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	return db
+}
+
+func TestPersistentRateLimitUsesSlidingWindow(t *testing.T) {
+	store := newTestDB(t).(database.RateLimitDB)
+	now := time.Unix(1_800_000_000, 0)
+	for i := 0; i < 3; i++ {
+		allowed, _, err := store.CheckRateLimit("ip:192.0.2.1:read", now, 3, time.Minute)
+		if err != nil || !allowed {
+			t.Fatalf("request %d allowed=%t err=%v, want allowed", i+1, allowed, err)
+		}
+	}
+	if allowed, retry, err := store.CheckRateLimit("ip:192.0.2.1:read", now, 3, time.Minute); err != nil || allowed || retry <= 0 {
+		t.Fatalf("over-limit request allowed=%t retry=%v err=%v", allowed, retry, err)
+	}
+	if allowed, _, err := store.CheckRateLimit("ip:192.0.2.1:read", now.Add(time.Minute+time.Second), 3, time.Minute); err != nil || !allowed {
+		t.Fatalf("request after window allowed=%t err=%v", allowed, err)
+	}
 }
 
 // samplePaste builds a minimal valid Paste for insertion.
@@ -1093,6 +1111,9 @@ func TestOwnerTokenLifecycle(t *testing.T) {
 	if err != nil || primary.Kind != "primary" || primary.OwnerID != "owner-one" {
 		t.Fatalf("primary token lookup = %#v, %v", primary, err)
 	}
+	if matched, err := regexp.MatchString(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`, primary.PublicID); err != nil || !matched {
+		t.Fatalf("primary public ID = %q, want opaque UUID v4", primary.PublicID)
+	}
 	expiry := time.Now().Add(24 * time.Hour)
 	_, linkedHash, linkedHashHex, linkedPrefix := makeToken(t)
 	linkedID, err := ownerDB.CreateLinkedToken("owner-one", linkedHashHex, linkedPrefix, "test", "automation", "encrypted-linked", &expiry, 25)
@@ -1119,6 +1140,13 @@ func TestOwnerTokenLifecycle(t *testing.T) {
 	if err != nil || detailed.TokenEnc != "encrypted-linked" {
 		t.Fatalf("scoped token detail lookup = %#v, %v", detailed, err)
 	}
+	if detailed.PublicID == primary.PublicID {
+		t.Fatal("primary and linked tokens share a public ID")
+	}
+	publicLookup, err := ownerDB.GetOwnerTokenByPublicID("owner-one", detailed.PublicID)
+	if err != nil || publicLookup.ID != linkedID {
+		t.Fatalf("public token ID lookup = %#v, %v", publicLookup, err)
+	}
 	if _, err := ownerDB.GetOwnerTokenByHash(linkedHash); err != nil {
 		t.Fatalf("linked token lookup: %v", err)
 	}
@@ -1131,6 +1159,10 @@ func TestOwnerTokenLifecycle(t *testing.T) {
 	}
 	if _, err := ownerDB.GetOwnerTokenByHash(rotatedHash); err != nil {
 		t.Fatalf("rotated token lookup: %v", err)
+	}
+	rotated, err := ownerDB.GetOwnerTokenByHash(rotatedHash)
+	if err != nil || rotated.PublicID != detailed.PublicID {
+		t.Fatalf("rotation changed public token ID: %q, %v", rotated.PublicID, err)
 	}
 	if err := ownerDB.UpdateOwnerToken("owner-one", linkedID, "renamed", nil, 25); err != nil {
 		t.Fatal(err)

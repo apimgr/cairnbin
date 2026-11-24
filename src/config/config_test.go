@@ -830,12 +830,12 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("zero_rate_limit_not_changed", func(t *testing.T) {
+	t.Run("zero_rate_limit_gets_defaulted", func(t *testing.T) {
 		cfg := fresh()
 		cfg.Server.RateLimit.Write.Requests = 0
 		config.Validate(cfg)
-		if cfg.Server.RateLimit.Write.Requests != 0 {
-			t.Errorf("zero rate limit was changed to %d; zero is valid (disables limiting)", cfg.Server.RateLimit.Write.Requests)
+		if cfg.Server.RateLimit.Write.Requests != 10 {
+			t.Errorf("zero rate limit was not reset to default 10: got %d", cfg.Server.RateLimit.Write.Requests)
 		}
 	})
 
@@ -1554,9 +1554,6 @@ func TestLoad_LegacyTopLevelRateLimitMigrates(t *testing.T) {
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
-	}
-	if !cfg.Server.RateLimit.Enabled {
-		t.Error("rate limiting must remain enabled")
 	}
 	if cfg.Server.RateLimit.Read.Requests != 7 || cfg.Server.RateLimit.Read.Window != 30 {
 		t.Errorf("legacy read limit not applied: %+v", cfg.Server.RateLimit.Read)

@@ -45,8 +45,10 @@ type Config struct {
 	fieldSources map[string]string `yaml:"-"`
 }
 
-var configDebugMu sync.RWMutex
-var configDebugEnabled bool
+var (
+	configDebugMu      sync.RWMutex
+	configDebugEnabled bool
+)
 
 // SetDebugLoggingEnabled controls configuration-layer debug logs during load
 // and reload. The application sets it after resolving CLI and environment flags.
@@ -148,8 +150,6 @@ type ServerConfig struct {
 	// Healthz controls the optional root-level /healthz alias (PART 13). Moved
 	// from the legacy web.healthz location.
 	Healthz HealthzConfig `yaml:"healthz"`
-	// MCP controls the Model Context Protocol endpoint (PART 11 "MCP Endpoint").
-	MCP MCPConfig `yaml:"-"`
 	// RateLimit controls per-IP request throttling (PART 12 "Rate Limiting").
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 	// Compression controls response compression (PART 12).
@@ -608,6 +608,8 @@ type CacheConfig struct {
 type TorConfig struct {
 	// Binary path; empty = auto-detect in PATH and common locations.
 	Binary string `yaml:"binary"`
+	// Expose controls whether the live onion address appears in autodiscovery.
+	Expose bool `yaml:"expose"`
 
 	// Outbound network settings.
 	UseNetwork bool `yaml:"use_network"`
@@ -631,11 +633,9 @@ type TorConfig struct {
 	NumIntroPoints int `yaml:"num_intro_points"`
 	VirtualPort    int `yaml:"virtual_port"`
 
-	// OnionAddress is the v3 .onion address (56 chars) assigned to this hidden service.
-	// Set automatically on first successful Tor bootstrap; may be overridden to use a
-	// pre-generated key. Used by baseURL() priority-0 check (PART 12) and Tor privacy
-	// rules — clearnet contact email is NEVER shown when Host matches this address.
-	OnionAddress string `yaml:"onion_address"`
+	// OnionAddress is runtime-only state read from the Tor HiddenServiceDir
+	// hostname file. It is deliberately excluded from server.yml.
+	OnionAddress string `yaml:"-"`
 
 	// ContactEmail is the Tor-specific operator contact address.
 	// Shown on Tor responses instead of any clearnet contact email (PART 12/31).
@@ -650,6 +650,8 @@ type I2PConfig struct {
 	// container and false elsewhere (unlike Tor, which auto-enables whenever
 	// the tor binary is found).
 	Enabled bool `yaml:"enabled"`
+	// Expose controls whether the live b32 address appears in autodiscovery.
+	Expose bool `yaml:"expose"`
 
 	// Binary is the i2pd binary path; empty = auto-detect. When found, the
 	// app spawns/manages a dedicated i2pd process (Model A). When absent,
@@ -677,9 +679,8 @@ type I2PConfig struct {
 
 	// B32Address is the .b32.i2p address derived from the persisted
 	// destination key. Set automatically on first successful I2P bootstrap
-	// (PART 31.2, mirroring tor.onion_address's PART 12 behavior) — enables
-	// priority-0 FQDN/request detection for .b32.i2p Host headers exactly
-	// like tor.onion_address does for .onion.
+	// (PART 31.2) — enables priority-0 FQDN/request detection for .b32.i2p
+	// Host headers. Unlike the Tor hostname, this destination is persisted.
 	B32Address string `yaml:"b32_address"`
 }
 
@@ -914,23 +915,24 @@ type PasteConfig struct {
 	AllowUnlisted bool `yaml:"allow_unlisted"`
 }
 
-// RateLimitEndpoint configures the per-IP request quota for one endpoint class (PART 12).
+// RateLimitEndpoint configures a sliding-window quota for one endpoint class (PART 12).
 type RateLimitEndpoint struct {
-	// Requests is the maximum number of requests allowed per IP within Window seconds.
+	// Requests is the maximum number of requests allowed per client key within Window seconds.
 	Requests int `yaml:"requests"`
 	// Window is the sliding window in seconds.
 	Window int `yaml:"window"`
 }
 
 // RateLimitConfig controls request throttling (PART 12).
-// Endpoint classes: Read (GET/HEAD), Write (POST/PUT/PATCH/DELETE), Health (status endpoints).
+// Endpoint classes: Read, Write, Health, Strict (token actions), AuthFailures, and GlobalBurst.
 // GlobalBurst is the absolute ceiling across all classes combined.
 type RateLimitConfig struct {
-	Enabled     bool              `yaml:"-"`
-	Read        RateLimitEndpoint `yaml:"read"`
-	Write       RateLimitEndpoint `yaml:"write"`
-	Health      RateLimitEndpoint `yaml:"health"`
-	GlobalBurst int               `yaml:"global_burst"`
+	Read         RateLimitEndpoint `yaml:"read"`
+	Write        RateLimitEndpoint `yaml:"write"`
+	Health       RateLimitEndpoint `yaml:"health"`
+	Strict       RateLimitEndpoint `yaml:"strict"`
+	AuthFailures RateLimitEndpoint `yaml:"auth_failures"`
+	GlobalBurst  int               `yaml:"global_burst"`
 }
 
 // WebConfig holds web-UI settings.
@@ -1019,14 +1021,6 @@ type CompressionConfig struct {
 	Level int `yaml:"level"`
 	// Types lists the MIME types that are compressed.
 	Types []string `yaml:"types"`
-}
-
-// MCPConfig controls the Model Context Protocol endpoint. It reuses the API's
-// Bearer tokens; there is no MCP-specific token or scope.
-type MCPConfig struct {
-	// Enabled serves /api/{api_version}/server/mcp (plus /api/mcp and /mcp).
-	// Default true; when false every MCP route answers 404.
-	Enabled bool `yaml:"-"`
 }
 
 // HealthzConfig controls the optional /healthz root alias (PART 13).
@@ -2030,13 +2024,13 @@ func DefaultConfig() *Config {
 				MaxAge:           86400,
 			},
 			Healthz: HealthzConfig{},
-			MCP:     MCPConfig{Enabled: true},
 			RateLimit: RateLimitConfig{
-				Enabled:     true,
-				Read:        RateLimitEndpoint{Requests: 120, Window: 60},
-				Write:       RateLimitEndpoint{Requests: 10, Window: 60},
-				Health:      RateLimitEndpoint{Requests: 120, Window: 60},
-				GlobalBurst: 240,
+				Read:         RateLimitEndpoint{Requests: 120, Window: 60},
+				Write:        RateLimitEndpoint{Requests: 10, Window: 60},
+				Health:       RateLimitEndpoint{Requests: 120, Window: 60},
+				Strict:       RateLimitEndpoint{Requests: 10, Window: 900},
+				AuthFailures: RateLimitEndpoint{Requests: 5, Window: 900},
+				GlobalBurst:  240,
 			},
 			Compression: CompressionConfig{
 				Enabled: true,
@@ -2639,7 +2633,7 @@ func (c *Config) ensureEncryptionKey() error {
 // tokenCharset is the base62 alphabet used for operator and resource-owner tokens (PART 11).
 const tokenCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-// ensureServerToken generates a "tok_" + 32 base62 char operator token and
+// ensureServerToken generates an "adm_" + 32 base62 char operator token and
 // stores it in Server.Token. Idempotent — no-ops if already set.
 func (c *Config) ensureServerToken() error {
 	if c.Server.Token != "" {
@@ -2653,7 +2647,7 @@ func (c *Config) ensureServerToken() error {
 	for i, v := range raw {
 		b[i] = tokenCharset[int(v)%len(tokenCharset)]
 	}
-	c.Server.Token = "tok_" + string(b)
+	c.Server.Token = "adm_" + string(b)
 	if c.fieldSources == nil {
 		c.fieldSources = make(map[string]string)
 	}
@@ -3140,8 +3134,10 @@ func (c *Config) ensureWebhookSecrets() (bool, error) {
 		name string
 		role *ContactRole
 	}{
-		{"admin", &c.Server.Contact.Admin}, {"security", &c.Server.Contact.Security},
-		{"abuse", &c.Server.Contact.Abuse}, {"general", &c.Server.Contact.General},
+		{"admin", &c.Server.Contact.Admin},
+		{"security", &c.Server.Contact.Security},
+		{"abuse", &c.Server.Contact.Abuse},
+		{"general", &c.Server.Contact.General},
 		{"dpo", &c.Server.Contact.DPO},
 	}
 	for _, item := range roles {
@@ -3365,8 +3361,6 @@ func validateLogFile(name string, c *LogFileConfig, def LogFileConfig, formats .
 // must always start with sane defaults even if the config file is malformed (PART 12).
 func Validate(cfg *Config) {
 	d := DefaultConfig()
-	cfg.Server.RateLimit.Enabled = true
-	cfg.Server.MCP.Enabled = true
 	cfg.Server.Maintenance.SelfHealing.Enabled = true
 	validateToastConfig(&cfg.Server.Notifications.WebUI, d.Server.Notifications.WebUI)
 	if cfg.Server.Tokens.MaxLinked <= 0 {
@@ -3583,25 +3577,25 @@ func Validate(cfg *Config) {
 	}
 	cfg.Web.Announcements.Messages = validAnnouncements
 
-	// Rate limit counts must be non-negative (zero means "disabled for this class").
-	if cfg.Server.RateLimit.Read.Requests < 0 {
-		log.Printf("[config] WARNING: rate_limit.read.requests < 0, using default %d",
-			d.Server.RateLimit.Read.Requests)
-		cfg.Server.RateLimit.Read.Requests = d.Server.RateLimit.Read.Requests
+	// Rate limiting is always active. Invalid or zero limits fall back to the
+	// documented defaults instead of disabling an abuse control.
+	for name, pair := range map[string]struct {
+		actual       *RateLimitEndpoint
+		defaultValue RateLimitEndpoint
+	}{
+		"read":          {&cfg.Server.RateLimit.Read, d.Server.RateLimit.Read},
+		"write":         {&cfg.Server.RateLimit.Write, d.Server.RateLimit.Write},
+		"health":        {&cfg.Server.RateLimit.Health, d.Server.RateLimit.Health},
+		"strict":        {&cfg.Server.RateLimit.Strict, d.Server.RateLimit.Strict},
+		"auth_failures": {&cfg.Server.RateLimit.AuthFailures, d.Server.RateLimit.AuthFailures},
+	} {
+		if pair.actual.Requests <= 0 || pair.actual.Window <= 0 {
+			log.Printf("[config] WARNING: invalid rate_limit.%s settings, using defaults", name)
+			*pair.actual = pair.defaultValue
+		}
 	}
-	if cfg.Server.RateLimit.Write.Requests < 0 {
-		log.Printf("[config] WARNING: rate_limit.write.requests < 0, using default %d",
-			d.Server.RateLimit.Write.Requests)
-		cfg.Server.RateLimit.Write.Requests = d.Server.RateLimit.Write.Requests
-	}
-	if cfg.Server.RateLimit.Health.Requests < 0 {
-		log.Printf("[config] WARNING: rate_limit.health.requests < 0, using default %d",
-			d.Server.RateLimit.Health.Requests)
-		cfg.Server.RateLimit.Health.Requests = d.Server.RateLimit.Health.Requests
-	}
-	if cfg.Server.RateLimit.GlobalBurst < 0 {
-		log.Printf("[config] WARNING: rate_limit.global_burst < 0, using default %d",
-			d.Server.RateLimit.GlobalBurst)
+	if cfg.Server.RateLimit.GlobalBurst <= 0 {
+		log.Printf("[config] WARNING: invalid rate_limit.global_burst, using default %d", d.Server.RateLimit.GlobalBurst)
 		cfg.Server.RateLimit.GlobalBurst = d.Server.RateLimit.GlobalBurst
 	}
 
@@ -4017,9 +4011,10 @@ func persistGeneratedSecrets(configPath string, cfg *Config) error {
 		source := cfg.SourceFile(key)
 		if source == "" || source == "generated" {
 			value := cfg.Server.Token
-			if key == "server.security.encryption_key" {
+			switch key {
+			case "server.security.encryption_key":
 				value = cfg.Server.Security.EncryptionKey
-			} else if key == "server.security.encryption_key_version" {
+			case "server.security.encryption_key_version":
 				value = cfg.Server.Security.EncryptionKeyVersion
 			}
 			if value != "" && (key != "server.security.encryption_key_version" || cfg.Server.Security.EncryptionKey != "") {
@@ -4163,11 +4158,18 @@ func migrateRuntimeSecrets(configPath string) error {
 
 func configSecretPaths() [][]string {
 	paths := [][]string{
-		{"server", "token"}, {"server", "security", "encryption_key"}, {"server", "security", "encryption_key_version"},
-		{"server", "notifications", "email", "smtp", "password"}, {"server", "cache", "password"},
-		{"database", "token"}, {"server", "database", "token"}, {"server", "pages", "contact", "captcha_secret_key"},
-		{"server", "ssl", "letsencrypt", "dns_credentials"}, {"data", "cve", "api_key"},
-		{"server", "backup", "encryption_password"}, {"server", "metrics", "auth", "tokens"},
+		{"server", "token"},
+		{"server", "security", "encryption_key"},
+		{"server", "security", "encryption_key_version"},
+		{"server", "notifications", "email", "smtp", "password"},
+		{"server", "cache", "password"},
+		{"database", "token"},
+		{"server", "database", "token"},
+		{"server", "pages", "contact", "captcha_secret_key"},
+		{"server", "ssl", "letsencrypt", "dns_credentials"},
+		{"data", "cve", "api_key"},
+		{"server", "backup", "encryption_password"},
+		{"server", "metrics", "auth", "tokens"},
 	}
 	for _, role := range []string{"admin", "security", "abuse", "general", "dpo"} {
 		paths = append(paths, []string{"server", "contact", role, "webhooks"})
@@ -4477,28 +4479,8 @@ func SetUpdateBranch(path, branch string) error {
 	return Save(path, cfg)
 }
 
-// SetOnionAddress loads the config at path, sets server.tor.onion_address to
-// the given value, and saves the file back (PART 12: tor.onion_address is
-// "Set automatically on first successful Tor bootstrap"). Creates the file
-// and parent dirs if absent.
-func SetOnionAddress(path, addr string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("creating config dir: %w", err)
-	}
-	cfg, err := Load(path)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("loading config: %w", err)
-	}
-	if cfg == nil {
-		cfg = DefaultConfig()
-	}
-	cfg.Server.Tor.OnionAddress = addr
-	return Save(path, cfg)
-}
-
 // SetB32Address loads the config at path, sets server.i2p.b32_address to
-// the given value, and saves the file back (PART 31.2, mirroring
-// SetOnionAddress's PART 12 behavior). Creates the file and parent dirs if
+// the given value, and saves the file back. Creates the file and parent dirs if
 // absent.
 func SetB32Address(path, addr string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -4835,10 +4817,11 @@ func (m *ConfigManager) applyHotSettings(prev, next *Config) {
 		log.Printf("[config] hot-reload: logging.level %s → %s",
 			prev.Server.Logging.Level, next.Server.Logging.Level)
 	}
-	if prev.Server.RateLimit.Enabled != next.Server.RateLimit.Enabled ||
-		prev.Server.RateLimit.Read != next.Server.RateLimit.Read ||
+	if prev.Server.RateLimit.Read != next.Server.RateLimit.Read ||
 		prev.Server.RateLimit.Write != next.Server.RateLimit.Write ||
 		prev.Server.RateLimit.Health != next.Server.RateLimit.Health ||
+		prev.Server.RateLimit.Strict != next.Server.RateLimit.Strict ||
+		prev.Server.RateLimit.AuthFailures != next.Server.RateLimit.AuthFailures ||
 		prev.Server.RateLimit.GlobalBurst != next.Server.RateLimit.GlobalBurst {
 		log.Printf("[config] hot-reload: rate_limit settings updated")
 	}

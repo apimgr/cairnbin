@@ -11,9 +11,8 @@ import (
 	"github.com/apimgr/cairnbin/src/mcp"
 )
 
-func TestHandleHelpMCPAvailableWhenEnabled(t *testing.T) {
+func TestHandleHelpMCPAlwaysAvailable(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.MCP.Enabled = true
 	s := newMinimalServer(cfg)
 	s.mcpHandler = mcp.New(mcp.Config{APIVersion: "v1"})
 	s.templates, _ = s.buildTemplates()
@@ -29,7 +28,6 @@ func TestHandleHelpMCPAvailableWhenEnabled(t *testing.T) {
 
 func TestHandleHelpMCPJSON(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.MCP.Enabled = true
 	cfg.Server.Pages.Help.MCP = "## Project instructions"
 	s := newMinimalServer(cfg)
 	s.mcpHandler = mcp.New(mcp.Config{APIVersion: "v1"})
@@ -78,7 +76,6 @@ func TestHandleHelpMCPJSON(t *testing.T) {
 
 func TestHandleHelpMCPHTMLSectionsAndHelpLink(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.MCP.Enabled = true
 	cfg.Server.Pages.Help.MCP = "## Project instructions"
 	s := newMinimalServer(cfg)
 	s.mcpHandler = mcp.New(mcp.Config{APIVersion: "v1"})
@@ -101,6 +98,16 @@ func TestHandleHelpMCPHTMLSectionsAndHelpLink(t *testing.T) {
 	if !strings.Contains(body, "Authorization: Bearer") || !strings.Contains(body, "class=\"copy-value\"") {
 		t.Error("page omits the Bearer guidance or selectable endpoint")
 	}
+	for _, expected := range []string{"MCP-Protocol-Version: 2026-07-28", "Mcp-Method: tools/list", `"method":"tools/list"`} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("MCP verification example omits %q", expected)
+		}
+	}
+	for _, stale := range []string{"2025-06-18", `"method":"initialize"`, "works anonymously"} {
+		if strings.Contains(body, stale) {
+			t.Errorf("MCP help page contains stale protocol guidance %q", stale)
+		}
+	}
 
 	data := map[string]interface{}{"SiteTitle": cfg.Web.SiteTitle, "Theme": cfg.Web.Theme, "BaseURL": "http://example.com", "MoreHelp": s.hubPageData(s.helpPageRegistry(), "en")}
 	linkPage, err := s.renderTemplateToString(r, "help.html", data)
@@ -114,7 +121,6 @@ func TestHandleHelpMCPHTMLSectionsAndHelpLink(t *testing.T) {
 
 func TestHandleHelpMCPUsesRequestedLocale(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.MCP.Enabled = true
 	applyI18nConfig(cfg)
 	defer applyI18nConfig(config.DefaultConfig())
 	s := newMinimalServer(cfg)

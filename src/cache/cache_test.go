@@ -7,6 +7,7 @@ package cache_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +38,45 @@ func TestDefaultConfig(t *testing.T) {
 				t.Errorf("DefaultConfig().%s = %v, want %v", tc.name, tc.got, tc.want)
 			}
 		})
+	}
+}
+
+func TestMemoryRateLimitCounters(t *testing.T) {
+	c := newMemory(t)
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	for i := 0; i < 2; i++ {
+		allowed, _, err := c.CheckRateLimit(ctx, "ip:192.0.2.5:write", now, 2, time.Minute)
+		if err != nil || !allowed {
+			t.Fatalf("request %d allowed=%t err=%v, want allowed", i+1, allowed, err)
+		}
+	}
+	if allowed, _, err := c.CheckRateLimit(ctx, "ip:192.0.2.5:write", now, 2, time.Minute); err != nil || allowed {
+		t.Fatalf("over-limit request allowed=%t err=%v", allowed, err)
+	}
+	if blocked, err := c.RateLimitExceeded(ctx, "ip:192.0.2.5:write", now, 2, time.Minute); err != nil || !blocked {
+		t.Fatalf("rate-limit lockout blocked=%t err=%v", blocked, err)
+	}
+}
+
+func TestMemoryRateLimitCountersUseBoundedLRU(t *testing.T) {
+	c := newMemory(t)
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	if allowed, _, err := c.CheckRateLimit(ctx, "ip:2001:db8::1", now, 1, time.Minute); err != nil || !allowed {
+		t.Fatalf("initial request allowed=%t err=%v", allowed, err)
+	}
+	for i := 1; i < 10000; i++ {
+		key := fmt.Sprintf("ip:2001:db8::%x", i+1)
+		if allowed, _, err := c.CheckRateLimit(ctx, key, now, 1, time.Minute); err != nil || !allowed {
+			t.Fatalf("request for %s allowed=%t err=%v", key, allowed, err)
+		}
+	}
+	if allowed, _, err := c.CheckRateLimit(ctx, "ip:2001:db8::ffff", now, 1, time.Minute); err != nil || !allowed {
+		t.Fatalf("request for newest address allowed=%t err=%v", allowed, err)
+	}
+	if allowed, _, err := c.CheckRateLimit(ctx, "ip:2001:db8::1", now, 1, time.Minute); err != nil || !allowed {
+		t.Fatalf("least-recently-used counter was not evicted: allowed=%t err=%v", allowed, err)
 	}
 }
 

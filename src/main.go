@@ -628,6 +628,47 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				return 1
 			}
 			return 0
+		case "email":
+			if maintenanceArg != "test" {
+				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_usage", "binary", binaryName))
+				return 2
+			}
+			emailOpts := maintenance.EmailOptions{
+				ConfigDir: paths.GetConfigDir(appName),
+				DBPath:    paths.GetDBPath(appName),
+				LogDir:    paths.GetLogsDir(appName),
+				Stdout:    stdout,
+				Lang:      earlyLang,
+			}
+			for i := 1; i < len(positional); i++ {
+				switch positional[i] {
+				case "--to":
+					if i+1 >= len(positional) || strings.HasPrefix(positional[i+1], "--") {
+						_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_usage", "binary", binaryName))
+						return 2
+					}
+					i++
+					emailOpts.To = positional[i]
+				case "--dry-run":
+					emailOpts.DryRun = true
+				default:
+					_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_usage", "binary", binaryName))
+					return 2
+				}
+			}
+			if err := maintenance.AuthorizeEmailOp(mcAuthOpts); err != nil {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "email", err)
+				return 1
+			}
+			if err := maintenance.RunEmail(maintenanceArg, emailOpts); err != nil {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "email", err)
+				var validationErr *maintenance.TemplateValidationError
+				if errors.As(err, &validationErr) {
+					return 65
+				}
+				return 1
+			}
+			return 0
 		default:
 			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "unknown_subcommand", "binary", binaryName, "command", "--maintenance", "value", maintenanceCmd))
 			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "help_for_command", "binary", binaryName, "command", "--maintenance"))
@@ -647,38 +688,6 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	if len(positional) > 0 && positional[0] == "tor" {
 		return runTorCommand(binaryName, positional[1:], stdout, stderr, earlyLang)
-	}
-
-	// ── Email (AI.md PART 17) ───────────────────────────────────────────────────
-	// Bare positional subcommand: "{project_name} email test [recipient]".
-
-	if len(positional) > 0 && positional[0] == "email" {
-		if len(positional) < 2 {
-			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_action_required", "binary", binaryName))
-			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_usage", "binary", binaryName))
-			return 2
-		}
-		emailOpts := maintenance.EmailOptions{
-			ConfigDir: paths.GetConfigDir(appName),
-			DBPath:    paths.GetDBPath(appName),
-			LogDir:    paths.GetLogsDir(appName),
-			Stdout:    stdout,
-			Lang:      earlyLang,
-		}
-		if len(positional) > 2 {
-			emailOpts.To = positional[2]
-		}
-		if positional[1] != "test" {
-			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "unknown_subcommand", "binary", binaryName, "command", "email", "value", positional[1]))
-			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_usage", "binary", binaryName))
-			return 2
-		}
-		if err := maintenance.RunEmail(positional[1], emailOpts); err != nil {
-			log.Printf("email test failed: %v", err)
-			_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "email_operation_failed", "binary", binaryName))
-			return 1
-		}
-		return 0
 	}
 
 	// ── Update ────────────────────────────────────────────────────────────────

@@ -12,7 +12,6 @@ import (
 
 func newAbuseServer(readLimit, multiplier int) *Server {
 	cfg := config.DefaultConfig()
-	cfg.Server.RateLimit.Enabled = true
 	cfg.Server.RateLimit.Read.Requests = readLimit
 	cfg.Server.Security.AbuseDetection.RequestFlood.Multiplier = multiplier
 	cfg.Server.Security.AbuseDetection.RequestFlood.BlockDuration = "1h"
