@@ -192,6 +192,52 @@ Native capabilities, exposed on both the API surface and the browser frontend:
 
 Compat endpoints are the one place where concrete paths, field names, status codes, and content types are business logic rather than implementation detail: they are external wire contracts owned by the services being emulated, not routes this project is free to choose. They are specified in the Compat targets table above, and in the raw-TCP termbin/fiche listener described there.
 
+### API routes
+
+The routes below are the Cairnbin paste API and the external wire-compatible API surface. `{api_version}` resolves to `v1`. Compatibility routes retain their protocol-specific authentication and response formats.
+
+| Method | Path | Authentication | Purpose; request and response summary |
+|--------|------|----------------|---------------------------------------|
+| GET | `/api` | None | API discovery summary; returns service name, version, and API base URL. |
+| GET | `/api/{api_version}` | None | Versioned API discovery summary; returns the same service metadata for the selected API version. |
+| GET | `/api/{api_version}/pastes` | None; `scope=owned` requires owner Bearer token | List recent public pastes or the authenticated owner's non-expired pastes; accepts pagination, search, type, sort, order, and scope query parameters; returns paste records and pagination metadata. |
+| POST | `/api/{api_version}/pastes` | None; optional owner Bearer token links the paste to that owner | Create a paste from JSON or multipart input; returns the paste record and owner token. |
+| GET | `/api/{api_version}/pastes/{id}` | None for public pastes; owner Bearer token for owned unlisted pastes | Retrieve one paste as JSON; returns its public fields and content. |
+| DELETE | `/api/{api_version}/pastes/{id}` | Paste owner token or operator Bearer token | Delete a paste before expiry; returns the deletion result. |
+| GET | `/api/{api_version}/pastes/{id}/raw` | None | Retrieve literal paste content; returns raw bytes and the detected content type. |
+| GET | `/api/{api_version}/server/auth/check` | Bearer token | Identify whether a presented token is an operator or owner token without returning the token or updating its activity; returns the token class. |
+| GET | `/api/{api_version}/server/contact` | None | Return public contact-form metadata and available verification options. |
+| POST | `/api/{api_version}/server/contact` | None; anti-spam verification may be required by configuration | Submit a contact message; returns the submission result without exposing operator-only contact data. |
+| POST | `/api/{api_version}/server/reports/{name}` | None | Submit a named security or abuse report; accepts the report fields and returns an acknowledgement. |
+| POST | `/api/api_post.php` | Pastebin protocol fields; no account required | Create a paste using the pastebin.com public API form fields; returns the pastebin-compatible URL or error response. |
+| GET | `/api/api_raw.php` | None | Retrieve a paste using pastebin.com API query fields; returns raw paste text or the protocol error response. |
+| POST | `/api/api_login.php` | None | Pastebin-compatible login stub; returns the anonymous protocol response. |
+| POST | `/api/new` | None | Create a lenpaste-compatible paste from form fields; returns `id`, `url`, and `deleteToken`. |
+| GET | `/api/get` | None | Retrieve a lenpaste-compatible paste by query ID; returns the paste JSON. |
+| GET | `/api/remove` | Compat delete token | Delete a lenpaste-compatible paste using its ID and delete token; returns the protocol result. |
+| DELETE | `/api/remove` | Compat delete token | Delete a lenpaste-compatible paste using its ID and delete token; returns the protocol result. |
+| GET | `/api/list` | None | List pastes using the lenpaste-compatible response shape. |
+| POST | `/api/{api_version}/new` | None | Create a versioned lenpaste-compatible paste from form fields; returns `id`, `url`, and `deleteToken`. |
+| GET | `/api/{api_version}/get` | None | Retrieve a versioned lenpaste-compatible paste by query ID; returns the paste JSON. |
+| GET | `/api/{api_version}/getServerInfo` | None | Return the lenpaste-compatible server information JSON. |
+| POST | `/api/{api_version}/pasta` | None; compat delete token is returned for deletion | Create a microbin-compatible paste from JSON, form, or multipart input; returns the protocol response. |
+| GET | `/api/{api_version}/pasta` | None | List pastes using the microbin-compatible response format selected by `Accept`. |
+| GET | `/api/{api_version}/pasta/{id}` | None | Retrieve a microbin-compatible paste using the response format selected by `Accept`. |
+| DELETE | `/api/{api_version}/pasta/{id}` | Compat delete token | Delete a microbin-compatible paste; returns the protocol result. |
+| POST | `/api/create` | None; supplied `apikey` is ignored | Create a stikked-compatible paste from form fields; returns a view URL or `Error: <message>`. |
+| GET | `/api/paste/{id}` | None | Retrieve a paste using the stikked JSON response shape. |
+| GET | `/view/{id}` | None | Render the stikked-compatible paste detail page without redirecting link pastes. |
+| GET | `/view/raw/{id}` | None | Retrieve literal content using the stikked-compatible raw route. |
+| POST | `/documents` | None | Create a hastebin-compatible paste from the raw request body; returns a JSON key. |
+| GET | `/documents/{id}` | None | Retrieve a hastebin-compatible paste by key; returns JSON content and key. |
+| GET | `/raw/{id}` | None | Retrieve literal content using the hastebin-compatible raw route. |
+| POST | `/api` | None | Create a dpaste-compatible paste from form fields; returns the configured URL, plain-text, or JSON response. |
+| POST | `/api/` | None | Trailing-slash dpaste create alias; accepts the same form fields and response formats as `/api`. |
+| POST | `/api/v2` | None | Create a dpaste v2-compatible paste from form fields; returns the configured URL, plain-text, or JSON response. |
+| POST | `/api/v2/` | None | Trailing-slash dpaste v2 create alias; accepts the same form fields and response formats as `/api/v2`. |
+| POST | `/` | None | Dispatch curl-upload compatibility requests by multipart `file`, form `sprunge`, or form `f:1`; returns a raw-content URL and the 0x0.st token header when applicable. |
+| TCP | `:9999` | None | Accept a raw TCP stream, store it as a paste after the client half-closes, and return the paste URL followed by a newline. |
+
 ### FAQ
 
 **Do I need an account to create a paste?**

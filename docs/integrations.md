@@ -113,7 +113,7 @@ None enabled. The service has no user accounts, no federated or machine-to-machi
 
 ## Platform Integrations
 
-None enabled: no Android App Links, Apple Universal Links, WebFinger, OpenID Provider metadata, MTA-STS, inbound webhooks or federation. Outbound operator notifications (email and chat webhooks) are optional and configured under `server.notifications` in `yaml.d/notifications.yml`.
+None enabled: no Android App Links, Apple Universal Links, WebFinger, OpenID Provider metadata, MTA-STS, inbound webhooks or federation. Outbound operator notifications are optional: email settings live under `server.notifications.email` in `yaml.d/notifications.yml`; role-specific webhook destinations live under `server.contact.{admin,security,abuse,general}.webhooks` in `yaml.d/contact.yml`. Built-in webhook transports include Telegram, Discord, Slack, Mattermost, Pushover, and Gotify; `generic` sends JSON by HTTPS POST. The server signs each delivery; webhook payloads contain summaries only and never include report bodies or contact details. See the [configuration reference](configuration.md) for the contact-role fallback rules and secret handling.
 
 ## Operator Notes
 

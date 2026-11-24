@@ -37,7 +37,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Compatibility routes for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, curl-upload services, and termbin/fiche
 - Termbin/fiche raw TCP listener on port 9999, enabled by default
 - Tor hidden-service support and I2P eepsite support; both start asynchronously, and I2P uses the computed container default unless explicitly configured
-- Optional email notifications when SMTP is configured
+- Optional operator email notifications when SMTP is configured and signed webhook notifications for configured contact roles
 - Cross-platform service management and checksum-verified self-updates
 - Self-contained static binary with local SQLite by default or optional remote libSQL/Turso
 

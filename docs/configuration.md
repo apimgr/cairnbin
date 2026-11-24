@@ -128,7 +128,8 @@ The following settings use these dotted paths in the merged configuration. The a
 |------|----------|---------|
 | `server` | `port`, `address`, `fqdn`, `mode`, `lang`, `api_version`, `baseurl`, `user`, `group`, `pidfile`, `daemonize`, `data_dir` | This node’s listener, identity, and data location. The operator token is in `secrets.yml`. |
 | `server.tokens` | `max_linked`, `cookie_max_age`, `idle_purge_days` | Owner-token limits and cleanup. |
-| `server.contact.{admin,security,abuse,general}` | `email`, `webhooks` | Per-role notification destinations; empty roles use the documented fallback chain. |
+| `server.contact.{admin,security,abuse,general}` | `email`, `webhooks` | Per-role notification destinations and public contact addresses; empty roles use the documented fallback chain. Webhook URLs and signing secrets are private and live in `secrets.yml`. |
+| `server.contact.dpo` | `name`, `email` | Public data-protection contact. An empty email falls back to the general contact address; the administrator address is never shown on the public DPO page. |
 | `server.pages.contact` | `enabled`, `captcha`, `captcha_site_key`, `captcha_secret_key`, `antispam.*`, `success_message` | Contact form behavior. Help content remains configuration-driven; other page content is in `yaml.d/branding.yml`. |
 | `database` | `driver`, `url`, `token`, `pool.max_open`, `pool.max_idle`, `pool.max_lifetime`, `pool.max_idle_time` | SQLite or remote libSQL/Turso storage and connection pooling. SQLite is the local default. |
 | `paste` | `max_size`, `default_expiry`, `default_language`, `max_burn_after`, `allow_unlisted` | Paste size, expiry, language, burn-after-read, and visibility defaults. `max_size` defaults to `10mb`, hot-reloads from config files, and accepts `0` for unlimited native pastes. |

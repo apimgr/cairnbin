@@ -54,7 +54,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Rate limiting per read/write/health class
 - Tor hidden-service support (auto-enabled when the `tor` binary is present) and I2P eepsite support (enabled by default in containers when a provider is available; explicit configuration overrides the default). Both start asynchronously without delaying the HTTP listener.
 - Internationalization: English, Spanish, French, German, Italian, Chinese, Arabic (RTL), and Japanese (8 locales; see the [translation guide](docs/translating.md))
-- Operator email notifications with SMTP auto-detection (no email attempted without working SMTP), including optional startup/shutdown and low-disk alerts
+- Operator email notifications with SMTP auto-detection (no email attempted without working SMTP) and signed webhook notifications for configured contact roles, including optional startup/shutdown and low-disk alerts
 - Cookie-consent banner and privacy/terms pages
 - Cross-platform service management (systemd, OpenRC, SysVinit, runit, launchd, rc.d, Windows Service)
 - Self-contained static binary with local SQLite by default or optional remote libSQL/Turso
