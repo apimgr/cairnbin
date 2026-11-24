@@ -20,6 +20,7 @@ binary: cairnbin
 client_binary: cairnbin-cli
 api_version: v1
 owner_token: cairnbin_owner_token_karmassz
+owner_token_legacy: cairnbin_owner_token_rU3uW5Ze
 tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, 0x0.st, sprunge.us, ix.io, and termbin/fiche.
 
 ## Business logic
@@ -67,7 +68,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - Service lifecycle management: `--install`/`--uninstall` (requires root privilege; uninstall prompts interactive `[y/N]` confirmation before data purge); `--start`/`--stop`/`--restart`/`--reload`/`--disable`/`--enable`; systemd unit (Linux), launchd plist (macOS), SCM service (Windows)
 - Rate limiting: per-endpoint, IP-based, configurable; proxy-aware (`X-Forwarded-For`, `CF-Connecting-IP`, `True-Client-IP`)
 - IP/CIDR/domain/country blocklists: operator-managed IP and domain sources are loaded from a URL or local file; refreshed by the daily `blocklist_update` task. Domain checks use submitted Origin/Referer, email domains and URL fields, never request Host or reverse DNS
-- Email notifications: SMTP; 15 built-in template types (`backup_complete`, `backup_failed`, `contact`, `disk_low`, `scheduler_error`, `security_alert`, `security_report_ack`, `server_started`, `server_stopped`, `ssl_expiring`, `ssl_renewal_failed`, `ssl_renewed`, `test`, `update_available`, `update_installed`); silently disabled when unconfigured; startup and shutdown messages are opt-in
+- Email notifications: SMTP; 16 built-in template types (`backup_complete`, `backup_failed`, `contact`, `database_error`, `disk_low`, `scheduler_error`, `security_alert`, `security_report_ack`, `server_started`, `server_stopped`, `ssl_expiring`, `ssl_renewal_failed`, `ssl_renewed`, `test`, `update_available`, `update_installed`); silently disabled when unconfigured; startup and shutdown messages are opt-in
 - Security report system: `/server/security` report submission flow with optional PGP-encrypted reports and researcher credit by real name, handle, anonymity or no credit; `security.txt` (RFC 9116) at `/.well-known/security.txt`, and operator PGP key at `/.well-known/pgp-key.asc`
 - Cookie consent and CCPA opt-out: consent banner (works without JavaScript) plus a do-not-sell opt-out submission; guest preference and consent state are stored in browser cookies, not a server-side preference profile; consent changes are recorded in the compliance audit log, and behavioral analytics run only when configured
 - App-specific guest preferences (AI.md "Client-Side Preferences"): the `/pastes` recents list's sort column, sort direction, and page size are remembered across visits via `cairnbin_pref_sort` (`date`\|`name`\|`views`, default `date`), `cairnbin_pref_order` (`asc`\|`desc`, default `desc`), and `cairnbin_pref_per_page` (`20`\|`50`\|`100`\|`250`, default `20`) cookies — set whenever the visitor changes a filter-bar control, read as the default on the next visit when no explicit query param is given, editable on `/server/preferences`, and included in preference export/import like every other `cairnbin_pref_*` key
@@ -245,6 +246,8 @@ The routes below are the Cairnbin paste API and the external wire-compatible API
 | POST | `/api/v2/` | None | Trailing-slash dpaste v2 create alias; accepts the same form fields and response formats as `/api/v2`. |
 | POST | `/` | None | Dispatch curl-upload compatibility requests by multipart `file`, form `sprunge`, or form `f:1`; returns a raw-content URL and the 0x0.st token header when applicable. |
 | TCP | `:9999` | None | Accept a raw TCP stream, store it as a paste after the client half-closes, and return the paste URL followed by a newline. |
+
+The legacy owner-token browser name remains usable during the configured cookie lifetime after startup so existing visitors can move to the current name without losing paste ownership.
 
 ### FAQ
 
