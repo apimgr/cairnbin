@@ -47,7 +47,8 @@ server:
   # first run picks a random unused 64000-64999 port and saves it here
   port: "64123"
   mode: "production"
-  baseurl: ""
+  # URL path prefix; use / for the site root.
+  baseurl: "/"
   cors:
     # List of origins; [""] disables CORS headers.
     allowed_origins: ["*"]
@@ -420,13 +421,19 @@ they are read individually (no `.env` file is ever loaded).
 
 ### Server
 
+`server.fqdn` records the hostname detected on first run for operator
+reference. It does not control public URL generation. Set `DOMAIN` to choose
+the primary public hostname; with multiple entries, the first entry is used.
+If no hostname can be resolved, generated absolute URLs remain empty rather
+than substituting `localhost`.
+
 | Variable | Description |
 |----------|-------------|
 | `PORT`   | Override listen port (dual format `"8090,8443"` supported) |
 | `CAIRNBIN_PORT` | Alias for `PORT` |
 | `LISTEN` | Listen address (default `[::]`, dual-stack; falls back only if IPv6 is unsupported; `0.0.0.0` is IPv4-only) |
-| `BASE_URL` | Public base URL / path prefix |
-| `DOMAIN` | Primary FQDN used for links and certificates |
+| `BASE_URL` | URL path prefix (for example, `/cairnbin`); request origin and trusted proxy headers supply the scheme and host |
+| `DOMAIN` | Optional comma-separated host list for public URLs and certificates; the first valid entry is primary. Without it, the server detects a host from the request, machine hostname, `HOSTNAME`, or a public IP. |
 | `MODE`   | Application mode (`production`, `development`, or `debug`) |
 | `DEBUG`  | Enable debug endpoints when truthy |
 | `TZ`     | Timezone (default: `America/New_York`) |

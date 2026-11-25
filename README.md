@@ -153,8 +153,8 @@ configuration values.
 | `PID_FILE` | Platform default | PID file path |
 | `PORT` | Random 64xxx | Listen port (80 in container) |
 | `LISTEN` | `[::]` | Dual-stack listen address; falls back to IPv4 only when IPv6 is unsupported; `0.0.0.0` selects IPv4 only |
-| `BASE_URL` | Auto-detected | Public base URL for link generation |
-| `DOMAIN` | Auto-detected | Primary FQDN for links and certificates |
+| `BASE_URL` | `/` | Public URL path prefix (for example, `/cairnbin`) |
+| `DOMAIN` | Host detection | Primary hostname for links and certificates; accepts a comma-separated list and uses the first entry |
 | `MODE` | `production` | Application mode (`production`, `development`, or `debug`) |
 | `DEBUG` | `false` | Enable development diagnostics and debug endpoints |
 | `TZ` | `America/New_York` | Process timezone |
