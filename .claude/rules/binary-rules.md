@@ -129,7 +129,7 @@ Single SQLite file `server.db` (default) with tables for resource state, owners/
 
 ### URL variable resolution priority
 
-`{fqdn}`: tor onion match (0) > reverse-proxy headers (1) > `DOMAIN` env (2) > `os.Hostname()` (3) > `$HOSTNAME` (4) > public IPv6 (5) > public IPv4 (6) > localhost (7).
+`{fqdn}`: tor onion match (0) > reverse-proxy headers (1) > `DOMAIN` env (2) > `os.Hostname()` (3) > `$HOSTNAME` (4) > public IPv6 (5) > public IPv4 (6) > unresolved empty value (7; one startup warning, never `localhost`).
 `{proto}`: `X-Forwarded-Proto` > `X-Forwarded-Ssl` > `X-Url-Scheme` > TLS-on-connection > `http` default.
 `{port}`: `X-Forwarded-Port` > Host header port > server listen port > proto default.
 

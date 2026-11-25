@@ -48,7 +48,7 @@
 - ALWAYS fully implement ALL relevant RFCs when the application itself implements an RFC-defined protocol (DNS, DHCP, SMTP, HTTP, FTP, NTP, WebDAV, etc.) — not optional
 - ALWAYS support Let's Encrypt (HTTP-01, TLS-ALPN-01, DNS-01) in every project
 - ALWAYS check certificate lookup order on startup before requesting a new cert
-- ALWAYS auto-renew app-managed Let's Encrypt certs 7 days before expiry (daily check at 03:00)
+- ALWAYS auto-renew app-managed Let's Encrypt certs when 30 days or fewer remain (daily check at 03:00; fixed threshold)
 - ALWAYS strip `:80` and `:443` from displayed URLs
 - ALWAYS prefer reverse-proxy headers (`X-Forwarded-Host`, etc.) over static FQDN resolution at request time
 
@@ -97,10 +97,10 @@
 | Challenge types | HTTP-01 (port 80, default), TLS-ALPN-01 (port 443), DNS-01 (wildcard, no port req) |
 | DNS-01 config | `server.tls.dns_provider` + `server.tls.dns_credentials.*` (AES-256-GCM encrypted at rest) |
 | Cert lookup order | 1. `/etc/letsencrypt/live/domain/` → 2. `/etc/letsencrypt/live/{fqdn}/` → 3. `{config_dir}/ssl/letsencrypt/{fqdn}/` → 4. `{config_dir}/ssl/local/{fqdn}/` → else request new |
-| App-managed cert paths | `{config_dir}/ssl/letsencrypt/{fqdn}/fullchain.pem`, `privkey.pem` (auto-renew 7 days before expiry, daily 03:00 check) |
+| App-managed cert paths | `{config_dir}/ssl/letsencrypt/{fqdn}/fullchain.pem`, `privkey.pem` (auto-renew at 30 days or fewer, daily 03:00 check) |
 | User-managed cert paths | `{config_dir}/ssl/local/{fqdn}/cert.pem`, `key.pem` (manual renewal only) |
 | System cert path | `/etc/letsencrypt/live/**` (certbot-managed, app never renews) |
-| FQDN resolution order | 1. reverse proxy headers (`X-Forwarded-Host`, `X-Real-Host`, `X-Original-Host`) → 2. `DOMAIN` env → 3. `os.Hostname()` → 4. `$HOSTNAME` → 5. public IPv6 → 6. public IPv4 → 7. `localhost` |
+| FQDN resolution order | 1. reverse proxy headers (`X-Forwarded-Host`, `X-Real-Host`, `X-Original-Host`) → 2. `DOMAIN` env → 3. `os.Hostname()` → 4. `$HOSTNAME` → 5. public IPv6 → 6. public IPv4 → unresolved (empty, one startup warning; never `localhost`) |
 | Port modes | Single port (HTTP by default; 443 forces HTTPS-only); dual ports = first HTTP, second HTTPS |
 | URL formatting | Always strip `:80`/`:443` from displayed URLs |
 | Overlay networks (Tor/I2P) | Self-signed certs only (LE unsupported for `.onion`/`.i2p`); inherit HTTPS-only from clearnet config |

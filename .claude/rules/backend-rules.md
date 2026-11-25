@@ -108,7 +108,7 @@
 ### Security headers (PART 11)
 Always: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Permitted-Cross-Domain-Policies: none`, `Origin-Agent-Cluster: ?1`, `COOP`/`COEP` (default `unsafe-none`), `CORP` (default `cross-origin`), `Content-Security-Policy`, `Permissions-Policy`, `Reporting-Endpoints`, `Report-To`, `NEL`, `X-Request-ID`.
 With SSL: `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`.
-On token revocation/consent withdrawal: `Clear-Site-Data: "cache", "cookies", "storage"`.
+On token revocation/consent withdrawal: `Clear-Site-Data: "cache", "storage"`; the owner cookie is explicitly expired with `Set-Cookie`, never cleared with the `cookies` directive.
 
 ### CSP default (PART 11)
 `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' https:; connect-src 'self' {learned_origins}; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; frame-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests; report-to default; report-uri /api/{api_version}/server/reports/csp`

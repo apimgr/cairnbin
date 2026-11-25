@@ -108,7 +108,7 @@ RTD URL formats: `{project_org}-{project_name}.readthedocs.io`, `{project_name}.
 - Interpolation: `{variable}` syntax
 - Plurals: nested under key with `zero`/`one`/`two`/`few`/`many`/`other` (CLDR categories)
 - Same word, different meaning → different keys (e.g. `common.close` vs `nav.close`)
-- `?lang=` sets a persistent cookie (`lang`, Max-Age 1 year, `SameSite=Lax`), no URL path prefixes
+- `?lang=` sets a persistent cookie (`lang`, Max-Age 1 year, `SameSite=Lax`) only when the Preferences consent category is accepted; otherwise it applies to the response without writing a cookie. No URL path prefixes.
 - When a user-facing translation changes, update `en.json` and best-effort translations in every other locale file in the same change; never leave locale key sets inconsistent.
 
 ### Language Detection Priority

@@ -112,7 +112,7 @@ The built-in scheduler runs the following tasks automatically:
 | Task | Schedule | Description |
 |------|----------|-------------|
 | `expire-pastes` | Every 10 min | Remove expired and burned pastes |
-| `ssl_renewal` | Daily 03:00 | Renew SSL certificates |
+| `ssl_renewal` | Daily 03:00 | Renew app-managed Let's Encrypt certificates when 30 days or fewer remain; warn and alert on expiring certificates |
 | `blocklist_update` | Daily 04:00 | Update IP/domain blocklists |
 | `cve_update` | Daily 05:00 | Update CVE/NVD and Trivy vulnerability databases |
 | `update_check` | Daily 06:00 | Check the configured release channel; notify only unless automatic installation is enabled |
@@ -124,7 +124,7 @@ The built-in scheduler runs the following tasks automatically:
 | `token_cleanup` | Every 15 min | Expire CAPTCHA challenges and apply owner-token idle-purge policy |
 | `backup_hourly` | Hourly (disabled) | Hourly incremental backup |
 | `disk_check` | Every 5 min | Check available disk space and report low-space conditions |
-| `branding_refresh` | Every 24 hours by default | Refresh cached branding image variants; configurable with `server.branding.image_refresh_interval` |
+| `branding_refresh` | Every 24 hours | Refresh cached branding image variants |
 | `healthcheck_self` | Every 5 min | Self-health check |
 | `dataset_health` | Every 60 sec | Refresh cached data-set health checks without making health requests read data files |
 | `tor_health` | Every 10 min | Tor connectivity check |

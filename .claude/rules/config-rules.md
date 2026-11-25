@@ -68,9 +68,9 @@ Implementation: `src/config/bool.go` — `ParseBool(s, default)`, `MustParseBool
 ### Env vars
 | Runtime (always checked) | Init-only (first run) |
 |---|---|
-| `NO_COLOR`, `TERM`, `DOMAIN`, `MODE`, `DATABASE_DRIVER`, `DATABASE_URL`, `SMTP_*` | `CONFIG_DIR`, `DATA_DIR`, `LOG_DIR`, `DATABASE_DIR`, `BACKUP_DIR`, `PORT`, `LISTEN`, `APPLICATION_NAME`, `APPLICATION_TAGLINE` |
+| `NO_COLOR`, `TERM`, `DOMAIN`, `MODE`, `DATABASE_DRIVER`, `DATABASE_URL`, `SMTP_*`, `PORT`, `LISTEN` | `CONFIG_DIR`, `DATA_DIR`, `LOG_DIR`, `DATABASE_DIR`, `BACKUP_DIR`, `APPLICATION_NAME`, `APPLICATION_TAGLINE` |
 
-URL variable resolution order: `{fqdn}`: Reverse Proxy → `DOMAIN` → `os.Hostname()` → `$HOSTNAME` → Global IP → `localhost`. `{proto}`: `X-Forwarded-Proto` → `X-Forwarded-Ssl` → `X-Url-Scheme` → TLS detect → `http`. `{port}`: `X-Forwarded-Port` → Host header → server port → proto default. `{baseurl}`: `X-Forwarded-Prefix` → `X-Forwarded-Path` → `X-Script-Name` → `server.baseurl` → `/`.
+URL variable resolution order: `{fqdn}`: Reverse Proxy → `DOMAIN` → `os.Hostname()` → `$HOSTNAME` → Global IP → unresolved empty value (one startup warning; no guessed URL). `{proto}`: `X-Forwarded-Proto` → `X-Forwarded-Ssl` → `X-Url-Scheme` → TLS detect → `http`. `{port}`: `X-Forwarded-Port` → Host header → server port → proto default. `{baseurl}`: `X-Forwarded-Prefix` → `X-Forwarded-Path` → `X-Script-Name` → `server.baseurl` → `/`.
 
 ### Mode / Debug precedence
 - Mode: `--mode` CLI > `MODE` env > default `production`
@@ -146,7 +146,7 @@ Priority-0 FQDN match on Host header. Proto always `http://`, port always stripp
 429 response: `Retry-After` header, body `{"ok":false,"error":"RATE_LIMITED","message":"Too many requests"}`.
 
 ### Contact config (canonical keys only)
-`server.contact.admin.email` (never public, required, fallback target) · `server.contact.security.email` (default `security@{fqdn}`, public) · `server.contact.abuse.email` (default `""`, opt-in) · `server.contact.general.email` (default `""`). Each has `webhooks: {telegram, discord, slack, generic}`. Fallback chain: `security`→`admin`; `abuse`→`general`→`admin`; `general`→`admin`.
+`server.contact.admin.email` (required, no default, never public) · `server.contact.security.email` (default `security@{fqdn}`, public only when configured) · `server.contact.abuse.email` (default `""`, opt-in) · `server.contact.general.email` (default `""`). Each has `webhooks: {telegram, discord, slack, generic}`. Internal fallback chain: `security`→`admin`; `abuse`→`general`→`admin`; `general`→`admin`. An empty security email falls back internally but public security pages omit the email and never expose admin.
 
 ### Analytics types
 `google, matomo, piwik, owa, fathom, plausible, umami, simple, cloudflare` under `server.tracking.{type,id,url}`.
