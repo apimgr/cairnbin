@@ -233,6 +233,12 @@ jobs:
       - name: Check image contract and overlay health
         if: hashFiles('docker/Dockerfile') != ''
         run: sh tests/image_check.sh local/scan-target:ci
+      - name: Build development image for contract check
+        if: hashFiles('docker/Dockerfile.dev') != ''
+        run: docker build -t local/scan-target:devel-ci -f docker/Dockerfile.dev .
+      - name: Check development image contract and overlay health
+        if: hashFiles('docker/Dockerfile.dev') != ''
+        run: sh tests/image_check.sh local/scan-target:devel-ci
       - name: Scan image (Trivy)
         if: hashFiles('docker/Dockerfile') != ''
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
@@ -254,11 +260,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> "$GITHUB_ENV"
-          else
-            echo "VERSION=devel" >> "$GITHUB_ENV"
-          fi
+          echo "VERSION=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
           BUILD_EPOCH=$(date -u +%s)
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_ENV"

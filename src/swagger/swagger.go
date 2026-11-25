@@ -289,6 +289,9 @@ func operationID(method, path string) string {
 		}
 		out += strings.ToUpper(p[:1]) + p[1:]
 	}
+	if strings.HasSuffix(path, "/") && path != "/" {
+		out += "TrailingSlash"
+	}
 	return out
 }
 

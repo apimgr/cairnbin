@@ -1734,6 +1734,10 @@
         "subject": "مساحة القرص منخفضة - {app_name}",
         "body": "مساحة القرص منخفضة\n\nمن: {app_name} ({fqdn})\nالوقت: {timestamp}\n\nيستخدم نظام الملفات الذي يحتوي على {path} نسبة {used_percent} بالمئة من مساحته.\nحد التنبيه: {threshold_percent} بالمئة\nالبايتات المتاحة: {free_bytes}\n\n{app_url}"
       },
+      "database_error": {
+        "subject": "مشكلة في اتصال قاعدة البيانات - {app_name}",
+        "body": "مشكلة في اتصال قاعدة البيانات\n\nمن: {app_name} ({fqdn})\nالوقت: {timestamp}\n\nفشل اتصال قاعدة البيانات بشكل متكرر منذ {since}.\nآخر خطأ: {error}\n\n{app_url}"
+      },
       "server_started": {
         "subject": "بدأ الخادم - {app_name}",
         "body": "بدأ الخادم\n\nمن: {app_name} ({fqdn})\nالوقت: {timestamp}\n\nالمضيف: {hostname}\nالإصدار: {version}\nالوضع: {mode}\n\n{app_url}"

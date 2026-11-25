@@ -45,11 +45,13 @@
   {{if .PreferencesConsentRequired}}
   <div class="container" role="status"><p class="alert alert-warning">{{t .Lang "preferences.consent_required_notice"}} <a href="{{.AssetPrefix}}/server/preferences#preferences-privacy">{{t .Lang "preferences.consent_title"}}</a></p></div>
   {{end}}
+  <input type="checkbox" id="nav-toggle" class="nav-checkbox" aria-label="{{t .Lang "nav.toggle_menu"}}">
   <header class="header">
     <a href="{{.AssetPrefix}}/" class="site-brand">
       <img src="{{asset .AssetPrefix "/static/branding/logo-50.png"}}" alt="{{.SiteTitle}}" class="site-brand-logo">
       <span>{{.SiteTitle}}</span>
     </a>
   {{template "nav" .}}
+  {{.OperatorHeader}}
   </header>
 {{end}}

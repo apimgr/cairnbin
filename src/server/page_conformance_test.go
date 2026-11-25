@@ -103,6 +103,19 @@ func TestRegisteredPagesConform(t *testing.T) {
 		assertInternalPageLinksResolve(t, path, body, s.router)
 	}
 
+	if cfg.Server.Branding.Content == nil {
+		cfg.Server.Branding.Content = make(map[string]config.BrandingContent)
+	}
+	cfg.Server.Branding.Content["header"] = config.BrandingContent{
+		Format: "html", Body: `<span class="operator-header-content">Operator header content</span>`,
+	}
+	customHeaderResponse := httptest.NewRecorder()
+	customHeaderRequest := httptest.NewRequest(http.MethodGet, "http://example.test/server/about", nil)
+	customHeaderRequest.Header.Set("Accept", "text/html")
+	customHeaderRequest.Header.Set("User-Agent", "Mozilla/5.0")
+	s.handleAbout(customHeaderResponse, customHeaderRequest)
+	assertPageConformance(t, "/server/about with operator header content", customHeaderResponse.Body.String())
+
 	for _, hub := range []struct {
 		path  string
 		pages []hubPageDefinition
@@ -564,15 +577,37 @@ func assertHeaderConformance(t *testing.T, name string, root *html.Node) {
 		t.Errorf("%s has no shared header", name)
 		return
 	}
+	checkboxes := nodesByClass(root, "nav-checkbox")
+	if len(checkboxes) != 1 {
+		t.Errorf("%s must have exactly one shared navigation checkbox, got %d", name, len(checkboxes))
+	} else if checkboxes[0].Parent != header.Parent || nextElementSibling(checkboxes[0]) != header {
+		t.Errorf("%s navigation checkbox must be a body sibling immediately before the header", name)
+	}
 	var children []*html.Node
 	for child := header.FirstChild; child != nil; child = child.NextSibling {
 		if child.Type == html.ElementNode {
 			children = append(children, child)
 		}
 	}
-	if len(children) != 5 || children[0].Data != "a" || !hasClass(children[0], "site-brand") || children[1].Data != "input" || !hasClass(children[1], "nav-checkbox") || children[2].Data != "nav" || !hasClass(children[2], "nav-links") || children[3].Data != "label" || !hasClass(children[3], "nav-toggle") || children[4].Data != "div" || !hasClass(children[4], "header-actions") {
+	if len(children) < 4 || children[0].Data != "a" || !hasClass(children[0], "site-brand") || children[1].Data != "nav" || !hasClass(children[1], "nav-links") || children[2].Data != "label" || !hasClass(children[2], "nav-toggle") || children[3].Data != "div" || !hasClass(children[3], "header-actions") {
 		t.Errorf("%s header does not follow the shared brand, navigation, menu, actions order", name)
+		return
 	}
+	if len(children) == 4 && strings.Contains(name, "operator header content") {
+		t.Errorf("%s omitted the configured operator header fragment", name)
+	}
+	if len(children) > 4 && (len(children) != 5 || !hasClass(children[len(children)-1], "operator-header-content")) {
+		t.Errorf("%s has unexpected header content after the shared header actions", name)
+	}
+}
+
+func nextElementSibling(node *html.Node) *html.Node {
+	for sibling := node.NextSibling; sibling != nil; sibling = sibling.NextSibling {
+		if sibling.Type == html.ElementNode {
+			return sibling
+		}
+	}
+	return nil
 }
 
 func hasClass(node *html.Node, class string) bool {

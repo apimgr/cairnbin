@@ -94,6 +94,7 @@ invalid. A match is rejected with `403` before the request handler runs.
 - `/server/security` explains the process in plain language and `/server/security/policy` states the disclosure policy.
 - Closed reports (`disclosed` or `wont_fix`) are removed after `server.security.reports.retention_days` (365 days by default); open reports are never purged. The daily `security_cleanup` task runs at 03:30 and also removes a rotated PGP private key after its 30-day in-flight grace period.
 - PGP key rotation re-encrypts retained PGP-protected report bodies to the new key in one database transaction. If any report cannot be decrypted and re-encrypted, rotation aborts and the old key remains active.
+- When `server.security.publish_pgp_key` is enabled, the public key is submitted to each configured `server.security.keyservers` endpoint. Transient network, rate-limit, and server errors are saved in `security/keyservers.state` and retried by the `keyserver_retry` task, up to eight attempts with exponential backoff capped at six hours; permanent 4xx responses are recorded as final. The state file is written with owner-only permissions so retries survive restarts.
 
 ## Well-Known Namespace
 

@@ -243,26 +243,33 @@ func TestPruneRotatedKeyDeletesOldFile(t *testing.T) {
 
 func TestWriteKeyserversStateWritesJSON(t *testing.T) {
 	s := newPGPTestServer(t)
-	published := []database.KeyserverPublish{
-		{URL: "https://keys.openpgp.org", PublishedAt: time.Unix(2000, 0)},
-		{URL: "https://keyserver.ubuntu.com", PublishedAt: time.Unix(3000, 0)},
+	first := time.Unix(2000, 0)
+	second := time.Unix(3000, 0)
+	state := pgp.KeyserverStateFile{
+		Fingerprint: "ABC123",
+		Keyservers: []pgp.KeyserverState{
+			{URL: "https://keys.openpgp.org", Status: "published", PublishedAt: &first},
+			{URL: "https://keyserver.ubuntu.com", Status: "pending", Attempts: 1, NextAttempt: &second},
+		},
 	}
-	s.writeKeyserversState(published)
+	if err := s.writeKeyserversState(state); err != nil {
+		t.Fatal(err)
+	}
 
 	data, err := os.ReadFile(s.keyserversStatePath())
 	if err != nil {
 		t.Fatalf("read keyservers state: %v", err)
 	}
-	var parsed []database.KeyserverPublish
+	var parsed pgp.KeyserverStateFile
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("parse keyservers state JSON: %v", err)
 	}
-	if len(parsed) != 2 {
-		t.Errorf("parsed length = %d, want 2", len(parsed))
+	if parsed.Fingerprint != "ABC123" || len(parsed.Keyservers) != 2 {
+		t.Errorf("parsed state = %#v, want fingerprint and two keyservers", parsed)
 	}
 	found := false
-	for _, p := range parsed {
-		if p.URL == "https://keys.openpgp.org" {
+	for _, p := range parsed.Keyservers {
+		if p.URL == "https://keys.openpgp.org" && p.Status == "published" && p.PublishedAt != nil {
 			found = true
 		}
 	}
@@ -273,8 +280,10 @@ func TestWriteKeyserversStateWritesJSON(t *testing.T) {
 
 func TestWriteKeyserversStateEmptySlice(t *testing.T) {
 	s := newPGPTestServer(t)
-	// Empty slice must write a valid (empty) JSON array, not crash.
-	s.writeKeyserversState([]database.KeyserverPublish{})
+	// Empty state must write a valid object, not crash.
+	if err := s.writeKeyserversState(pgp.KeyserverStateFile{Fingerprint: "ABC123", Keyservers: []pgp.KeyserverState{}}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // ─── installKeypair ──────────────────────────────────────────────────────────

@@ -1734,6 +1734,10 @@
         "subject": "Poco espacio en disco - {app_name}",
         "body": "POCO ESPACIO EN DISCO\n\nDe: {app_name} ({fqdn})\nHora: {timestamp}\n\nEl sistema de archivos que contiene {path} está usando el {used_percent} por ciento de su espacio.\nUmbral de alerta: {threshold_percent} por ciento\nBytes libres: {free_bytes}\n\n{app_url}"
       },
+      "database_error": {
+        "subject": "Problema de conexión con la base de datos - {app_name}",
+        "body": "PROBLEMA DE CONEXIÓN CON LA BASE DE DATOS\n\nDe: {app_name} ({fqdn})\nHora: {timestamp}\n\nLa conexión con la base de datos ha fallado repetidamente desde {since}.\nÚltimo error: {error}\n\n{app_url}"
+      },
       "server_started": {
         "subject": "Servidor iniciado - {app_name}",
         "body": "SERVIDOR INICIADO\n\nDe: {app_name} ({fqdn})\nHora: {timestamp}\n\nHost: {hostname}\nVersión: {version}\nModo: {mode}\n\n{app_url}"

@@ -63,6 +63,60 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
+func TestEnsureMetricsTokensPersistsGeneratedSecrets(t *testing.T) {
+	path := tempConfigPath(t)
+	cfg := config.DefaultConfig()
+	if err := config.EnsureMetricsTokens(path, cfg); err != nil {
+		t.Fatalf("EnsureMetricsTokens: %v", err)
+	}
+	tokens := []string{
+		cfg.Server.Metrics.Auth.Tokens.Prometheus,
+		cfg.Server.Metrics.Auth.Tokens.Grafana,
+		cfg.Server.Metrics.Auth.Tokens.Loki,
+	}
+	for i, token := range tokens {
+		if !strings.HasPrefix(token, "mtr_") || len(token) != len("mtr_")+32 {
+			t.Errorf("generated token %d does not have the mtr_ plus 32-character format", i)
+		}
+		for _, char := range strings.TrimPrefix(token, "mtr_") {
+			if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", char) {
+				t.Errorf("generated token %d contains a non-base62 character", i)
+				break
+			}
+		}
+		for j := 0; j < i; j++ {
+			if token == tokens[j] {
+				t.Errorf("generated tokens %d and %d are equal", i, j)
+			}
+		}
+	}
+
+	secretsPath := filepath.Join(filepath.Dir(path), "secrets.yml")
+	secrets, err := os.ReadFile(secretsPath)
+	if err != nil {
+		t.Fatalf("read generated secrets: %v", err)
+	}
+	for _, token := range tokens {
+		if !strings.Contains(string(secrets), token) {
+			t.Errorf("generated token was not persisted in secrets.yml")
+		}
+	}
+	info, err := os.Stat(secretsPath)
+	if err != nil {
+		t.Fatalf("stat generated secrets: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("secrets.yml permissions = %04o, want 0600", info.Mode().Perm())
+	}
+
+	if err := config.EnsureMetricsTokens(path, cfg); err != nil {
+		t.Fatalf("EnsureMetricsTokens second call: %v", err)
+	}
+	if got := []string{cfg.Server.Metrics.Auth.Tokens.Prometheus, cfg.Server.Metrics.Auth.Tokens.Grafana, cfg.Server.Metrics.Auth.Tokens.Loki}; strings.Join(got, ",") != strings.Join(tokens, ",") {
+		t.Errorf("second call changed metrics tokens: got %q, want original values", got)
+	}
+}
+
 func TestWebUIToastConfigDefaultsAndValidation(t *testing.T) {
 	cfg := config.DefaultConfig()
 	if got := cfg.Server.Notifications.WebUI; got.Position != "top-right" || got.Duration != 3 || got.WarningDuration != 5 {

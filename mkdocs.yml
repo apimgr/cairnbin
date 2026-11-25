@@ -107,9 +107,9 @@ nav:
     - Compatibility: compat.md
     - Security: security.md
     - Integrations: integrations.md
-    - Translating: translating.md
   - Development:
     - Contributing: development.md
+    - Translating: translating.md
 
 extra:
   social:

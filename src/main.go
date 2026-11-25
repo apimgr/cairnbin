@@ -1016,6 +1016,10 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		log.Printf("warning: config load: %v", err)
 	}
+	if err := config.EnsureMetricsTokens(cfgFile, cfg); err != nil {
+		log.Printf("metrics: could not generate or persist service tokens: %v", err)
+		return 70
+	}
 	if cfg.Server.Port == "" {
 		cfg.Server.Port = earlyConfigPort
 	}
@@ -1186,16 +1190,22 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	sched := scheduler.New(db)
 
-	// Scheduler timezone (PART 18): config → TZ env → America/New_York default.
+	// Scheduler timezone (PART 18): use the configured IANA zone with a stable fallback.
 	schedTZ := strings.TrimSpace(cfg.Server.Scheduler.Timezone)
+	const defaultSchedulerTimezone = "America/New_York"
 	if schedTZ == "" {
-		schedTZ = "America/New_York"
+		schedTZ = defaultSchedulerTimezone
 	}
-	if loc, err := time.LoadLocation(schedTZ); err != nil {
-		log.Printf("scheduler: invalid timezone %q, using system local: %v", schedTZ, err)
-	} else {
-		sched.SetLocation(loc)
+	loc, err := time.LoadLocation(schedTZ)
+	if err != nil {
+		log.Printf("warning: invalid server.scheduler.timezone %q, using default %q", schedTZ, defaultSchedulerTimezone)
+		loc, err = time.LoadLocation(defaultSchedulerTimezone)
 	}
+	if err != nil {
+		log.Printf("warning: default scheduler timezone %q cannot load; using UTC", defaultSchedulerTimezone)
+		loc = time.UTC
+	}
+	sched.SetLocation(loc)
 
 	// Catch-up window (PART 18): re-run tasks missed while down within this span.
 	if w := strings.TrimSpace(cfg.Server.Scheduler.CatchUpWindow); w != "" {
@@ -1242,6 +1252,22 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			Server:        ac.Events.Server,
 		},
 	})
+	for _, key := range []string{
+		"server.token",
+		"server.security.encryption_key",
+		"server.metrics.auth.tokens.prometheus",
+		"server.metrics.auth.tokens.grafana",
+		"server.metrics.auth.tokens.loki",
+	} {
+		if cfg.SourceFile(key) == "generated" {
+			auditW.Log(audit.Entry{
+				Event:    "config.secret_generated",
+				Severity: audit.SeverityInfo,
+				Result:   audit.ResultSuccess,
+				Details:  map[string]any{"key": key},
+			})
+		}
+	}
 
 	// Logging manager (AI.md server.logs): owns access/server/error/app/auth/
 	// debug log files plus scheduled rotation for audit.log and security.log.
@@ -1333,6 +1359,10 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		return errors.Join(cveErr, trivyErr)
 	}))
 	logSchedErr(sched.Register("token_cleanup", "Token Cleanup", "@every 15m", true, func(ctx context.Context) error {
+		removedChallenges := srv.CleanupExpiredSimpleCaptchaChallenges()
+		if removedChallenges > 0 {
+			log.Printf("scheduler: removed %d expired simple-captcha challenges", removedChallenges)
+		}
 		n, err := db.DeleteExpiredAPITokens()
 		if err != nil {
 			return err
@@ -1352,6 +1382,9 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 		}
 		return nil
+	}))
+	logSchedErr(sched.Register("keyserver_retry", "PGP Keyserver Retry", "@every 15m", true, func(ctx context.Context) error {
+		return srv.RetryKeyserverPublications(ctx)
 	}))
 	logSchedErr(sched.Register("log_rotation", "Log Rotation", "0 0 * * *", true,
 		task.LogRotation(logMgr)))
@@ -1389,6 +1422,31 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			OperatorEmail:    taskOperatorEmail,
 			Mailer:           taskMailer,
 			Log:              logMgr.Server,
+		})))
+	databaseError := cfg.Server.Notifications.DatabaseError
+	databaseInterval := time.Minute
+	if configured, err := time.ParseDuration(strings.TrimSpace(databaseError.CheckInterval)); err == nil && configured > 0 {
+		databaseInterval = configured
+	}
+	databaseRepeat := 24 * time.Hour
+	if configured, err := time.ParseDuration(strings.TrimSpace(databaseError.Repeat)); err == nil && configured > 0 {
+		databaseRepeat = configured
+	}
+	databaseProbe := func(ctx context.Context) error {
+		if probe, ok := db.(database.ConnectionProbe); ok {
+			return probe.CheckConnection(ctx)
+		}
+		return db.Ping()
+	}
+	logSchedErr(sched.Register("database_check", "Database Connection Check", "@every "+databaseInterval.String(), databaseError.Enabled,
+		task.DatabaseCheck(task.DatabaseCheckConfig{
+			Enabled:       databaseError.Enabled,
+			Failures:      databaseError.Failures,
+			Repeat:        databaseRepeat,
+			OperatorEmail: taskOperatorEmail,
+			Mailer:        taskMailer,
+			Probe:         databaseProbe,
+			Log:           logMgr.Server,
 		})))
 	backupCfg := task.BackupConfig{
 		ProjectName:    appName,
@@ -1523,7 +1581,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	sched.SetRetry("branding_refresh", true, time.Hour, 0)
 	skippableTasks := map[string]bool{
 		"geoip_update": true, "blocklist_update": true, "cve_update": true,
-		"update_check": true, "backup_daily": true, "backup_hourly": true, "disk_check": true,
+		"update_check": true, "backup_daily": true, "backup_hourly": true, "disk_check": true, "database_check": true,
 	}
 	for id, tc := range cfg.Server.Scheduler.Tasks {
 		if tc.Schedule != "" {
@@ -1559,6 +1617,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 
 	// Failure notification + audit logging (PART 18 task execution flow): every
 	// run is audited; failures also send a scheduler_error email to the operator.
+	sched.SetLogger(logMgr.Server)
 	sched.SetNotifier(schedulerNotifier(cfg, auditW))
 
 	defer sched.Stop()
@@ -2473,7 +2532,7 @@ func schedulerNotifier(cfg *config.Config, auditW *audit.Writer) scheduler.Notif
 		// and backup_hourly send backup_failed (task.backupSendFailed),
 		// ssl_renewal sends ssl_renewal_failed (task.SSLRenewalWithEmail).
 		switch o.TaskID {
-		case "backup_daily", "backup_hourly", "ssl_renewal":
+		case "backup_daily", "backup_hourly", "ssl_renewal", "database_check":
 			return
 		}
 

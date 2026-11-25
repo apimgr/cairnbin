@@ -1,7 +1,7 @@
 package server
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -215,21 +215,48 @@ func (s *Server) publishToKeyservers(pubArmored string) {
 	if len(keyservers) == 0 {
 		return
 	}
+	meta, err := s.db.GetSecurityKeypair()
+	if err != nil || meta == nil || meta.Fingerprint == "" {
+		log.Printf("pgp: cannot publish key without current fingerprint metadata: %v", err)
+		return
+	}
+	state, err := pgp.LoadKeyserverState(s.keyserversStatePath(), meta.Fingerprint)
+	if err != nil {
+		log.Printf("pgp: read keyserver state: %v", err)
+		state = pgp.KeyserverStateFile{Fingerprint: meta.Fingerprint}
+	}
 	var published []database.KeyserverPublish
+	now := time.Now().UTC()
 	for _, ks := range keyservers {
 		ks = strings.TrimSpace(ks)
 		if ks == "" {
 			continue
 		}
-		if s.submitToKeyserver(ks, pubArmored) {
-			published = append(published, database.KeyserverPublish{URL: ks, PublishedAt: time.Now()})
+		item := keyserverStateFor(&state, ks)
+		if item.Status == "published" || keyserverPublished(meta.KeyserversPublished, ks) || item.Status == "final" || (item.NextAttempt != nil && item.NextAttempt.After(now)) {
+			continue
 		}
+		if err := pgp.PostKeyWithClient(ks, pubArmored, s.outboundHTTPClient); err != nil {
+			item.RecordFailure(now, err, pgp.KeyserverErrorRetryable(err))
+			if item.NextAttempt != nil {
+				log.Printf("pgp: keyserver %s publish attempt %d failed; retry due %s: %v", ks, item.Attempts, item.NextAttempt.UTC().Format(time.RFC3339), err)
+			} else {
+				log.Printf("pgp: keyserver %s publish failed permanently after %d attempt(s): %v", ks, item.Attempts, err)
+			}
+			continue
+		}
+		publishedAt := now
+		item.Status = "published"
+		item.NextAttempt = nil
+		item.LastError = ""
+		item.PublishedAt = &publishedAt
+		log.Printf("pgp: published public key to %s", ks)
+		published = append(published, database.KeyserverPublish{URL: ks, PublishedAt: publishedAt})
 	}
-	if len(published) == 0 {
-		return
+	if err := s.writeKeyserversState(state); err != nil {
+		log.Printf("pgp: write keyserver state: %v", err)
 	}
-	s.writeKeyserversState(published)
-	if meta, err := s.db.GetSecurityKeypair(); err == nil && meta != nil {
+	if len(published) > 0 {
 		meta.KeyserversPublished = mergeKeyserverPublishes(meta.KeyserversPublished, published)
 		if err := s.db.UpsertSecurityKeypair(meta); err != nil {
 			log.Printf("pgp: record keyserver publish: %v", err)
@@ -237,39 +264,79 @@ func (s *Server) publishToKeyservers(pubArmored string) {
 	}
 }
 
-// submitToKeyserver POSTs the public key to one keyserver, retrying with
-// exponential backoff (1s, 2s, 4s, 8s, 16s). Returns true on success.
-func (s *Server) submitToKeyserver(keyserver, pubArmored string) bool {
-	delay := time.Second
-	for attempt := 0; attempt < 5; attempt++ {
-		if attempt > 0 {
-			time.Sleep(delay)
-			delay *= 2
+func keyserverPublished(published []database.KeyserverPublish, keyserver string) bool {
+	for _, item := range published {
+		if item.URL == keyserver {
+			return true
 		}
-		if err := pgp.PostKeyWithClient(keyserver, pubArmored, s.outboundHTTPClient); err != nil {
-			log.Printf("pgp: keyserver %s publish attempt %d failed: %v", keyserver, attempt+1, err)
-			continue
-		}
-		log.Printf("pgp: published public key to %s", keyserver)
-		return true
 	}
 	return false
 }
 
-// writeKeyserversState persists the keyserver publish state to disk (0o600).
-func (s *Server) writeKeyserversState(published []database.KeyserverPublish) {
-	b, err := json.MarshalIndent(published, "", "  ")
+func keyserverStateFor(state *pgp.KeyserverStateFile, keyserver string) *pgp.KeyserverState {
+	for i := range state.Keyservers {
+		if state.Keyservers[i].URL == keyserver {
+			return &state.Keyservers[i]
+		}
+	}
+	state.Keyservers = append(state.Keyservers, pgp.KeyserverState{URL: keyserver, Status: "pending"})
+	return &state.Keyservers[len(state.Keyservers)-1]
+}
+
+func (s *Server) RetryKeyserverPublications(ctx context.Context) error {
+	meta, err := s.db.GetSecurityKeypair()
+	if err != nil || meta == nil || meta.Revoked || meta.Fingerprint == "" {
+		return err
+	}
+	state, err := pgp.LoadKeyserverState(s.keyserversStatePath(), meta.Fingerprint)
 	if err != nil {
-		log.Printf("pgp: marshal keyservers state: %v", err)
-		return
+		return fmt.Errorf("pgp: read keyserver state: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Join(s.configDir, "security"), 0o700); err != nil {
-		log.Printf("pgp: create security dir: %v", err)
-		return
+	publicKey := s.projectPGPPublicKey()
+	if publicKey == "" {
+		return fmt.Errorf("pgp: current public key is unavailable")
 	}
-	if err := os.WriteFile(s.keyserversStatePath(), b, 0o600); err != nil {
-		log.Printf("pgp: write keyservers state: %v", err)
+	now := time.Now().UTC()
+	var published []database.KeyserverPublish
+	for i := range state.Keyservers {
+		item := &state.Keyservers[i]
+		if item.Status == "published" || item.Status == "final" || item.NextAttempt == nil || item.NextAttempt.After(now) {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := pgp.PostKeyWithClient(item.URL, publicKey, s.outboundHTTPClient); err != nil {
+			item.RecordFailure(now, err, pgp.KeyserverErrorRetryable(err))
+			if item.NextAttempt != nil {
+				log.Printf("pgp: keyserver %s retry %d failed; next attempt %s: %v", item.URL, item.Attempts, item.NextAttempt.UTC().Format(time.RFC3339), err)
+			} else {
+				log.Printf("pgp: keyserver %s retries exhausted or final response: %v", item.URL, err)
+			}
+			continue
+		}
+		publishedAt := now
+		item.Status = "published"
+		item.NextAttempt = nil
+		item.LastError = ""
+		item.PublishedAt = &publishedAt
+		published = append(published, database.KeyserverPublish{URL: item.URL, PublishedAt: publishedAt})
+		log.Printf("pgp: published public key to %s", item.URL)
 	}
+	if err := s.writeKeyserversState(state); err != nil {
+		return fmt.Errorf("pgp: write keyserver state: %w", err)
+	}
+	if len(published) > 0 {
+		meta.KeyserversPublished = mergeKeyserverPublishes(meta.KeyserversPublished, published)
+		if err := s.db.UpsertSecurityKeypair(meta); err != nil {
+			return fmt.Errorf("pgp: record keyserver retry success: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *Server) writeKeyserversState(state pgp.KeyserverStateFile) error {
+	return pgp.WriteKeyserverState(s.keyserversStatePath(), state)
 }
 
 // mergeKeyserverPublishes returns prior publishes with each keyserver's timestamp

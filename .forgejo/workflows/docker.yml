@@ -63,6 +63,9 @@ jobs:
             # Strip 'v' prefix
             echo "VERSION=${VERSION#v}" >> $GITEA_ENV
             echo "IS_TAG=true" >> $GITEA_ENV
+          elif [[ "${{ gitea.ref }}" == refs/heads/beta ]]; then
+            echo "VERSION=$(date -u +%Y%m%d%H%M%S)-beta" >> $GITEA_ENV
+            echo "IS_TAG=false" >> $GITEA_ENV
           else
             echo "VERSION=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
             echo "IS_TAG=false" >> $GITEA_ENV
@@ -118,6 +121,10 @@ jobs:
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.schema-version=${{ env.VERSION }}
+            org.opencontainers.image.vcs-type=Git
+            com.github.containers.toolbox=false
+            maintainer=apimgr <git-admin@casjaysdev.pro>
           annotations: |
             manifest:org.opencontainers.image.vendor=apimgr
             manifest:org.opencontainers.image.authors=apimgr
@@ -131,6 +138,15 @@ jobs:
             manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.licenses=MIT
+            manifest:org.opencontainers.image.schema-version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.vcs-type=Git
+            manifest:com.github.containers.toolbox=false
+            manifest:maintainer=apimgr <git-admin@casjaysdev.pro>
+
+      - name: Check standard image contract and overlay health
+        run: |
+          docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
+          sh tests/image_check.sh "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
 
   build-devel:
     runs-on: ubuntu-26.04
@@ -165,6 +181,7 @@ jobs:
       - name: Set build info
         run: |
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
+          echo "VERSION=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           BUILD_EPOCH=$(date -u +%s)
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
@@ -194,6 +211,11 @@ jobs:
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.schema-version=${{ env.VERSION }}
+            org.opencontainers.image.vcs-type=Git
+            com.github.containers.toolbox=false
+            maintainer=apimgr <git-admin@casjaysdev.pro>
           annotations: |
             manifest:org.opencontainers.image.vendor=apimgr
             manifest:org.opencontainers.image.authors=apimgr
@@ -206,3 +228,13 @@ jobs:
             manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.licenses=MIT
+            manifest:org.opencontainers.image.version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.schema-version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.vcs-type=Git
+            manifest:com.github.containers.toolbox=false
+            manifest:maintainer=apimgr <git-admin@casjaysdev.pro>
+
+      - name: Check development image contract and overlay health
+        run: |
+          docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel"
+          sh tests/image_check.sh "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel"

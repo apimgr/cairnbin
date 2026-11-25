@@ -52,6 +52,9 @@ jobs:
             VERSION="${GITHUB_REF#refs/tags/}"
             echo "VERSION=${VERSION#v}" >> $GITHUB_ENV
             echo "IS_TAG=true" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == refs/heads/beta ]]; then
+            echo "VERSION=$(date -u +%Y%m%d%H%M%S)-beta" >> $GITHUB_ENV
+            echo "IS_TAG=false" >> $GITHUB_ENV
           else
             echo "VERSION=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
             echo "IS_TAG=false" >> $GITHUB_ENV
@@ -106,6 +109,10 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.schema-version=${{ env.VERSION }}
+            org.opencontainers.image.vcs-type=Git
+            com.github.containers.toolbox=false
+            maintainer=apimgr <git-admin@casjaysdev.pro>
           annotations: |
             manifest:org.opencontainers.image.vendor=apimgr
             manifest:org.opencontainers.image.authors=apimgr
@@ -119,6 +126,15 @@ jobs:
             manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.licenses=MIT
+            manifest:org.opencontainers.image.schema-version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.vcs-type=Git
+            manifest:com.github.containers.toolbox=false
+            manifest:maintainer=apimgr <git-admin@casjaysdev.pro>
+
+      - name: Check standard image contract and overlay health
+        run: |
+          docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
+          sh tests/image_check.sh "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
 
   build-devel:
     runs-on: ubuntu-26.04
@@ -146,6 +162,7 @@ jobs:
       - name: Set build info
         run: |
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
+          echo "VERSION=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           BUILD_EPOCH=$(date -u +%s)
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
@@ -177,6 +194,11 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.schema-version=${{ env.VERSION }}
+            org.opencontainers.image.vcs-type=Git
+            com.github.containers.toolbox=false
+            maintainer=apimgr <git-admin@casjaysdev.pro>
           annotations: |
             manifest:org.opencontainers.image.vendor=apimgr
             manifest:org.opencontainers.image.authors=apimgr
@@ -189,3 +211,13 @@ jobs:
             manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.licenses=MIT
+            manifest:org.opencontainers.image.version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.schema-version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.vcs-type=Git
+            manifest:com.github.containers.toolbox=false
+            manifest:maintainer=apimgr <git-admin@casjaysdev.pro>
+
+      - name: Check development image contract and overlay health
+        run: |
+          docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel"
+          sh tests/image_check.sh "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel"

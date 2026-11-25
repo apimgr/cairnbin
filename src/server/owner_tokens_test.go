@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apimgr/cairnbin/src/common/browsercookie"
 	"github.com/apimgr/cairnbin/src/common/secretbox"
 	"github.com/apimgr/cairnbin/src/config"
 	"github.com/apimgr/cairnbin/src/database"
@@ -163,6 +164,54 @@ func TestOwnerTokenRevealUsesOneUseViewCookie(t *testing.T) {
 	s.consumeTokenView(reload, reloadRequest, reloadData)
 	if _, ok := reloadData["RevealedOwnerToken"]; ok {
 		t.Fatal("token page reload disclosed the primary token without a view cookie")
+	}
+}
+
+func TestOwnerCookieMiddlewareMigratesLegacyPrimaryCookie(t *testing.T) {
+	s, primary := ownerTokenTestServer(t)
+	request := httptest.NewRequest(http.MethodGet, "/server/preferences/tokens", nil)
+	request.AddCookie(&http.Cookie{Name: browsercookie.LegacyOwnerTokenName, Value: primary})
+	recorder := httptest.NewRecorder()
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	s.ownerCookieMiddleware(next).ServeHTTP(recorder, request)
+	var migrated, clearedLegacy bool
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == browsercookie.OwnerTokenName && cookie.Value == primary && cookie.MaxAge > 0 && cookie.HttpOnly && cookie.Secure {
+			migrated = true
+		}
+		if cookie.Name == browsercookie.LegacyOwnerTokenName && cookie.MaxAge < 0 {
+			clearedLegacy = true
+		}
+	}
+	if !migrated || !clearedLegacy {
+		t.Fatalf("legacy cookie migration did not set current and clear legacy cookie: %#v", recorder.Result().Cookies())
+	}
+}
+
+func TestOwnerCookieMigrationExpiresAfterConfiguredMaxAge(t *testing.T) {
+	s, _ := ownerTokenTestServer(t)
+	s.startTime = time.Now().Add(-s.ownerCookieMaxAge())
+	request := httptest.NewRequest(http.MethodGet, "/server/preferences/tokens", nil)
+	request.AddCookie(&http.Cookie{Name: browsercookie.LegacyOwnerTokenName, Value: "legacy"})
+	if cookies := s.ownerTokenCookies(request); len(cookies) != 0 {
+		t.Fatalf("legacy cookie remained accepted after the migration window: %#v", cookies)
+	}
+	recorder := httptest.NewRecorder()
+	s.ownerCookieMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := r.Cookie(browsercookie.LegacyOwnerTokenName); err == nil {
+			t.Error("expired legacy cookie reached the handler")
+		}
+	})).ServeHTTP(recorder, request)
+	cleared := false
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == browsercookie.LegacyOwnerTokenName && cookie.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatal("expired legacy cookie was not cleared")
 	}
 }
 

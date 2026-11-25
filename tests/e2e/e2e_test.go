@@ -329,7 +329,7 @@ func TestTier1OwnerAndLinkedTokenLifecycleAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	preferencesReq.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
-	preferencesReq.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_rU3uW5Ze", Value: primary})
+	preferencesReq.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_karmassz", Value: primary})
 	preferencesResp, err := client().Do(preferencesReq)
 	if err != nil {
 		t.Fatalf("render localized owner-token preferences: %v", err)
@@ -492,7 +492,7 @@ func TestTier1OwnerAndLinkedTokenLifecycleAPI(t *testing.T) {
 		t.Fatalf("owner restore status=%d", restoreResp.StatusCode)
 	}
 	ownerCookieSet := strings.Join(restoreResp.Header.Values("Set-Cookie"), "\n")
-	if !strings.Contains(ownerCookieSet, "cairnbin_owner_token_rU3uW5Ze=") || !strings.Contains(ownerCookieSet, "HttpOnly") || !strings.Contains(ownerCookieSet, "Secure") {
+	if !strings.Contains(ownerCookieSet, "cairnbin_owner_token_karmassz=") || !strings.Contains(ownerCookieSet, "HttpOnly") || !strings.Contains(ownerCookieSet, "Secure") {
 		t.Fatalf("restore did not issue a protected owner cookie: %s", ownerCookieSet)
 	}
 	resp, body = request(http.MethodDelete, "/api/v1/pastes/"+pasteID, rotated.Data.Token, nil)
@@ -1845,7 +1845,7 @@ func TestTier2OwnerTokenManagementFormsWithoutJavaScript(t *testing.T) {
 		req.Header.Set("Accept", "text/html")
 		req.Header.Set("User-Agent", "Mozilla/5.0 cairnbin-e2e")
 		addCSRFToken(req, csrf)
-		req.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_rU3uW5Ze", Value: token})
+		req.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_karmassz", Value: token})
 		resp, err := formClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -1866,7 +1866,7 @@ func TestTier2OwnerTokenManagementFormsWithoutJavaScript(t *testing.T) {
 		for _, cookie := range resp.Cookies() {
 			if cookie.Name == "cairnbin_token_view" {
 				viewCookie = cookie
-			} else if cookie.Name == "cairnbin_owner_token_rU3uW5Ze" {
+			} else if cookie.Name == "cairnbin_owner_token_karmassz" {
 				owner = cookie.Value
 			}
 		}
@@ -1878,7 +1878,7 @@ func TestTier2OwnerTokenManagementFormsWithoutJavaScript(t *testing.T) {
 			t.Fatal(err)
 		}
 		req.Header.Set("Accept", "text/html")
-		req.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_rU3uW5Ze", Value: owner})
+		req.AddCookie(&http.Cookie{Name: "cairnbin_owner_token_karmassz", Value: owner})
 		req.AddCookie(viewCookie)
 		view, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -1937,7 +1937,7 @@ func TestTier3OwnerTokenManagementWithJavaScript(t *testing.T) {
 	setOwnerCookie := func() {
 		t.Helper()
 		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetCookie("cairnbin_owner_token_rU3uW5Ze", primary).WithURL(base).WithSecure(false).Do(ctx)
+			return network.SetCookie("cairnbin_owner_token_karmassz", primary).WithURL(base).WithSecure(false).Do(ctx)
 		})); err != nil {
 			t.Fatalf("set browser owner cookie: %v", err)
 		}
@@ -2277,7 +2277,7 @@ func TestTier3FullBrowser(t *testing.T) {
 		t.Errorf("dark and light theme styles did not differ: dark=%q light=%q", darkBackground, lightBackground)
 	}
 	if err := chromedp.Run(ctx,
-		chromedp.Evaluate(`localStorage.removeItem("cairnbin_owner_token_rU3uW5Ze")`, nil),
+		chromedp.Evaluate(`localStorage.removeItem("cairnbin_owner_token_karmassz")`, nil),
 		chromedp.Navigate(base+"/remove/"+linkID),
 	); err != nil {
 		t.Fatalf("open owner-token form in browser: %v", err)

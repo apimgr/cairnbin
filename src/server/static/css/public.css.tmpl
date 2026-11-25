@@ -92,7 +92,7 @@
     opacity: 0;
 }
 
-.nav-checkbox:focus-visible ~ .nav-toggle {
+body:has(.nav-checkbox:focus-visible) .nav-toggle {
     box-shadow: var(--focus-ring-offset);
 }
 
@@ -521,9 +521,12 @@ main {
 
 .container {
     width: 100%;
-    max-width: 1400px;
     margin: 0 auto;
     padding-inline: var(--space-4);
+}
+
+.container:not(.container-sm):not(.container-md):not(.container-lg) {
+    max-width: 1400px;
 }
 
 /* Tablet+: 90% centered container, capped at 1400px (PART 16 Container) */
@@ -532,14 +535,6 @@ main {
         width: 90%;
         padding-inline: 0;
     }
-}
-
-.container-sm {
-    max-width: 720px;
-}
-
-.container-lg {
-    max-width: 1400px;
 }
 
 /* ============================================

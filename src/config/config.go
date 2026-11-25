@@ -728,8 +728,8 @@ type MetricsAuthConfig struct {
 	Tokens MetricsTokensConfig `yaml:"tokens"`
 }
 
-// MetricsTokensConfig holds the per-service bearer tokens for the metrics
-// routes. An empty token disables that service (403, empty body).
+// MetricsTokensConfig holds the per-service bearer tokens for metrics routes.
+// Empty values are generated and persisted to secrets.yml at startup.
 type MetricsTokensConfig struct {
 	Prometheus string `yaml:"prometheus"`
 	Grafana    string `yaml:"grafana"`
@@ -1208,9 +1208,17 @@ type CSRFConfig struct {
 
 // NotificationsConfig holds email notification settings.
 type NotificationsConfig struct {
-	WebUI   ToastConfig   `yaml:"webui"`
-	Email   EmailConfig   `yaml:"email"`
-	DiskLow DiskLowConfig `yaml:"disk_low"`
+	WebUI         ToastConfig         `yaml:"webui"`
+	Email         EmailConfig         `yaml:"email"`
+	DiskLow       DiskLowConfig       `yaml:"disk_low"`
+	DatabaseError DatabaseErrorConfig `yaml:"database_error"`
+}
+
+type DatabaseErrorConfig struct {
+	Enabled       bool   `yaml:"enabled"`
+	Failures      int    `yaml:"failures"`
+	CheckInterval string `yaml:"check_interval"`
+	Repeat        string `yaml:"repeat"`
 }
 
 // ToastConfig controls visitor-facing WebUI toast notifications.
@@ -1997,9 +2005,7 @@ func DefaultConfig() *Config {
 				// with configs that predate auth.tokens.
 				Token: "",
 				// PART 20: no unauthenticated default, so the escape hatch is
-				// off and every service token starts empty. An empty token
-				// disables that service (403), so out of the box /metrics is
-				// mounted but serves nothing until an operator sets a token.
+				// off. Empty service tokens are generated into secrets.yml at startup.
 				Auth: MetricsAuthConfig{
 					AllowUnauthenticated: false,
 					Tokens: MetricsTokensConfig{
@@ -2161,6 +2167,12 @@ func DefaultConfig() *Config {
 					ThresholdPercent: 85,
 					CheckInterval:    "5m",
 					Repeat:           "24h",
+				},
+				DatabaseError: DatabaseErrorConfig{
+					Enabled:       true,
+					Failures:      3,
+					CheckInterval: "1m",
+					Repeat:        "24h",
 				},
 				Email: EmailConfig{
 					Enabled: false,
@@ -3363,6 +3375,7 @@ func Validate(cfg *Config) {
 	d := DefaultConfig()
 	cfg.Server.Maintenance.SelfHealing.Enabled = true
 	validateToastConfig(&cfg.Server.Notifications.WebUI, d.Server.Notifications.WebUI)
+	validateDatabaseErrorConfig(&cfg.Server.Notifications.DatabaseError, d.Server.Notifications.DatabaseError)
 	if cfg.Server.Tokens.MaxLinked <= 0 {
 		log.Printf("[config] WARNING: invalid server.tokens.max_linked %d, using default %d", cfg.Server.Tokens.MaxLinked, d.Server.Tokens.MaxLinked)
 		cfg.Server.Tokens.MaxLinked = d.Server.Tokens.MaxLinked
@@ -3796,6 +3809,21 @@ func validateToastConfig(c *ToastConfig, defaults ToastConfig) {
 	}
 }
 
+func validateDatabaseErrorConfig(c *DatabaseErrorConfig, defaults DatabaseErrorConfig) {
+	if c.Failures < 1 || c.Failures > 100 {
+		log.Printf("[config] WARNING: invalid server.notifications.database_error.failures %d, using default %d", c.Failures, defaults.Failures)
+		c.Failures = defaults.Failures
+	}
+	if interval, err := time.ParseDuration(strings.TrimSpace(c.CheckInterval)); err != nil || interval <= 0 {
+		log.Printf("[config] WARNING: invalid server.notifications.database_error.check_interval %q, using default %q", c.CheckInterval, defaults.CheckInterval)
+		c.CheckInterval = defaults.CheckInterval
+	}
+	if repeat, err := time.ParseDuration(strings.TrimSpace(c.Repeat)); err != nil || repeat <= 0 {
+		log.Printf("[config] WARNING: invalid server.notifications.database_error.repeat %q, using default %q", c.Repeat, defaults.Repeat)
+		c.Repeat = defaults.Repeat
+	}
+}
+
 func ownerCookieMaxAge(value string) (time.Duration, bool) {
 	if strings.HasSuffix(value, "y") || strings.HasSuffix(value, "d") {
 		unit := value[len(value)-1]
@@ -4022,6 +4050,16 @@ func persistGeneratedSecrets(configPath string, cfg *Config) error {
 			}
 		}
 	}
+	for key, value := range map[string]string{
+		"server.metrics.auth.tokens.prometheus": cfg.Server.Metrics.Auth.Tokens.Prometheus,
+		"server.metrics.auth.tokens.grafana":    cfg.Server.Metrics.Auth.Tokens.Grafana,
+		"server.metrics.auth.tokens.loki":       cfg.Server.Metrics.Auth.Tokens.Loki,
+	} {
+		source := cfg.SourceFile(key)
+		if value != "" && (source == "" || source == "generated") {
+			values[key] = value
+		}
+	}
 	roles := map[string]ContactRole{"admin": cfg.Server.Contact.Admin, "security": cfg.Server.Contact.Security, "abuse": cfg.Server.Contact.Abuse, "general": cfg.Server.Contact.General, "dpo": cfg.Server.Contact.DPO}
 	for role, contact := range roles {
 		for key, value := range contact.Webhooks {
@@ -4058,6 +4096,44 @@ func persistGeneratedSecrets(configPath string, cfg *Config) error {
 		return err
 	}
 	return writePrivateYAML(secretsPath, encoded, ".secrets.yml-*")
+}
+
+func EnsureMetricsTokens(configPath string, cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("metrics token configuration is nil")
+	}
+	tokens := []struct {
+		key   string
+		value *string
+	}{
+		{"server.metrics.auth.tokens.prometheus", &cfg.Server.Metrics.Auth.Tokens.Prometheus},
+		{"server.metrics.auth.tokens.grafana", &cfg.Server.Metrics.Auth.Tokens.Grafana},
+		{"server.metrics.auth.tokens.loki", &cfg.Server.Metrics.Auth.Tokens.Loki},
+	}
+	generated := false
+	for _, token := range tokens {
+		if strings.TrimSpace(*token.value) != "" {
+			continue
+		}
+		raw := make([]byte, 32)
+		if _, err := crand.Read(raw); err != nil {
+			return fmt.Errorf("generate %s: %w", token.key, err)
+		}
+		encoded := make([]byte, len(raw))
+		for i, value := range raw {
+			encoded[i] = tokenCharset[int(value)%len(tokenCharset)]
+		}
+		*token.value = "mtr_" + string(encoded)
+		if cfg.fieldSources == nil {
+			cfg.fieldSources = make(map[string]string)
+		}
+		cfg.fieldSources[token.key] = "generated"
+		generated = true
+	}
+	if !generated {
+		return nil
+	}
+	return persistGeneratedSecrets(configPath, cfg)
 }
 
 func migrateRuntimeSecrets(configPath string) error {

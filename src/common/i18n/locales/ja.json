@@ -1734,6 +1734,10 @@
         "subject": "ディスク容量不足 - {app_name}",
         "body": "ディスク容量不足\n\n送信元: {app_name} ({fqdn})\n時刻: {timestamp}\n\n{path} を含むファイルシステムは容量の {used_percent} パーセントを使用しています。\n警告しきい値: {threshold_percent} パーセント\n空きバイト数: {free_bytes}\n\n{app_url}"
       },
+      "database_error": {
+        "subject": "データベース接続の問題 - {app_name}",
+        "body": "データベース接続の問題\n\n送信元: {app_name} ({fqdn})\n時刻: {timestamp}\n\n{since} 以降、データベース接続が繰り返し失敗しています。\n直近のエラー: {error}\n\n{app_url}"
+      },
       "server_started": {
         "subject": "サーバー起動 - {app_name}",
         "body": "サーバー起動\n\n送信元: {app_name} ({fqdn})\n時刻: {timestamp}\n\nホスト: {hostname}\nバージョン: {version}\nモード: {mode}\n\n{app_url}"

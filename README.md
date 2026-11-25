@@ -46,7 +46,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only queries)
 - MCP endpoint at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`) so AI clients can use the API as tools with the same Bearer tokens
 - Full route compatibility with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (sprunge/0x0/ix.io), and termbin/fiche (raw TCP on port 9999, enabled by default)
-- Built-in scheduler for expiry cleanup, backups, low-disk alerts, security-database updates, and self-update checks (no external cron)
+- Built-in scheduler for expiry cleanup, backups, database health probes, low-disk alerts, security-database updates, and self-update checks (no external cron)
 - Backup and restore with optional AES-256-GCM encryption (Argon2id key derivation)
 - Self-update with SHA-256 checksum verification (stable/beta/devel channels)
 - Internal metrics services at `/server/metrics`; the `/metrics[/{service}]` root aliases are gated by `server.metrics.root.enabled` (enabled by default)
@@ -54,7 +54,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Rate limiting per read/write/health class
 - Tor hidden-service support (auto-enabled when the `tor` binary is present) and I2P eepsite support (enabled by default in containers when a provider is available; explicit configuration overrides the default). Both start asynchronously without delaying the HTTP listener.
 - Internationalization: English, Spanish, French, German, Italian, Chinese, Arabic (RTL), and Japanese (8 locales; see the [translation guide](docs/translating.md))
-- Operator email notifications with SMTP auto-detection (no email attempted without working SMTP) and signed webhook notifications for configured contact roles, including optional startup/shutdown and low-disk alerts
+- Operator email notifications with SMTP auto-detection (no email attempted without working SMTP), including database outage and low-disk alerts; signed webhook notifications are available for configured contact roles
 - Cookie-consent banner and privacy/terms pages
 - Cross-platform service management (systemd, OpenRC, SysVinit, runit, launchd, rc.d, Windows Service)
 - Self-contained static binary with local SQLite by default or optional remote libSQL/Turso

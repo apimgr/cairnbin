@@ -29,6 +29,7 @@ import (
 	"github.com/alecthomas/chroma/v2/styles"
 
 	"github.com/apimgr/cairnbin/src/cache"
+	"github.com/apimgr/cairnbin/src/common/browsercookie"
 	"github.com/apimgr/cairnbin/src/common/httputil"
 	"github.com/apimgr/cairnbin/src/common/secretbox"
 	"github.com/apimgr/cairnbin/src/database"
@@ -251,8 +252,8 @@ func extractToken(r *http.Request) string {
 	// Browser cookie fallback is restricted to web forms; API routes never
 	// receive ambient authority from cookies.
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
-		if cookie, err := r.Cookie("cairnbin_owner_token_rU3uW5Ze"); err == nil && cookie.Value != "" {
-			return cookie.Value
+		if value := browsercookie.OwnerTokenValue(r); value != "" {
+			return value
 		}
 	}
 	return ""

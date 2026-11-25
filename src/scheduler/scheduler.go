@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,6 +86,7 @@ type Scheduler struct {
 	running  bool
 	stopping bool
 	notifier NotifyFunc
+	logger   func(string, string, ...string)
 
 	// ctx is cancelled when Stop is called, so in-flight TaskFunc invocations
 	// can observe shutdown and abort promptly (PART 18).
@@ -123,6 +125,23 @@ func (s *Scheduler) SetNotifier(fn NotifyFunc) {
 	s.mu.Lock()
 	s.notifier = fn
 	s.mu.Unlock()
+}
+
+func (s *Scheduler) SetLogger(fn func(string, string, ...string)) {
+	s.mu.Lock()
+	s.logger = fn
+	s.mu.Unlock()
+}
+
+func (s *Scheduler) writeLog(level, message string, fields ...string) {
+	s.mu.Lock()
+	logger := s.logger
+	s.mu.Unlock()
+	if logger != nil {
+		logger(level, message, fields...)
+		return
+	}
+	log.Printf("%s: %s %s", strings.ToUpper(level), message, strings.Join(fields, " "))
 }
 
 // SetRetry configures the retry policy for a registered task (PART 18). When
@@ -193,7 +212,14 @@ func (s *Scheduler) Start() {
 	// Run any missed tasks (within catch-up window) immediately.
 	s.runMissed()
 
-	log.Printf("scheduler: started with %d tasks", len(s.tasks))
+	s.mu.Lock()
+	names := make([]string, 0, len(s.tasks))
+	for _, task := range s.tasks {
+		names = append(names, task.name)
+	}
+	s.mu.Unlock()
+	sort.Strings(names)
+	s.writeLog("info", "scheduler started", "tasks", strings.Join(names, ", "))
 
 	go s.loop(stop)
 }
@@ -412,7 +438,6 @@ func (s *Scheduler) tick() {
 func runIsolated(ctx context.Context, id string, fn TaskFunc) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("scheduler: task %s panicked: %v", id, r)
 			err = fmt.Errorf("task panicked: %v", r)
 		}
 	}()
@@ -421,7 +446,7 @@ func runIsolated(ctx context.Context, id string, fn TaskFunc) (err error) {
 
 func (s *Scheduler) execute(e *taskEntry) error {
 	start := time.Now()
-	log.Printf("scheduler: running %s", e.id)
+	s.writeLog("debug", "scheduler task running", "task_id", e.id)
 
 	s.mu.Lock()
 	ctx := s.ctx
@@ -442,9 +467,6 @@ func (s *Scheduler) execute(e *taskEntry) error {
 	if taskErr != nil {
 		status = "failed"
 		errMsg = taskErr.Error()
-		log.Printf("scheduler: task %s failed: %v", e.id, taskErr)
-	} else {
-		log.Printf("scheduler: task %s completed (%dms)", e.id, durationMS)
 	}
 
 	// PART 20 defines the scheduler_tasks_total status label values as
@@ -463,8 +485,13 @@ func (s *Scheduler) execute(e *taskEntry) error {
 	e.lastError = errMsg
 	attempt := e.retryAttempt
 	willRetry := false
+	logLevel := "debug"
+	logMessage := fmt.Sprintf("scheduler: task %s completed (%dms)", e.id, durationMS)
+	var retryMessage []string
 	var next time.Time
 	if taskErr != nil {
+		logLevel = "warn"
+		logMessage = fmt.Sprintf("scheduler: task %s failed: %v", e.id, taskErr)
 		e.failCount++
 		if e.retryOnFail && e.retryAttempt < e.retryMax {
 			// Exponential backoff: base × 2^attempt (e.g. 5m, 10m, 20m).
@@ -472,8 +499,9 @@ func (s *Scheduler) execute(e *taskEntry) error {
 			next = finished.Add(delay)
 			e.retryAttempt++
 			willRetry = true
-			log.Printf("scheduler: task %s retry %d/%d scheduled in %s", e.id, e.retryAttempt, e.retryMax, delay)
+			retryMessage = []string{"task_id", e.id, "attempt", fmt.Sprint(e.retryAttempt), "max_attempts", fmt.Sprint(e.retryMax), "delay", delay.String()}
 		} else {
+			logLevel = "error"
 			next = e.schedule.Next(finished)
 			e.retryAttempt = 0
 		}
@@ -502,6 +530,10 @@ func (s *Scheduler) execute(e *taskEntry) error {
 	}
 	notifier := s.notifier
 	s.mu.Unlock()
+	if len(retryMessage) > 0 {
+		s.writeLog("warn", "scheduler task retry scheduled", retryMessage...)
+	}
+	s.writeLog(logLevel, logMessage, "task_id", e.id)
 
 	if notifier != nil {
 		notifier(Outcome{

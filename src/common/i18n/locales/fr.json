@@ -1734,6 +1734,10 @@
         "subject": "Espace disque faible - {app_name}",
         "body": "ESPACE DISQUE FAIBLE\n\nDe : {app_name} ({fqdn})\nHeure : {timestamp}\n\nLe système de fichiers contenant {path} utilise {used_percent} pour cent de son espace.\nSeuil d’alerte : {threshold_percent} pour cent\nOctets libres : {free_bytes}\n\n{app_url}"
       },
+      "database_error": {
+        "subject": "Problème de connexion à la base de données - {app_name}",
+        "body": "PROBLÈME DE CONNEXION À LA BASE DE DONNÉES\n\nDe : {app_name} ({fqdn})\nHeure : {timestamp}\n\nLa connexion à la base de données échoue de façon répétée depuis {since}.\nDernière erreur : {error}\n\n{app_url}"
+      },
       "server_started": {
         "subject": "Serveur démarré - {app_name}",
         "body": "SERVEUR DÉMARRÉ\n\nDe : {app_name} ({fqdn})\nHeure : {timestamp}\n\nHôte : {hostname}\nVersion : {version}\nMode : {mode}\n\n{app_url}"

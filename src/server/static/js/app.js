@@ -1098,7 +1098,13 @@ async function fetchAPI(endpoint, options) {
 (function () {
     // Canonical browser-storage name shared with the owner_token cookie
     // (AI.md PART 11 "Naming"; suffix recorded in IDEA.md).
-    const TOKEN_KEY = 'cairnbin_owner_token_rU3uW5Ze';
+    const TOKEN_KEY = 'cairnbin_owner_token_karmassz';
+    const LEGACY_TOKEN_KEY = 'cairnbin_owner_token_rU3uW5Ze';
+    if (!localStorage.getItem(TOKEN_KEY)) {
+        const legacyToken = localStorage.getItem(LEGACY_TOKEN_KEY);
+        if (legacyToken) localStorage.setItem(TOKEN_KEY, legacyToken);
+    }
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
 
     // Persist a freshly issued owner token (rendered server-side after a
     // successful create) so the next paste can reuse it.
@@ -1231,14 +1237,20 @@ document.addEventListener('DOMContentLoaded', () => {
 // Cairnbin — Remove page enhancements
 // Progressive enhancement only — the form works as a plain POST without
 // this. Pre-fill the delete-token field from the owner token saved at
-// creation time (canonical localStorage key: cairnbin_owner_token_rU3uW5Ze,
+// creation time (canonical localStorage key: cairnbin_owner_token_karmassz,
 // shared with the owner_token cookie name, per IDEA.md and AI.md:11801).
 // If the page is showing an error, the saved token was invalid — clear it
 // so the user is not silently retrying with a bad token on the next attempt.
 // The error state is passed via the data-token-error attribute (server-
 // rendered, no inline JS needed to read it).
 (function () {
-    const TOKEN_KEY = 'cairnbin_owner_token_rU3uW5Ze';
+    const TOKEN_KEY = 'cairnbin_owner_token_karmassz';
+    const LEGACY_TOKEN_KEY = 'cairnbin_owner_token_rU3uW5Ze';
+    if (!localStorage.getItem(TOKEN_KEY)) {
+        const legacyToken = localStorage.getItem(LEGACY_TOKEN_KEY);
+        if (legacyToken) localStorage.setItem(TOKEN_KEY, legacyToken);
+    }
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
     const tokenField = document.getElementById('token');
     if (!tokenField) return;
 
@@ -1622,7 +1634,7 @@ document.addEventListener('DOMContentLoaded', initFormValidation);
         const fits = needed <= available;
         header.classList.add(fits ? 'nav-fit' : 'nav-overflow');
         if (fits) {
-            const menu = header.querySelector('.nav-checkbox');
+            const menu = document.getElementById('nav-toggle');
             if (menu) menu.checked = false;
         }
     }

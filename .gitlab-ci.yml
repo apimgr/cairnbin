@@ -666,8 +666,8 @@ docker:build:
         YYMM=$(date +%y%m)
         TAGS="-t $CI_REGISTRY_IMAGE:$VERSION -t $CI_REGISTRY_IMAGE:latest -t $CI_REGISTRY_IMAGE:$YYMM -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
       elif [ "$CI_COMMIT_BRANCH" = "beta" ]; then
-        VERSION="beta-${CI_COMMIT_SHA:0:7}"
-        TAGS="-t $CI_REGISTRY_IMAGE:beta -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
+        VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
+        TAGS="-t $CI_REGISTRY_IMAGE:$VERSION -t $CI_REGISTRY_IMAGE:beta -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
       else
         VERSION="${CI_COMMIT_SHA:0:7}"
         TAGS="-t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
@@ -689,6 +689,10 @@ docker:build:
         --label "org.opencontainers.image.base.name=${PROJECT_NAME}" \
         --label "org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
         --label "org.opencontainers.image.licenses=MIT" \
+        --label "org.opencontainers.image.schema-version=${VERSION}" \
+        --label "org.opencontainers.image.vcs-type=Git" \
+        --label "com.github.containers.toolbox=false" \
+        --label "maintainer=apimgr <git-admin@casjaysdev.pro>" \
         --label "org.opencontainers.image.version=${VERSION}" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
         --label "org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
@@ -701,6 +705,10 @@ docker:build:
         --annotation "manifest:org.opencontainers.image.base.name=${PROJECT_NAME}" \
         --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
+        --annotation "manifest:org.opencontainers.image.schema-version=${VERSION}" \
+        --annotation "manifest:org.opencontainers.image.vcs-type=Git" \
+        --annotation "manifest:com.github.containers.toolbox=false" \
+        --annotation "manifest:maintainer=apimgr <git-admin@casjaysdev.pro>" \
         --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
         --annotation "manifest:org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
@@ -710,6 +718,8 @@ docker:build:
         $TAGS \
         --push \
         .
+      docker pull "$CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
+      sh tests/image_check.sh "$CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
@@ -739,6 +749,7 @@ docker:devel:
       BUILD_EPOCH="$(date -u +%s)"
       BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     - |
+      export VERSION="${CI_COMMIT_SHA:0:7}"
       docker buildx build \
         -f docker/Dockerfile.dev \
         --platform linux/amd64,linux/arm64 \
@@ -751,6 +762,11 @@ docker:devel:
         --label "org.opencontainers.image.base.name=${PROJECT_NAME}" \
         --label "org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
         --label "org.opencontainers.image.licenses=MIT" \
+        --label "org.opencontainers.image.version=${VERSION}" \
+        --label "org.opencontainers.image.schema-version=${VERSION}" \
+        --label "org.opencontainers.image.vcs-type=Git" \
+        --label "com.github.containers.toolbox=false" \
+        --label "maintainer=apimgr <git-admin@casjaysdev.pro>" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
         --label "org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --label "org.opencontainers.image.url=${CI_PROJECT_URL}" \
@@ -762,6 +778,11 @@ docker:devel:
         --annotation "manifest:org.opencontainers.image.base.name=${PROJECT_NAME}" \
         --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
+        --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
+        --annotation "manifest:org.opencontainers.image.schema-version=${VERSION}" \
+        --annotation "manifest:org.opencontainers.image.vcs-type=Git" \
+        --annotation "manifest:com.github.containers.toolbox=false" \
+        --annotation "manifest:maintainer=apimgr <git-admin@casjaysdev.pro>" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
         --annotation "manifest:org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --annotation "manifest:org.opencontainers.image.url=${CI_PROJECT_URL}" \
@@ -770,6 +791,8 @@ docker:devel:
         -t $CI_REGISTRY_IMAGE:devel \
         --push \
         .
+      docker pull "$CI_REGISTRY_IMAGE:devel"
+      sh tests/image_check.sh "$CI_REGISTRY_IMAGE:devel"
   rules:
     - if: $CI_COMMIT_TAG
       when: never

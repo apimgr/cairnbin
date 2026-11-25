@@ -198,11 +198,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> "$FORGEJO_ENV"
-          else
-            echo "VERSION=devel" >> "$FORGEJO_ENV"
-          fi
+          echo "VERSION=$(git rev-parse --short=7 HEAD)" >> "$FORGEJO_ENV"
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> "$FORGEJO_ENV"
           BUILD_EPOCH=$(date -u +%s)
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$FORGEJO_ENV"

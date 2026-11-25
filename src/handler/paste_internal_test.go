@@ -81,7 +81,7 @@ func createMinimalPaste(t *testing.T, db database.DB) string {
 // ─── extractToken ─────────────────────────────────────────────────────────────
 
 func TestExtractToken(t *testing.T) {
-	const ownerCookieName = "cairnbin_owner_token_rU3uW5Ze"
+	const ownerCookieName = "cairnbin_owner_token_karmassz"
 	cases := []struct {
 		name  string
 		setup func(*http.Request)

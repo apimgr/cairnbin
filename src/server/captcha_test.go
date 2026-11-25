@@ -101,6 +101,20 @@ func TestSimpleCaptchaTamperedSignatureRejected(t *testing.T) {
 	}
 }
 
+func TestCleanupExpiredSimpleCaptchaChallenges(t *testing.T) {
+	s := newCaptchaTestServer()
+	s.captchaChallenges = map[string]simpleCaptchaState{
+		"expired": {expires: time.Now().Add(-time.Second)},
+		"active":  {expires: time.Now().Add(time.Minute)},
+	}
+	if removed := s.CleanupExpiredSimpleCaptchaChallenges(); removed != 1 {
+		t.Fatalf("removed %d expired challenges, want 1", removed)
+	}
+	if len(s.captchaChallenges) != 1 {
+		t.Fatalf("remaining challenges = %d, want 1", len(s.captchaChallenges))
+	}
+}
+
 func TestSimpleCaptchaExpired(t *testing.T) {
 	s := newCaptchaTestServer()
 	// Forge an already-expired payload signed with the real secret.

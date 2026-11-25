@@ -1,5 +1,7 @@
 package swagger
 
+import "strings"
+
 // Route describes a single API operation for the generated OpenAPI spec.
 type Route struct {
 	Method      string
@@ -94,7 +96,7 @@ func Routes(apiVersion string) []Route {
 		},
 	}
 
-	return []Route{
+	routes := []Route{
 		{
 			Method:      "GET",
 			Path:        apiBase + "/pastes",
@@ -612,4 +614,137 @@ func Routes(apiVersion string) []Route {
 			},
 		},
 	}
+	return mergeRouteAnnotations(routes, projectRouteAnnotations(apiVersion))
+}
+
+func projectRouteAnnotations(apiVersion string) []Route {
+	apiBase := "/api/" + apiVersion
+	definitions := []struct {
+		method, path, summary, description string
+	}{
+		{"GET", "/api", "API discovery", "Returns the service name, version, and current API base URL."},
+		{"GET", apiBase, "Versioned API discovery", "Returns service metadata for this API version."},
+		{"GET", apiBase + "/server/auth/check", "Check token", "Identifies the presented operator or owner token without returning it or updating its activity."},
+		{"GET", apiBase + "/server/contact", "Contact metadata", "Returns public contact-form metadata and available verification options."},
+		{"POST", apiBase + "/server/contact", "Submit contact message", "Submits a contact message after configured anti-spam verification."},
+		{"POST", apiBase + "/server/reports/{name}", "Submit report", "Submits a named security or abuse report and returns an acknowledgement."},
+		{"GET", apiBase + "/server/about", "About page data", "Returns public project and operator-supplied about-page data."},
+		{"GET", apiBase + "/server/dpo", "Data protection contact", "Returns the public data-protection contact details."},
+		{"GET", apiBase + "/server/help", "Help content", "Returns public help content."},
+		{"GET", apiBase + "/server/help/mcp", "MCP help", "Returns MCP connection and usage help."},
+		{"GET", apiBase + "/server/privacy", "Privacy information", "Returns the public privacy statement."},
+		{"GET", apiBase + "/server/security", "Security information", "Returns public security contact and disclosure information."},
+		{"GET", apiBase + "/server/security/policy", "Security policy", "Returns the public security policy."},
+		{"GET", apiBase + "/server/security/thanks", "Security acknowledgements", "Returns public security acknowledgements."},
+		{"GET", apiBase + "/server/terms", "Terms of service", "Returns the public terms of service."},
+		{"GET", apiBase + "/server/graphql", "GraphQL query", "Executes a read-only GraphQL query; POST is available for queries with variables."},
+		{"POST", apiBase + "/server/mcp", "MCP endpoint", "Accepts a Streamable HTTP MCP request authenticated with a bearer token."},
+		{"GET", apiBase + "/server/preferences", "Read preferences", "Returns the visitor's current preferences."},
+		{"POST", apiBase + "/server/preferences", "Update preferences", "Applies a partial JSON update to visitor preferences."},
+		{"GET", apiBase + "/server/preferences/sync", "Export preferences", "Returns preferences and cross-device import link data."},
+		{"GET", apiBase + "/server/preferences/sync/import", "Import preferences", "Applies preferences encoded in the supplied import code."},
+		{"GET", apiBase + "/server/preferences/tokens", "List owner tokens", "Returns the owner's token list with token values masked."},
+		{"POST", apiBase + "/server/preferences/tokens", "Create linked token", "Creates a linked owner token."},
+		{"POST", apiBase + "/server/preferences/tokens/primary/reveal", "Reveal primary token", "Reveals the primary owner token after the one-time confirmation flow."},
+		{"POST", apiBase + "/server/preferences/tokens/primary/rotate", "Rotate primary token", "Rotates the primary owner token."},
+		{"PATCH", apiBase + "/server/preferences/tokens/{id}", "Update linked token", "Updates linked-token metadata and permissions."},
+		{"DELETE", apiBase + "/server/preferences/tokens/{id}", "Revoke linked token", "Revokes a linked owner token."},
+		{"POST", apiBase + "/server/preferences/tokens/{id}/reveal", "Reveal linked token", "Reveals a linked owner token after the one-time confirmation flow."},
+		{"POST", apiBase + "/server/preferences/tokens/{id}/rotate", "Rotate linked token", "Rotates a linked owner token."},
+		{"GET", apiBase + "/schedulers", "List schedulers", "Returns registered background schedulers and their current status."},
+		{"GET", apiBase + "/schedulers/{id}", "Get scheduler", "Returns configuration and current status for one scheduler."},
+		{"GET", apiBase + "/schedulers/{id}/history", "Get scheduler history", "Returns recent execution history for one scheduler."},
+		{"POST", apiBase + "/schedulers/{id}/run", "Run scheduler", "Triggers one scheduler run; requires the operator bearer token."},
+		{"POST", apiBase + "/schedulers/{id}/enable", "Enable scheduler", "Enables one scheduler; requires the operator bearer token."},
+		{"POST", apiBase + "/schedulers/{id}/disable", "Disable scheduler", "Disables one scheduler; requires the operator bearer token."},
+		{"GET", "/api/autodiscover", "Client discovery", "Returns service URLs, optional overlay addresses, and client update metadata."},
+		{"GET", "/api/swagger", "OpenAPI specification alias", "Returns the current version's OpenAPI JSON specification."},
+		{"POST", "/api/graphql", "GraphQL alias", "Executes a GraphQL request against the current API version."},
+		{"POST", "/api/mcp", "MCP alias", "Accepts an MCP request using the current API version and bearer-token authentication."},
+		{"POST", "/mcp", "MCP root alias", "Accepts an MCP request using the current API version and bearer-token authentication."},
+		{"GET", "/api/healthz", "Health check alias", "Returns the current server health document."},
+		{"GET", "/api/metrics", "Prometheus metrics alias", "Returns Prometheus metrics when the corresponding bearer token is supplied."},
+		{"GET", "/api/metrics/{service}", "Metrics service alias", "Returns the selected metrics service when its bearer token is supplied."},
+		{"GET", "/server/metrics", "Prometheus metrics", "Returns Prometheus metrics when the corresponding bearer token is supplied."},
+		{"GET", "/server/metrics/{service}", "Metrics service", "Returns the selected metrics service when its bearer token is supplied."},
+		{"GET", "/metrics", "Root Prometheus metrics alias", "Returns Prometheus metrics when the corresponding bearer token is supplied."},
+		{"GET", "/metrics/{service}", "Root metrics service alias", "Returns the selected metrics service when its bearer token is supplied."},
+		{"GET", apiBase + "/server/metrics", "Versioned Prometheus metrics", "Returns Prometheus metrics when the corresponding bearer token is supplied."},
+		{"GET", apiBase + "/server/metrics/{service}", "Versioned metrics service", "Returns the selected metrics service when its bearer token is supplied."},
+		{"POST", "/api/api_post.php", "Pastebin-compatible create", "Creates a paste using the pastebin.com public API form protocol."},
+		{"GET", "/api/api_raw.php", "Pastebin-compatible raw paste", "Returns raw paste content using the pastebin.com API query protocol."},
+		{"POST", "/api/api_login.php", "Pastebin-compatible login stub", "Returns the anonymous login response for pastebin.com protocol clients."},
+		{"POST", "/api/new", "Lenpaste-compatible create", "Creates a paste using the lenpaste-compatible form protocol."},
+		{"GET", "/api/get", "Lenpaste-compatible retrieve", "Returns a paste using the lenpaste-compatible JSON response."},
+		{"GET", "/api/remove", "Lenpaste-compatible remove", "Removes a paste using its compat delete token."},
+		{"DELETE", "/api/remove", "Lenpaste-compatible remove", "Removes a paste using its compat delete token."},
+		{"GET", "/api/list", "Lenpaste-compatible list", "Lists pastes using the lenpaste-compatible response format."},
+		{"POST", apiBase + "/new", "Versioned lenpaste-compatible create", "Creates a paste using the versioned lenpaste-compatible form protocol."},
+		{"GET", apiBase + "/get", "Versioned lenpaste-compatible retrieve", "Returns a paste using the versioned lenpaste-compatible JSON response."},
+		{"GET", apiBase + "/getServerInfo", "Lenpaste-compatible server info", "Returns server metadata using the lenpaste-compatible response format."},
+		{"POST", apiBase + "/pasta", "Microbin-compatible create", "Creates a paste using the microbin-compatible request protocol."},
+		{"GET", apiBase + "/pasta", "Microbin-compatible list", "Lists pastes using the microbin-compatible response format."},
+		{"GET", apiBase + "/pasta/{id}", "Microbin-compatible retrieve", "Returns a paste using the microbin-compatible response format."},
+		{"DELETE", apiBase + "/pasta/{id}", "Microbin-compatible delete", "Deletes a paste using the microbin-compatible delete token."},
+		{"POST", "/upload", "Microbin-compatible upload", "Creates a paste using the microbin-compatible upload form."},
+		{"GET", "/upload/{id}", "Microbin-compatible view", "Renders a microbin-compatible paste page."},
+		{"POST", "/api/create", "Stikked-compatible create", "Creates a paste using the stikked-compatible form protocol."},
+		{"GET", "/api/paste/{id}", "Stikked-compatible retrieve", "Returns a paste using the stikked-compatible JSON response."},
+		{"GET", "/view/{id}", "Stikked-compatible view", "Renders a stikked-compatible paste page."},
+		{"GET", "/view/raw/{id}", "Stikked-compatible raw paste", "Returns the literal paste content."},
+		{"POST", "/documents", "Hastebin-compatible create", "Creates a paste from the raw request body and returns its key."},
+		{"GET", "/documents/{id}", "Hastebin-compatible retrieve", "Returns paste content and key using the hastebin-compatible JSON response."},
+		{"GET", "/raw/{id}", "Hastebin-compatible raw paste", "Returns the literal paste content."},
+		{"POST", "/api", "Dpaste-compatible create", "Creates a paste using the dpaste-compatible form protocol."},
+		{"POST", "/api/", "Dpaste-compatible trailing-slash create", "Creates a paste using the dpaste-compatible form protocol."},
+		{"POST", "/api/v2", "Dpaste v2-compatible create", "Creates a paste using the dpaste v2-compatible form protocol."},
+		{"POST", "/api/v2/", "Dpaste v2-compatible trailing-slash create", "Creates a paste using the dpaste v2-compatible form protocol."},
+		{"POST", "/", "Curl-upload create", "Creates a paste using multipart file, sprunge, ix.io, or raw-body input."},
+	}
+	routes := make([]Route, 0, len(definitions))
+	for _, definition := range definitions {
+		route := Route{
+			Method:      definition.method,
+			Path:        definition.path,
+			Tag:         "compatibility",
+			Summary:     definition.summary,
+			Description: definition.description,
+			Responses: map[int]ResponseSpec{
+				200: {Description: "Successful response"},
+				400: {Description: "Invalid request"},
+				404: {Description: "Resource not found"},
+			},
+		}
+		if strings.Contains(definition.path, "/server/") || strings.HasPrefix(definition.path, "/api/") || strings.HasPrefix(definition.path, apiBase) {
+			route.Tag = "server"
+		}
+		for _, part := range strings.Split(definition.path, "/") {
+			if len(part) > 2 && part[0] == '{' && part[len(part)-1] == '}' {
+				name := part[1 : len(part)-1]
+				route.Params = append(route.Params, Param{
+					Name: name, In: "path", Required: true,
+					Description: name + " path parameter",
+					Schema:      map[string]interface{}{"type": "string"},
+				})
+			}
+		}
+		routes = append(routes, route)
+	}
+	return routes
+}
+
+func mergeRouteAnnotations(existing, generated []Route) []Route {
+	seen := make(map[string]struct{}, len(existing))
+	for _, route := range existing {
+		seen[route.Method+" "+route.Path] = struct{}{}
+	}
+	for _, route := range generated {
+		key := route.Method + " " + route.Path
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		existing = append(existing, route)
+	}
+	return existing
 }

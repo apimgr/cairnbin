@@ -38,6 +38,7 @@ import (
 
 	"github.com/apimgr/cairnbin/src/audit"
 	"github.com/apimgr/cairnbin/src/cache"
+	"github.com/apimgr/cairnbin/src/common/browsercookie"
 	"github.com/apimgr/cairnbin/src/common/buildinfo"
 	"github.com/apimgr/cairnbin/src/common/email"
 	"github.com/apimgr/cairnbin/src/common/httputil"
@@ -1208,8 +1209,7 @@ const userDateLayout = "January 2, 2006"
 
 // ownerTokenCookieName is the project-unique browser storage name for the
 // resource-owner token cookie (and, in app.js, the matching localStorage key).
-// Per AI.md PART 11 "Naming": both MUST share this exact {project_name}_owner_token_XXXXXX
-// name — fixed suffix recorded in IDEA.md (`owner_token: cairnbin_owner_token_rU3uW5Ze`).
+// Per AI.md PART 11 "Naming": both MUST share the project-unique name recorded in IDEA.md.
 const ownerTokenCookieName = ownerCookieName
 
 // fmtUserTime renders t in the canonical user-facing timestamp format in the
@@ -2036,10 +2036,11 @@ func (s *Server) setupRoutes() {
 		r.Get("/server/preferences/sync", s.handlePreferencesExport)
 		r.Get("/server/preferences/sync/import", s.handlePreferencesImport)
 		r.Get("/server/swagger", s.swaggerHandler.ServeSpec)
-		r.Handle("/server/mcp", s.mcpHandler)
+		r.Post("/server/mcp", s.mcpHandler.ServeHTTP)
 		r.Post("/server/reports/{name}", s.handleReports)
 		// /api/v1/server/graphql — versioned GraphQL endpoint (PART 14)
-		r.Handle("/server/graphql", s.graphqlHandler)
+		r.Get("/server/graphql", s.graphqlHandler.ServeHTTP)
+		r.Post("/server/graphql", s.graphqlHandler.ServeHTTP)
 
 		// Scheduler API (PART 18)
 		// Read-only status routes are public. Mutating routes require server.token.
@@ -2062,10 +2063,10 @@ func (s *Server) setupRoutes() {
 
 	// Unversioned aliases — same handler as versioned, served directly (no redirect) per PART 14.
 	r.Get("/api/swagger", s.swaggerHandler.ServeSpec)
-	r.Handle("/api/graphql", s.graphqlHandler)
+	r.Post("/api/graphql", s.graphqlHandler.ServeHTTP)
 	// MCP: the same handler at all three paths, never a redirect (PART 11).
-	r.Handle("/api/mcp", s.mcpHandler)
-	r.Handle("/mcp", s.mcpHandler)
+	r.Post("/api/mcp", s.mcpHandler.ServeHTTP)
+	r.Post("/mcp", s.mcpHandler.ServeHTTP)
 	r.Get("/api/healthz", s.maybeHealthRateLimit(s.handleHealthzAPI))
 	// PART 20: unversioned machine-friendly metrics alias, same handlers.
 	if s.cfg.Server.Metrics.Enabled {
@@ -2712,16 +2713,16 @@ func (s *Server) mountMetricsServices(r chi.Router, base string, withBare bool) 
 	}
 
 	if withBare {
-		r.Handle(base, handlerFor(metric.ServicePrometheus))
+		r.Method(http.MethodGet, base, handlerFor(metric.ServicePrometheus))
 	}
 
-	r.Handle(base+"/prometheus", handlerFor(metric.ServicePrometheus))
-	r.Handle(base+"/grafana", handlerFor(metric.ServiceGrafana))
-	r.Handle(base+"/loki", handlerFor(metric.ServiceLoki))
+	r.Method(http.MethodGet, base+"/prometheus", handlerFor(metric.ServicePrometheus))
+	r.Method(http.MethodGet, base+"/grafana", handlerFor(metric.ServiceGrafana))
+	r.Method(http.MethodGet, base+"/loki", handlerFor(metric.ServiceLoki))
 
 	// Catch-all for the service segment so an unknown name 404s with the
 	// canonical PART 14 envelope instead of chi's bare-text default.
-	r.HandleFunc(base+"/{service}", func(w http.ResponseWriter, r *http.Request) {
+	r.Get(base+"/{service}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{
 			"ok": false, "error": "NOT_FOUND",
 			"message": i18n.Translate(i18n.LangFromRequest(r), "errors.not_found"),
@@ -3664,7 +3665,13 @@ func (s *Server) buildHealthResponse() HealthResponse {
 		Datasets:  s.datasetChecks.Snapshot(),
 	}
 
-	if err := s.db.Ping(); err != nil {
+	var databaseErr error
+	if probe, ok := s.db.(database.ConnectionProbe); ok {
+		databaseErr = probe.CheckConnection(context.Background())
+	} else {
+		databaseErr = s.db.Ping()
+	}
+	if databaseErr != nil {
 		checks.Database = "error"
 	}
 
@@ -4693,9 +4700,7 @@ func (s *Server) handleRemoveSubmit(w http.ResponseWriter, r *http.Request) {
 	// API routes (/api/...) never reach this handler, so this is always a
 	// browser-context form POST — cookie use is safe here.
 	if token == "" {
-		if c, err := r.Cookie(ownerTokenCookieName); err == nil && c.Value != "" {
-			token = c.Value
-		}
+		token = browsercookie.OwnerTokenValue(r)
 	}
 	if token == "" {
 		s.renderTemplate(w, r, "remove.html", map[string]interface{}{
@@ -6685,17 +6690,16 @@ func (s *Server) injectOwnerTokenData(r *http.Request, data map[string]interface
 	data["HasOwnerToken"] = false
 	data["OwnedResourceURL"] = ""
 	data["ResourceLabel"] = ""
-	c, err := r.Cookie(ownerTokenCookieName)
-	if err != nil || c.Value == "" {
-		return
+	for _, c := range s.ownerTokenCookies(r) {
+		tokenHash := sha256.Sum256([]byte(c.Value))
+		resourceID, err := s.db.FindResourceIDByToken(tokenHash, "paste")
+		if err == nil && resourceID != "" {
+			data["HasOwnerToken"] = true
+			data["OwnedResourceURL"] = s.assetPrefix(r) + "/" + resourceID
+			data["ResourceLabel"] = "paste"
+			return
+		}
 	}
-	tokenHash := sha256.Sum256([]byte(c.Value))
-	resourceID, err := s.db.FindResourceIDByToken(tokenHash, "paste")
-	if err != nil || resourceID == "" {
-		return
-	}
-	data["HasOwnerToken"] = true
-	data["OwnedResourceURL"] = s.assetPrefix(r) + "/" + resourceID
 	// The dropdown's visible link text uses the full pre-translated
 	// nav.manage_my_paste sentence (grammar/word-order differs too much
 	// across all supported languages to safely concatenate "Manage my"

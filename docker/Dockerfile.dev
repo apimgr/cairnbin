@@ -50,7 +50,10 @@ RUN apk upgrade --no-cache && \
     bash \
     shadow \
     tini \
-    tor
+    tor \
+    i2pd \
+    tzdata \
+    ca-certificates
 
 COPY --from=builder /app/binary/ /usr/local/bin/
 COPY docker/rootfs/ /

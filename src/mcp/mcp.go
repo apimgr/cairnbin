@@ -104,6 +104,7 @@ func excluded(r swagger.Route, apiBase string) bool {
 	case strings.HasPrefix(rest, "/server/swagger"),
 		strings.HasPrefix(rest, "/server/graphql"),
 		strings.HasPrefix(rest, "/server/mcp"),
+		strings.HasPrefix(rest, "/server/help/mcp"),
 		strings.HasPrefix(rest, "/server/preferences"):
 		return true
 	}

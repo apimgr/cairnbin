@@ -1734,6 +1734,10 @@
         "subject": "Wenig Speicherplatz - {app_name}",
         "body": "WENIG SPEICHERPLATZ\n\nVon: {app_name} ({fqdn})\nZeit: {timestamp}\n\nDas Dateisystem mit {path} verwendet {used_percent} Prozent seines Speicherplatzes.\nWarnschwelle: {threshold_percent} Prozent\nFreie Bytes: {free_bytes}\n\n{app_url}"
       },
+      "database_error": {
+        "subject": "Datenbankverbindungsproblem - {app_name}",
+        "body": "DATENBANKVERBINDUNGSPROBLEM\n\nVon: {app_name} ({fqdn})\nZeit: {timestamp}\n\nDie Datenbankverbindung schlägt seit {since} wiederholt fehl.\nLetzter Fehler: {error}\n\n{app_url}"
+      },
       "server_started": {
         "subject": "Server gestartet - {app_name}",
         "body": "SERVER GESTARTET\n\nVon: {app_name} ({fqdn})\nZeit: {timestamp}\n\nHost: {hostname}\nVersion: {version}\nModus: {mode}\n\n{app_url}"

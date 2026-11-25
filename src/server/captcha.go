@@ -85,6 +85,20 @@ func (s *Server) validateSimpleCaptcha(token, answer string) bool {
 	return subtle.ConstantTimeCompare(challenge.answerHash[:], got[:]) == 1
 }
 
+func (s *Server) CleanupExpiredSimpleCaptchaChallenges() int {
+	now := time.Now()
+	s.captchaMu.Lock()
+	defer s.captchaMu.Unlock()
+	removed := 0
+	for token, challenge := range s.captchaChallenges {
+		if !challenge.expires.After(now) {
+			delete(s.captchaChallenges, token)
+			removed++
+		}
+	}
+	return removed
+}
+
 // signCaptchaPayload signs an opaque captcha payload with the server csrfSecret
 // and returns "base64(payload).base64(hmac)".
 func (s *Server) signCaptchaPayload(payload string) string {

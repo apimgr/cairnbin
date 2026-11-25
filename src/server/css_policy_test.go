@@ -35,3 +35,28 @@ func TestCSSPolicy(t *testing.T) {
 		}
 	}
 }
+
+func TestPageShellContainerWidthsUseSharedTokens(t *testing.T) {
+	components, err := os.ReadFile("static/css/components.css.tmpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := os.ReadFile("static/css/public.css.tmpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, declaration := range []string{
+		".container-sm { max-width: 40rem; }",
+		".container-md { max-width: 56rem; }",
+		".container-lg { max-width: 72rem; }",
+	} {
+		if !strings.Contains(string(components), declaration) {
+			t.Errorf("shared container stylesheet is missing %q", declaration)
+		}
+	}
+	for _, class := range []string{".container-sm", ".container-md", ".container-lg"} {
+		if regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(class) + `\s*\{`).Match(public) {
+			t.Errorf("public stylesheet overrides shared width modifier %s", class)
+		}
+	}
+}

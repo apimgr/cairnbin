@@ -1734,6 +1734,10 @@
         "subject": "磁盘空间不足 - {app_name}",
         "body": "磁盘空间不足\n\n来自：{app_name}（{fqdn}）\n时间：{timestamp}\n\n包含 {path} 的文件系统已使用 {used_percent} 百分比。\n警告阈值：{threshold_percent} 百分比\n可用字节数：{free_bytes}\n\n{app_url}"
       },
+      "database_error": {
+        "subject": "数据库连接问题 - {app_name}",
+        "body": "数据库连接问题\n\n来自：{app_name}（{fqdn}）\n时间：{timestamp}\n\n自 {since} 起数据库连接持续失败。\n最近错误：{error}\n\n{app_url}"
+      },
       "server_started": {
         "subject": "服务器已启动 - {app_name}",
         "body": "服务器已启动\n\n来自：{app_name}（{fqdn}）\n时间：{timestamp}\n\n主机：{hostname}\n版本：{version}\n模式：{mode}\n\n{app_url}"

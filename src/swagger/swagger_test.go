@@ -302,6 +302,37 @@ func TestServeSpec_OperationIDPresent(t *testing.T) {
 	}
 }
 
+func TestServeSpec_OperationIDsAreUnique(t *testing.T) {
+	h := swagger.New("API", "1.0.0", "https://example.com", "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/swagger", nil)
+	rec := httptest.NewRecorder()
+	h.ServeSpec(rec, req)
+
+	var spec map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &spec); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	paths := spec["paths"].(map[string]interface{})
+	seen := make(map[string]string)
+	for path, item := range paths {
+		pathObj, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for method, operation := range pathObj {
+			op, ok := operation.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			id, _ := op["operationId"].(string)
+			if prior, exists := seen[id]; exists {
+				t.Errorf("operationId %q is shared by %s and %s %s", id, prior, method, path)
+			}
+			seen[id] = method + " " + path
+		}
+	}
+}
+
 // TestServeSpec_KnownOperationID checks that the GET /api/v1/pastes route
 // generates the expected operationId string.
 func TestServeSpec_KnownOperationID(t *testing.T) {

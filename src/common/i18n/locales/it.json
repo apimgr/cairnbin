@@ -1734,6 +1734,10 @@
         "subject": "Spazio su disco insufficiente - {app_name}",
         "body": "SPAZIO SU DISCO INSUFFICIENTE\n\nDa: {app_name} ({fqdn})\nOra: {timestamp}\n\nIl filesystem che contiene {path} utilizza il {used_percent} percento dello spazio.\nSoglia di avviso: {threshold_percent} percento\nByte liberi: {free_bytes}\n\n{app_url}"
       },
+      "database_error": {
+        "subject": "Problema di connessione al database - {app_name}",
+        "body": "PROBLEMA DI CONNESSIONE AL DATABASE\n\nDa: {app_name} ({fqdn})\nOra: {timestamp}\n\nLa connessione al database fallisce ripetutamente da {since}.\nUltimo errore: {error}\n\n{app_url}"
+      },
       "server_started": {
         "subject": "Server avviato - {app_name}",
         "body": "SERVER AVVIATO\n\nDa: {app_name} ({fqdn})\nOra: {timestamp}\n\nHost: {hostname}\nVersione: {version}\nModalità: {mode}\n\n{app_url}"

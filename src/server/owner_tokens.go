@@ -16,12 +16,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/common/browsercookie"
 	"github.com/apimgr/cairnbin/src/common/secretbox"
 	"github.com/apimgr/cairnbin/src/database"
 	"github.com/go-chi/chi/v5"
 )
 
-const ownerCookieName = "cairnbin_owner_token_rU3uW5Ze"
+const ownerCookieName = browsercookie.OwnerTokenName
 const tokenViewCookieName = "cairnbin_token_view"
 
 func (s *Server) setTokenViewCookie(w http.ResponseWriter, target string) {
@@ -59,8 +60,13 @@ func (s *Server) ownerCredential(r *http.Request) (*database.APITokenRecord, err
 		if strings.HasPrefix(auth, "Bearer ") {
 			raw = strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
 		}
-	} else if c, err := r.Cookie(ownerCookieName); err == nil {
-		raw = c.Value
+	} else {
+		for _, cookie := range s.ownerTokenCookies(r) {
+			rec, err := db.GetOwnerTokenByHash(sha256.Sum256([]byte(cookie.Value)))
+			if err == nil {
+				return rec, nil
+			}
+		}
 	}
 	if raw == "" {
 		return nil, fmt.Errorf("unauthorized")
@@ -77,15 +83,13 @@ func (s *Server) requireOwnerForPage(r *http.Request) (*database.APITokenRecord,
 	if !ok {
 		return nil, nil, false
 	}
-	c, err := r.Cookie(ownerCookieName)
-	if err != nil || c.Value == "" {
-		return nil, db, false
+	for _, c := range s.ownerTokenCookies(r) {
+		rec, err := db.GetOwnerTokenByHash(sha256.Sum256([]byte(c.Value)))
+		if err == nil && rec.Kind == "primary" {
+			return rec, db, true
+		}
 	}
-	rec, err := db.GetOwnerTokenByHash(sha256.Sum256([]byte(c.Value)))
-	if err != nil || rec.Kind != "primary" {
-		return nil, db, false
-	}
-	return rec, db, true
+	return nil, db, false
 }
 
 func (s *Server) requirePrimaryOwner(w http.ResponseWriter, r *http.Request) (*database.APITokenRecord, database.OwnerDB, bool) {
@@ -271,6 +275,34 @@ func (s *Server) setOwnerCookie(w http.ResponseWriter, r *http.Request, token st
 		}
 	}
 	http.SetCookie(w, &http.Cookie{Name: ownerCookieName, Value: token, Path: "/", MaxAge: maxAge, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: browsercookie.LegacyOwnerTokenName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+}
+
+func (s *Server) ownerTokenCookies(r *http.Request) []*http.Cookie {
+	cookies := browsercookie.OwnerTokenCookies(r)
+	if s.ownerCookieMigrationActive() {
+		return cookies
+	}
+	currentOnly := cookies[:0]
+	for _, cookie := range cookies {
+		if cookie.Name != browsercookie.LegacyOwnerTokenName {
+			currentOnly = append(currentOnly, cookie)
+		}
+	}
+	return currentOnly
+}
+
+func (s *Server) ownerCookieMigrationActive() bool {
+	return s.startTime.IsZero() || time.Now().Before(s.startTime.Add(s.ownerCookieMaxAge()))
+}
+
+func (s *Server) ownerCookieMaxAge() time.Duration {
+	if age := s.liveCfg().Server.Tokens.CookieMaxAge; age != "" {
+		if duration, err := parseOwnerCookieAge(age); err == nil && duration > 0 {
+			return duration
+		}
+	}
+	return 365 * 24 * time.Hour
 }
 
 func parseOwnerCookieAge(value string) (time.Duration, error) {
@@ -692,13 +724,40 @@ func (s *Server) tokenActionSuccess(w http.ResponseWriter, r *http.Request, data
 func (s *Server) ownerCookieMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			if c, err := r.Cookie(ownerCookieName); err == nil && c.Value != "" {
-				if db, ok := s.ownerDB(); ok {
-					rec, lookupErr := db.GetOwnerTokenByHash(sha256.Sum256([]byte(c.Value)))
-					if lookupErr == nil && rec.Kind == "primary" {
-						s.setOwnerCookie(w, r, c.Value)
+			cookies := s.ownerTokenCookies(r)
+			if !s.ownerCookieMigrationActive() {
+				if legacy, err := r.Cookie(browsercookie.LegacyOwnerTokenName); err == nil && legacy.Value != "" {
+					http.SetCookie(w, &http.Cookie{Name: browsercookie.LegacyOwnerTokenName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+					filtered := r.Clone(r.Context())
+					var retained []string
+					for _, cookie := range r.Cookies() {
+						if cookie.Name != browsercookie.LegacyOwnerTokenName {
+							retained = append(retained, cookie.Name+"="+cookie.Value)
+						}
+					}
+					if len(retained) == 0 {
+						filtered.Header.Del("Cookie")
 					} else {
-						http.SetCookie(w, &http.Cookie{Name: ownerCookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+						filtered.Header.Set("Cookie", strings.Join(retained, "; "))
+					}
+					r = filtered
+				}
+			}
+			if len(cookies) > 0 {
+				valid := false
+				if db, ok := s.ownerDB(); ok {
+					for _, c := range cookies {
+						rec, lookupErr := db.GetOwnerTokenByHash(sha256.Sum256([]byte(c.Value)))
+						if lookupErr == nil && rec.Kind == "primary" {
+							s.setOwnerCookie(w, r, c.Value)
+							valid = true
+							break
+						}
+					}
+				}
+				if !valid {
+					for _, c := range cookies {
+						http.SetCookie(w, &http.Cookie{Name: c.Name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
 					}
 				}
 			}

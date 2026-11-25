@@ -523,32 +523,55 @@ func (m *pgpManager) delete() error {
 
 // ── keyserver publishing ──────────────────────────────────────────────────────
 
-// publishAll submits pubArmored to every configured keyserver with exponential
-// backoff, then persists per-keyserver publish state to disk and the DB.
+// publishAll starts one attempt per configured keyserver and persists retry state
+// for the running server's keyserver_retry scheduler task.
 func (m *pgpManager) publishAll(pubArmored string) {
 	keyservers := m.cfg.Web.Security.Keyservers
 	if len(keyservers) == 0 {
 		fmt.Println(maintenanceText("pgp_no_keyservers"))
 		return
 	}
+	meta, err := m.db.GetSecurityKeypair()
+	if err != nil || meta == nil || meta.Fingerprint == "" {
+		fmt.Fprintln(os.Stderr, maintenanceText("pgp_publish_failed", "server", "keypair metadata unavailable"))
+		return
+	}
+	state, err := pgp.LoadKeyserverState(m.keyserversStatePath(), meta.Fingerprint)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pgp: read keyserver state: %v\n", err)
+		state = pgp.KeyserverStateFile{Fingerprint: meta.Fingerprint}
+	}
 	var published []database.KeyserverPublish
+	now := time.Now().UTC()
 	for _, ks := range keyservers {
 		ks = strings.TrimSpace(ks)
 		if ks == "" {
 			continue
 		}
-		if submitKeyserver(ks, pubArmored) {
+		item := maintenanceKeyserverStateFor(&state, ks)
+		if item.Status == "published" || item.Status == "final" || (item.NextAttempt != nil && item.NextAttempt.After(now)) {
+			continue
+		}
+		if err := submitKeyserver(ks, pubArmored); err == nil {
 			fmt.Println(maintenanceText("pgp_publish_success", "server", ks))
-			published = append(published, database.KeyserverPublish{URL: ks, PublishedAt: time.Now()})
+			publishedAt := now
+			item.Status = "published"
+			item.PublishedAt = &publishedAt
+			item.NextAttempt = nil
+			item.LastError = ""
+			published = append(published, database.KeyserverPublish{URL: ks, PublishedAt: publishedAt})
 		} else {
 			fmt.Fprintln(os.Stderr, maintenanceText("pgp_publish_failed", "server", ks))
+			item.RecordFailure(now, err, pgp.KeyserverErrorRetryable(err))
+			if item.NextAttempt != nil {
+				fmt.Fprintf(os.Stderr, "pgp: retry scheduled for %s at %s\n", ks, item.NextAttempt.UTC().Format(time.RFC3339))
+			}
 		}
 	}
-	if len(published) == 0 {
-		return
+	if err := pgp.WriteKeyserverState(m.keyserversStatePath(), state); err != nil {
+		fmt.Fprintf(os.Stderr, "pgp: write keyserver state: %v\n", err)
 	}
-	m.writeKeyserversState(published)
-	if meta, err := m.db.GetSecurityKeypair(); err == nil && meta != nil {
+	if len(published) > 0 {
 		meta.KeyserversPublished = mergeKeyservers(meta.KeyserversPublished, published)
 		if err := m.db.UpsertSecurityKeypair(meta); err != nil {
 			fmt.Fprintln(os.Stderr, maintenanceText("service_warning", "error", err.Error()))
@@ -556,34 +579,18 @@ func (m *pgpManager) publishAll(pubArmored string) {
 	}
 }
 
-// submitKeyserver POSTs to one keyserver, retrying with exponential backoff
-// (1s, 2s, 4s, 8s, 16s). Returns true on success.
-func submitKeyserver(keyserver, pubArmored string) bool {
-	delay := time.Second
-	for attempt := 0; attempt < 5; attempt++ {
-		if attempt > 0 {
-			time.Sleep(delay)
-			delay *= 2
-		}
-		if err := pgp.PostKey(keyserver, pubArmored); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %s (attempt %d)\n", maintenanceText("pgp_publish_failed", "server", keyserver), err.Error(), attempt+1)
-			continue
-		}
-		return true
-	}
-	return false
+func submitKeyserver(keyserver, pubArmored string) error {
+	return pgp.PostKey(keyserver, pubArmored)
 }
 
-// writeKeyserversState persists the keyserver publish state to disk (0o600).
-func (m *pgpManager) writeKeyserversState(published []database.KeyserverPublish) {
-	b, err := json.MarshalIndent(published, "", "  ")
-	if err != nil {
-		return
+func maintenanceKeyserverStateFor(state *pgp.KeyserverStateFile, keyserver string) *pgp.KeyserverState {
+	for i := range state.Keyservers {
+		if state.Keyservers[i].URL == keyserver {
+			return &state.Keyservers[i]
+		}
 	}
-	if err := os.MkdirAll(m.securityDir(), 0o700); err != nil {
-		return
-	}
-	_ = os.WriteFile(m.keyserversStatePath(), b, 0o600)
+	state.Keyservers = append(state.Keyservers, pgp.KeyserverState{URL: keyserver, Status: "pending"})
+	return &state.Keyservers[len(state.Keyservers)-1]
 }
 
 // mergeKeyservers returns prior publishes with each keyserver's timestamp

@@ -27,11 +27,7 @@ jobs:
       - name: Compute version
         id: set
         run: |
-          if [ -f release.txt ]; then
-            echo "version=$(cat release.txt)" >> "$GITEA_OUTPUT"
-          else
-            echo "version=$(date -u +%Y%m%d%H%M%S)-beta" >> "$GITEA_OUTPUT"
-          fi
+          echo "version=$(date -u +%Y%m%d%H%M%S)-beta" >> "$GITEA_OUTPUT"
 
   build:
     needs: [version]

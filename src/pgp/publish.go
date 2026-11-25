@@ -3,6 +3,7 @@ package pgp
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,6 +12,22 @@ import (
 
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
+
+type KeyserverHTTPError struct {
+	StatusCode int
+}
+
+func (e *KeyserverHTTPError) Error() string {
+	return fmt.Sprintf("keyserver returned %d", e.StatusCode)
+}
+
+func KeyserverErrorRetryable(err error) bool {
+	var responseErr *KeyserverHTTPError
+	if errors.As(err, &responseErr) {
+		return responseErr.StatusCode == http.StatusTooManyRequests || responseErr.StatusCode >= 500
+	}
+	return err != nil
+}
 
 // PostKey submits one ASCII-armored public key to a single keyserver (AI.md
 // 14183). keys.openpgp.org uses the VKS JSON API; classic HKP servers accept a
@@ -38,8 +55,8 @@ func PostKeyWithClient(keyserver, pubArmored string, client *http.Client) error 
 			return err
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode >= 300 {
-			return fmt.Errorf("keyserver returned %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusOK {
+			return &KeyserverHTTPError{StatusCode: resp.StatusCode}
 		}
 		return nil
 	}
@@ -49,8 +66,8 @@ func PostKeyWithClient(keyserver, pubArmored string, client *http.Client) error 
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("keyserver returned %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return &KeyserverHTTPError{StatusCode: resp.StatusCode}
 	}
 	return nil
 }
