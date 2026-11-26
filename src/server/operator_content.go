@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/apimgr/cairnbin/src/common/i18n"
@@ -95,6 +96,38 @@ func localizedBrandingBody(value interface{}, lang string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func localizedHelpContent(value interface{}, lang string) string {
+	if body, ok := localizedBrandingBody(value, lang); ok {
+		return body
+	}
+	values := map[string]string{}
+	switch body := value.(type) {
+	case map[string]interface{}:
+		for key, raw := range body {
+			if text, ok := raw.(string); ok {
+				values[key] = text
+			}
+		}
+	case map[interface{}]interface{}:
+		for key, raw := range body {
+			name, keyOK := key.(string)
+			text, valueOK := raw.(string)
+			if keyOK && valueOK {
+				values[name] = text
+			}
+		}
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	if len(keys) == 0 {
+		return ""
+	}
+	return values[keys[0]]
 }
 
 func sanitizeOperatorDocument(content string) string {

@@ -552,7 +552,7 @@
     "license_note": "Open source, sous licence MIT.",
     "attribution": "Attribution tierce",
     "attribution_geoip": "Géolocalisation IP par DB-IP",
-    "attribution_nro": "Données de pays et d'ASN sous licence CC BY 4.0 par la Number Resource Organization (NRO).",
+    "attribution_chroma": "Les données de syntaxe utilisent Chroma v2.24.1 (MIT) et les polices Liberation Mono intégrées (SIL OFL 1.1). Textes complets des licences :",
     "what_is": "Qu'est-ce que {title} ?",
     "meta_description": "À propos de {title} : un service de partage de texte simple et rapide avec coloration syntaxique et accès API",
     "source": "Code source",

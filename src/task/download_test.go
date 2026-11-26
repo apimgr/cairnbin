@@ -61,8 +61,35 @@ func TestBlocklistUpdate_DownloadsSource(t *testing.T) {
 	if string(got) != "1.2.3.0/24\n5.6.7.0/24\n" {
 		t.Errorf("downloaded content = %q", got)
 	}
-	if _, err := os.Stat(filepath.Join(blDir, ".last_updated")); err != nil {
-		t.Errorf("expected .last_updated stamp: %v", err)
+	if _, err := os.Stat(filepath.Join(blDir, "firehol_level1.last_updated")); err != nil {
+		t.Errorf("expected per-source timestamp: %v", err)
+	}
+}
+
+func TestBlocklistUpdateWritesIndependentSourceTimestamps(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/failed" {
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte("8.8.8.8\n"))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	fn := task.BlocklistUpdate(dir,
+		task.Source{Name: "good.txt", Type: "ip", URL: srv.URL + "/good"},
+		task.Source{Name: "failed.txt", Type: "ip", URL: srv.URL + "/failed"},
+	)
+	if err := fn(context.Background()); err != nil {
+		t.Fatalf("BlocklistUpdate: %v", err)
+	}
+	blocklists := filepath.Join(dir, "security", "blocklists")
+	if _, err := os.Stat(filepath.Join(blocklists, "good.last_updated")); err != nil {
+		t.Fatalf("successful source timestamp missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(blocklists, "failed.last_updated")); !os.IsNotExist(err) {
+		t.Fatalf("failed source must not receive a fresh timestamp, err=%v", err)
 	}
 }
 
@@ -139,9 +166,9 @@ func TestBlocklistUpdate_SkipsEmptySource(t *testing.T) {
 	if err := fn(context.Background()); err != nil {
 		t.Fatalf("BlocklistUpdate error: %v", err)
 	}
-	// No .last_updated because nothing was updated.
-	if _, err := os.Stat(filepath.Join(dir, "security", "blocklists", ".last_updated")); !os.IsNotExist(err) {
-		t.Errorf("expected no .last_updated when no source updated, err=%v", err)
+	// No per-source timestamps because nothing was updated.
+	if _, err := os.Stat(filepath.Join(dir, "security", "blocklists", "x.last_updated")); !os.IsNotExist(err) {
+		t.Errorf("expected no source timestamp when no source updated, err=%v", err)
 	}
 }
 

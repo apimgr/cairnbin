@@ -86,6 +86,9 @@ func TestBackupAndVerify_WithEncryption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadEncryptedBackupHeader error: %v", err)
 	}
+	if header.Threads != 4 || header.Offset != 55 {
+		t.Fatalf("BKUP1 header threads/offset = %d/%d, want 4/55", header.Threads, header.Offset)
+	}
 	if got := maintenance.BackupKeyIDForPassword(opts.Password, header); got != header.KeyID {
 		t.Fatalf("backup key id = %q, header key id = %q", got, header.KeyID)
 	}

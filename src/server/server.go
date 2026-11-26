@@ -3072,6 +3072,9 @@ func (s *Server) csrfMiddleware(next http.Handler) http.Handler {
 		case "false":
 			secure = false
 		}
+		if s.i2pRequestB32(r) != "" {
+			secure = false
+		}
 
 		// Double-submit cookie: HttpOnly=false so progressive-enhancement JS can
 		// echo the token into the X-CSRF-Token header; SameSite=Strict is the
@@ -4765,7 +4768,7 @@ func (s *Server) handleRemoveSubmit(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			MaxAge:   -1,
 			HttpOnly: true,
-			Secure:   r.TLS != nil,
+			Secure:   s.ownerCookieSecure(r),
 			SameSite: http.SameSiteStrictMode,
 		})
 		s.renderTemplate(w, r, "remove.html", map[string]interface{}{
@@ -4942,7 +4945,8 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 		"BaseURL":   s.baseURL(r),
 		"MoreHelp":  s.hubPageData(s.helpPageRegistry(), i18n.LangFromRequest(r)),
 	}
-	data["PageContent"] = renderMarkdown(s.liveCfg().Server.Pages.Help.Content)
+	helpContent := localizedHelpContent(s.liveCfg().Server.Pages.Help.Content, i18n.LangFromRequest(r))
+	data["PageContent"] = renderMarkdown(helpContent)
 	s.injectTermbinData(r, data)
 	if detectClientType(r) == "text" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -5512,6 +5516,9 @@ func (s *Server) handleCCPAOptOut(w http.ResponseWriter, r *http.Request) {
 	} else if s.liveCfg().Server.CSRF.Secure == "false" {
 		secure = false
 	}
+	if s.i2pRequestB32(r) != "" {
+		secure = false
+	}
 	cookie := &http.Cookie{
 		Name:     "ccpa_opt_out",
 		Path:     "/",
@@ -5642,6 +5649,9 @@ func (s *Server) handleConsentSet(w http.ResponseWriter, r *http.Request) {
 	case "true":
 		secure = true
 	case "false":
+		secure = false
+	}
+	if s.i2pRequestB32(r) != "" {
 		secure = false
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -5788,6 +5798,9 @@ func (s *Server) handleAnnouncementDismiss(w http.ResponseWriter, r *http.Reques
 	case "false":
 		secure = false
 	}
+	if s.i2pRequestB32(r) != "" {
+		secure = false
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "dismissed_announcements",
 		Value:    url.QueryEscape(strings.Join(list, ",")),
@@ -5919,7 +5932,7 @@ func (s *Server) handlePreferencesSet(w http.ResponseWriter, r *http.Request) {
 	applied, blockedPrefs := s.applyGuestPrefs(w, prefsReq, valid)
 	blocked = append(blocked, blockedPrefs...)
 	if len(applied) > 0 && refererIsPreferencesPage(r) {
-		setFlash(w, r, "preferences_saved")
+		setFlash(w, r, "preferences_saved", s.cookieSecure(r))
 	}
 	dest := s.prefRedirectDest(r, r.PostFormValue("redirect"), "/")
 	dest = preferencesConsentRedirect(dest, len(applied) == 0 && len(blocked) > 0 && preferenceConsentMissing(prefsReq))
@@ -6546,7 +6559,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, r *http.Request, name str
 	data["Announcements"] = s.activeAnnouncements(r)
 	// Inject the one-shot flash message set by a no-JS form POST redirect
 	// (PART 16 Toast Notifications, "No-JS fallback"); consumed exactly once.
-	data["Flash"] = takeFlash(w, r, lang)
+	data["Flash"] = takeFlash(w, r, lang, s.cookieSecure(r))
 	// Render into a buffer first so a mid-template failure never leaks a
 	// partially-written, corrupted response — headers/status are only sent
 	// once rendering has fully succeeded. On failure, fall back through

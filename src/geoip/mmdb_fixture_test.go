@@ -1,9 +1,12 @@
 package geoip
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/oschwald/maxminddb-golang"
@@ -170,7 +173,12 @@ func buildMinimalMMDB() []byte {
 func serveMinimalMMDB(t *testing.T) {
 	t.Helper()
 	body := buildMinimalMMDB()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	digest := sha256.Sum256(body)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			_, _ = fmt.Fprintf(w, "%x  db.mmdb\n", digest)
+			return
+		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = w.Write(body)
 	}))

@@ -534,6 +534,7 @@ func TestCSRFMiddlewareCookieSecureResolution(t *testing.T) {
 		{"TLS proxy", "auto", "192.0.2.10:443", "example.com", "https", true},
 		{"plain HTTP", "auto", "192.0.2.10:80", "example.com", "", false},
 		{"Tor onion secure context", "auto", "127.0.0.1:80", testOnion, "", true},
+		{"I2P plain HTTP", "true", "127.0.0.1:80", "abc123.b32.i2p", "https", false},
 		{"explicit false", "false", "192.0.2.10:443", "example.com", "https", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -541,6 +542,9 @@ func TestCSRFMiddlewareCookieSecureResolution(t *testing.T) {
 			s.cfg.Server.CSRF.Secure = tc.secure
 			s.cfg.Server.TrustedProxies.Additional = []string{"192.0.2.10"}
 			s.cfg.Server.Tor.OnionAddress = testOnion
+			if tc.host == "abc123.b32.i2p" {
+				s.cfg.Server.I2P.B32Address = tc.host
+			}
 			r := httptest.NewRequest(http.MethodGet, "http://"+tc.host+"/", nil)
 			r.RemoteAddr = tc.remote
 			r.Header.Set("Accept", "text/html")

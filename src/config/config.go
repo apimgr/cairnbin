@@ -223,8 +223,8 @@ type PagesConfig struct {
 
 // PageContentConfig is a single static page's optional Markdown content override.
 type PageContentConfig struct {
-	Content string `yaml:"content"`
-	MCP     string `yaml:"mcp"`
+	Content interface{} `yaml:"content"`
+	MCP     string      `yaml:"mcp"`
 }
 
 // ContactPageConfig configures the /server/contact form (PART 31). When Enabled
@@ -2260,6 +2260,7 @@ func DefaultConfig() *Config {
 			},
 			Pages: PagesConfig{
 				Help: PageContentConfig{
+					Content: "",
 					MCP: "## cairnbin tools\n\n" +
 						"- `getApiV1Pastes`: list public pastes; `page` defaults to 1 and `limit` defaults to 20 (maximum 100).\n" +
 						"- `postApiV1Pastes`: create a paste; provide `content`, and optionally `title`, `language`, `is_public`, `expires_in`, and `burn_after`. " +
@@ -4589,15 +4590,21 @@ func SetB32Address(path, addr string) error {
 // port. In a container an explicit port always wins; 80 is only the fallback
 // default when nothing else set it.
 func ResolvePort(cfgPath string, cfg *Config, inContainer bool) error {
+	persist := cfg.Server.Port == ""
 	// An explicit value (flag, env, or config file) always wins, in or out of
-	// a container.
+	// a container when it is a valid listener port specification.
 	if cfg.Server.Port != "" {
-		return nil
+		if validPortSpec(cfg.Server.Port) {
+			return nil
+		}
+		log.Printf("[config] WARNING: invalid server.port %q; selecting a random port in 64000-64999", cfg.Server.Port)
+		persist = false
+		cfg.Server.Port = ""
 	}
-	if cfg.IsDropInOverride("server.port") {
+	if cfg.Server.Port == "" && cfg.IsDropInOverride("server.port") {
 		return fmt.Errorf("server.port is defined by %s but empty", cfg.SourceFile("server.port"))
 	}
-	if inContainer {
+	if inContainer && cfg.Server.Port == "" {
 		// Container default when nothing else configured the port.
 		cfg.Server.Port = "80"
 		return nil
@@ -4609,6 +4616,9 @@ func ResolvePort(cfgPath string, cfg *Config, inContainer bool) error {
 		return fmt.Errorf("port allocator: %w", err)
 	}
 	cfg.Server.Port = strconv.Itoa(port)
+	if !persist {
+		return nil
+	}
 
 	// Persist only the port. Read the canonical config file, update Server.Port,
 	// and save it back. Never save cfg directly: cfg carries runtime env-var
@@ -4619,6 +4629,20 @@ func ResolvePort(cfgPath string, cfg *Config, inContainer bool) error {
 		return fmt.Errorf("port allocator: could not persist port to %s: %w", cfgPath, saveErr)
 	}
 	return nil
+}
+
+func validPortSpec(spec string) bool {
+	parts := strings.Split(spec, ",")
+	if len(parts) > 2 {
+		return false
+	}
+	for _, part := range parts {
+		port, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || port < 1 || port > 65535 {
+			return false
+		}
+	}
+	return true
 }
 
 // PeekServerPort reads only the top-level server.port scalar from an existing

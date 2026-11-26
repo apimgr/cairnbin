@@ -1,2 +1,2 @@
-# Reviewed modernc.org/mathutil v1.6.0 LICENSE; see LICENSE.md attribution.
-modernc.org/mathutil BSD-3-Clause BSD-3-Clause terms in upstream LICENSE; see LICENSE.md attribution.
+# casjay read modernc.org/mathutil v1.6.0 LICENSE on 2026-11-26; see LICENSE.md attribution.
+modernc.org/mathutil BSD-3-Clause casjay read upstream LICENSE on 2026-11-26; see LICENSE.md attribution.

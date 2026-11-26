@@ -25,12 +25,12 @@ import (
 const ownerCookieName = browsercookie.OwnerTokenName
 const tokenViewCookieName = "cairnbin_token_view"
 
-func (s *Server) setTokenViewCookie(w http.ResponseWriter, target string) {
-	http.SetCookie(w, &http.Cookie{Name: tokenViewCookieName, Value: target, Path: "/server/preferences/tokens", MaxAge: 60, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+func (s *Server) setTokenViewCookie(w http.ResponseWriter, r *http.Request, target string) {
+	http.SetCookie(w, &http.Cookie{Name: tokenViewCookieName, Value: target, Path: "/server/preferences/tokens", MaxAge: 60, HttpOnly: true, Secure: s.ownerCookieSecure(r), SameSite: http.SameSiteStrictMode})
 }
 
-func clearTokenViewCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: tokenViewCookieName, Value: "", Path: "/server/preferences/tokens", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+func (s *Server) clearTokenViewCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: tokenViewCookieName, Value: "", Path: "/server/preferences/tokens", MaxAge: -1, HttpOnly: true, Secure: s.ownerCookieSecure(r), SameSite: http.SameSiteStrictMode})
 }
 
 func tokenViewRedirect(w http.ResponseWriter, r *http.Request, target string) {
@@ -199,7 +199,7 @@ func (s *Server) handleOwnerTokenRevealWeb(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	s.setTokenViewCookie(w, "primary")
+	s.setTokenViewCookie(w, r, "primary")
 	tokenViewRedirect(w, r, "primary")
 	s.tokenAudit(r, "token.revealed", "primary", "")
 }
@@ -263,7 +263,7 @@ func (s *Server) handleOwnerTokenRotateWeb(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.setOwnerCookie(w, r, token)
-	s.setTokenViewCookie(w, "primary")
+	s.setTokenViewCookie(w, r, "primary")
 	tokenViewRedirect(w, r, "primary")
 }
 
@@ -274,8 +274,12 @@ func (s *Server) setOwnerCookie(w http.ResponseWriter, r *http.Request, token st
 			maxAge = int(d.Seconds())
 		}
 	}
-	http.SetCookie(w, &http.Cookie{Name: ownerCookieName, Value: token, Path: "/", MaxAge: maxAge, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
-	http.SetCookie(w, &http.Cookie{Name: browsercookie.LegacyOwnerTokenName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: ownerCookieName, Value: token, Path: "/", MaxAge: maxAge, HttpOnly: true, Secure: s.ownerCookieSecure(r), SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: browsercookie.LegacyOwnerTokenName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.ownerCookieSecure(r), SameSite: http.SameSiteStrictMode})
+}
+
+func (s *Server) ownerCookieSecure(r *http.Request) bool {
+	return s.i2pRequestB32(r) == ""
 }
 
 func (s *Server) ownerTokenCookies(r *http.Request) []*http.Cookie {
@@ -558,7 +562,7 @@ func (s *Server) handleLinkedTokenReveal(w http.ResponseWriter, r *http.Request)
 		}
 		result["linked_token"] = plain
 	} else {
-		s.setTokenViewCookie(w, token.PublicID)
+		s.setTokenViewCookie(w, r, token.PublicID)
 		tokenViewRedirect(w, r, token.PublicID)
 		return
 	}
@@ -711,7 +715,7 @@ func (s *Server) tokenActionSuccess(w http.ResponseWriter, r *http.Request, data
 	if values, ok := data.(map[string]any); ok {
 		if _, yes := values["linked_token"].(string); yes {
 			id, _ := values["id"].(string)
-			s.setTokenViewCookie(w, id)
+			s.setTokenViewCookie(w, r, id)
 			tokenViewRedirect(w, r, id)
 			return
 		}
@@ -727,7 +731,7 @@ func (s *Server) ownerCookieMiddleware(next http.Handler) http.Handler {
 			cookies := s.ownerTokenCookies(r)
 			if !s.ownerCookieMigrationActive() {
 				if legacy, err := r.Cookie(browsercookie.LegacyOwnerTokenName); err == nil && legacy.Value != "" {
-					http.SetCookie(w, &http.Cookie{Name: browsercookie.LegacyOwnerTokenName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+					http.SetCookie(w, &http.Cookie{Name: browsercookie.LegacyOwnerTokenName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.ownerCookieSecure(r), SameSite: http.SameSiteStrictMode})
 					filtered := r.Clone(r.Context())
 					var retained []string
 					for _, cookie := range r.Cookies() {
@@ -757,7 +761,7 @@ func (s *Server) ownerCookieMiddleware(next http.Handler) http.Handler {
 				}
 				if !valid {
 					for _, c := range cookies {
-						http.SetCookie(w, &http.Cookie{Name: c.Name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+						http.SetCookie(w, &http.Cookie{Name: c.Name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.ownerCookieSecure(r), SameSite: http.SameSiteStrictMode})
 					}
 				}
 			}

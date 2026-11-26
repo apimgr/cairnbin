@@ -412,3 +412,23 @@ func TestHelpPageAPIFirstThenCompat(t *testing.T) {
 		t.Error("APIBase not expanded")
 	}
 }
+
+func TestLocalizedHelpContentFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body interface{}
+		lang string
+		want string
+	}{
+		{name: "scalar", body: "all languages", lang: "es", want: "all languages"},
+		{name: "resolved language", body: map[string]interface{}{"default": "fallback", "es": "espanol"}, lang: "es", want: "espanol"},
+		{name: "default", body: map[string]interface{}{"default": "fallback", "fr": "francais"}, lang: "es", want: "fallback"},
+		{name: "first sorted key", body: map[string]interface{}{"zz": "last", "fr": "first"}, lang: "es", want: "first"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := localizedHelpContent(tc.body, tc.lang); got != tc.want {
+				t.Fatalf("localizedHelpContent() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

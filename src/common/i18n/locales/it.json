@@ -696,7 +696,7 @@
     "license_note": "open source, concesso in licenza dal MIT.",
     "attribution": "attribuzione di terze parti",
     "attribution_geoip": "Geolocalizzazione IP tramite DB-IP",
-    "attribution_nro": "dati ASN e paese concessi in licenza CC BY 4.0 dalla Number Resource Organization (NRO).",
+    "attribution_chroma": "I dati di sintassi usano Chroma v2.24.1 (MIT) e i caratteri Liberation Mono incorporati (SIL OFL 1.1). Testi completi delle licenze:",
     "what_is": "Cos'è {title}?",
     "meta_description": "Informazioni su {title}: un servizio di condivisione semplice e veloce con evidenziazione della sintassi e accesso API",
     "source": "fonte",

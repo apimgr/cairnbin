@@ -8,6 +8,7 @@ import (
 
 	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/geoip"
 )
 
 func TestAboutPageLocalizesShippedBrandingDefaultsAndPreservesOverrides(t *testing.T) {
@@ -31,6 +32,12 @@ func TestAboutPageLocalizesShippedBrandingDefaultsAndPreservesOverrides(t *testi
 		if want := i18n.Translate(lang, "about.default_feature_1"); !strings.Contains(w.Body.String(), want) {
 			t.Errorf("%s about page missing localized default feature %q", lang, want)
 		}
+		if want := i18n.Translate(lang, "about.attribution_chroma"); !strings.Contains(w.Body.String(), want) {
+			t.Errorf("%s about page missing localized Chroma attribution %q", lang, want)
+		}
+		if !strings.Contains(w.Body.String(), "href=\"https://github.com/apimgr/cairnbin/blob/main/LICENSE.md\">LICENSE.md</a>") {
+			t.Errorf("%s about page missing third-party license link", lang)
+		}
 	}
 
 	cfg.Server.Branding.Tagline = "Operator tagline"
@@ -49,5 +56,20 @@ func TestAboutPageLocalizesShippedBrandingDefaultsAndPreservesOverrides(t *testi
 	}
 	if strings.Contains(w.Body.String(), "Compatibilidad directa con pastebin.com") {
 		t.Error("operator branding override was replaced with translated defaults")
+	}
+}
+
+func TestAboutPageShowsExactDBIPAttributionWhenGeoIPIsEnabled(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.GeoIP.Enabled = true
+	s := newMinimalServer(cfg)
+	s.geoipDB = &geoip.DB{}
+	s.templates, _ = s.buildTemplates()
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "http://example.com/server/about", nil)
+	r.Header.Set("Accept", "text/html")
+	s.handleAbout(w, r)
+	if !strings.Contains(w.Body.String(), `<a href="https://db-ip.com/">IP Geolocation by DB-IP</a>`) {
+		t.Fatal("about page is missing the required verbatim DB-IP attribution")
 	}
 }

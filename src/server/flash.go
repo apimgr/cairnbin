@@ -35,7 +35,7 @@ type flashView struct {
 
 // setFlash stores a flash key for the next page render. Keys outside
 // flashMessages are ignored.
-func setFlash(w http.ResponseWriter, r *http.Request, key string) {
+func setFlash(w http.ResponseWriter, r *http.Request, key string, secure bool) {
 	if _, ok := flashMessages[key]; !ok {
 		return
 	}
@@ -45,7 +45,7 @@ func setFlash(w http.ResponseWriter, r *http.Request, key string) {
 		Path:     "/",
 		MaxAge:   60,
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -53,7 +53,7 @@ func setFlash(w http.ResponseWriter, r *http.Request, key string) {
 // takeFlash returns the pending flash message (if any) for this request and
 // clears the cookie so it renders exactly once. It must run before the
 // response headers are written.
-func takeFlash(w http.ResponseWriter, r *http.Request, lang string) *flashView {
+func takeFlash(w http.ResponseWriter, r *http.Request, lang string, secure bool) *flashView {
 	c, err := r.Cookie(flashCookieName)
 	if err != nil {
 		return nil
@@ -64,7 +64,7 @@ func takeFlash(w http.ResponseWriter, r *http.Request, lang string) *flashView {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 	msg, ok := flashMessages[c.Value]

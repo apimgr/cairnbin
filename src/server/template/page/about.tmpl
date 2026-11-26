@@ -30,11 +30,11 @@
           </p>
           <p>{{t .Lang "about.license_note"}}</p>
 
-          {{if .GeoIPEnabled}}
           <h3>{{t .Lang "about.attribution"}}</h3>
-          <p><a href="https://db-ip.com/" target="_blank" rel="noopener">{{t .Lang "about.attribution_geoip"}}</a></p>
-          <p>{{t .Lang "about.attribution_nro"}}</p>
+          {{if .GeoIPEnabled}}
+          <p><a href="https://db-ip.com/">IP Geolocation by DB-IP</a></p>
           {{end}}
+          <p>{{t .Lang "about.attribution_chroma"}} <a href="https://github.com/apimgr/cairnbin/blob/main/LICENSE.md">LICENSE.md</a></p>
           {{if .OperatorAboutHTML}}<div class="markdown-content">{{.OperatorAboutHTML}}</div>{{end}}
         </section>
     </div>

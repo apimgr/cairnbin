@@ -552,7 +552,7 @@
     "license_note": "Open Source, MIT-lizenziert.",
     "attribution": "Drittanbieter-Namensnennung",
     "attribution_geoip": "IP-Geolokalisierung von DB-IP",
-    "attribution_nro": "Länder- und ASN-Daten lizenziert unter CC BY 4.0 von der Number Resource Organization (NRO).",
+    "attribution_chroma": "Die Syntaxdaten verwenden Chroma v2.24.1 (MIT) und eingebettete Liberation-Mono-Schriften (SIL OFL 1.1). Vollständige Lizenztexte:",
     "what_is": "Was ist {title}?",
     "meta_description": "Über {title} – ein einfacher, schneller Paste-Dienst mit Syntaxhervorhebung und API-Zugriff",
     "source": "Quellcode",

@@ -68,7 +68,7 @@ func (s *Server) handlePrivacyAPI(w http.ResponseWriter, r *http.Request) {
 // handleHelpAPI serves GET /api/{api_version}/server/help.
 func (s *Server) handleHelpAPI(w http.ResponseWriter, r *http.Request) {
 	base := s.baseURL(r)
-	content := s.liveCfg().Server.Pages.Help.Content
+	content := localizedHelpContent(s.liveCfg().Server.Pages.Help.Content, i18n.LangFromRequest(r))
 	pages := make([]map[string]string, 0)
 	for _, page := range s.hubPageData(s.helpPageRegistry(), i18n.LangFromRequest(r)) {
 		pages = append(pages, map[string]string{"title": page.Title, "path": page.Path})

@@ -18,6 +18,7 @@ concurrency:
 
 env:
   PROJECT_NAME: cairnbin
+  INTERNAL_NAME: cairnbin
 
 jobs:
   lint:
@@ -66,7 +67,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           mkdir -p "/tmp/${{ github.repository_owner }}"
-          COVDIR=$(mktemp -d "/tmp/${{ github.repository_owner }}/$(basename "${{ github.repository }}")-XXXXXX")
+          COVDIR=$(mktemp -d "/tmp/${{ github.repository_owner }}/${{ env.INTERNAL_NAME }}-XXXXXX")
           echo "COVDIR=$COVDIR" >> "$GITHUB_ENV"
           mkdir -p "$COVDIR/tmp"
           TMPDIR="$COVDIR/tmp" go test -buildvcs=false -v -cover -timeout 30m -coverprofile="$COVDIR/coverage.out" ./...
@@ -205,9 +206,8 @@ jobs:
             ${{ runner.os }}-go-${{ hashFiles('go.sum') }}-
       - name: Generate coverage report
         run: |
-          REPO_NAME=$(basename "$GITHUB_REPOSITORY")
           mkdir -p "/tmp/$GITHUB_REPOSITORY_OWNER"
-          COVDIR=$(mktemp -d "/tmp/$GITHUB_REPOSITORY_OWNER/${REPO_NAME}-XXXXXX")
+          COVDIR=$(mktemp -d "/tmp/$GITHUB_REPOSITORY_OWNER/${INTERNAL_NAME}-XXXXXX")
           go test -buildvcs=false -v -cover -timeout 30m -coverprofile="$COVDIR/coverage.out" ./...
           go tool cover -html="$COVDIR/coverage.out" -o "$COVDIR/coverage.html"
           PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')

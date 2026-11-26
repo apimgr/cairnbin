@@ -325,6 +325,12 @@ func securityFetchTask(name, dir string, sources []Source, client *http.Client) 
 				continue
 			}
 			updated++
+			if name == "blocklist_update" {
+				stamp := strings.TrimSuffix(filepath.Base(src.Name), filepath.Ext(src.Name)) + ".last_updated"
+				if err := writeUpdateStamp(filepath.Join(dir, stamp)); err != nil {
+					log.Printf("%s: write %s: %v", name, stamp, err)
+				}
+			}
 		}
 
 		entries, err := os.ReadDir(dir)
@@ -332,7 +338,7 @@ func securityFetchTask(name, dir string, sources []Source, client *http.Client) 
 			return fmt.Errorf("%s: readdir: %w", name, err)
 		}
 
-		if updated > 0 {
+		if updated > 0 && name != "blocklist_update" {
 			if err := os.WriteFile(filepath.Join(dir, ".last_updated"),
 				[]byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o640); err != nil {
 				log.Printf("%s: write .last_updated: %v", name, err)
@@ -342,6 +348,31 @@ func securityFetchTask(name, dir string, sources []Source, client *http.Client) 
 		log.Printf("%s: %s — %d source(s) updated, %d file(s) present", name, dir, updated, len(entries))
 		return nil
 	}
+}
+
+func writeUpdateStamp(path string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".last_updated-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if err := tmp.Chmod(0o640); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := fmt.Fprintln(tmp, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 func downloadFileWithClient(ctx context.Context, url, dst string, client *http.Client) error {
@@ -487,7 +518,7 @@ func newestFullBackup(dir, projectName string) string {
 	prefix := projectName + "_backup_"
 	for i := len(entries) - 1; i >= 0; i-- {
 		entry := entries[i]
-	if entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) || (!strings.HasSuffix(entry.Name(), ".tar.gz") && !strings.HasSuffix(entry.Name(), ".tar.gz.enc")) {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) || (!strings.HasSuffix(entry.Name(), ".tar.gz") && !strings.HasSuffix(entry.Name(), ".tar.gz.enc")) {
 			continue
 		}
 		return filepath.Join(dir, entry.Name())

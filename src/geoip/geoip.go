@@ -7,6 +7,8 @@ package geoip
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -22,8 +24,8 @@ import (
 	maxminddb "github.com/oschwald/maxminddb-golang"
 )
 
-// Database URLs from sapics/ip-location-db. ASN/Country are served via
-// jsDelivr CDN; the City databases are served from GitHub Releases directly.
+// Database URLs from sapics/ip-location-db GitHub Releases. Every release
+// asset has a matching SHA-256 checksum asset that is verified before use.
 // PART 19 requires separate IPv4 and IPv6 city databases (dbip-city-ipv4.mmdb,
 // dbip-city-ipv6.mmdb) — a single combined city.mmdb is not sufficient.
 //
@@ -38,8 +40,8 @@ import (
 // exercises Update talks to the real CDN and blocks for the 5-minute
 // ensureFile context timeout, per database.
 var (
-	urlASN     = "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb"
-	urlCountry = "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"
+	urlASN     = "https://github.com/sapics/ip-location-db/releases/download/latest/iptoasn-asn.mmdb"
+	urlCountry = "https://github.com/sapics/ip-location-db/releases/download/latest/iptoasn-country.mmdb"
 	urlCityV4  = "https://github.com/sapics/ip-location-db/releases/download/latest/dbip-city-ipv4.mmdb"
 	urlCityV6  = "https://github.com/sapics/ip-location-db/releases/download/latest/dbip-city-ipv6.mmdb"
 )
@@ -52,6 +54,9 @@ type ASNRecord struct {
 
 // CountryRecord holds country lookup fields from the country database.
 type CountryRecord struct {
+	Country struct {
+		ISOCode string `maxminddb:"iso_code"`
+	} `maxminddb:"country"`
 	CountryCode string `maxminddb:"country_code"`
 }
 
@@ -359,7 +364,10 @@ func (d *DB) Lookup(ip net.IP) *Info {
 	if d.countDB != nil {
 		var rec CountryRecord
 		if err := d.countDB.Lookup(ip, &rec); err == nil {
-			info.CountryCode = rec.CountryCode
+			info.CountryCode = rec.Country.ISOCode
+			if info.CountryCode == "" {
+				info.CountryCode = rec.CountryCode
+			}
 		}
 	}
 
@@ -608,8 +616,9 @@ func downloadOnceWithClient(ctx context.Context, dst, src string, client *http.C
 	}
 
 	// Cap download at 512 MiB to guard against runaway responses.
+	digest := sha256.New()
 	lr := io.LimitReader(resp.Body, 512<<20)
-	if _, err := io.Copy(f, lr); err != nil {
+	if _, err := io.Copy(io.MultiWriter(f, digest), lr); err != nil {
 		_ = f.Close()
 		_ = os.Remove(tmp)
 		return fmt.Errorf("write: %w", err)
@@ -619,6 +628,15 @@ func downloadOnceWithClient(ctx context.Context, dst, src string, client *http.C
 		return fmt.Errorf("close: %w", err)
 	}
 
+	checksum, err := fetchChecksum(ctx, src, client)
+	if err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("checksum: %w", err)
+	}
+	if hex.EncodeToString(digest.Sum(nil)) != checksum {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("checksum mismatch for %s", filepath.Base(dst))
+	}
 	if err := os.Rename(tmp, dst); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("rename: %w", err)
@@ -626,6 +644,47 @@ func downloadOnceWithClient(ctx context.Context, dst, src string, client *http.C
 
 	log.Printf("geoip: downloaded %s (%.1f MiB)", filepath.Base(dst), float64(mustStat(dst))/float64(1<<20))
 	return nil
+}
+
+func fetchChecksum(ctx context.Context, src string, client *http.Client) (string, error) {
+	checksumURL := src + ".sha256"
+	if strings.Contains(src, "/download/latest/") {
+		checksumURL = strings.Replace(src, "/download/latest/", "/download/checksum/", 1) + ".sha256"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("User-Agent", "cairnbin-geoip/1.0")
+	if client == nil {
+		client = http.DefaultClient
+	} else {
+		clientCopy := *client
+		if clientCopy.Timeout == 0 || clientCopy.Timeout < 5*time.Minute {
+			clientCopy.Timeout = 5 * time.Minute
+		}
+		client = &clientCopy
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("download checksum: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", &retry.StatusError{Code: resp.StatusCode, URL: checksumURL}
+	}
+	content, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err != nil {
+		return "", fmt.Errorf("read checksum: %w", err)
+	}
+	fields := strings.Fields(string(content))
+	if len(fields) == 0 || len(fields[0]) != sha256.Size*2 {
+		return "", fmt.Errorf("invalid SHA-256 checksum response")
+	}
+	if _, err := hex.DecodeString(fields[0]); err != nil {
+		return "", fmt.Errorf("invalid SHA-256 checksum: %w", err)
+	}
+	return strings.ToLower(fields[0]), nil
 }
 
 func mustStat(path string) int64 {

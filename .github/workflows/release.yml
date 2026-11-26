@@ -15,6 +15,7 @@ permissions:
 
 env:
   PROJECT_NAME: cairnbin
+  INTERNAL_NAME: cairnbin
 
 jobs:
   build:

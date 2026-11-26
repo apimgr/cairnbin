@@ -696,7 +696,7 @@
     "license_note": "Open source, MIT licensed.",
     "attribution": "Third-Party Attribution",
     "attribution_geoip": "IP Geolocation by DB-IP",
-    "attribution_nro": "Country and ASN data licensed CC BY 4.0 by the Number Resource Organization (NRO).",
+    "attribution_chroma": "Syntax data uses Chroma v2.24.1 (MIT) and embedded Liberation Mono fonts (SIL OFL 1.1). Full license texts:",
     "what_is": "What is {title}?",
     "meta_description": "About {title} — a simple, fast paste sharing service with syntax highlighting and API access",
     "source": "Source",

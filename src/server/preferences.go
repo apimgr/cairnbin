@@ -206,6 +206,9 @@ func (s *Server) rememberPreference(w http.ResponseWriter, r *http.Request, key,
 // server.csrf.secure=true forces it. Marking a cookie Secure on a plain-HTTP
 // deployment would make the browser drop it entirely.
 func (s *Server) cookieSecure(r *http.Request) bool {
+	if s.i2pRequestB32(r) != "" {
+		return false
+	}
 	if s.torRequestOnion(r) != "" {
 		return true
 	}

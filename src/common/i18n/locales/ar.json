@@ -696,7 +696,7 @@
     "license_note": "مفتوح المصدر، برخصة MIT.",
     "attribution": "إسناد الجهات الخارجية",
     "attribution_geoip": "تحديد الموقع الجغرافي لعنوان IP بواسطة DB-IP",
-    "attribution_nro": "بيانات الدولة ومعرف نظام الشبكات (ASN) مرخصة بموجب CC BY 4.0 من قبل منظمة موارد الأرقام (NRO).",
+    "attribution_chroma": "تستخدم بيانات الصياغة Chroma v2.24.1 (MIT) وخطوط Liberation Mono المضمنة (SIL OFL 1.1). نصوص التراخيص الكاملة:",
     "what_is": "ما هو {title}؟",
     "meta_description": "حول {title} — خدمة بسيطة وسريعة لمشاركة النصوص مع تمييز الصياغة والوصول عبر API",
     "source": "المصدر",

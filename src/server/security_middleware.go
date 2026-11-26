@@ -203,11 +203,13 @@ func loadBlocklistsWithTypes(dir string, trustedRanges []string, sourceTypes map
 			log.Printf("blocklist: open %s: %v", e.Name(), err)
 			continue
 		}
-		info, statErr := e.Info()
+		_, statErr := e.Info()
 		if statErr != nil {
 			_ = f.Close()
 			continue
 		}
+		stampPath := filepath.Join(dir, sourceID+".last_updated")
+		_, stampErr := os.Stat(stampPath)
 		scanner := bufio.NewScanner(f)
 		skipped := 0
 		validEntries := 0
@@ -275,7 +277,13 @@ func loadBlocklistsWithTypes(dir string, trustedRanges []string, sourceTypes map
 			log.Printf("blocklist: scan %s: %v", e.Name(), scanErr)
 		}
 		_ = f.Close()
-		bs.sources[sourceID] = blocklistSourceHealth{loadedAt: info.ModTime(), loaded: scanErr == nil && validEntries > 0}
+		loadedAt := time.Time{}
+		if stampErr == nil {
+			if stamp, readErr := os.ReadFile(stampPath); readErr == nil {
+				loadedAt, _ = time.Parse(time.RFC3339, strings.TrimSpace(string(stamp)))
+			}
+		}
+		bs.sources[sourceID] = blocklistSourceHealth{loadedAt: loadedAt, loaded: scanErr == nil && validEntries > 0 && !loadedAt.IsZero()}
 		if skipped > 0 {
 			log.Printf("blocklist: %s: skipped %d invalid or trusted/private-overlapping entries", e.Name(), skipped)
 			bs.skipped += skipped

@@ -39,6 +39,9 @@ func TestDomainBlocklistMiddlewareTargets(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(blockDir, "domains.txt"), []byte("bad.example\n*.example.co.uk\n"), 0o640); err != nil {
 				t.Fatal(err)
 			}
+			if err := os.WriteFile(filepath.Join(blockDir, "domains.last_updated"), []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o640); err != nil {
+				t.Fatal(err)
+			}
 			cfg := config.DefaultConfig()
 			cfg.Server.DataDir = dir
 			cfg.Server.Security.Blocklists.Enabled = true
@@ -96,6 +99,9 @@ func TestBlocklistHealthUsesCachedResultsUntilSchedulerRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte("ads.example\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), "ads.last_updated"), []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := s.datasetChecks.Snapshot()[1].Status; got != "error" {

@@ -17,6 +17,7 @@ concurrency:
 
 env:
   PROJECT_NAME: cairnbin
+  INTERNAL_NAME: cairnbin
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 

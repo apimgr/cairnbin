@@ -79,7 +79,7 @@ TEST_COVERAGE ?= 1
 TEST_NETWORK  ?= $(PROJECT_NAME)-test-net
 
 # GO_DOCKER_RUN is the shared docker run prefix with no image, so targets can add mounts before the image.
-GO_DOCKER_RUN := timeout -k 30 $(DOCKER_TIMEOUT) docker run --rm --no-healthcheck --name $(PROJECT_NAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) --memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) --cpu-shares=256 -v $(PROJECT_DIR):/app -v $(GO_CACHE):/usr/local/share/go/pkg/mod -v $(GO_BUILD):/usr/local/share/go/cache -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false $(EXTRA_ENV)
+GO_DOCKER_RUN := timeout -k 30 $(DOCKER_TIMEOUT) docker run --rm --no-healthcheck --name $(PROJECT_NAME)-$$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8) --memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) --cpu-shares=256 -v $(PROJECT_DIR):/app -v $(GO_CACHE):/usr/local/share/go/pkg/mod -v $(GO_BUILD):/usr/local/share/go/cache -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false $(EXTRA_ENV)
 GO_DOCKER := $(GO_DOCKER_RUN) casjaysdev/go:latest
 
 .PHONY: build local release release-check docker test dev clean

@@ -552,7 +552,7 @@
     "license_note": "开源，采用 MIT 许可证。",
     "attribution": "第三方致谢",
     "attribution_geoip": "IP 地理定位由 DB-IP 提供",
-    "attribution_nro": "国家和 ASN 数据由 Number Resource Organization (NRO) 依据 CC BY 4.0 许可提供。",
+    "attribution_chroma": "语法数据使用 Chroma v2.24.1（MIT）和内置的 Liberation Mono 字体（SIL OFL 1.1）。许可证全文：",
     "what_is": "{title} 是什么?",
     "meta_description": "关于 {title} — 一个简单快速的文本分享服务,支持语法高亮和 API 访问",
     "source": "源代码",

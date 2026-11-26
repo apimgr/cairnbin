@@ -552,7 +552,7 @@
     "license_note": "オープンソース、MITライセンス。",
     "attribution": "サードパーティ表示",
     "attribution_geoip": "DB-IP による IP ジオロケーション",
-    "attribution_nro": "国および ASN データは Number Resource Organization (NRO) により CC BY 4.0 でライセンスされています。",
+    "attribution_chroma": "構文データには Chroma v2.24.1（MIT）と組み込みの Liberation Mono フォント（SIL OFL 1.1）を使用しています。ライセンス全文：",
     "what_is": "{title} とは?",
     "meta_description": "{title} について — シンタックスハイライトと API アクセスを備えた、シンプルで高速なペースト共有サービス",
     "source": "ソース",

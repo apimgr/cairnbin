@@ -2,12 +2,15 @@ package geoip
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,7 +72,12 @@ func TestEnsureFile_AlreadyPresent(t *testing.T) {
 
 func TestEnsureFile_Downloads(t *testing.T) {
 	payload := []byte("fake mmdb binary content")
+	digest := sha256.Sum256(payload)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			_, _ = fmt.Fprintf(w, "%x  asn.mmdb\n", digest)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(payload)
 	}))
@@ -88,6 +96,26 @@ func TestEnsureFile_Downloads(t *testing.T) {
 	}
 	if string(got) != string(payload) {
 		t.Errorf("downloaded content = %q; want %q", got, payload)
+	}
+}
+
+func TestEnsureFile_RejectsChecksumMismatch(t *testing.T) {
+	payload := []byte("tampered mmdb data")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			_, _ = fmt.Fprintln(w, strings.Repeat("0", sha256.Size*2)+"  data.mmdb")
+			return
+		}
+		_, _ = w.Write(payload)
+	}))
+	defer srv.Close()
+
+	dst := filepath.Join(t.TempDir(), "data.mmdb")
+	if err := ensureFile(dst, srv.URL+"/data.mmdb"); err == nil {
+		t.Fatal("ensureFile accepted a download whose checksum did not match")
+	}
+	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+		t.Fatalf("destination exists after checksum failure: stat error = %v", err)
 	}
 }
 

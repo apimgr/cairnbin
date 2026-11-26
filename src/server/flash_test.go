@@ -11,8 +11,8 @@ import (
 func TestFlashRoundTrip(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/server/preferences", nil)
-	setFlash(rec, req, "preferences_saved")
-	setFlash(rec, req, "not_allowed")
+	setFlash(rec, req, "preferences_saved", true)
+	setFlash(rec, req, "not_allowed", true)
 	cookies := rec.Result().Cookies()
 	if len(cookies) != 1 || cookies[0].Name != flashCookieName || cookies[0].Value != "preferences_saved" {
 		t.Fatalf("setFlash cookies = %+v, want exactly the preferences_saved flash cookie", cookies)
@@ -21,7 +21,7 @@ func TestFlashRoundTrip(t *testing.T) {
 	next := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
 	next.AddCookie(cookies[0])
 	out := httptest.NewRecorder()
-	fv := takeFlash(out, next, "en")
+	fv := takeFlash(out, next, "en", true)
 	if fv == nil || fv.Kind != "success" || fv.Message == "" {
 		t.Fatalf("takeFlash = %+v, want success flash with message", fv)
 	}
@@ -32,10 +32,10 @@ func TestFlashRoundTrip(t *testing.T) {
 
 	forged := httptest.NewRequest(http.MethodGet, "/", nil)
 	forged.AddCookie(&http.Cookie{Name: flashCookieName, Value: "<script>"})
-	if fv := takeFlash(httptest.NewRecorder(), forged, "en"); fv != nil {
+	if fv := takeFlash(httptest.NewRecorder(), forged, "en", false); fv != nil {
 		t.Errorf("forged flash key rendered: %+v", fv)
 	}
-	if fv := takeFlash(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil), "en"); fv != nil {
+	if fv := takeFlash(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil), "en", false); fv != nil {
 		t.Errorf("no cookie must yield no flash, got %+v", fv)
 	}
 }

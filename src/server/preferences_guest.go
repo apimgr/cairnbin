@@ -305,7 +305,7 @@ func (s *Server) consumeTokenView(w http.ResponseWriter, r *http.Request, data m
 	if err != nil {
 		return
 	}
-	clearTokenViewCookie(w)
+	s.clearTokenViewCookie(w, r)
 	w.Header().Set("Cache-Control", "no-store")
 	primary, db, ok := s.requireOwnerForPage(r)
 	if !ok || cookie.Value == "" {

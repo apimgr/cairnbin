@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
 
@@ -94,7 +95,7 @@ type EncryptedBackupHeader struct {
 	Salt       []byte
 	MemoryKiB  uint32
 	Iterations uint32
-	Threads    uint8
+	Threads    uint32
 	Nonce      []byte
 	KeyID      string
 	BaseBackup string
@@ -1015,22 +1016,22 @@ const (
 	backupHeaderMagic = "BKUP1"
 	backupMemoryKiB   = uint32(64 * 1024)
 	backupIterations  = uint32(1)
-	backupThreads     = uint8(4)
-	backupHeaderFixed = 5 + 16 + 4 + 4 + 1 + 12 + 8 + 2
+	backupThreads     = uint32(4)
+	backupHeaderFixed = 5 + 16 + 4 + 4 + 4 + 12 + 8 + 2
 )
 
 func encryptWithBase(plaintext []byte, password, baseBackup string) ([]byte, error) {
-	if baseBackup != "" && (filepath.Base(baseBackup) != baseBackup || strings.Contains(baseBackup, "..")) {
+	if baseBackup != "" && (filepath.Base(baseBackup) != baseBackup || strings.ContainsAny(baseBackup, "/\\") || strings.Contains(baseBackup, "..") || !utf8.ValidString(baseBackup)) {
 		return nil, fmt.Errorf("invalid incremental base filename %q", baseBackup)
 	}
-	if len(baseBackup) > 4096 {
+	if len(baseBackup) > 255 {
 		return nil, fmt.Errorf("incremental base filename is too long")
 	}
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, err
 	}
-	key := argon2.IDKey([]byte(password), salt, backupIterations, backupMemoryKiB, backupThreads, 32)
+	key := argon2.IDKey([]byte(password), salt, backupIterations, backupMemoryKiB, uint8(backupThreads), 32)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -1049,11 +1050,11 @@ func encryptWithBase(plaintext []byte, password, baseBackup string) ([]byte, err
 	header := make([]byte, 0, backupHeaderFixed+len(baseBackup))
 	header = append(header, backupHeaderMagic...)
 	header = append(header, salt...)
-	var params [8]byte
+	var params [12]byte
 	binary.BigEndian.PutUint32(params[0:4], backupMemoryKiB)
 	binary.BigEndian.PutUint32(params[4:8], backupIterations)
+	binary.BigEndian.PutUint32(params[8:12], backupThreads)
 	header = append(header, params[:]...)
-	header = append(header, backupThreads)
 	header = append(header, nonce...)
 	keyMAC := hmac.New(sha256.New, key)
 	_, _ = keyMAC.Write([]byte("key-id"))
@@ -1075,26 +1076,43 @@ func ParseEncryptedBackupHeader(data []byte) (EncryptedBackupHeader, error) {
 	}
 	mem := binary.BigEndian.Uint32(data[21:25])
 	iterations := binary.BigEndian.Uint32(data[25:29])
-	threads := data[29]
+	threads := binary.BigEndian.Uint32(data[29:33])
+	legacy := threads < 1 || threads > 8
+	fixed := backupHeaderFixed
+	nameOffset := 53
+	nonceOffset, keyIDOffset := 33, 45
+	if legacy {
+		threads = uint32(data[29])
+		fixed = 5 + 16 + 4 + 4 + 1 + 12 + 8 + 2
+		nameOffset = 50
+		nonceOffset, keyIDOffset = 30, 42
+	}
 	if mem < 8*1024 || mem > 256*1024 || iterations < 1 || iterations > 10 || threads < 1 || threads > 8 {
 		return EncryptedBackupHeader{}, fmt.Errorf("invalid BKUP1 Argon2id parameters")
 	}
-	baseLen := int(binary.BigEndian.Uint16(data[50:52]))
-	end := backupHeaderFixed + baseLen
-	if end > len(data) || baseLen > 4096 {
+	if len(data) < fixed {
+		return EncryptedBackupHeader{}, fmt.Errorf("invalid or truncated BKUP1 header")
+	}
+	baseLen := int(binary.BigEndian.Uint16(data[nameOffset : nameOffset+2]))
+	end := fixed + baseLen
+	if end > len(data) || baseLen > 255 {
 		return EncryptedBackupHeader{}, fmt.Errorf("invalid BKUP1 base filename length")
 	}
-	baseBackup := string(data[backupHeaderFixed:end])
-	if baseBackup != "" && (filepath.Base(baseBackup) != baseBackup || strings.Contains(baseBackup, "..")) {
+	baseBackup := string(data[fixed:end])
+	if baseBackup != "" && (filepath.Base(baseBackup) != baseBackup || strings.ContainsAny(baseBackup, "/\\") || strings.Contains(baseBackup, "..") || !utf8.ValidString(baseBackup)) {
 		return EncryptedBackupHeader{}, fmt.Errorf("invalid BKUP1 base filename")
+	}
+	keyID := string(data[keyIDOffset : keyIDOffset+8])
+	if _, err := hex.DecodeString(keyID); err != nil || strings.ToLower(keyID) != keyID {
+		return EncryptedBackupHeader{}, fmt.Errorf("invalid BKUP1 key id")
 	}
 	return EncryptedBackupHeader{
 		Salt:       append([]byte(nil), data[5:21]...),
 		MemoryKiB:  mem,
 		Iterations: iterations,
 		Threads:    threads,
-		Nonce:      append([]byte(nil), data[30:42]...),
-		KeyID:      string(data[42:50]),
+		Nonce:      append([]byte(nil), data[nonceOffset:nonceOffset+12]...),
+		KeyID:      keyID,
 		BaseBackup: baseBackup,
 		AAD:        append([]byte(nil), data[:end]...),
 		Offset:     end,
@@ -1104,7 +1122,7 @@ func ParseEncryptedBackupHeader(data []byte) (EncryptedBackupHeader, error) {
 // BackupKeyIDForPassword returns the key id for a password derived using the
 // archive header's own salt and Argon2id parameters.
 func BackupKeyIDForPassword(password string, header EncryptedBackupHeader) string {
-	key := argon2.IDKey([]byte(password), header.Salt, header.Iterations, header.MemoryKiB, header.Threads, 32)
+	key := argon2.IDKey([]byte(password), header.Salt, header.Iterations, header.MemoryKiB, uint8(header.Threads), 32)
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write([]byte("key-id"))
 	return hex.EncodeToString(mac.Sum(nil)[:4])
@@ -1125,18 +1143,27 @@ func ReadEncryptedBackupHeader(path string) (header EncryptedBackupHeader, retEr
 	if _, err := io.ReadFull(f, magic); err != nil || string(magic) != backupHeaderMagic {
 		return EncryptedBackupHeader{}, fmt.Errorf("invalid or truncated BKUP1 header")
 	}
-	data := make([]byte, backupHeaderFixed)
+	data := make([]byte, 33)
 	copy(data, magic)
 	if _, err := io.ReadFull(f, data[len(magic):]); err != nil {
 		return EncryptedBackupHeader{}, fmt.Errorf("invalid or truncated BKUP1 header")
 	}
-	baseLen := int(binary.BigEndian.Uint16(data[50:52]))
-	if baseLen > 4096 {
-		return ParseEncryptedBackupHeader(data)
+	threads := binary.BigEndian.Uint32(data[29:33])
+	baseOffset, fixed := 53, backupHeaderFixed
+	if threads < 1 || threads > 8 {
+		baseOffset, fixed = 50, 5+16+4+4+1+12+8+2
+	}
+	data = append(data, make([]byte, fixed-len(data))...)
+	if _, err := io.ReadFull(f, data[33:]); err != nil {
+		return EncryptedBackupHeader{}, fmt.Errorf("invalid or truncated BKUP1 header")
+	}
+	baseLen := int(binary.BigEndian.Uint16(data[baseOffset : baseOffset+2]))
+	if baseLen > 255 {
+		return ParseEncryptedBackupHeader(data[:fixed])
 	}
 	if baseLen > 0 {
 		data = append(data, make([]byte, baseLen)...)
-		if _, err := io.ReadFull(f, data[backupHeaderFixed:]); err != nil {
+		if _, err := io.ReadFull(f, data[fixed:]); err != nil {
 			return EncryptedBackupHeader{}, fmt.Errorf("invalid or truncated BKUP1 header")
 		}
 	}
@@ -1212,7 +1239,7 @@ func decrypt(data []byte, password string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		key := argon2.IDKey([]byte(password), header.Salt, header.Iterations, header.MemoryKiB, header.Threads, 32)
+		key := argon2.IDKey([]byte(password), header.Salt, header.Iterations, header.MemoryKiB, uint8(header.Threads), 32)
 		if !hmac.Equal([]byte(header.KeyID), []byte(BackupKeyIDForPassword(password, header))) {
 			return nil, fmt.Errorf("backup password does not match header key id")
 		}

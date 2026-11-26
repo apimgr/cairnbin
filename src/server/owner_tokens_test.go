@@ -56,6 +56,32 @@ func ownerTokenTestServer(t *testing.T) (*Server, string) {
 	return s, primary
 }
 
+func TestOwnerCookieSecureOnI2P(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.I2P.B32Address = "abc123.b32.i2p"
+	s := newMinimalServer(cfg)
+	for _, tc := range []struct {
+		host string
+		want bool
+	}{{host: "abc123.b32.i2p", want: false}, {host: "example.com", want: true}} {
+		r := httptest.NewRequest(http.MethodGet, "http://"+tc.host+"/", nil)
+		w := httptest.NewRecorder()
+		s.setOwnerCookie(w, r, "own_test")
+		var found bool
+		for _, cookie := range w.Result().Cookies() {
+			if cookie.Name == ownerCookieName {
+				found = true
+				if cookie.Secure != tc.want || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
+					t.Errorf("owner cookie for %s = Secure:%t HttpOnly:%t SameSite:%d", tc.host, cookie.Secure, cookie.HttpOnly, cookie.SameSite)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("owner cookie was not set for %s", tc.host)
+		}
+	}
+}
+
 func TestLinkedTokenAPIUsesOpaqueIDAndReturnsCanonicalShape(t *testing.T) {
 	s, primary := ownerTokenTestServer(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences/tokens", strings.NewReader(`{"name":"automation","expires_on":""}`))

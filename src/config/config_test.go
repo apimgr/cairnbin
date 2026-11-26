@@ -519,6 +519,23 @@ func TestResolvePort_AlreadySet(t *testing.T) {
 	}
 }
 
+func TestResolvePort_InvalidExplicitPortIsReplaced(t *testing.T) {
+	for _, invalid := range []string{"0", "65536", "abc", "80,0", "1,2,3"} {
+		t.Run(invalid, func(t *testing.T) {
+			path := tempConfigPath(t)
+			cfg := config.DefaultConfig()
+			cfg.Server.Port = invalid
+			if err := config.ResolvePort(path, cfg, false); err != nil {
+				t.Fatalf("ResolvePort: %v", err)
+			}
+			port, err := strconv.Atoi(cfg.Server.Port)
+			if err != nil || port < 64000 || port > 64999 {
+				t.Fatalf("invalid port %q was not replaced with a random 64000-64999 port", cfg.Server.Port)
+			}
+		})
+	}
+}
+
 // TestResolvePort_RandomPort verifies that the first-run path selects a port in
 // [64000, 64999] and persists it to the config file.
 func TestResolvePort_RandomPort(t *testing.T) {
