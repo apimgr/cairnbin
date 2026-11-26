@@ -1,6 +1,6 @@
 # Configuration
 
-The server reads `server.yml`, ordered `yaml.d/*.yml` area files, and `secrets.yml` from the config directory. First run creates the node-specific `server.yml`; the rest use built-in defaults until an area file is present. `secrets.yml` is merged last. CLI flags and environment variables override file values.
+The server reads `server.yml`, ordered `yaml.d/*.yml` area files, and `secrets.yml` from the config directory. First run creates the node-specific `server.yml`; the rest use built-in defaults until an area file is present. `secrets.yml` is merged last. CLI flags and runtime environment variables override file values, except `DATABASE_DRIVER`, `DATABASE_URL`, and `CACHE_URL`, which seed saved connections only on first run.
 
 ## Config File Location
 
@@ -379,7 +379,7 @@ is skipped (with a `backup.skipped_disk_full` audit event) when free
 space is less than 2x the last backup size or disk usage exceeds
 `maintenance.cleanup.disk_threshold` (default 90%).
 
-`--maintenance backup` archives `server.yml`, `yaml.d/`, `secrets.yml`, `assets/`, and the `template/` and `theme/` directories. It includes the local SQLite `server.db` when present; with libSQL/Turso, it includes the local cache database only when `server.database.cache.enabled` is true. The remote database itself is never copied. The archived copy of `secrets.yml` has `server.token` blanked; the source file is unchanged. Add `--include-ssl` for the full `{config_dir}/ssl/` directory and `--include-data` for `{data_dir}/` (excluding `db/` and the backup directory).
+`--maintenance backup` archives `server.yml`, `yaml.d/`, `secrets.yml`, `assets/`, `template/`, and `theme/`. It stores a local SQLite database as `server.db`; with libSQL/Turso, it stores the local read-cache snapshot as `server.db` only when `server.database.cache.enabled` is true. The remote database itself is never copied; the backup logs one informational line naming its driver. `app_secrets.json` contains the application-secret rows needed to restore cryptographic state even when no database snapshot is included. On restore, `server.db` seeds a remote database only if every remote table is empty; populated remote data is left untouched, while the exported app-secret rows are restored. The archived copy of `secrets.yml` has `server.token` blanked; restore preserves the target host's token or generates and prints one if none exists. The source file is unchanged. Add `--include-ssl` for the full `{config_dir}/ssl/` directory and `--include-data` for `{data_dir}/` (excluding `db/` and the backup directory).
 
 The individual files referenced by `server.cache.tls_ca`, `server.cache.tls_cert`, and `server.cache.tls_key` are always included from `{config_dir}/ssl/`, whether or not `--include-ssl` is set. When `server.ssl.cert` or `server.ssl.key` points outside that directory, only the referenced file is included under `ssl-external/`; restore places it in `{config_dir}/ssl/external/`, keeps the key owner-only, and rewrites the restored setting to that path. Files inside `{config_dir}/ssl/` are covered by `--include-ssl` instead.
 
@@ -441,8 +441,10 @@ both the dark and light themes.
 
 ## Environment Variables
 
-Environment variables override the matching `server.yml` values at startup;
-they are read individually (no `.env` file is ever loaded).
+Environment variables are read individually; no `.env` file is loaded.
+Runtime overrides apply at every startup. `DATABASE_DRIVER`, `DATABASE_URL`,
+and `CACHE_URL` seed the saved database/cache connection on first run and are
+ignored after that, so later file or CLI changes remain authoritative.
 
 ### Server
 
@@ -479,11 +481,10 @@ than substituting `localhost`.
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_DRIVER` | Database driver (`sqlite`, `libsql`) |
-| `DATABASE_URL` | Remote database URL (libsql/Turso) |
+| `DATABASE_DRIVER` | First-run database driver when `DATABASE_URL` is unset (`sqlite`, `libsql`) |
+| `DATABASE_URL` | First-run database connection string; its scheme selects the driver |
 | `DATABASE_DIR` | Directory holding the SQLite DB |
-| `DB_PATH` | Full path to the SQLite DB file |
-| `CACHE_URL` | Cache backend URL (memory/valkey/redis) |
+| `CACHE_URL` | First-run cache connection string (`valkey://` or `redis://`); its scheme selects the type |
 
 ### SMTP (email notifications)
 

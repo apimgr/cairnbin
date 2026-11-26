@@ -138,8 +138,9 @@ cairnbin-cli list --limit 20
 ## Configuration
 
 The server reads `/etc/apimgr/cairnbin/server.yml` on Linux (created automatically on
-first run). Supported CLI flags and environment variables override their matching
-configuration values.
+first run). Supported CLI flags and runtime environment variables override
+matching configuration values. `DATABASE_DRIVER`, `DATABASE_URL`, and
+`CACHE_URL` seed saved connections only on first run.
 
 ### Server (`cairnbin`) Environment Variables
 
@@ -158,11 +159,10 @@ configuration values.
 | `MODE` | `production` | Application mode (`production`, `development`, or `debug`) |
 | `DEBUG` | `false` | Enable development diagnostics and debug endpoints |
 | `TZ` | `America/New_York` | Process timezone |
-| `DATABASE_DRIVER` | `sqlite` | Database driver: local `sqlite` or remote `libsql`/Turso |
-| `DATABASE_URL` | Unset (local SQLite path is used) | Database URL/path; set a `libsql://` URL for remote libSQL/Turso |
+| `DATABASE_DRIVER` | `sqlite` (first run only) | Initial database driver when `DATABASE_URL` is unset |
+| `DATABASE_URL` | Unset (local SQLite path is used) | Initial database connection string; its scheme selects the driver |
 | `DATABASE_DIR` | `{data_dir}/db` | Directory holding the SQLite database |
-| `DB_PATH` | `{data_dir}/db/server.db` | SQLite database path |
-| `CACHE_URL` | In-memory cache | Cache backend URL (memory, Valkey, or Redis) |
+| `CACHE_URL` | In-memory cache (first run only) | Initial cache connection string; `valkey://` and `redis://` select the backend |
 | `SITE_TITLE` | `Cairnbin` | Site title shown in the web UI |
 | `THEME` | `dark` | UI theme: `dark`, `light`, or `auto` |
 | `MAX_SIZE` | `10mb` | Maximum paste size; accepts `kb`/`mb`/`gb`/`tb` suffixes, a bare number (defaults to MB), or `0`/negative for unlimited |
