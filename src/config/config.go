@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -33,11 +34,10 @@ import (
 
 // Config is the top-level configuration for the cairnbin server.
 type Config struct {
-	Server   ServerConfig       `yaml:"server"`
-	Database DatabaseConfig     `yaml:"database"`
-	Paste    PasteConfig        `yaml:"paste"`
-	Web      WebConfig          `yaml:"web"`
-	Data     SecurityDataConfig `yaml:"data"`
+	Server ServerConfig       `yaml:"server"`
+	Paste  PasteConfig        `yaml:"paste"`
+	Web    WebConfig          `yaml:"web"`
+	Data   SecurityDataConfig `yaml:"data"`
 	// FirstRun is true when Load() created server.yml because none existed.
 	// Runtime-only — never persisted (startup step 20, AI.md:10631).
 	FirstRun     bool              `yaml:"-"`
@@ -112,6 +112,7 @@ type ServerConfig struct {
 	Logging       LoggingConfig       `yaml:"logs"`
 	Notifications NotificationsConfig `yaml:"notifications"`
 	TLS           TLSConfig           `yaml:"ssl"`
+	Database      DatabaseConfig      `yaml:"database"`
 	// Backup configures backup encryption, compliance, and retention (PART 21).
 	Backup BackupConfig `yaml:"backup"`
 	// Update controls the self-update channel and scheduling behaviour (PART 22).
@@ -597,10 +598,13 @@ type CacheConfig struct {
 	Password string `yaml:"password"`
 	DB       int    `yaml:"db"`
 	// TLS enables TLS for the connection.
-	TLS           bool `yaml:"tls"`
-	TLSSkipVerify bool `yaml:"tls_skip_verify"`
-	PoolSize      int  `yaml:"pool_size"`
-	MinIdle       int  `yaml:"min_idle"`
+	TLS           bool   `yaml:"tls"`
+	TLSSkipVerify bool   `yaml:"tls_skip_verify"`
+	TLSCA         string `yaml:"tls_ca"`
+	TLSCert       string `yaml:"tls_cert"`
+	TLSKey        string `yaml:"tls_key"`
+	PoolSize      int    `yaml:"pool_size"`
+	MinIdle       int    `yaml:"min_idle"`
 	// Timeout is the dial/read/write timeout for remote drivers.
 	Timeout string `yaml:"timeout"`
 	// Prefix is prepended to every key to avoid namespace collisions.
@@ -875,10 +879,20 @@ type DatabaseConfig struct {
 	// Token is the libsql/Turso auth token, used when the URL does not already
 	// carry an authToken query parameter (AI.md PART 3 "libSQL Driver").
 	// Ignored by the sqlite driver.
-	Token string `yaml:"token"`
+	Token string              `yaml:"token"`
+	Cache DatabaseCacheConfig `yaml:"cache"`
 	// Pool holds the connection pool settings applied to every database handle
 	// (AI.md PART 10 "Pool Configuration").
 	Pool DatabasePoolConfig `yaml:"pool"`
+}
+
+// DatabaseCacheConfig controls the optional SQLite read replica for libSQL.
+type DatabaseCacheConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	Path         string `yaml:"path"`
+	SyncInterval string `yaml:"sync_interval"`
+	OfflineMode  bool   `yaml:"offline_mode"`
+	MaxAge       string `yaml:"max_age"`
 }
 
 // DatabasePoolConfig configures the sql.DB connection pool (AI.md PART 10).
@@ -1789,15 +1803,15 @@ type RestoreConfig struct {
 
 // BackupConfig holds backup, encryption, compliance, and retention settings (PART 21).
 type BackupConfig struct {
-	Encryption BackupEncryptionConfig `yaml:"encryption"`
-	Compliance BackupComplianceConfig `yaml:"compliance"`
-	Retention  BackupRetentionConfig  `yaml:"retention"`
+	Encryption         BackupEncryptionConfig `yaml:"encryption"`
+	EncryptionPassword string                 `yaml:"encryption_password"`
+	Compliance         BackupComplianceConfig `yaml:"compliance"`
+	Retention          BackupRetentionConfig  `yaml:"retention"`
 }
 
 // BackupEncryptionConfig controls AES-256-GCM + Argon2id backup encryption (PART 21).
 type BackupEncryptionConfig struct {
-	// Enabled turns on AES-256-GCM encryption for all backup archives.
-	// Password is prompted interactively; never stored in config.
+	// Enabled records whether backup encryption is enabled in the configuration.
 	Enabled bool `yaml:"enabled"`
 }
 
@@ -2212,6 +2226,13 @@ func DefaultConfig() *Config {
 				Prefix:   "cairnbin:",
 				TTL:      "1h",
 			},
+			Database: DatabaseConfig{
+				Type: "sqlite",
+				Pool: DatabasePoolConfig{
+					MaxOpen: 5, MaxIdle: 2, MaxLifetime: 5 * time.Minute, MaxIdleTime: time.Minute,
+				},
+				Cache: DatabaseCacheConfig{Enabled: false, SyncInterval: "30s", OfflineMode: true, MaxAge: "1h"},
+			},
 			Limits: LimitsConfig{
 				// 10 MiB
 				MaxBodySize:  10 << 20,
@@ -2366,17 +2387,6 @@ func DefaultConfig() *Config {
 				URL:  "",
 			},
 		},
-		Database: DatabaseConfig{
-			Type: "sqlite",
-			// resolved at startup relative to data dir
-			Path: "",
-			Pool: DatabasePoolConfig{
-				MaxOpen:     5,
-				MaxIdle:     2,
-				MaxLifetime: 5 * time.Minute,
-				MaxIdleTime: time.Minute,
-			},
-		},
 		Paste: PasteConfig{
 			// 10 MiB
 			MaxSize:         "10mb",
@@ -2489,6 +2499,7 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	cfg.loadEnv()
+	seedDatabaseEnvironment(cfg, missing)
 	Validate(cfg)
 	if provider := cfg.Server.Pages.Contact.Captcha; provider == "recaptcha" || provider == "hcaptcha" {
 		if strings.TrimSpace(cfg.Server.Pages.Contact.CaptchaSiteKey) == "" || strings.TrimSpace(cfg.Server.Pages.Contact.CaptchaSecretKey) == "" {
@@ -2517,6 +2528,8 @@ func Load(path string) (*Config, error) {
 			log.Printf("config: warning: could not persist generated secrets to %s: %v", path, saveErr)
 		} else if migrationErr := migrateAreaFiles(path); migrationErr != nil {
 			log.Printf("[config] area migration could not complete: %v", migrationErr)
+		} else if migrationErr := migrateRuntimeSecrets(path); migrationErr != nil {
+			log.Printf("[config] runtime secret migration could not complete: %v", migrationErr)
 		}
 		cfg.FirstRun = true
 		cfg.fieldSources = fieldSources
@@ -2591,6 +2604,64 @@ func Load(path string) (*Config, error) {
 	return cfg, decodeErr
 }
 
+// seedDatabaseEnvironment applies connection variables only while creating a
+// new configuration. Existing saved connection settings remain authoritative.
+func seedDatabaseEnvironment(cfg *Config, firstRun bool) {
+	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	databaseDriver := strings.TrimSpace(os.Getenv("DATABASE_DRIVER"))
+	cacheURL := strings.TrimSpace(os.Getenv("CACHE_URL"))
+	if !firstRun {
+		if databaseURL != "" && cfg.Server.Database.Path != "" && databaseURL != cfg.Server.Database.Path {
+			log.Printf("config: DATABASE_URL is ignored because saved server.database.url is authoritative")
+		}
+		if databaseURL == "" && databaseDriver != "" && !strings.EqualFold(databaseDriver, cfg.Server.Database.Type) {
+			log.Printf("config: DATABASE_DRIVER is ignored because saved server.database.driver is authoritative")
+		}
+		if cacheURL != "" && cfg.Server.Cache.URL != "" && cacheURL != cfg.Server.Cache.URL {
+			log.Printf("config: CACHE_URL is ignored because saved server.cache.url is authoritative")
+		}
+		return
+	}
+	if databaseURL != "" {
+		cfg.Server.Database.Path = databaseURL
+		if cfg.fieldSources == nil {
+			cfg.fieldSources = make(map[string]string)
+		}
+		cfg.fieldSources["server.database.url"] = cfg.configPath
+		if urlHasCredential(databaseURL) {
+			cfg.fieldSources["server.database.url"] = "secrets.yml"
+		}
+		if parsed, err := url.Parse(databaseURL); err == nil {
+			switch strings.ToLower(parsed.Scheme) {
+			case "libsql", "libsqls", "turso":
+				cfg.Server.Database.Type = "libsql"
+			case "sqlite", "sqlite2", "sqlite3", "file":
+				cfg.Server.Database.Type = "sqlite"
+			}
+		}
+	} else if databaseDriver != "" {
+		cfg.Server.Database.Type = databaseDriver
+	}
+	if cacheURL != "" {
+		cfg.Server.Cache.URL = cacheURL
+		if cfg.fieldSources == nil {
+			cfg.fieldSources = make(map[string]string)
+		}
+		cfg.fieldSources["server.cache.url"] = cfg.configPath
+		if urlHasCredential(cacheURL) {
+			cfg.fieldSources["server.cache.url"] = "secrets.yml"
+		}
+		if parsed, err := url.Parse(cacheURL); err == nil {
+			switch strings.ToLower(parsed.Scheme) {
+			case "valkey", "valkeys":
+				cfg.Server.Cache.Type = "valkey"
+			case "redis", "rediss":
+				cfg.Server.Cache.Type = "redis"
+			}
+		}
+	}
+}
+
 // ReadLanguage reads only server.lang without creating a missing config file or
 // generating runtime secrets. It is used for early CLI output such as --help.
 func ReadLanguage(path string) (string, error) {
@@ -2647,6 +2718,16 @@ func (c *Config) ensureServerToken() error {
 	}
 	c.fieldSources["server.token"] = "generated"
 	return nil
+}
+
+// GenerateServerToken returns a fresh operator token using the canonical
+// adm_ format. It is used by restore when the target has no token to preserve.
+func GenerateServerToken() (string, error) {
+	cfg := &Config{}
+	if err := cfg.ensureServerToken(); err != nil {
+		return "", err
+	}
+	return cfg.Server.Token, nil
 }
 
 // EncryptionKey returns the decoded 32-byte AES-256-GCM key, or an error if
@@ -3212,30 +3293,6 @@ func (c *Config) loadEnv() {
 			log.Printf("config: DOMAIN primary host %q failed host validation for mode %q; ignoring", primary, c.Server.Mode)
 		}
 	}
-	// DATABASE_DRIVER selects the storage backend (AI.md 7550).
-	if v := os.Getenv("DATABASE_DRIVER"); v != "" {
-		c.Database.Type = v
-	}
-	// DATABASE_URL / DB_PATH set the connection string (AI.md 7551); DB_PATH is an alias.
-	if v := os.Getenv("DB_PATH"); v != "" {
-		c.Database.Path = v
-	}
-	if v := os.Getenv("DATABASE_URL"); v != "" {
-		c.Database.Path = v
-	}
-	// CACHE_URL is the container-canonical cache override (AI.md 31725), e.g.
-	// "valkey://host:6379" or "redis://host:6379". The cache driver dispatches on
-	// Type, so derive Type from the URL scheme; a URL alone would otherwise stay on
-	// the default in-memory driver and silently ignore the remote endpoint.
-	if v := os.Getenv("CACHE_URL"); v != "" {
-		c.Server.Cache.URL = v
-		switch {
-		case strings.HasPrefix(v, "valkey://"), strings.HasPrefix(v, "valkeys://"):
-			c.Server.Cache.Type = "valkey"
-		case strings.HasPrefix(v, "redis://"), strings.HasPrefix(v, "rediss://"):
-			c.Server.Cache.Type = "redis"
-		}
-	}
 	// APPLICATION_NAME is the AI.md-canonical application title (AI.md 7579); SITE_TITLE is an alias.
 	if v := os.Getenv("SITE_TITLE"); v != "" {
 		c.Web.SiteTitle = v
@@ -3395,6 +3452,7 @@ func Validate(cfg *Config) {
 	validateRestoreLimits(&cfg.Server.Restore)
 	validateDebugConfig(&cfg.Server.Debug)
 	validateReportsConfig(&cfg.Web.Reports)
+	validateKeyservers(&cfg.Web.Security.Keyservers)
 	validateHeadersConfig(&cfg.Web.Headers)
 	if cfg.Web.CSP.ReportsSampleRate < 0 || cfg.Web.CSP.ReportsSampleRate > 1 {
 		log.Printf("[config] WARNING: invalid web.csp.reports_sample_rate %v, using default 1.0", cfg.Web.CSP.ReportsSampleRate)
@@ -3430,49 +3488,49 @@ func Validate(cfg *Config) {
 
 	// Database driver aliases normalize to their canonical form (AI.md 7722):
 	// sqlite/sqlite2/sqlite3 -> sqlite; libsql/turso -> libsql.
-	switch strings.ToLower(strings.TrimSpace(cfg.Database.Type)) {
+	switch strings.ToLower(strings.TrimSpace(cfg.Server.Database.Type)) {
 	case "", "sqlite", "sqlite2", "sqlite3":
-		cfg.Database.Type = "sqlite"
+		cfg.Server.Database.Type = "sqlite"
 	case "libsql", "turso":
-		cfg.Database.Type = "libsql"
+		cfg.Server.Database.Type = "libsql"
 	default:
 		log.Printf("[config] WARNING: invalid database.driver %q, using default %q",
-			cfg.Database.Type, d.Database.Type)
-		cfg.Database.Type = d.Database.Type
+			cfg.Server.Database.Type, d.Server.Database.Type)
+		cfg.Server.Database.Type = d.Server.Database.Type
 	}
 
 	// Database pool: a non-positive value is invalid, so warn and substitute the
 	// default rather than handing sql.DB an unbounded pool (AI.md PART 10).
-	if cfg.Database.Pool.MaxOpen <= 0 {
-		if cfg.Database.Pool.MaxOpen != 0 {
+	if cfg.Server.Database.Pool.MaxOpen <= 0 {
+		if cfg.Server.Database.Pool.MaxOpen != 0 {
 			log.Printf("[config] WARNING: invalid database.pool.max_open %d, using default %d",
-				cfg.Database.Pool.MaxOpen, d.Database.Pool.MaxOpen)
+				cfg.Server.Database.Pool.MaxOpen, d.Server.Database.Pool.MaxOpen)
 		}
-		cfg.Database.Pool.MaxOpen = d.Database.Pool.MaxOpen
+		cfg.Server.Database.Pool.MaxOpen = d.Server.Database.Pool.MaxOpen
 	}
-	if cfg.Database.Pool.MaxIdle <= 0 {
-		if cfg.Database.Pool.MaxIdle != 0 {
+	if cfg.Server.Database.Pool.MaxIdle <= 0 {
+		if cfg.Server.Database.Pool.MaxIdle != 0 {
 			log.Printf("[config] WARNING: invalid database.pool.max_idle %d, using default %d",
-				cfg.Database.Pool.MaxIdle, d.Database.Pool.MaxIdle)
+				cfg.Server.Database.Pool.MaxIdle, d.Server.Database.Pool.MaxIdle)
 		}
-		cfg.Database.Pool.MaxIdle = d.Database.Pool.MaxIdle
+		cfg.Server.Database.Pool.MaxIdle = d.Server.Database.Pool.MaxIdle
 	}
-	if cfg.Database.Pool.MaxIdle > cfg.Database.Pool.MaxOpen {
-		cfg.Database.Pool.MaxIdle = cfg.Database.Pool.MaxOpen
+	if cfg.Server.Database.Pool.MaxIdle > cfg.Server.Database.Pool.MaxOpen {
+		cfg.Server.Database.Pool.MaxIdle = cfg.Server.Database.Pool.MaxOpen
 	}
-	if cfg.Database.Pool.MaxLifetime <= 0 {
-		if cfg.Database.Pool.MaxLifetime != 0 {
+	if cfg.Server.Database.Pool.MaxLifetime <= 0 {
+		if cfg.Server.Database.Pool.MaxLifetime != 0 {
 			log.Printf("[config] WARNING: invalid database.pool.max_lifetime %s, using default %s",
-				cfg.Database.Pool.MaxLifetime, d.Database.Pool.MaxLifetime)
+				cfg.Server.Database.Pool.MaxLifetime, d.Server.Database.Pool.MaxLifetime)
 		}
-		cfg.Database.Pool.MaxLifetime = d.Database.Pool.MaxLifetime
+		cfg.Server.Database.Pool.MaxLifetime = d.Server.Database.Pool.MaxLifetime
 	}
-	if cfg.Database.Pool.MaxIdleTime <= 0 {
-		if cfg.Database.Pool.MaxIdleTime != 0 {
+	if cfg.Server.Database.Pool.MaxIdleTime <= 0 {
+		if cfg.Server.Database.Pool.MaxIdleTime != 0 {
 			log.Printf("[config] WARNING: invalid database.pool.max_idle_time %s, using default %s",
-				cfg.Database.Pool.MaxIdleTime, d.Database.Pool.MaxIdleTime)
+				cfg.Server.Database.Pool.MaxIdleTime, d.Server.Database.Pool.MaxIdleTime)
 		}
-		cfg.Database.Pool.MaxIdleTime = d.Database.Pool.MaxIdleTime
+		cfg.Server.Database.Pool.MaxIdleTime = d.Server.Database.Pool.MaxIdleTime
 	}
 
 	// Limits: timeouts must be parseable and positive.
@@ -3795,6 +3853,45 @@ func Validate(cfg *Config) {
 	}
 }
 
+func validateKeyservers(keyservers *[]string) {
+	seen := make(map[string]struct{}, len(*keyservers))
+	valid := make([]string, 0, len(*keyservers))
+	for _, host := range *keyservers {
+		if !validKeyserverHost(host) {
+			log.Printf("[config] WARNING: invalid web.security.keyservers host %q; ignoring", host)
+			continue
+		}
+		host = strings.ToLower(host)
+		if _, ok := seen[host]; ok {
+			continue
+		}
+		seen[host] = struct{}{}
+		valid = append(valid, host)
+	}
+	*keyservers = valid
+}
+
+func validKeyserverHost(host string) bool {
+	if host == "" || strings.TrimSpace(host) != host || len(host) > 253 || net.ParseIP(host) != nil {
+		return false
+	}
+	labels := strings.Split(host, ".")
+	if len(labels) < 2 {
+		return false
+	}
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func validateToastConfig(c *ToastConfig, defaults ToastConfig) {
 	switch c.Position {
 	case "top-right", "top-left", "bottom-right", "bottom-left":
@@ -3917,7 +4014,6 @@ func Save(path string, cfg *Config) error {
 	}
 	saveCfg := *cfg
 	saveCfg.Server = cfg.Server
-	saveCfg.Database = cfg.Database
 	if cfg.Web.SiteTitle != "" {
 		saveCfg.Server.Branding.Title = cfg.Web.SiteTitle
 	}
@@ -3934,8 +4030,8 @@ func Save(path string, cfg *Config) error {
 	if inheritedSecret(cfg, "server.cache.password") {
 		saveCfg.Server.Cache.Password = ""
 	}
-	if inheritedSecret(cfg, "database.token") {
-		saveCfg.Database.Token = ""
+	if inheritedSecret(cfg, "server.database.token") {
+		saveCfg.Server.Database.Token = ""
 	}
 	if inheritedSecret(cfg, "server.notifications.email.smtp.password") {
 		saveCfg.Server.Notifications.Email.SMTP.Password = ""
@@ -3974,6 +4070,13 @@ func Save(path string, cfg *Config) error {
 		return err
 	}
 	for _, path := range configSecretPaths() {
+		key := strings.Join(path, ".")
+		if key == "server.database.url" || key == "server.cache.url" {
+			value := yamlPathValue(savedDocument.Content[0], path)
+			if value == nil || !urlHasCredential(value.Value) {
+				continue
+			}
+		}
 		deleteYAMLPath(savedDocument.Content[0], path)
 	}
 	data, err = marshalYAML2(&savedDocument)
@@ -4035,6 +4138,12 @@ func stripInheritedWebhookSecrets(cfg *Config, contact *ContactConfig) {
 // file; drop-ins remain independent inputs and continue to win on reload.
 func persistGeneratedSecrets(configPath string, cfg *Config) error {
 	values := map[string]string{}
+	if urlHasCredential(cfg.Server.Database.Path) {
+		values["server.database.url"] = cfg.Server.Database.Path
+	}
+	if urlHasCredential(cfg.Server.Cache.URL) {
+		values["server.cache.url"] = cfg.Server.Cache.URL
+	}
 	if cfg.Data.CVE.APIKey != "" {
 		values["data.cve.api_key"] = cfg.Data.CVE.APIKey
 	}
@@ -4184,6 +4293,9 @@ func migrateRuntimeSecrets(configPath string) error {
 			if value == nil || value.Kind == yaml.ScalarNode && value.Value == "" {
 				continue
 			}
+			if (strings.Join(key, ".") == "server.database.url" || strings.Join(key, ".") == "server.cache.url") && !urlHasCredential(value.Value) {
+				continue
+			}
 			if yamlPathValue(originalSecrets, key) == nil {
 				if err := setYAMLNodePath(secretsDoc.Content[0], key, cloneYAMLNode(value)); err != nil {
 					return err
@@ -4242,6 +4354,8 @@ func configSecretPaths() [][]string {
 		{"server", "security", "encryption_key_version"},
 		{"server", "notifications", "email", "smtp", "password"},
 		{"server", "cache", "password"},
+		{"server", "database", "url"},
+		{"server", "cache", "url"},
 		{"database", "token"},
 		{"server", "database", "token"},
 		{"server", "pages", "contact", "captcha_secret_key"},
@@ -4254,6 +4368,29 @@ func configSecretPaths() [][]string {
 		paths = append(paths, []string{"server", "contact", role, "webhooks"})
 	}
 	return paths
+}
+
+func urlHasCredential(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	if parsed.User != nil {
+		if _, ok := parsed.User.Password(); ok {
+			return true
+		}
+	}
+	for key, values := range parsed.Query() {
+		switch strings.ToLower(key) {
+		case "password", "pwd", "token", "authtoken":
+			for _, value := range values {
+				if strings.TrimSpace(value) != "" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func setYAMLNodePath(node *yaml.Node, path []string, value *yaml.Node) error {
@@ -4905,12 +5042,11 @@ func (m *ConfigManager) applyHotSettings(prev, next *Config) {
 		log.Printf("[config] WARNING: server.address changed (%s → %s) — restart required",
 			prev.Server.Address, next.Server.Address)
 	}
-	if prev.Database.Type != next.Database.Type || prev.Database.Path != next.Database.Path {
+	if prev.Server.Database.Type != next.Server.Database.Type || prev.Server.Database.Path != next.Server.Database.Path {
 		log.Printf("[config] WARNING: database settings changed — restart required")
 	}
-	if prev.Server.Tor.Binary != next.Server.Tor.Binary ||
-		prev.Server.Tor.VirtualPort != next.Server.Tor.VirtualPort {
-		log.Printf("[config] WARNING: tor settings changed — restart required")
+	if !reflect.DeepEqual(prev.Server.Tor, next.Server.Tor) {
+		log.Printf("[config] hot-reload: tor settings changed; restarting Tor child process")
 	}
 
 	// Hot-reloadable settings are applied by replacing the entire current pointer
@@ -4981,7 +5117,7 @@ func (c *Config) StartupBaseURL() string {
 
 // legacyKeyMoves lists top-level config keys that older releases wrote outside
 // `server:`; each is read from server.<key> now (AI.md location).
-var legacyKeyMoves = []string{"rate_limit"}
+var legacyKeyMoves = []string{"database", "rate_limit"}
 
 // migrateLegacyKeys rewrites an older server.yml so keys that moved are read
 // from their new location, never overwriting a value already set there. A
@@ -5003,7 +5139,13 @@ func migrateLegacyKeys(data []byte) []byte {
 		if server == nil {
 			server = map[string]any{}
 		}
-		if _, exists := server[key]; !exists {
+		if existing, exists := server[key]; exists {
+			legacy, legacyOK := val.(map[string]any)
+			canonical, canonicalOK := existing.(map[string]any)
+			if legacyOK && canonicalOK {
+				server[key] = mergeLegacyMapping(legacy, canonical)
+			}
+		} else {
 			server[key] = val
 		}
 		doc["server"] = server
@@ -5018,6 +5160,25 @@ func migrateLegacyKeys(data []byte) []byte {
 		return data
 	}
 	return out
+}
+
+func mergeLegacyMapping(legacy, canonical map[string]any) map[string]any {
+	merged := make(map[string]any, len(legacy)+len(canonical))
+	for key, value := range legacy {
+		merged[key] = value
+	}
+	for key, value := range canonical {
+		if old, exists := merged[key]; exists {
+			oldMap, oldOK := old.(map[string]any)
+			newMap, newOK := value.(map[string]any)
+			if oldOK && newOK {
+				merged[key] = mergeLegacyMapping(oldMap, newMap)
+				continue
+			}
+		}
+		merged[key] = value
+	}
+	return merged
 }
 
 func removeLegacyRateLimitEnabled(doc map[string]any) bool {

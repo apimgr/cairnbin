@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/cairnbin/src/database"
 )
 
 // writeBackupTree creates a minimal config/data tree for Backup.
@@ -20,16 +22,25 @@ func writeBackupTree(t *testing.T) (cfgDir, dataDir, backupDir string) {
 		}
 	}
 	files := map[string]string{
-		filepath.Join(cfgDir, "server.yml"):          "server:\n  mode: production\n",
-		filepath.Join(cfgDir, "ssl", "cert.pem"):     "CERT",
-		filepath.Join(dataDir, "db", "server.db"):    "SQLite format 3\x00" + strings.Repeat("x", 100),
-		filepath.Join(dataDir, "uploads", "a.bin"):   "UPLOAD",
+		filepath.Join(cfgDir, "server.yml"):            "server:\n  mode: production\n",
+		filepath.Join(cfgDir, "ssl", "cert.pem"):       "CERT",
+		filepath.Join(dataDir, "uploads", "a.bin"):     "UPLOAD",
 		filepath.Join(dataDir, "uploads", "zeros.bin"): strings.Repeat("\x00", 20000),
 	}
 	for p, c := range files {
 		if err := os.WriteFile(p, []byte(c), 0o600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	db, err := database.NewDatabase("sqlite", filepath.Join(dataDir, "db", "server.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(dataDir, "db", "server.db"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	return cfgDir, dataDir, backupDir
 }

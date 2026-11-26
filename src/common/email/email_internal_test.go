@@ -104,7 +104,10 @@ func TestBuildMessage_NoReplyTo(t *testing.T) {
 // TestBuildRFCMessage_RejectsHeaderInjection verifies caller-controlled header
 // values containing CR or LF are rejected before a message is generated.
 func TestBuildRFCMessage_RejectsHeaderInjection(t *testing.T) {
-	cases := []struct { name string; args []string }{
+	cases := []struct {
+		name string
+		args []string
+	}{
 		{"from name", []string{"Name\r\nBcc: bad@example.com", "from@example.com", "to@example.com", "Subject", "Body", "", "example.com"}},
 		{"from address", []string{"Name", "from@example.com\nBcc: bad@example.com", "to@example.com", "Subject", "Body", "", "example.com"}},
 		{"recipient", []string{"Name", "from@example.com", "to@example.com\r\nBcc: bad@example.com", "Subject", "Body", "", "example.com"}},
@@ -122,13 +125,21 @@ func TestBuildRFCMessage_RejectsHeaderInjection(t *testing.T) {
 
 func TestBuildRFCMessage_RequiredHeadersAndAlternativeParts(t *testing.T) {
 	msg, err := buildRFCMessage("Cairnbín", "from@example.com", "to@example.com", "Résumé – report", "<script>alert('x')</script>", "reply@example.com", "example.com")
-	if err != nil { t.Fatal(err) }
-	parsed, err := mail.ReadMessage(bytes.NewReader(msg))
-	if err != nil { t.Fatal(err) }
-	for _, name := range []string{"From", "To", "Subject", "Date", "Message-Id", "MIME-Version", "Auto-Submitted"} {
-		if parsed.Header.Get(name) == "" { t.Errorf("required %s header missing", name) }
+	if err != nil {
+		t.Fatal(err)
 	}
-	if parsed.Header.Get("Auto-Submitted") != "auto-generated" { t.Errorf("Auto-Submitted = %q", parsed.Header.Get("Auto-Submitted")) }
+	parsed, err := mail.ReadMessage(bytes.NewReader(msg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"From", "To", "Subject", "Date", "Message-Id", "MIME-Version", "Auto-Submitted"} {
+		if parsed.Header.Get(name) == "" {
+			t.Errorf("required %s header missing", name)
+		}
+	}
+	if parsed.Header.Get("Auto-Submitted") != "auto-generated" {
+		t.Errorf("Auto-Submitted = %q", parsed.Header.Get("Auto-Submitted"))
+	}
 	if !strings.Contains(parsed.Header.Get("From"), "=?UTF-8?b?") || !strings.Contains(parsed.Header.Get("Subject"), "=?UTF-8?b?") {
 		t.Errorf("non-ASCII display name and subject must use RFC 2047 encoding: %#v", parsed.Header)
 	}
@@ -140,33 +151,61 @@ func TestBuildRFCMessage_RequiredHeadersAndAlternativeParts(t *testing.T) {
 	if err != nil || fromAddress.Name != "Cairnbín" {
 		t.Errorf("RFC 2047 display name decode = %#v, %v", fromAddress, err)
 	}
-	if _, err := mail.ParseDate(parsed.Header.Get("Date")); err != nil { t.Errorf("Date is not RFC 5322 formatted: %v", err) }
+	if _, err := mail.ParseDate(parsed.Header.Get("Date")); err != nil {
+		t.Errorf("Date is not RFC 5322 formatted: %v", err)
+	}
 	if !strings.HasPrefix(parsed.Header.Get("Message-Id"), "<") || !strings.HasSuffix(parsed.Header.Get("Message-Id"), "@example.com>") {
 		t.Errorf("Message-ID has wrong format: %q", parsed.Header.Get("Message-Id"))
 	}
 	mediaType, params, err := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
-	if err != nil || mediaType != "multipart/alternative" { t.Fatalf("Content-Type = %q (%v)", parsed.Header.Get("Content-Type"), err) }
+	if err != nil || mediaType != "multipart/alternative" {
+		t.Fatalf("Content-Type = %q (%v)", parsed.Header.Get("Content-Type"), err)
+	}
 	reader := multipart.NewReader(parsed.Body, params["boundary"])
 	plain, err := reader.NextPart()
-	if err != nil { t.Fatal(err) }
-	if plain.Header.Get("Content-Type") != "text/plain; charset=UTF-8" { t.Errorf("first part content type = %q", plain.Header.Get("Content-Type")) }
-	if !strings.Contains(string(msg), "Content-Transfer-Encoding: quoted-printable") { t.Error("quoted-printable transfer encoding missing from raw MIME parts") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.Header.Get("Content-Type") != "text/plain; charset=UTF-8" {
+		t.Errorf("first part content type = %q", plain.Header.Get("Content-Type"))
+	}
+	if !strings.Contains(string(msg), "Content-Transfer-Encoding: quoted-printable") {
+		t.Error("quoted-printable transfer encoding missing from raw MIME parts")
+	}
 	plainBody, err := io.ReadAll(plain)
-	if err != nil || strings.TrimSpace(string(plainBody)) == "" { t.Errorf("plain-text part must be non-empty: body=%q err=%v", plainBody, err) }
+	if err != nil || strings.TrimSpace(string(plainBody)) == "" {
+		t.Errorf("plain-text part must be non-empty: body=%q err=%v", plainBody, err)
+	}
 	htmlPart, err := reader.NextPart()
-	if err != nil { t.Fatal(err) }
-	if htmlPart.Header.Get("Content-Type") != "text/html; charset=UTF-8" { t.Errorf("second part content type = %q", htmlPart.Header.Get("Content-Type")) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if htmlPart.Header.Get("Content-Type") != "text/html; charset=UTF-8" {
+		t.Errorf("second part content type = %q", htmlPart.Header.Get("Content-Type"))
+	}
 	htmlBody, err := io.ReadAll(htmlPart)
-	if err != nil { t.Fatal(err) }
-	if !strings.Contains(string(htmlBody), "&lt;script&gt;") { t.Errorf("HTML part does not escape the message body: %q", htmlBody) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(htmlBody), "&lt;script&gt;") {
+		t.Errorf("HTML part does not escape the message body: %q", htmlBody)
+	}
 	for _, line := range strings.Split(string(msg), "\r\n") {
-		if len(line) > 998 { t.Errorf("RFC 5322 line exceeds 998 octets (%d): %q", len(line), line) }
+		if len(line) > 998 {
+			t.Errorf("RFC 5322 line exceeds 998 octets (%d): %q", len(line), line)
+		}
 	}
 	second, err := buildRFCMessage("Cairnbín", "from@example.com", "to@example.com", "Résumé – report", "Body", "reply@example.com", "example.com")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	secondMessage, err := mail.ReadMessage(bytes.NewReader(second))
-	if err != nil { t.Fatal(err) }
-	if parsed.Header.Get("Message-Id") == secondMessage.Header.Get("Message-Id") { t.Error("Message-ID must be unique per message") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Header.Get("Message-Id") == secondMessage.Header.Get("Message-Id") {
+		t.Error("Message-ID must be unique per message")
+	}
 }
 
 func TestBuildRFCMessage_FoldsLongHeadersWithoutBreakingAddressTokens(t *testing.T) {

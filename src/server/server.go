@@ -20,6 +20,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+
 	// blank import side-effect: registers pprof handlers on DefaultServeMux
 	_ "net/http/pprof"
 	"net/url"
@@ -275,6 +276,7 @@ type Server struct {
 	cfgMgr               *config.ConfigManager
 	lastSMTPConfig       config.EmailConfig
 	lastEmailLanguage    string
+	lastTorConfig        config.TorConfig
 	lastI2PConfig        config.I2PConfig
 	lastBlocklistsConfig config.BlocklistsConfig
 	lastGeoIPConfig      config.GeoIPConfig
@@ -294,14 +296,18 @@ type Server struct {
 	sslManagerMu       sync.RWMutex
 	sslManager         *ssl.Manager
 	torManager         *tor.Manager
-	outboundHTTPClient *http.Client
+	torServerPort      int
+	outboundHTTPClient atomic.Pointer[http.Client]
 	i2pManager         *i2p.Manager
 	i2pMonitorOnce     sync.Once
 	overlayMu          sync.RWMutex
 	torStatus          string
 	torHostname        string
+	startupBannerDone  bool
+	torAddressLogged   bool
 	i2pStatus          string
 	i2pHostname        string
+	i2pAddressLogged   bool
 	i2pProvider        i2p.Provider
 	readLimiter        *rateLimiter
 	writeLimiter       *rateLimiter
@@ -527,6 +533,9 @@ func (s *Server) printStartupBanner() {
 	if s.startupBannerFn != nil {
 		s.startupBannerFn()
 	}
+	s.overlayMu.Lock()
+	s.startupBannerDone = true
+	s.overlayMu.Unlock()
 }
 
 // bindPrivilegedListenersAndDrop binds only ports below 1024 while root, then
@@ -678,6 +687,13 @@ func (s *Server) liveCfg() *config.Config {
 	return s.cfg
 }
 
+func resolveSSLPath(configDir, value string) string {
+	if value == "" || filepath.IsAbs(value) {
+		return value
+	}
+	return filepath.Join(configDir, "ssl", value)
+}
+
 func makeI2PConfig(cfg config.I2PConfig, configDir, dataDir, logDir string) i2p.Config {
 	bootstrapTimeout := 5 * time.Minute
 	if d, err := time.ParseDuration(cfg.BootstrapTimeout); err == nil && d > 0 {
@@ -697,6 +713,27 @@ func makeI2PConfig(cfg config.I2PConfig, configDir, dataDir, logDir string) i2p.
 		ConfigDir:        configDir,
 		DataDir:          dataDir,
 		LogDir:           logDir,
+	}
+}
+
+func makeTorConfig(cfg config.TorConfig, configDir, dataDir, logDir string) tor.Config {
+	return tor.Config{
+		Binary:                    cfg.Binary,
+		UseNetwork:                cfg.UseNetwork,
+		MaxCircuits:               cfg.MaxCircuits,
+		CircuitTimeout:            cfg.CircuitTimeout,
+		BootstrapTimeout:          cfg.BootstrapTimeout,
+		SafeLogging:               cfg.SafeLogging,
+		MaxStreamsPerCircuit:      cfg.MaxStreamsPerCircuit,
+		CloseCircuitOnStreamLimit: cfg.CloseCircuitOnStreamLimit,
+		BandwidthRate:             cfg.BandwidthRate,
+		BandwidthBurst:            cfg.BandwidthBurst,
+		MaxMonthlyBandwidth:       cfg.MaxMonthlyBandwidth,
+		NumIntroPoints:            cfg.NumIntroPoints,
+		VirtualPort:               cfg.VirtualPort,
+		ConfigDir:                 configDir,
+		DataDir:                   dataDir,
+		LogDir:                    logDir,
 	}
 }
 
@@ -721,6 +758,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		cfgMgr:                cfgMgr,
 		lastSMTPConfig:        cfg.Server.Notifications.Email,
 		lastEmailLanguage:     cfg.Server.Lang,
+		lastTorConfig:         cfg.Server.Tor,
 		lastI2PConfig:         cfg.Server.I2P,
 		lastBlocklistsConfig:  cfg.Server.Security.Blocklists,
 		lastGeoIPConfig:       cfg.Server.GeoIP,
@@ -825,24 +863,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	}
 
 	// Tor hidden service — auto-enabled when Tor binary is found.
-	torCfg := tor.Config{
-		Binary:                    cfg.Server.Tor.Binary,
-		UseNetwork:                cfg.Server.Tor.UseNetwork,
-		MaxCircuits:               cfg.Server.Tor.MaxCircuits,
-		CircuitTimeout:            cfg.Server.Tor.CircuitTimeout,
-		BootstrapTimeout:          cfg.Server.Tor.BootstrapTimeout,
-		SafeLogging:               cfg.Server.Tor.SafeLogging,
-		MaxStreamsPerCircuit:      cfg.Server.Tor.MaxStreamsPerCircuit,
-		CloseCircuitOnStreamLimit: cfg.Server.Tor.CloseCircuitOnStreamLimit,
-		BandwidthRate:             cfg.Server.Tor.BandwidthRate,
-		BandwidthBurst:            cfg.Server.Tor.BandwidthBurst,
-		MaxMonthlyBandwidth:       cfg.Server.Tor.MaxMonthlyBandwidth,
-		NumIntroPoints:            cfg.Server.Tor.NumIntroPoints,
-		VirtualPort:               cfg.Server.Tor.VirtualPort,
-		ConfigDir:                 configDir,
-		DataDir:                   dataDir,
-		LogDir:                    paths.GetLogsDir("cairnbin"),
-	}
+	torCfg := makeTorConfig(cfg.Server.Tor, configDir, dataDir, paths.GetLogsDir("cairnbin"))
 	// Forward the hidden service to the server's real HTTP listener. Port may be a
 	// dual "http,https" value (PART 5/15); the onion maps :virtual → the plaintext
 	// HTTP port, so parse the first field. Never hardcode a dev port — an unresolved
@@ -852,13 +873,14 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		portField = portField[:i]
 	}
 	serverPort, _ := strconv.Atoi(strings.TrimSpace(portField))
+	s.torServerPort = serverPort
 	s.torManager = tor.NewManager(context.Background(), serverPort, torCfg, s.router)
-	s.outboundHTTPClient = s.torManager.GetHTTPClient(cfg.Server.Tor.UseNetwork)
+	s.outboundHTTPClient.Store(s.torManager.GetHTTPClient(cfg.Server.Tor.UseNetwork))
 
 	if cfg.Server.GeoIP.Enabled {
 		gcfg := geoip.Config{
 			Dir:            cfg.Server.GeoIP.Dir,
-			HTTPClient:     s.outboundHTTPClient,
+			HTTPClient:     s.OutboundHTTPClient(),
 			DeferDownloads: cfg.Server.Tor.UseNetwork,
 			EnableASN:      cfg.Server.GeoIP.Databases.ASN,
 			EnableCountry:  cfg.Server.GeoIP.Databases.Country,
@@ -897,6 +919,10 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 		DB:            cfg.Server.Cache.DB,
 		TLS:           cfg.Server.Cache.TLS,
 		TLSSkipVerify: cfg.Server.Cache.TLSSkipVerify,
+		TLSVerify:     cfg.Server.Cache.TLSCA != "" || (cfg.SourceFile("server.cache.tls_skip_verify") != "" && !cfg.Server.Cache.TLSSkipVerify),
+		TLSCA:         resolveSSLPath(configDir, cfg.Server.Cache.TLSCA),
+		TLSCert:       resolveSSLPath(configDir, cfg.Server.Cache.TLSCert),
+		TLSKey:        resolveSSLPath(configDir, cfg.Server.Cache.TLSKey),
 		PoolSize:      cfg.Server.Cache.PoolSize,
 		MinIdle:       cfg.Server.Cache.MinIdle,
 		Prefix:        cfg.Server.Cache.Prefix,
@@ -1259,6 +1285,19 @@ func (s *Server) OnConfigChange(next *config.Config) {
 		if s.pasteHandler != nil {
 			s.pasteHandler.SetMaxSize(next.Paste.MaxSizeBytes)
 		}
+		if !reflect.DeepEqual(s.lastTorConfig, next.Server.Tor) {
+			if s.torManager != nil {
+				if err := s.torManager.UpdateConfig(makeTorConfig(next.Server.Tor,
+					s.configDir, s.dataDir, paths.GetLogsDir("cairnbin"))); err != nil {
+					log.Printf("tor: config reload failed: %v", err)
+				} else {
+					s.lastTorConfig = next.Server.Tor
+					s.outboundHTTPClient.Store(s.torManager.GetHTTPClient(next.Server.Tor.UseNetwork))
+				}
+			} else {
+				s.lastTorConfig = next.Server.Tor
+			}
+		}
 		datasetsChanged := !reflect.DeepEqual(s.lastBlocklistsConfig, next.Server.Security.Blocklists) ||
 			!reflect.DeepEqual(s.lastGeoIPConfig, next.Server.GeoIP) ||
 			!reflect.DeepEqual(s.lastCVEConfig, next.Data.CVE) ||
@@ -1325,8 +1364,8 @@ func (s *Server) OnConfigChange(next *config.Config) {
 
 	// Detect restart-required changes and record them for healthz. Settings
 	// are prefix-matched per AI.md restartRequiredSettings: "server.port",
-	// "server.address", "server.daemonize" are exact-match; "ssl.", "database.",
-	// "tor." cover their whole section. logging.* file/format and
+	// "server.address", "server.daemonize" are exact-match; "ssl." and "database."
+	// cover their whole section. logging.* file/format and
 	// server.baseurl / server.timeouts.* are also restart-required.
 	prev := s.liveCfg()
 	if prev.Server.Port != next.Server.Port {
@@ -1338,11 +1377,8 @@ func (s *Server) OnConfigChange(next *config.Config) {
 	if prev.Server.Daemonize != next.Server.Daemonize {
 		s.MarkPendingRestart("server.daemonize")
 	}
-	if prev.Database.Type != next.Database.Type || prev.Database.Path != next.Database.Path {
+	if prev.Server.Database.Type != next.Server.Database.Type || prev.Server.Database.Path != next.Server.Database.Path {
 		s.MarkPendingRestart("database")
-	}
-	if !reflect.DeepEqual(prev.Server.Tor, next.Server.Tor) {
-		s.MarkPendingRestart("tor")
 	}
 	s.dnsConfigMu.Lock()
 	nextDNSHash := dnsCredentialHash(next)
@@ -1434,7 +1470,7 @@ func (s *Server) auditConfigChange(prev, next *config.Config) {
 	if !reflect.DeepEqual(prev.Web, next.Web) {
 		keys = append(keys, "web")
 	}
-	if !reflect.DeepEqual(prev.Database, next.Database) {
+	if !reflect.DeepEqual(prev.Server.Database, next.Server.Database) {
 		keys = append(keys, "database")
 	}
 	if len(keys) == 0 {
@@ -1509,7 +1545,7 @@ func (s *Server) UpdateGeoIP() error {
 // requests. When Tor networking is enabled, requests fail closed until Tor is
 // ready instead of falling back to clearnet.
 func (s *Server) OutboundHTTPClient() *http.Client {
-	return s.outboundHTTPClient
+	return s.outboundHTTPClient.Load()
 }
 
 // TorEnabled reports whether a Tor binary is available for the managed service.
@@ -3181,7 +3217,11 @@ func (s *Server) noTrailingSlash(next http.Handler) http.Handler {
 			lastSeg := p[strings.LastIndex(p, "/"):]
 			if !strings.Contains(lastSeg, ".") {
 				r.URL.Path = strings.TrimRight(p, "/")
-				http.Redirect(w, r, r.URL.String(), http.StatusMovedPermanently)
+				status := http.StatusMovedPermanently
+				if r.Method != http.MethodGet && r.Method != http.MethodHead {
+					status = http.StatusPermanentRedirect
+				}
+				http.Redirect(w, r, r.URL.String(), status)
 				return
 			}
 		}
@@ -3243,7 +3283,7 @@ func (s *Server) startTermbin(ctx context.Context, cfg *config.Config) func() {
 // startManagedNetworkServices schedules overlay startup after privilege drop.
 // Starting each manager in its own goroutine keeps provider bootstrap from
 // delaying the clearnet listener.
-func (s *Server) startManagedNetworkServices() {
+func (s *Server) startManagedNetworkServices(ctx context.Context) {
 	if s.torManager != nil {
 		s.overlayMu.Lock()
 		if s.torManager.Enabled() {
@@ -3254,6 +3294,7 @@ func (s *Server) startManagedNetworkServices() {
 		s.overlayMu.Unlock()
 		if s.torManager.Enabled() {
 			go s.startTorManager()
+			go s.watchOverlayAddress(ctx, true)
 		}
 	}
 	if s.i2pManager != nil {
@@ -3263,11 +3304,55 @@ func (s *Server) startManagedNetworkServices() {
 			s.i2pProvider = i2p.ProviderNone
 			s.overlayMu.Unlock()
 			go s.startI2PManager()
+			go s.watchOverlayAddress(ctx, false)
 		} else {
 			s.overlayMu.Lock()
 			s.i2pStatus = "disabled"
 			s.i2pProvider = i2p.ProviderNone
 			s.overlayMu.Unlock()
+		}
+	}
+}
+
+func (s *Server) watchOverlayAddress(ctx context.Context, isTor bool) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var address string
+		if isTor && s.torManager != nil {
+			address = s.torManager.OnionAddress()
+		} else if !isTor && s.i2pManager != nil {
+			address = s.i2pManager.Address()
+		}
+		if address != "" {
+			s.overlayMu.Lock()
+			logAddress := s.startupBannerDone
+			if isTor {
+				s.torHostname = address
+				logAddress = logAddress && !s.torAddressLogged
+				s.torAddressLogged = s.torAddressLogged || logAddress
+			} else {
+				s.i2pHostname = address
+				logAddress = logAddress && !s.i2pAddressLogged
+				s.i2pAddressLogged = s.i2pAddressLogged || logAddress
+			}
+			s.overlayMu.Unlock()
+			if logAddress {
+				if isTor {
+					log.Printf("tor: address available: %s", address)
+				} else {
+					log.Printf("i2p: address available: %s", address)
+				}
+			}
+			if isTor {
+				s.captureOnionAddress()
+			}
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 		}
 	}
 }
@@ -3457,6 +3542,8 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		sslMgr := ssl.NewManager(ssl.Config{
 			Enabled: true,
 			CertDir: s.configDir + "/ssl",
+			Cert:    resolveSSLPath(s.configDir, cfg.Server.TLS.Cert),
+			Key:     resolveSSLPath(s.configDir, cfg.Server.TLS.Key),
 			FQDN:    fqdn,
 			LetsEncrypt: ssl.LetsEncryptConfig{
 				Enabled:         cfg.Server.TLS.LetsEncrypt.Enabled,
@@ -3487,7 +3574,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 				return fmt.Errorf("bind %s: %w", addr, err)
 			}
 			s.afterPrivilegeDrop(ctx, cfg)
-			s.startManagedNetworkServices()
+			s.startManagedNetworkServices(ctx)
 			ln, err := bindListenerAfterDrop(addr, listeners[0])
 			if err != nil {
 				return fmt.Errorf("bind %s: %w", addr, err)
@@ -3518,7 +3605,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		return fmt.Errorf("bind %s: %w", addr, err)
 	}
 	s.afterPrivilegeDrop(ctx, cfg)
-	s.startManagedNetworkServices()
+	s.startManagedNetworkServices(ctx)
 	ln, err := bindListenerAfterDrop(addr, listeners[0])
 	if err != nil {
 		return fmt.Errorf("bind %s: %w", addr, err)
@@ -3557,6 +3644,8 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 	sslMgr := ssl.NewManager(ssl.Config{
 		Enabled: true,
 		CertDir: s.configDir + "/ssl",
+		Cert:    resolveSSLPath(s.configDir, cfg.Server.TLS.Cert),
+		Key:     resolveSSLPath(s.configDir, cfg.Server.TLS.Key),
 		FQDN:    fqdn,
 		LetsEncrypt: ssl.LetsEncryptConfig{
 			Enabled:         cfg.Server.TLS.LetsEncrypt.Enabled,
@@ -3611,7 +3700,7 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 		return fmt.Errorf("dual-port: %w", err)
 	}
 	s.afterPrivilegeDrop(ctx, cfg)
-	s.startManagedNetworkServices()
+	s.startManagedNetworkServices(ctx)
 	httpLn, err := bindListenerAfterDrop(httpAddr, listeners[0])
 	if err != nil {
 		return fmt.Errorf("dual-port: listen HTTP %s: %w", httpAddr, err)

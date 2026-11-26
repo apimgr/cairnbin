@@ -17,7 +17,7 @@ func writeAPIError(w http.ResponseWriter, r *http.Request, status int, code, mes
 func apiErrorTranslationKey(code, message string) string {
 	if key := map[string]string{
 		"name must be 1 to 64 characters": "errors.invalid_format",
-		"token name already exists":      "errors.conflict",
+		"token name already exists":       "errors.conflict",
 		"linked token limit reached":      "errors.rate_limited",
 		"token not found":                 "errors.not_found",
 	}[message]; key != "" {

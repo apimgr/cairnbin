@@ -41,6 +41,9 @@ type Config struct {
 	Enabled bool
 	// CertDir is the {config_dir}/ssl/ base directory.
 	CertDir string
+	// Cert and Key are explicit certificate paths, resolved by the server.
+	Cert string
+	Key  string
 	// FQDN is the primary domain.
 	FQDN        string
 	LetsEncrypt LetsEncryptConfig
@@ -87,6 +90,12 @@ func (m *Manager) GetTLSConfig(domains []string) (*tls.Config, error) {
 
 	if !m.config.Enabled {
 		return nil, nil
+	}
+	if m.config.Cert != "" || m.config.Key != "" {
+		if m.config.Cert == "" || m.config.Key == "" {
+			return nil, fmt.Errorf("ssl: server.ssl.cert and server.ssl.key must be configured together")
+		}
+		return tlsConfigFromFiles(m.config.Cert, m.config.Key)
 	}
 
 	fqdn := m.config.FQDN
@@ -215,7 +224,7 @@ func (m *Manager) RenewCertificate(ctx context.Context) error {
 // Certificates are cached in {cert_dir}/letsencrypt/{fqdn}/.
 func (m *Manager) getLetsEncryptTLSConfig(domains []string) (*tls.Config, error) {
 	cacheDir := filepath.Join(m.config.CertDir, "letsencrypt", m.config.FQDN)
-	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return nil, fmt.Errorf("ssl: failed to create cert cache dir %s: %w", cacheDir, err)
 	}
 
@@ -417,7 +426,7 @@ func saveLegoRegistration(cacheDir string, reg *registration.Resource) error {
 // in GetTLSConfig so restarts reuse the issued cert without re-requesting.
 func (m *Manager) getLetsEncryptTLSConfigDNS01(domains []string) (*tls.Config, error) {
 	cacheDir := filepath.Join(m.config.CertDir, "letsencrypt", m.config.FQDN)
-	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return nil, fmt.Errorf("ssl: failed to create cert cache dir %s: %w", cacheDir, err)
 	}
 

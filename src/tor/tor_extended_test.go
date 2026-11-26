@@ -354,6 +354,7 @@ func (f *successfulTorRuntime) EnableNetwork(context.Context, bool) error { retu
 func (f *successfulTorRuntime) Dialer(context.Context, *binettor.DialConf) (*binettor.Dialer, error) {
 	return nil, nil
 }
+
 func (f *successfulTorRuntime) GetInfo(...string) ([]*control.KeyVal, error) {
 	return []*control.KeyVal{{Key: "version", Val: "fixture"}}, nil
 }

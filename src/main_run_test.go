@@ -74,6 +74,29 @@ func TestStartupOutputContract(t *testing.T) {
 	}
 }
 
+func TestConfiguredSQLiteDatabasePathUsesDataDirectory(t *testing.T) {
+	dataDir := t.TempDir()
+	configuredPath := filepath.Join("custom", "server.db")
+	cfg := config.DefaultConfig()
+	cfg.Server.Database.Type = "sqlite"
+	cfg.Server.Database.Path = configuredPath
+
+	db, err := openConfiguredDatabase(cfg, dataDir)
+	if err != nil {
+		t.Fatalf("open configured database: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close configured database: %v", err)
+	}
+	wantPath := filepath.Join(dataDir, configuredPath)
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Fatalf("database was not created under data directory at %q: %v", wantPath, err)
+	}
+	if got := configuredSQLiteDatabasePath(configuredPath, dataDir); got != wantPath {
+		t.Fatalf("resolved database path = %q, want %q", got, wantPath)
+	}
+}
+
 func TestEarlyListenAddresses(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -265,11 +288,11 @@ func TestRunMaintenanceHelp(t *testing.T) {
 	}
 }
 
-// TestRunMaintenanceRestoreNoArg verifies --maintenance restore with no filename exits 2.
+// TestRunMaintenanceRestoreNoArg verifies restore reports a missing default archive as an operational error.
 func TestRunMaintenanceRestoreNoArg(t *testing.T) {
 	code, _, errOut := runCapture("--maintenance", "restore")
-	if code != 2 {
-		t.Errorf("--maintenance restore (no file): exit %d, want 2", code)
+	if code != 1 {
+		t.Errorf("--maintenance restore (no default backup): exit %d, want 1", code)
 	}
 	if !strings.Contains(errOut, "restore") {
 		t.Errorf("--maintenance restore (no file): stderr should mention 'restore'; got %q", errOut)

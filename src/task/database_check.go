@@ -10,8 +10,10 @@ import (
 	"time"
 )
 
-var databaseCredentialPattern = regexp.MustCompile(`(?i)(password|token|authtoken|secret)=([^&\s]+)`)
-var databaseUserInfoPattern = regexp.MustCompile(`://[^/@\s]+@`)
+var (
+	databaseCredentialPattern = regexp.MustCompile(`(?i)(password|token|authtoken|secret)=([^&\s]+)`)
+	databaseUserInfoPattern   = regexp.MustCompile(`://[^/@\s]+@`)
+)
 
 type DatabaseCheckConfig struct {
 	Enabled       bool

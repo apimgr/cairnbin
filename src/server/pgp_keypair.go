@@ -236,7 +236,7 @@ func (s *Server) publishToKeyservers(pubArmored string) {
 		if item.Status == "published" || keyserverPublished(meta.KeyserversPublished, ks) || item.Status == "final" || (item.NextAttempt != nil && item.NextAttempt.After(now)) {
 			continue
 		}
-		if err := pgp.PostKeyWithClient(ks, pubArmored, s.outboundHTTPClient); err != nil {
+		if err := pgp.PostKeyWithClient(ks, pubArmored, s.OutboundHTTPClient()); err != nil {
 			item.RecordFailure(now, err, pgp.KeyserverErrorRetryable(err))
 			if item.NextAttempt != nil {
 				log.Printf("pgp: keyserver %s publish attempt %d failed; retry due %s: %v", ks, item.Attempts, item.NextAttempt.UTC().Format(time.RFC3339), err)
@@ -306,7 +306,7 @@ func (s *Server) RetryKeyserverPublications(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := pgp.PostKeyWithClient(item.URL, publicKey, s.outboundHTTPClient); err != nil {
+		if err := pgp.PostKeyWithClient(item.URL, publicKey, s.OutboundHTTPClient()); err != nil {
 			item.RecordFailure(now, err, pgp.KeyserverErrorRetryable(err))
 			if item.NextAttempt != nil {
 				log.Printf("pgp: keyserver %s retry %d failed; next attempt %s: %v", item.URL, item.Attempts, item.NextAttempt.UTC().Format(time.RFC3339), err)

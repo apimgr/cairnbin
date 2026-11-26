@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"crypto/subtle"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -44,11 +44,12 @@ func RunPGP(action string, actionArgs []string, opts PGPOptions) error {
 	if err != nil {
 		return fmt.Errorf("pgp: load config: %w", err)
 	}
-	dbPath := cfg.Database.Path
+	dbPath := cfg.Server.Database.Path
 	if strings.TrimSpace(dbPath) == "" {
 		dbPath = opts.DBPath
 	}
-	db, err := database.NewDatabase(cfg.Database.Type, dbPath)
+	cfg.Server.Database.Path = dbPath
+	db, err := OpenConfiguredDatabase(cfg, opts.DataDir)
 	if err != nil {
 		return fmt.Errorf("pgp: open database: %w", err)
 	}
@@ -82,6 +83,9 @@ func RunPGP(action string, actionArgs []string, opts PGPOptions) error {
 		installSecret: installSecret,
 		auditW:        auditW,
 	}
+	if err := RecoverPGPRotation(opts.ConfigDir, db); err != nil {
+		return fmt.Errorf("pgp: recover interrupted key rotation: %w", err)
+	}
 
 	switch action {
 	case "generate":
@@ -111,17 +115,145 @@ type pgpManager struct {
 	auditW        *audit.Writer
 }
 
+func (m *pgpManager) stagedPublicPath() string  { return m.pubPath() + ".new" }
+func (m *pgpManager) stagedPrivatePath() string { return m.privPath() + ".new" }
+
+func writeStagedFile(path string, data []byte, mode os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	return f.Close()
+}
+
+func syncDir(path string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	dir, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = dir.Close() }()
+	return dir.Sync()
+}
+
+func (m *pgpManager) finishStagedRotation() error {
+	stagedPrivate, stagedPublic := m.stagedPrivatePath(), m.stagedPublicPath()
+	if _, err := os.Stat(stagedPrivate); err == nil {
+		if _, activeErr := os.Stat(m.privPath()); activeErr == nil {
+			if err := os.Remove(m.rotatedPath()); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if err := os.Rename(m.privPath(), m.rotatedPath()); err != nil {
+				return err
+			}
+		} else if !os.IsNotExist(activeErr) {
+			return activeErr
+		}
+		if err := os.Rename(stagedPrivate, m.privPath()); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if _, err := os.Stat(stagedPublic); err == nil {
+		if err := os.Remove(m.pubPath()); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Rename(stagedPublic, m.pubPath()); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := syncDir(m.securityDir()); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RecoverPGPRotation completes a committed rotation or removes uncommitted
+// staged files before the server can accept new security reports.
+func RecoverPGPRotation(configDir string, db database.DB) error {
+	m := &pgpManager{configDir: configDir, db: db}
+	_, pubErr := os.Stat(m.stagedPublicPath())
+	_, privErr := os.Stat(m.stagedPrivatePath())
+	if os.IsNotExist(pubErr) && os.IsNotExist(privErr) {
+		return nil
+	}
+	if pubErr != nil && !os.IsNotExist(pubErr) {
+		return pubErr
+	}
+	if privErr != nil && !os.IsNotExist(privErr) {
+		return privErr
+	}
+	meta, err := db.GetSecurityKeypair()
+	if err != nil {
+		return fmt.Errorf("read PGP rotation marker: %w", err)
+	}
+	if meta == nil {
+		for _, path := range []string{m.stagedPublicPath(), m.stagedPrivatePath()} {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
+		return nil
+	}
+	if os.IsNotExist(pubErr) {
+		if err := os.Remove(m.stagedPrivatePath()); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	staged, err := os.ReadFile(m.stagedPublicPath())
+	if err != nil {
+		return err
+	}
+	fingerprint, err := pgp.FingerprintFromPublic(string(staged))
+	if err != nil {
+		return fmt.Errorf("read staged PGP fingerprint: %w", err)
+	}
+	committed := fingerprint == meta.Fingerprint
+	if !committed {
+		if err := os.Remove(m.stagedPublicPath()); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Remove(m.stagedPrivatePath()); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	if err := m.finishStagedRotation(); err != nil {
+		return fmt.Errorf("finish committed PGP rotation: %w", err)
+	}
+	return nil
+}
+
 // ── on-disk paths (mirror the server package so the two never drift) ──────────
 
 func (m *pgpManager) securityDir() string { return filepath.Join(m.configDir, "security") }
 func (m *pgpManager) pubPath() string     { return filepath.Join(m.securityDir(), "pgp.pub.asc") }
 func (m *pgpManager) privPath() string    { return filepath.Join(m.securityDir(), "pgp.priv.asc.enc") }
+
 func (m *pgpManager) rotatedPath() string {
 	return filepath.Join(m.securityDir(), "pgp.priv.old.asc.enc")
 }
+
 func (m *pgpManager) keyserversStatePath() string {
 	return filepath.Join(m.securityDir(), "keyservers.state")
 }
+
 func (m *pgpManager) exportStatePath() string {
 	return filepath.Join(m.securityDir(), "private_export.state")
 }
@@ -131,13 +263,9 @@ func (m *pgpManager) exportStatePath() string {
 // writePrivateKey wraps an armored private key with the installation_secret-derived
 // key and writes it to disk with 0o600 permissions.
 func (m *pgpManager) writePrivateKey(armored string) error {
-	key, err := pgp.WrapKey(m.installSecret)
+	sealed, err := m.sealPrivateKey(armored)
 	if err != nil {
 		return err
-	}
-	sealed, err := secretbox.Seal(key, []byte(armored))
-	if err != nil {
-		return fmt.Errorf("pgp: seal private key: %w", err)
 	}
 	if err := os.MkdirAll(m.securityDir(), 0o700); err != nil {
 		return fmt.Errorf("pgp: create security dir: %w", err)
@@ -146,6 +274,18 @@ func (m *pgpManager) writePrivateKey(armored string) error {
 		return fmt.Errorf("pgp: write private key: %w", err)
 	}
 	return nil
+}
+
+func (m *pgpManager) sealPrivateKey(armored string) ([]byte, error) {
+	key, err := pgp.WrapKey(m.installSecret)
+	if err != nil {
+		return nil, err
+	}
+	sealed, err := secretbox.Seal(key, []byte(armored))
+	if err != nil {
+		return nil, fmt.Errorf("pgp: seal private key: %w", err)
+	}
+	return sealed, nil
 }
 
 // readPrivateKey reads and unwraps the armored private key from path.
@@ -244,22 +384,37 @@ func (m *pgpManager) rotate() error {
 	if err != nil {
 		return fmt.Errorf("pgp rotate: read outgoing private key: %w", err)
 	}
-	oldPublic, err := os.ReadFile(m.pubPath())
-	if err != nil {
-		return fmt.Errorf("pgp rotate: read outgoing public key: %w", err)
-	}
 	signed, err := pgp.SignPublicKey(oldPrivate, kp.PublicArmored)
 	if err != nil {
 		return fmt.Errorf("pgp rotate: cross-sign new public key: %w", err)
 	}
 	kp.PublicArmored = signed
 	rotator, ok := m.db.(interface {
-		ReencryptPGPSecurityReports(func(old []byte) ([]byte, error)) (int, error)
+		RotatePGPSecurityKeypair(func(old []byte) ([]byte, error), *database.SecurityKeypair) (int, error)
 	})
 	if !ok {
-		return fmt.Errorf("pgp rotate: database does not support transactional report re-encryption")
+		return fmt.Errorf("pgp rotate: database does not support atomic key rotation")
 	}
-	updated, err := rotator.ReencryptPGPSecurityReports(func(ciphertext []byte) ([]byte, error) {
+	if err := os.MkdirAll(m.securityDir(), 0o700); err != nil {
+		return fmt.Errorf("pgp rotate: create security directory: %w", err)
+	}
+	stagedPublic, stagedPrivate := m.stagedPublicPath(), m.stagedPrivatePath()
+	if err := writeStagedFile(stagedPublic, []byte(kp.PublicArmored), 0o644); err != nil {
+		return fmt.Errorf("pgp rotate: stage public key: %w", err)
+	}
+	sealedPrivate, err := m.sealPrivateKey(kp.PrivateArmored)
+	if err != nil {
+		_ = os.Remove(stagedPublic)
+		return fmt.Errorf("pgp rotate: seal staged private key: %w", err)
+	}
+	if err := writeStagedFile(stagedPrivate, sealedPrivate, 0o600); err != nil {
+		_ = os.Remove(stagedPublic)
+		_ = os.Remove(stagedPrivate)
+		return fmt.Errorf("pgp rotate: stage private key: %w", err)
+	}
+	now := kp.CreatedAt
+	meta := &database.SecurityKeypair{Fingerprint: kp.Fingerprint, CreatedAt: kp.CreatedAt, ExpiresAt: kp.ExpiresAt, LastRotatedAt: &now}
+	updated, err := rotator.RotatePGPSecurityKeypair(func(ciphertext []byte) ([]byte, error) {
 		plain, err := pgp.Decrypt(oldPrivate, string(ciphertext))
 		if err != nil {
 			return nil, err
@@ -269,43 +424,14 @@ func (m *pgpManager) rotate() error {
 			return nil, err
 		}
 		return []byte(reencrypted), nil
-	})
+	}, meta)
 	if err != nil {
+		_ = os.Remove(stagedPrivate)
+		_ = os.Remove(stagedPublic)
 		return fmt.Errorf("pgp rotate: re-encrypt stored reports: %w", err)
 	}
-	if err := os.Rename(m.privPath(), m.rotatedPath()); err != nil {
-		_, rollbackErr := rotator.ReencryptPGPSecurityReports(func(ciphertext []byte) ([]byte, error) {
-			plain, err := pgp.Decrypt(kp.PrivateArmored, string(ciphertext))
-			if err != nil {
-				return nil, err
-			}
-			reencrypted, err := pgp.Encrypt(string(oldPublic), plain)
-			if err != nil {
-				return nil, err
-			}
-			return []byte(reencrypted), nil
-		})
-		return errors.Join(fmt.Errorf("pgp rotate: park previous private key: %w", err), rollbackErr)
-	}
-	if err := m.installKeypair(kp, true); err != nil {
-		restoreErr := os.WriteFile(m.pubPath(), oldPublic, 0o644)
-		restoreErr = errors.Join(restoreErr, os.Rename(m.rotatedPath(), m.privPath()))
-		restoreErr = errors.Join(restoreErr, m.db.UpsertSecurityKeypair(prev))
-		rollbackErr := error(nil)
-		if restoreErr == nil {
-			_, rollbackErr = rotator.ReencryptPGPSecurityReports(func(ciphertext []byte) ([]byte, error) {
-				plain, err := pgp.Decrypt(kp.PrivateArmored, string(ciphertext))
-				if err != nil {
-					return nil, err
-				}
-				reencrypted, err := pgp.Encrypt(string(oldPublic), plain)
-				if err != nil {
-					return nil, err
-				}
-				return []byte(reencrypted), nil
-			})
-		}
-		return errors.Join(err, restoreErr, rollbackErr)
+	if err := m.finishStagedRotation(); err != nil {
+		return fmt.Errorf("pgp rotate: finish committed key rotation: %w; staged recovery will retry at startup", err)
 	}
 	fmt.Printf("%s\n  %s\n  %s\n",
 		maintenanceText("pgp_rotated"),
@@ -401,12 +527,16 @@ func (m *pgpManager) exportPrivate(args []string) error {
 		return fmt.Errorf("pgp export private: write %s: %w", path, err)
 	}
 	m.recordPrivateExport(time.Now())
+	operator, userErr := currentUsername()
+	if userErr != nil || strings.TrimSpace(operator) == "" {
+		operator = "unknown"
+	}
 	m.audit(audit.Entry{
 		Event:    "security.private_key_exported",
 		Severity: audit.SeverityCritical,
-		Actor:    audit.Actor{IP: outboundIP()},
+		Actor:    audit.Actor{IP: "local"},
 		Target:   &audit.Target{Type: "pgp_keypair", ID: fp},
-		Details:  map[string]any{"path": path},
+		Details:  map[string]any{"path": path, "operator_os_user": operator},
 		Reason:   reason,
 	})
 	fmt.Println(maintenanceText("pgp_private_exported", "path", path))

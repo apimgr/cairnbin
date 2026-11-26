@@ -44,10 +44,10 @@ func isWindowsServiceInstalled() bool {
 // windowsService wraps a user-supplied start function as a svc.Handler.
 // The function is expected to block for the lifetime of the service.
 type windowsService struct {
-	start      func()
+	start         func()
 	startWithStop func(<-chan struct{})
-	stop       chan struct{}
-	stopSignal chan struct{}
+	stop          chan struct{}
+	stopSignal    chan struct{}
 }
 
 // Execute implements svc.Handler. It transitions the service through

@@ -34,6 +34,28 @@ func TestMigrateLegacyKeysWebSecurityMoves(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyKeysDatabaseMovesUnderServer(t *testing.T) {
+	in := []byte("database:\n  driver: libsql\n  url: libsql://old.example\nserver:\n  database:\n    driver: sqlite\n")
+	var doc struct {
+		Database map[string]any `yaml:"database"`
+		Server   struct {
+			Database map[string]any `yaml:"database"`
+		} `yaml:"server"`
+	}
+	if err := yaml.Unmarshal(migrateLegacyKeys(in), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Database) != 0 {
+		t.Fatalf("top-level database remains: %v", doc.Database)
+	}
+	if doc.Server.Database["driver"] != "sqlite" {
+		t.Fatalf("existing server.database was overwritten: %v", doc.Server.Database)
+	}
+	if doc.Server.Database["url"] != "libsql://old.example" {
+		t.Fatalf("legacy database URL was not moved: %v", doc.Server.Database)
+	}
+}
+
 func TestAllowlistEntryAcceptsScalarAndMapping(t *testing.T) {
 	var c ServerSecurityConfig
 	in := "allowlist:\n  - 10.0.0.1\n  - cidr: 192.168.0.0/16\n    description: LAN\n"

@@ -61,5 +61,25 @@ func newLibSQLDB(url, token string, pool PoolConfig) (*SQLiteDB, error) {
 		return nil, err
 	}
 
-	return &SQLiteDB{db: &instrumentedSQLDB{DB: db}}, nil
+	store := &SQLiteDB{db: &instrumentedSQLDB{DB: db}, driver: "libsql"}
+	store.schemaReady.Store(true)
+	return store, nil
+}
+
+func newLibSQLDBUninitialized(url, token string, pool PoolConfig) (*SQLiteDB, error) {
+	if err := validateLibSQL(url); err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("libsql", buildLibSQLURL(url, token))
+	if err != nil {
+		return nil, fmt.Errorf("open libsql: %w", err)
+	}
+	if pool.MaxOpen <= 0 {
+		pool = DefaultPool()
+	}
+	db.SetMaxOpenConns(pool.MaxOpen)
+	db.SetMaxIdleConns(pool.MaxIdle)
+	db.SetConnMaxLifetime(pool.MaxLifetime)
+	db.SetConnMaxIdleTime(pool.MaxIdleTime)
+	return &SQLiteDB{db: &instrumentedSQLDB{DB: db}, driver: "libsql"}, nil
 }

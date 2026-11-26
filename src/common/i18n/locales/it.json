@@ -338,6 +338,7 @@
   },
   "contact": {
     "title": "Contatto",
+    "honeypot_label": "Lascia vuoto questo campo",
     "name": "Nome",
     "email": "e-mail",
     "subject": "Oggetto",
@@ -879,6 +880,12 @@
       "other": "{count} minuti"
     }
   },
+  "docs": {
+    "javascript_required": "JavaScript richiesto",
+    "javascript_fallback": "La vista interattiva della documentazione richiede JavaScript. Usa questi endpoint diretti:",
+    "openapi_json": "JSON OpenAPI",
+    "graphql_endpoint": "Endpoint GraphQL"
+  },
   "swagger": {
     "title": "Documentazione API - {app_name}",
     "description": "esploratore API REST interattivo",
@@ -962,7 +969,7 @@
     "returns_the_openapi_3_0_3_json_specification_for_015acf42": "restituisce la specifica JSON OpenAPI 3.0.3 per questa API.",
     "openapi_json_spec_d1f38104": "specifiche OpenAPI JSON",
     "graphql_endpoint_0a863601": "punto finale GraphQL",
-    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "esegue una query o una mutazione GraphQL. L'esploratore interattivo GraphiQL è disponibile su /server/docs/graphql.",
+    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "Esegue una query GraphQL di sola lettura. Le mutazioni non sono disponibili; usa REST per le scritture. L'esploratore interattivo GraphiQL è disponibile su /server/docs/graphql.",
     "graphql_request_with_query_and_optional_variable_7b24cbff": "richiesta GraphQL con query e variabili facoltative.",
     "graphql_response_b96449ad": "risposta GraphQL",
     "compatibility_fa528d3a": "compatibilità",
@@ -1429,7 +1436,7 @@
     "server_title": "un servizio pubblico veloce di tumuli",
     "show_help_extended": "mostra aiuto (ogni comando supporta anche --help)",
     "subcommand_details": "per i dettagli, eseguire {command} --help.",
-    "maintenance_help": "Comandi di manutenzione:\n\nbackup [file]: crea e verifica un archivio di dati di servizio\n  Impostazione predefinita: {backup_dir}/{project_name}_backup_AAAA-MM-GG_HHMMSS.tar.gz\n  --include-ssl include ssl/; --include-data include la directory dei dati\ntest di backup: verifica la coppia di chiavi di sicurezza senza creare un backup\nripristinare <file> - Ripristina un archivio; il server si ferma e si riavvia\nupdate [cmd] - Gestisci gli aggiornamenti: seleziona, sì (installa) o ramo <stable|beta|devel>\nmode <mode> - Imposta la modalità di produzione o di sviluppo\nsetup - Ripristina la configurazione del server (solo prima esecuzione o root)\npgp <azione> - Gestisci la coppia di chiavi di sicurezza\n  generare | ruotare | pubblicare | esporta pubblico [percorso] | esporta privato <percorso> | importa <file> | eliminare\ntoken <azione> - elenco | revocare <prefisso>\ndata <action> <prefix>: esporta o elimina i dati incollati in base al prefisso del token proprietario\nsecret ruotare <nome>: ruota il segreto_installazione o la chiave_crittografia\nreport di conformità: stampa il riepilogo dello stato di conformità\nemail test [--to ADDRESS] [--dry-run] - Verificare SMTP o convalidare i modelli (richiede root o token operatore)\n\nEsempi:\n  {project_name} --backup di manutenzione\n  {project_name} --ripristino manutenzione backup.tar.gz\n  {project_name} --sviluppo della modalità di manutenzione\n  {project_name} --generazione pgp di manutenzione\n  {project_name} --elenco dei token di manutenzione\n  {project_name} --esportazione dati di manutenzione own_abc123\n  {project_name} --rapporto di conformità di manutenzione",
+    "maintenance_help": "Comandi di manutenzione:\n\nbackup [file]: crea e verifica un archivio di dati di servizio\n  Impostazione predefinita: {backup_dir}/{project_name}_backup_AAAA-MM-GG_HHMMSS.tar.gz\n  --include-ssl include ssl/; --include-data include la directory dei dati\nbackup test [file] - Verifica e prova a ripristinare un backup; se il file è omesso usa il backup completo più recente\nrestore [file] - Ripristina un archivio; se il file è omesso usa il backup completo più recente; il server si ferma e si riavvia\nupdate [cmd] - Gestisci gli aggiornamenti: seleziona, sì (installa) o ramo <stable|beta|devel>\nmode <mode> - Imposta la modalità di produzione o di sviluppo\nsetup - Ripristina la configurazione del server (solo prima esecuzione o root)\npgp <azione> - Gestisci la coppia di chiavi di sicurezza\n  generare | ruotare | pubblicare | esporta pubblico [percorso] | esporta privato <percorso> | importa <file> | eliminare\ntoken <azione> - elenco | revocare <prefisso>\ndata <action> <prefix>: esporta o elimina i dati incollati in base al prefisso del token proprietario\nsecret ruotare <nome>: ruota il segreto_installazione o la chiave_crittografia\nreport di conformità: stampa il riepilogo dello stato di conformità\nemail test [--to ADDRESS] [--dry-run] - Verificare SMTP o convalidare i modelli (richiede root o token operatore)\n\nEsempi:\n  {project_name} --backup di manutenzione\n  {project_name} --ripristino manutenzione backup.tar.gz\n  {project_name} --sviluppo della modalità di manutenzione\n  {project_name} --generazione pgp di manutenzione\n  {project_name} --elenco dei token di manutenzione\n  {project_name} --esportazione dati di manutenzione own_abc123\n  {project_name} --rapporto di conformità di manutenzione",
     "update_help": "Gestione aggiornamenti:\n\ncheck - Controlla gli aggiornamenti disponibili; confrontare la versione installata con l'ultima release\nsì: scarica e installa l'ultimo aggiornamento, sostituisci il binario e riavvia\nbranch <nome> - Scegli il canale di rilascio: stabile (predefinito), beta o devel\n\nEsempi:\n  {binary} --controllo aggiornamento\n  {binary} --aggiornamento sì\n  {binary} --aggiornamento ramo beta",
     "update_current": "Corrente:\n  Versione: {version}\n  Filiale: {branch}",
     "update_latest": "Ultimo: {latest}",

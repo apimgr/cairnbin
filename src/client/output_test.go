@@ -47,6 +47,34 @@ func TestSilentAutoUpdate(t *testing.T) {
 	}
 }
 
+func TestShouldAutoUpdateCLI(t *testing.T) {
+	var cfg cliConfig
+	cfg.Update.Auto = true
+	if !shouldAutoUpdateCLI(cfg, false) {
+		t.Fatal("update.auto should consent to a non-interactive update")
+	}
+	if shouldAutoUpdateCLI(cfg, true) {
+		t.Fatal("interactive runs must prompt instead of auto-updating")
+	}
+	cfg.Update.Auto = false
+	if shouldAutoUpdateCLI(cfg, false) {
+		t.Fatal("disabled update.auto must not auto-update")
+	}
+}
+
+func TestIsAffirmativeUpdateAnswer(t *testing.T) {
+	for _, answer := range []string{"y", "YES", " s ", "sí", "o", "oui", "j", "ja", "はい", "是", "نعم"} {
+		if !isAffirmativeUpdateAnswer(answer) {
+			t.Errorf("%q should be an affirmative update response", answer)
+		}
+	}
+	for _, answer := range []string{"", "n", "no", "nope"} {
+		if isAffirmativeUpdateAnswer(answer) {
+			t.Errorf("%q should not be an affirmative update response", answer)
+		}
+	}
+}
+
 func TestApplyCLIConfigEnvOverrides(t *testing.T) {
 	var cfg cliConfig
 	cfg.Output.Format = "table"
@@ -94,8 +122,13 @@ func TestReorderCommandArgs(t *testing.T) {
 
 func TestNormalizeExpiry(t *testing.T) {
 	for _, tc := range []struct{ input, want string }{
-		{"never", "never"}, {"disabled", "never"}, {"off", "never"}, {"0", "never"},
-		{"1h", "1h"}, {"18m", "18m"}, {"3600", "3600"},
+		{"never", "never"},
+		{"disabled", "never"},
+		{"off", "never"},
+		{"0", "never"},
+		{"1h", "1h"},
+		{"18m", "18m"},
+		{"3600", "3600"},
 	} {
 		got, err := normalizeExpiry(tc.input)
 		if err != nil || got != tc.want {
@@ -114,8 +147,14 @@ func TestParseVisibility(t *testing.T) {
 		input string
 		want  int
 	}{
-		{"public", 0}, {"yes", 0}, {"on", 0}, {"1", 0},
-		{"unlisted", 1}, {"no", 1}, {"off", 1}, {"0", 1},
+		{"public", 0},
+		{"yes", 0},
+		{"on", 0},
+		{"1", 0},
+		{"unlisted", 1},
+		{"no", 1},
+		{"off", 1},
+		{"0", 1},
 	} {
 		got, err := parseVisibility(tc.input)
 		if err != nil || got != tc.want {

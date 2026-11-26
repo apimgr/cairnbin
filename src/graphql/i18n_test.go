@@ -22,7 +22,7 @@ func TestGraphQLUIUsesRequestedLanguage(t *testing.T) {
 	got := h.renderUI(r)
 	for _, want := range []string{"Ejecutar", "Variables (JSON)", "Respuesta", "Una entrada de texto."} {
 		if !strings.Contains(got, want) {
-		t.Errorf("Spanish GraphQL UI is missing %q", want)
+			t.Errorf("Spanish GraphQL UI is missing %q", want)
 		}
 	}
 }

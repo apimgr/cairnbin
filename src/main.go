@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
 	// Embed the IANA timezone database so time.LoadLocation works in CGO_ENABLED=0 static binaries.
 	_ "time/tzdata"
 
@@ -194,7 +196,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		// "pgp"/"token"/"data" take further positionals (e.g. "export
 		// private <path>", "revoke <prefix>", "delete <prefix>").
 		switch maintenanceCmd {
-		case "pgp", "token", "data", "secret":
+		case "pgp", "token", "data", "secret", "backup":
 			maintenancePGP = positional[1:]
 		}
 	}
@@ -355,53 +357,78 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		case "--help", "help":
 			maintenance.PrintHelp(binaryName, earlyLang)
 		case "backup":
-			// "backup test" is a dry-run verification of the security keypair,
-			// not a backup creation (AI.md 14213).
+			// "backup test" verifies and dry-run restores an archive without
+			// touching the live config or data directories.
 			if maintenanceArg == "test" {
-				btCfgFile := filepath.Join(mcConfigDir, "server.yml")
-				btCfg, _ := config.Load(btCfgFile)
-				if btCfg.Database.Path == "" {
-					btCfg.Database.Path = paths.GetDBPath(appName)
+				if len(maintenancePGP) > 1 {
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup test", errors.New("expected at most one backup filename"))
+					return 2
 				}
-				btDB, dbErr := database.NewDatabase(btCfg.Database.Type, btCfg.Database.Path)
-				if dbErr != nil {
-					writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup test database", dbErr)
+				archivePath := ""
+				if len(maintenancePGP) == 1 {
+					archivePath = maintenancePGP[0]
+					if !filepath.IsAbs(archivePath) {
+						if _, err := os.Stat(archivePath); os.IsNotExist(err) {
+							archivePath = filepath.Join(mcBackupDir, archivePath)
+						}
+					}
+				} else {
+					archivePath = maintenance.NewestFullBackup(mcBackupDir, appName)
+				}
+				if archivePath == "" {
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup test", errors.New("no dated full backup found in the backup directory"))
 					return 1
 				}
-				installSecret, secErr := btDB.EnsureAppSecret("installation_secret")
-				_ = btDB.Close()
-				if secErr != nil {
-					writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup test", secErr)
-					return 1
+				var testPass string
+				if strings.HasSuffix(archivePath, ".enc") {
+					if !term.IsTerminal(int(os.Stdin.Fd())) {
+						writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup test", errors.New("encrypted backup password requires an interactive terminal"))
+						return 1
+					}
+					_, _ = fmt.Fprint(stderr, cliMessage(earlyLang, "backup_password"))
+					pw, pwErr := term.ReadPassword(int(os.Stdin.Fd()))
+					_, _ = fmt.Fprintln(stderr)
+					if pwErr != nil {
+						writeMaintenanceFailure(stderr, earlyLang, binaryName, "reading password", pwErr)
+						return 1
+					}
+					testPass = string(pw)
 				}
-				if err := maintenance.TestSecurityKeypair(mcConfigDir, installSecret); err != nil {
-					_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "update_action_failed", "error", err.Error()))
+				testLimits := maintenance.DefaultRestoreLimits()
+				if testCfg, testCfgErr := config.Load(filepath.Join(mcConfigDir, "server.yml")); testCfgErr == nil {
+					testLimits = maintenance.RestoreLimitsFromConfig(testCfg.Server.Restore)
+				}
+				if err := maintenance.TestBackupArchive(archivePath, testPass, Version, testLimits); err != nil {
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup test", err)
 					return 1
 				}
 				return 0
 			}
-			// Passwords are never accepted via CLI flag (shell history / process
-			// list leakage) — prompt interactively when encryption is enabled
-			// (AI.md 29017).
-			var backupPass string
 			btCfgFile := filepath.Join(mcConfigDir, "server.yml")
 			btCfg, btCfgErr := config.Load(btCfgFile)
-			if btCfgErr == nil && btCfg.Server.Backup.Encryption.Enabled {
-				_, _ = fmt.Fprint(stderr, cliMessage(earlyLang, "backup_password"))
-				pw, pwErr := term.ReadPassword(int(os.Stdin.Fd()))
-				_, _ = fmt.Fprintln(stderr)
-				if pwErr != nil {
-					writeMaintenanceFailure(stderr, earlyLang, binaryName, "reading password", pwErr)
-					return 1
-				}
-				backupPass = string(pw)
+			if btCfgErr != nil {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup", btCfgErr)
+				return 1
 			}
+			backupDB, dbErr := openConfiguredDatabase(btCfg, mcDataDir)
+			if dbErr != nil {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "backup", dbErr)
+				return 1
+			}
+			defer func() { _ = backupDB.Close() }()
 			opts := maintenance.BackupOptions{
-				ConfigDir:  mcConfigDir,
-				DataDir:    mcDataDir,
-				BackupDir:  mcBackupDir,
-				AppVersion: Version,
-				Password:   backupPass,
+				ConfigDir:            mcConfigDir,
+				DataDir:              mcDataDir,
+				BackupDir:            mcBackupDir,
+				AppVersion:           Version,
+				Password:             backupEncryptionPassword(btCfg, btCfgErr),
+				ConnectionTLSFiles:   backupConnectionTLSFiles(btCfg, mcConfigDir),
+				ExternalTLSCert:      backupExternalTLSPath(btCfg, mcConfigDir, true),
+				ExternalTLSKey:       backupExternalTLSPath(btCfg, mcConfigDir, false),
+				DatabaseDriver:       btCfg.Server.Database.Type,
+				DatabasePath:         btCfg.Server.Database.Path,
+				DatabaseCacheEnabled: btCfg.Server.Database.Cache.Enabled,
+				Database:             backupDB,
 				// optional custom filename
 				Filename:    maintenanceArg,
 				IncludeSSL:  includeSSL,
@@ -414,10 +441,13 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				return 1
 			}
 		case "restore":
-			if maintenanceArg == "" {
-				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_argument_required", "binary", binaryName, "command", "restore", "argument", "filename"))
-				_, _ = fmt.Fprintln(stderr, cliMessage(earlyLang, "maintenance_usage_restore", "binary", binaryName))
-				return 2
+			restoreArchive := maintenanceArg
+			if restoreArchive == "" {
+				restoreArchive = maintenance.NewestFullBackup(mcBackupDir, appName)
+			}
+			if restoreArchive == "" {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "restore", errors.New("no dated full backup found in the backup directory"))
+				return 1
 			}
 			if err := maintenance.AuthorizeRestore(mcAuthOpts); err != nil {
 				writeMaintenanceFailure(stderr, earlyLang, binaryName, "restore", err)
@@ -427,7 +457,11 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			// list leakage) — always prompt interactively for encrypted backups
 			// (AI.md 29017).
 			var restorePass string
-			if strings.HasSuffix(maintenanceArg, ".enc") {
+			if strings.HasSuffix(restoreArchive, ".enc") {
+				if !term.IsTerminal(int(os.Stdin.Fd())) {
+					writeMaintenanceFailure(stderr, earlyLang, binaryName, "restore", errors.New("encrypted backup password requires an interactive terminal"))
+					return 1
+				}
 				_, _ = fmt.Fprint(stderr, cliMessage(earlyLang, "backup_password"))
 				pw, pwErr := term.ReadPassword(int(os.Stdin.Fd()))
 				_, _ = fmt.Fprintln(stderr)
@@ -441,12 +475,12 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			if rtCfg, rtErr := config.Load(filepath.Join(mcConfigDir, "server.yml")); rtErr == nil {
 				restoreLimits = maintenance.RestoreLimitsFromConfig(rtCfg.Server.Restore)
 			}
-			if err := maintenance.RestoreWithLimits(maintenanceArg, mcConfigDir, mcDataDir, restorePass, Version, restoreLimits); err != nil {
+			if err := maintenance.RestoreWithLimits(restoreArchive, mcConfigDir, mcDataDir, restorePass, Version, restoreLimits); err != nil {
 				writeMaintenanceFailure(stderr, earlyLang, binaryName, "restore", err)
 				return 1
 			}
 			maintenance.AuditMaintenanceEvent(mcAuthOpts, "backup.restored", map[string]any{
-				"filename": filepath.Base(maintenanceArg),
+				"filename": filepath.Base(restoreArchive),
 			})
 			return 0
 		case "update":
@@ -506,11 +540,12 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 				return 2
 			}
 			tkCfgFile := filepath.Join(mcConfigDir, "server.yml")
-			tkCfg, _ := config.Load(tkCfgFile)
-			if tkCfg.Database.Path == "" {
-				tkCfg.Database.Path = paths.GetDBPath(appName)
+			tkCfg, err := config.Load(tkCfgFile)
+			if err != nil {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "token database", err)
+				return 1
 			}
-			tkDB, err := database.NewDatabase(tkCfg.Database.Type, tkCfg.Database.Path)
+			tkDB, err := openConfiguredDatabase(tkCfg, mcDataDir)
 			if err != nil {
 				writeMaintenanceFailure(stderr, earlyLang, binaryName, "token database", err)
 				return 1
@@ -1157,27 +1192,39 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// libsql/turso is remote-only: its "path" is a server URL, so neither the
 	// on-disk default nor the parent-directory creation applies to it.
 	remoteDB := false
-	switch strings.ToLower(strings.TrimSpace(cfg.Database.Type)) {
+	switch strings.ToLower(strings.TrimSpace(cfg.Server.Database.Type)) {
 	case "libsql", "turso":
 		remoteDB = true
 	}
 	if !remoteDB {
-		if cfg.Database.Path == "" {
-			// Derive from the (possibly --data-overridden) dataDir, not the global
-			// paths.GetDBPath() which ignores the --data flag.
-			cfg.Database.Path = filepath.Join(dataDir, "db", "server.db")
-		}
-		if err := paths.EnsureDir(filepath.Dir(cfg.Database.Path)); err != nil {
+		cfg.Server.Database.Path = configuredSQLiteDatabasePath(cfg.Server.Database.Path, dataDir)
+		if err := paths.EnsureDir(filepath.Dir(cfg.Server.Database.Path)); err != nil {
 			log.Printf("warning: db dir: %v", err)
 		}
 	}
+	cacheConfig := database.LocalCacheConfig{
+		Enabled:      cfg.Server.Database.Cache.Enabled,
+		Path:         database.CachePathFromConfig(cfg.Server.Database.Cache.Path, dataDir),
+		OfflineMode:  cfg.Server.Database.Cache.OfflineMode,
+		SyncInterval: parseDurationOr(cfg.Server.Database.Cache.SyncInterval, 30*time.Second),
+		MaxAge:       parseDurationOr(cfg.Server.Database.Cache.MaxAge, time.Hour),
+	}
+	if remoteDB && cacheConfig.Enabled {
+		if cacheConfig.Path == "" {
+			cacheConfig.Path = filepath.Join(dataDir, "db", "cache.db")
+		}
+		if err := paths.EnsureDir(filepath.Dir(cacheConfig.Path)); err != nil {
+			log.Printf("warning: database cache dir: %v", err)
+		}
+		cfg.Server.Database.Cache.Path = cacheConfig.Path
+	}
 
-	db, err := database.NewDatabaseWithToken(cfg.Database.Type, cfg.Database.Path, cfg.Database.Token, database.PoolConfig{
-		MaxOpen:     cfg.Database.Pool.MaxOpen,
-		MaxIdle:     cfg.Database.Pool.MaxIdle,
-		MaxLifetime: cfg.Database.Pool.MaxLifetime,
-		MaxIdleTime: cfg.Database.Pool.MaxIdleTime,
-	})
+	db, err := database.NewDatabaseWithCache(cfg.Server.Database.Type, cfg.Server.Database.Path, cfg.Server.Database.Token, database.PoolConfig{
+		MaxOpen:     cfg.Server.Database.Pool.MaxOpen,
+		MaxIdle:     cfg.Server.Database.Pool.MaxIdle,
+		MaxLifetime: cfg.Server.Database.Pool.MaxLifetime,
+		MaxIdleTime: cfg.Server.Database.Pool.MaxIdleTime,
+	}, cacheConfig)
 	if err != nil {
 		log.Printf("database: %v", err)
 		// EX_SOFTWARE
@@ -1185,7 +1232,11 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	}
 	defer func() { _ = db.Close() }()
 
-	log.Printf("%s %s — database: %s (%s)", appName, Version, db.Type(), cfg.Database.Path)
+	log.Printf("%s %s — database: %s (%s)", appName, Version, db.Type(), safeDatabaseURL(cfg.Server.Database.Path))
+	if err := maintenance.RecoverPGPRotation(configDir, db); err != nil {
+		log.Printf("security: recover interrupted PGP key rotation: %v", err)
+		os.Exit(70)
+	}
 
 	// Construct the server before registering background tasks that use its
 	// Tor-aware outbound client and GeoIP controls.
@@ -1456,15 +1507,23 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			Log:           logMgr.Server,
 		})))
 	backupCfg := task.BackupConfig{
-		ProjectName:    appName,
-		ConfigDir:      configDir,
-		DataDir:        dataDir,
-		BackupDir:      backupDir,
-		AppVersion:     Version,
-		OperatorEmail:  taskOperatorEmail,
-		Mailer:         taskMailer,
-		SendOnComplete: cfg.Server.Notifications.Email.Events.BackupComplete,
-		SendOnFailed:   cfg.Server.Notifications.Email.Events.BackupFailed,
+		ProjectName:          appName,
+		ConfigDir:            configDir,
+		DataDir:              dataDir,
+		BackupDir:            backupDir,
+		AppVersion:           Version,
+		Password:             cfg.Server.Backup.EncryptionPassword,
+		ConnectionTLSFiles:   backupConnectionTLSFiles(cfg, configDir),
+		ExternalTLSCert:      backupExternalTLSPath(cfg, configDir, true),
+		ExternalTLSKey:       backupExternalTLSPath(cfg, configDir, false),
+		DatabaseDriver:       cfg.Server.Database.Type,
+		DatabasePath:         cfg.Server.Database.Path,
+		DatabaseCacheEnabled: cfg.Server.Database.Cache.Enabled,
+		Database:             db,
+		OperatorEmail:        taskOperatorEmail,
+		Mailer:               taskMailer,
+		SendOnComplete:       cfg.Server.Notifications.Email.Events.BackupComplete,
+		SendOnFailed:         cfg.Server.Notifications.Email.Events.BackupFailed,
 		Retention: task.BackupRetention{
 			MaxBackups:   cfg.Server.Backup.Retention.MaxBackups,
 			KeepWeekly:   cfg.Server.Backup.Retention.KeepWeekly,
@@ -1478,8 +1537,8 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	}
 	// PART 21: warn at startup while backups are unencrypted; the warning stops
 	// once server.backup.encryption.enabled is set.
-	if !cfg.Server.Backup.Encryption.Enabled {
-		log.Printf("WARN: backup encryption not configured; backups are NOT encrypted (set server.backup.encryption.enabled and supply the password when prompted)")
+	if cfg.Server.Backup.EncryptionPassword == "" {
+		log.Printf("WARN: backup encryption not configured; backups are NOT encrypted (set server.backup.encryption_password in secrets.yml)")
 	}
 	logSchedErr(sched.Register("backup_daily", "Backup Daily", "0 2 * * *", true,
 		task.BackupDaily(backupCfg)))
@@ -2458,6 +2517,115 @@ func writeServiceFailure(stderr io.Writer, lang, binaryName, action string, err 
 func writeMaintenanceFailure(stderr io.Writer, lang, binaryName, action string, err error) {
 	log.Printf("maintenance operation %s failed: %v", action, err)
 	_, _ = fmt.Fprintln(stderr, cliMessage(lang, "maintenance_failure", "binary", binaryName, "action", action))
+}
+
+func backupEncryptionPassword(cfg *config.Config, err error) string {
+	if err != nil || cfg == nil {
+		return ""
+	}
+	return cfg.Server.Backup.EncryptionPassword
+}
+
+func configuredDatabaseCachePath(cfg *config.Config, dataDir string) string {
+	if cfg == nil || !cfg.Server.Database.Cache.Enabled {
+		return ""
+	}
+	path := database.CachePathFromConfig(cfg.Server.Database.Cache.Path, dataDir)
+	if path == "" {
+		return filepath.Join(dataDir, "db", "cache.db")
+	}
+	return path
+}
+
+func openConfiguredDatabase(cfg *config.Config, dataDir string) (database.DB, error) {
+	if cfg == nil {
+		return nil, errors.New("database configuration is unavailable")
+	}
+	driver := strings.ToLower(strings.TrimSpace(cfg.Server.Database.Type))
+	path := cfg.Server.Database.Path
+	if driver != "libsql" && driver != "turso" {
+		path = configuredSQLiteDatabasePath(path, dataDir)
+		if err := paths.EnsureDir(filepath.Dir(path)); err != nil {
+			return nil, fmt.Errorf("create database directory: %w", err)
+		}
+	}
+	cache := database.LocalCacheConfig{
+		Enabled:      cfg.Server.Database.Cache.Enabled,
+		Path:         configuredDatabaseCachePath(cfg, dataDir),
+		OfflineMode:  cfg.Server.Database.Cache.OfflineMode,
+		SyncInterval: parseDurationOr(cfg.Server.Database.Cache.SyncInterval, 30*time.Second),
+		MaxAge:       parseDurationOr(cfg.Server.Database.Cache.MaxAge, time.Hour),
+	}
+	if cache.Enabled && cache.Path != "" {
+		if err := paths.EnsureDir(filepath.Dir(cache.Path)); err != nil {
+			return nil, fmt.Errorf("create database cache directory: %w", err)
+		}
+	}
+	return database.NewDatabaseWithCache(cfg.Server.Database.Type, path, cfg.Server.Database.Token, database.PoolConfig{
+		MaxOpen: cfg.Server.Database.Pool.MaxOpen, MaxIdle: cfg.Server.Database.Pool.MaxIdle,
+		MaxLifetime: cfg.Server.Database.Pool.MaxLifetime, MaxIdleTime: cfg.Server.Database.Pool.MaxIdleTime,
+	}, cache)
+}
+
+func configuredSQLiteDatabasePath(path, dataDir string) string {
+	if path == "" {
+		return filepath.Join(dataDir, "db", "server.db")
+	}
+	return database.ResolvePathFromConfig(path, dataDir)
+}
+
+func parseDurationOr(value string, fallback time.Duration) time.Duration {
+	parsed, err := time.ParseDuration(strings.TrimSpace(value))
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func safeDatabaseURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" {
+		return raw
+	}
+	parsed.User = nil
+	query := parsed.Query()
+	for key := range query {
+		switch strings.ToLower(key) {
+		case "password", "pwd", "token", "authtoken":
+			query.Set(key, "REDACTED")
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
+func backupConnectionTLSFiles(cfg *config.Config, configDir string) []string {
+	if cfg == nil {
+		return nil
+	}
+	return []string{
+		backupTLSPath(configDir, cfg.Server.Cache.TLSCA),
+		backupTLSPath(configDir, cfg.Server.Cache.TLSCert),
+		backupTLSPath(configDir, cfg.Server.Cache.TLSKey),
+	}
+}
+
+func backupExternalTLSPath(cfg *config.Config, configDir string, certificate bool) string {
+	if cfg == nil {
+		return ""
+	}
+	value := cfg.Server.TLS.Key
+	if certificate {
+		value = cfg.Server.TLS.Cert
+	}
+	return backupTLSPath(configDir, value)
+}
+
+func backupTLSPath(configDir, value string) string {
+	if value == "" || filepath.IsAbs(value) {
+		return value
+	}
+	return filepath.Join(configDir, "ssl", value)
 }
 
 func writeCommandFailure(stderr io.Writer, lang, binaryName string, err error) {

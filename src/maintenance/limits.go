@@ -2,7 +2,6 @@ package maintenance
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/apimgr/cairnbin/src/config"
 )
@@ -52,22 +51,6 @@ func RestoreLimitsFromConfig(c config.RestoreConfig) RestoreLimits {
 		MaxFileSize:     size(c.MaxFileSize, 512<<20),
 		MaxRatio:        ratio,
 	}
-}
-
-// checkArchiveSize rejects an archive file larger than MaxArchiveSize before
-// any of it is read into memory.
-func (l RestoreLimits) checkArchiveSize(path string) error {
-	if l.MaxArchiveSize <= 0 {
-		return nil
-	}
-	st, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("stat backup: %w", err)
-	}
-	if st.Size() > l.MaxArchiveSize {
-		return fmt.Errorf("backup is %d bytes, above server.restore.max_archive_size (%d)", st.Size(), l.MaxArchiveSize)
-	}
-	return nil
 }
 
 // extractBudget tracks what has been extracted so far and aborts the restore

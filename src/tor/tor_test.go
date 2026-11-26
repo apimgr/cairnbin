@@ -451,8 +451,10 @@ func TestMigrateLegacyKey_UnexpectedSize_LeftUntouched(t *testing.T) {
 }
 
 func TestGetTorConfig_RelayHardeningAndTuning(t *testing.T) {
-	cfg := &Config{VirtualPort: 80, DataDir: "/d", SafeLogging: true, BandwidthRate: "1 MB", BandwidthBurst: "2 MB",
-		UseNetwork: true, NumIntroPoints: 5, MaxStreamsPerCircuit: 100, CloseCircuitOnStreamLimit: true}
+	cfg := &Config{
+		VirtualPort: 80, DataDir: "/d", SafeLogging: true, BandwidthRate: "1 MB", BandwidthBurst: "2 MB",
+		UseNetwork: true, NumIntroPoints: 5, MaxStreamsPerCircuit: 100, CloseCircuitOnStreamLimit: true,
+	}
 	out := getTorConfig(cfg, 4242)
 	for _, want := range []string{
 		"SocksPort 127.0.0.1:auto", "SocksPolicy accept 127.0.0.1", "PublishServerDescriptor 0",

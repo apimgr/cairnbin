@@ -145,6 +145,7 @@ func (m *mockDB) GetPasteByID(id string) (*model.Paste, error) { return nil, nil
 func (m *mockDB) GetPublicPastes(page, limit int) ([]model.PasteListItem, int, error) {
 	return nil, 0, nil
 }
+
 func (m *mockDB) SearchPublicPastes(page, limit int, search, sortBy, order string, pasteType ...string) ([]model.PasteListItem, int, error) {
 	return nil, 0, nil
 }

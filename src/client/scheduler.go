@@ -223,8 +223,10 @@ func (c *client) schedulerShow(path, id string) {
 		enabled = t("sched_yes")
 	}
 	headers := []string{t("sched_col_task"), t("sched_col_enabled"), t("sched_col_schedule"), t("sched_col_status"), t("sched_col_last_run"), t("sched_col_next_run"), t("sched_col_runs"), t("sched_col_failed"), t("sched_col_error")}
-	row := []string{tk.TaskID, enabled, tk.Schedule, schedulerStatusSymbol(tk.LastStatus) + " " + tk.LastStatus, schedulerTime(tk.LastRun), schedulerTime(tk.NextRun),
-		fmt.Sprint(tk.RunCount), fmt.Sprint(tk.FailCount), tk.LastError}
+	row := []string{
+		tk.TaskID, enabled, tk.Schedule, schedulerStatusSymbol(tk.LastStatus) + " " + tk.LastStatus, schedulerTime(tk.LastRun), schedulerTime(tk.NextRun),
+		fmt.Sprint(tk.RunCount), fmt.Sprint(tk.FailCount), tk.LastError,
+	}
 	if c.emitStructured(tk, headers, [][]string{row}) {
 		return
 	}

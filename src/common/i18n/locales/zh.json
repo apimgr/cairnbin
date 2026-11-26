@@ -194,6 +194,7 @@
   },
   "contact": {
     "title": "联系我们",
+    "honeypot_label": "请将此字段留空",
     "name": "姓名",
     "email": "电子邮件",
     "subject": "主题",
@@ -735,6 +736,12 @@
       "other": "{count} 分钟"
     }
   },
+  "docs": {
+    "javascript_required": "需要 JavaScript",
+    "javascript_fallback": "交互式文档视图需要 JavaScript。请改用以下直接接口：",
+    "openapi_json": "OpenAPI JSON",
+    "graphql_endpoint": "GraphQL 接口"
+  },
   "swagger": {
     "title": "API 文档 - {app_name}",
     "description": "交互式 REST API 浏览器",
@@ -818,7 +825,7 @@
     "returns_the_openapi_3_0_3_json_specification_for_015acf42": "返回此 API 的 OpenAPI 3.0.3 JSON 规范。",
     "openapi_json_spec_d1f38104": "OpenAPI JSON 规范",
     "graphql_endpoint_0a863601": "GraphQL 端点",
-    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "执行 GraphQL 查询或变更。交互式 GraphiQL 浏览器位于 /server/docs/graphql。",
+    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "执行只读 GraphQL 查询。不支持变更操作；写入请使用 REST。交互式 GraphiQL 浏览器位于 /server/docs/graphql。",
     "graphql_request_with_query_and_optional_variable_7b24cbff": "包含查询和可选变量的 GraphQL 请求。",
     "graphql_response_b96449ad": "GraphQL 响应",
     "compatibility_fa528d3a": "兼容性",
@@ -1285,7 +1292,7 @@
     "server_title": "快速、公开的 Cairnbin 服务",
     "show_help_extended": "显示帮助（每个命令也支持 --help）",
     "subcommand_details": "更多详情请运行 {command} --help。",
-    "maintenance_help": "维护命令：\n\nbackup [file] - 创建并验证服务数据归档\n  默认：{backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  --include-ssl 包含 ssl/；--include-data 包含数据目录\nbackup test - 验证安全密钥对，不创建备份\nrestore <file> - 恢复归档；服务器将停止并重启\nupdate [cmd] - 管理更新：check、yes（安装）或 branch <stable|beta|devel>\nmode <mode> - 设置 production 或 development 模式\nsetup - 重置服务器配置（首次运行或仅 root）\npgp <action> - 管理安全密钥对\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - 按所有者令牌前缀导出或删除数据\nsecret rotate <name> - 轮换 installation_secret 或 encryption_key\ncompliance report - 打印合规状态摘要\nemail test [--to ADDRESS] [--dry-run] - 测试 SMTP 或验证模板（需要 root 或管理员令牌）\n\n示例：\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
+    "maintenance_help": "维护命令：\n\nbackup [file] - 创建并验证服务数据归档\n  默认：{backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  --include-ssl 包含 ssl/；--include-data 包含数据目录\nbackup test [file] - 验证并试恢复备份；省略文件时使用最新的完整备份\nrestore [file] - 恢复归档；省略文件时使用最新的完整备份；服务器将停止并重启\nupdate [cmd] - 管理更新：check、yes（安装）或 branch <stable|beta|devel>\nmode <mode> - 设置 production 或 development 模式\nsetup - 重置服务器配置（首次运行或仅 root）\npgp <action> - 管理安全密钥对\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - 按所有者令牌前缀导出或删除数据\nsecret rotate <name> - 轮换 installation_secret 或 encryption_key\ncompliance report - 打印合规状态摘要\nemail test [--to ADDRESS] [--dry-run] - 测试 SMTP 或验证模板（需要 root 或管理员令牌）\n\n示例：\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
     "update_help": "更新管理：\n\ncheck - 检查可用更新，并将当前版本与最新版本比较\nyes - 下载并安装最新更新，替换二进制文件后重启\nbranch <name> - 选择发布渠道：stable（默认）、beta 或 devel\n\n示例：\n  {binary} --update check\n  {binary} --update yes\n  {binary} --update branch beta",
     "update_current": "当前：\n  版本：{version}\n  渠道：{branch}",
     "update_latest": "  最新：{latest}",

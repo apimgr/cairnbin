@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -137,6 +138,87 @@ func (s *SQLiteDB) ReencryptPGPSecurityReports(fn func(old []byte) ([]byte, erro
 			return 0, fmt.Errorf("security report %s: update PGP body: %w", report.id, err)
 		}
 		updated++
+	}
+	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
+		return 0, fmt.Errorf("security reports: commit PGP rotation: %w", err)
+	}
+	return updated, nil
+}
+
+// RotatePGPSecurityKeypair commits report re-encryption and the new key
+// fingerprint marker in the same write transaction.
+func (s *SQLiteDB) RotatePGPSecurityKeypair(fn func(old []byte) ([]byte, error), keypair *SecurityKeypair) (updated int, err error) {
+	ctx, cancel := dbCtx(dbBulkTimeout)
+	defer cancel()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("security reports: begin PGP rotation: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
+		return 0, fmt.Errorf("security reports: lock PGP rotation: %w", err)
+	}
+	defer func() { _, _ = conn.ExecContext(context.Background(), `ROLLBACK`) }()
+	rows, err := conn.QueryContext(ctx, `SELECT tracking_id, encrypted_body FROM security_reports WHERE enc_method = 'pgp'`)
+	if err != nil {
+		return 0, fmt.Errorf("security reports: read PGP bodies: %w", err)
+	}
+	type encryptedReport struct {
+		id   string
+		body []byte
+	}
+	var reports []encryptedReport
+	for rows.Next() {
+		var report encryptedReport
+		if err := rows.Scan(&report.id, &report.body); err != nil {
+			_ = rows.Close()
+			return 0, fmt.Errorf("security reports: read PGP row: %w", err)
+		}
+		reports = append(reports, report)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, fmt.Errorf("security reports: scan PGP rows: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("security reports: close PGP rows: %w", err)
+	}
+	for _, report := range reports {
+		next, err := fn(report.body)
+		if err != nil {
+			return 0, fmt.Errorf("security report %s: re-encrypt PGP body: %w", report.id, err)
+		}
+		if _, err := conn.ExecContext(ctx, `UPDATE security_reports SET encrypted_body = ? WHERE tracking_id = ? AND enc_method = 'pgp'`, next, report.id); err != nil {
+			return 0, fmt.Errorf("security report %s: update PGP body: %w", report.id, err)
+		}
+		updated++
+	}
+	if keypair == nil {
+		return 0, fmt.Errorf("security reports: missing PGP rotation metadata")
+	}
+	publishedState := keypair.KeyserversPublished
+	if publishedState == nil {
+		publishedState = []KeyserverPublish{}
+	}
+	published, err := json.Marshal(publishedState)
+	if err != nil {
+		return 0, fmt.Errorf("security reports: encode keyserver state: %w", err)
+	}
+	var expiresAt, lastRotatedAt any
+	if !keypair.ExpiresAt.IsZero() {
+		expiresAt = keypair.ExpiresAt
+	}
+	if keypair.LastRotatedAt != nil {
+		lastRotatedAt = *keypair.LastRotatedAt
+	}
+	if _, err := conn.ExecContext(ctx, `INSERT INTO security_keypair
+		(id, fingerprint, created_at, expires_at, last_rotated_at, keyservers_published, revoked)
+		VALUES (1, ?, ?, ?, ?, ?, 0)
+		ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint,
+		created_at = excluded.created_at, expires_at = excluded.expires_at,
+		last_rotated_at = excluded.last_rotated_at, keyservers_published = excluded.keyservers_published,
+		revoked = 0`, keypair.Fingerprint, keypair.CreatedAt, expiresAt, lastRotatedAt, string(published)); err != nil {
+		return 0, fmt.Errorf("security reports: store PGP rotation marker: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
 		return 0, fmt.Errorf("security reports: commit PGP rotation: %w", err)

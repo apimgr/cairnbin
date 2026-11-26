@@ -50,8 +50,8 @@ func (s *Server) maintenanceMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Maintenance-Mode", "true")
 		w.Header().Set("X-Maintenance-Reason", snap.Reason)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"ok": false,
-			"error": "MAINTENANCE",
+			"ok":      false,
+			"error":   "MAINTENANCE",
 			"message": i18n.Translate(i18n.LangFromRequest(r), "errors.maintenance_mode"),
 			"details": map[string]any{
 				"reason":       snap.Reason,

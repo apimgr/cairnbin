@@ -138,7 +138,7 @@ func (s *Server) verifyContactCaptcha(r *http.Request, token, answer, response s
 	default:
 		return false
 	}
-	client := s.outboundHTTPClient
+	client := s.OutboundHTTPClient()
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}

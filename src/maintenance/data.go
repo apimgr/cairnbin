@@ -50,11 +50,11 @@ func RunData(action, prefix string, opts DataOptions) error {
 	if err != nil {
 		return fmt.Errorf("data: load config: %w", err)
 	}
-	dbPath := cfg.Database.Path
+	dbPath := cfg.Server.Database.Path
 	if strings.TrimSpace(dbPath) == "" {
 		dbPath = opts.DBPath
 	}
-	db, err := database.NewDatabase(cfg.Database.Type, dbPath)
+	db, err := database.NewDatabase(cfg.Server.Database.Type, dbPath)
 	if err != nil {
 		return fmt.Errorf("data: open database: %w", err)
 	}

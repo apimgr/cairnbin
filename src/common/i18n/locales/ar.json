@@ -338,6 +338,7 @@
   },
   "contact": {
     "title": "اتصل بنا",
+    "honeypot_label": "اترك هذا الحقل فارغًا",
     "name": "الاسم",
     "email": "البريد الإلكتروني",
     "subject": "الموضوع",
@@ -879,6 +880,12 @@
       "other": "{count} دقيقة"
     }
   },
+  "docs": {
+    "javascript_required": "يلزم استخدام JavaScript",
+    "javascript_fallback": "تحتاج واجهة التوثيق التفاعلية إلى JavaScript. استخدم نقاط النهاية المباشرة التالية:",
+    "openapi_json": "JSON الخاص بـ OpenAPI",
+    "graphql_endpoint": "نقطة نهاية GraphQL"
+  },
   "swagger": {
     "title": "توثيق API - {app_name}",
     "description": "مستكشف REST API التفاعلي",
@@ -962,7 +969,7 @@
     "returns_the_openapi_3_0_3_json_specification_for_015acf42": "يعيد مواصفات JSON OpenAPI 3.0.3 لهذه الواجهة.",
     "openapi_json_spec_d1f38104": "مواصفات OpenAPI بصيغة JSON",
     "graphql_endpoint_0a863601": "نقطة نهاية GraphQL",
-    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "ينفذ استعلام GraphQL أو طفرة. مستكشف GraphiQL متاح على /server/docs/graphql.",
+    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "ينفذ استعلام GraphQL للقراءة فقط. الطفرات غير متاحة؛ استخدم REST للكتابة. مستكشف GraphiQL متاح على /server/docs/graphql.",
     "graphql_request_with_query_and_optional_variable_7b24cbff": "طلب GraphQL يتضمن استعلامًا ومتغيرات اختيارية.",
     "graphql_response_b96449ad": "استجابة GraphQL",
     "compatibility_fa528d3a": "التوافق",
@@ -1429,7 +1436,7 @@
     "server_title": "خدمة Cairnbin عامة وسريعة",
     "show_help_extended": "عرض المساعدة (يدعم كل أمر الخيار --help أيضًا)",
     "subcommand_details": "لمزيد من التفاصيل، شغّل {command} --help.",
-    "maintenance_help": "أوامر الصيانة:\n\nbackup [file] - إنشاء أرشيف بيانات الخدمة والتحقق منه\n  الافتراضي: {backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  يتضمن --include-ssl المجلد ssl/؛ ويتضمن --include-data مجلد البيانات\nbackup test - التحقق من زوج مفاتيح الأمان دون إنشاء نسخة احتياطية\nrestore <file> - استعادة أرشيف؛ يتوقف الخادم ثم يعاد تشغيله\nupdate [cmd] - إدارة التحديثات: check أو yes (تثبيت) أو branch <stable|beta|devel>\nmode <mode> - تعيين وضع production أو development\nsetup - إعادة ضبط إعدادات الخادم (أول تشغيل أو root فقط)\npgp <action> - إدارة زوج مفاتيح الأمان\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - تصدير بيانات اللصقة أو حذفها باستخدام بادئة رمز المالك\nsecret rotate <name> - تدوير installation_secret أو encryption_key\ncompliance report - عرض ملخص حالة الامتثال\nemail test [--to ADDRESS] [--dry-run] - اختبار SMTP أو التحقق من القوالب (يتطلب root أو رمز المشغّل)\n\nأمثلة:\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
+    "maintenance_help": "أوامر الصيانة:\n\nbackup [file] - إنشاء أرشيف بيانات الخدمة والتحقق منه\n  الافتراضي: {backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  يتضمن --include-ssl المجلد ssl/؛ ويتضمن --include-data مجلد البيانات\nbackup test [file] - التحقق من النسخة الاحتياطية وتجربة استعادتها؛ يستخدم أحدث نسخة كاملة عند حذف اسم الملف\nrestore [file] - استعادة أرشيف؛ يستخدم أحدث نسخة كاملة عند حذف اسم الملف؛ يتوقف الخادم ثم يعاد تشغيله\nupdate [cmd] - إدارة التحديثات: check أو yes (تثبيت) أو branch <stable|beta|devel>\nmode <mode> - تعيين وضع production أو development\nsetup - إعادة ضبط إعدادات الخادم (أول تشغيل أو root فقط)\npgp <action> - إدارة زوج مفاتيح الأمان\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - تصدير بيانات اللصقة أو حذفها باستخدام بادئة رمز المالك\nsecret rotate <name> - تدوير installation_secret أو encryption_key\ncompliance report - عرض ملخص حالة الامتثال\nemail test [--to ADDRESS] [--dry-run] - اختبار SMTP أو التحقق من القوالب (يتطلب root أو رمز المشغّل)\n\nأمثلة:\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
     "update_help": "إدارة التحديثات:\n\ncheck - البحث عن التحديثات ومقارنة الإصدار المثبت بأحدث إصدار\nyes - تنزيل أحدث تحديث وتثبيته واستبدال الملف التنفيذي ثم إعادة التشغيل\nbranch <name> - اختيار القناة: stable (افتراضي) أو beta أو devel\n\nأمثلة:\n  {binary} --update check\n  {binary} --update yes\n  {binary} --update branch beta",
     "update_current": "الحالي:\n  الإصدار: {version}\n  القناة:  {branch}",
     "update_latest": "  الأحدث: {latest}",

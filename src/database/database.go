@@ -228,7 +228,9 @@ func dbCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
 
 // SQLiteDB implements DB for SQLite.
 type SQLiteDB struct {
-	db *instrumentedSQLDB
+	db          *instrumentedSQLDB
+	driver      string
+	schemaReady atomic.Bool
 }
 
 // PoolConfig mirrors server.database.pool from server.yml (AI.md PART 10). It
@@ -310,7 +312,9 @@ func newSQLiteDB(path string, pool PoolConfig) (*SQLiteDB, error) {
 		return nil, err
 	}
 
-	return &SQLiteDB{db: &instrumentedSQLDB{DB: db}}, nil
+	store := &SQLiteDB{db: &instrumentedSQLDB{DB: db}, driver: "sqlite"}
+	store.schemaReady.Store(true)
+	return store, nil
 }
 
 func ensureSchema(db *sql.DB) error {
@@ -337,8 +341,8 @@ func ensureSchema(db *sql.DB) error {
 
 		// Scheduler persistent state (PART 18).
 		`CREATE TABLE IF NOT EXISTS scheduler_tasks (
-			task_id      TEXT PRIMARY KEY,
-			task_name    TEXT NOT NULL,
+			id           TEXT PRIMARY KEY,
+			name         TEXT NOT NULL,
 			schedule     TEXT NOT NULL,
 			last_run     DATETIME,
 			last_status  TEXT NOT NULL DEFAULT 'pending',
@@ -350,7 +354,7 @@ func ensureSchema(db *sql.DB) error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS scheduler_history (
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
-			task_id      TEXT NOT NULL,
+			task_id      TEXT NOT NULL REFERENCES scheduler_tasks(id),
 			started_at   DATETIME NOT NULL,
 			finished_at  DATETIME,
 			status       TEXT NOT NULL,
@@ -358,7 +362,6 @@ func ensureSchema(db *sql.DB) error {
 			duration_ms  INTEGER NOT NULL DEFAULT 0
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_sched_history_task ON scheduler_history(task_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_sched_history_started ON scheduler_history(started_at)`,
 
 		// App-level server secrets (PART 11): installation_secret, cookie_signing_key,
 		// csrf_token_secret. 32 bytes each, stored base64-encoded. Never returned
@@ -538,6 +541,12 @@ func ensureSchema(db *sql.DB) error {
 			return fmt.Errorf("schema: %w", err)
 		}
 	}
+	if err := migrateSchedulerSchema(ctx, db); err != nil {
+		return fmt.Errorf("schema scheduler migration: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_sched_history_started ON scheduler_history(started_at)`); err != nil {
+		return fmt.Errorf("schema scheduler history index: %w", err)
+	}
 
 	for _, s := range updates {
 		if _, err := db.ExecContext(ctx, s); err != nil {
@@ -570,6 +579,9 @@ func ensureSchema(db *sql.DB) error {
 	}
 	if err := migrateLegacyOwners(ctx, db); err != nil {
 		return fmt.Errorf("schema owner migration: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO owners(id) VALUES ('system')`); err != nil {
+		return fmt.Errorf("schema system owner: %w", err)
 	}
 
 	return nil
@@ -669,8 +681,43 @@ func isAlreadyExists(err error) bool {
 // Close closes the database connection.
 func (s *SQLiteDB) Close() error { return s.db.Close() }
 
+// SnapshotTo writes a transactionally consistent SQLite snapshot to path,
+// including committed pages that still reside in the source WAL file.
+func (s *SQLiteDB) SnapshotTo(path string) error {
+	if s.driver != "" && s.driver != "sqlite" {
+		return fmt.Errorf("SQLite snapshot is unavailable for the %s driver", s.driver)
+	}
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("SQLite snapshot path is required")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create snapshot directory: %w", err)
+	}
+	if _, err := os.Lstat(path); err == nil {
+		return fmt.Errorf("snapshot destination already exists: %s", path)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("check snapshot destination: %w", err)
+	}
+	ctx, cancel := dbCtx(dbBulkTimeout)
+	defer cancel()
+	if _, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, path); err != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("create SQLite snapshot: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("secure SQLite snapshot: %w", err)
+	}
+	return nil
+}
+
 // Type returns the database type name.
-func (s *SQLiteDB) Type() string { return "sqlite" }
+func (s *SQLiteDB) Type() string {
+	if s.driver == "" {
+		return "sqlite"
+	}
+	return s.driver
+}
 
 // Ping verifies the database connection is alive.
 func (s *SQLiteDB) Ping() error {
@@ -1156,11 +1203,11 @@ func (s *SQLiteDB) UpsertSchedulerTask(t *TaskState) error {
 	defer cancel()
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO scheduler_tasks
-			(task_id, task_name, schedule, last_run, last_status, last_error,
+			(id, name, schedule, last_run, last_status, last_error,
 			 next_run, run_count, fail_count, enabled)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(task_id) DO UPDATE SET
-			task_name   = excluded.task_name,
+		ON CONFLICT(id) DO UPDATE SET
+			name        = excluded.name,
 			schedule    = excluded.schedule,
 			last_run    = COALESCE(scheduler_tasks.last_run, excluded.last_run),
 			last_status = COALESCE(NULLIF(scheduler_tasks.last_status,''), excluded.last_status),
@@ -1180,9 +1227,9 @@ func (s *SQLiteDB) GetSchedulerTask(taskID string) (*TaskState, error) {
 	ctx, cancel := dbCtx(dbReadTimeout)
 	defer cancel()
 	row := s.db.QueryRowContext(ctx, `
-		SELECT task_id, task_name, schedule, last_run, last_status, last_error,
+		SELECT id, name, schedule, last_run, last_status, last_error,
 		       next_run, run_count, fail_count, enabled
-		FROM   scheduler_tasks WHERE task_id = ?`, taskID)
+		FROM   scheduler_tasks WHERE id = ?`, taskID)
 	return scanTaskState(row)
 }
 
@@ -1191,9 +1238,9 @@ func (s *SQLiteDB) ListSchedulerTasks() ([]*TaskState, error) {
 	ctx, cancel := dbCtx(dbReadTimeout)
 	defer cancel()
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT task_id, task_name, schedule, last_run, last_status, last_error,
+		SELECT id, name, schedule, last_run, last_status, last_error,
 		       next_run, run_count, fail_count, enabled
-		FROM   scheduler_tasks ORDER BY task_id`)
+		FROM   scheduler_tasks ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -1219,7 +1266,7 @@ func (s *SQLiteDB) SetTaskEnabled(taskID string, enabled bool) error {
 	ctx, cancel := dbCtx(dbWriteTimeout)
 	defer cancel()
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE scheduler_tasks SET enabled = ? WHERE task_id = ?`,
+		`UPDATE scheduler_tasks SET enabled = ? WHERE id = ?`,
 		enabledInt, taskID,
 	)
 	return err
@@ -1240,7 +1287,7 @@ func (s *SQLiteDB) UpdateTaskRun(
 		UPDATE scheduler_tasks
 		SET last_run = ?, last_status = ?, last_error = ?,
 		    run_count = ?, fail_count = ?, next_run = ?
-		WHERE task_id = ?`,
+		WHERE id = ?`,
 		lastRun, status, lastError, runCount, failCount, nextRunPtr, taskID,
 	)
 	return err
@@ -1785,10 +1832,10 @@ func (s *SQLiteDB) PurgeIdleOwners(days int) (int64, error) {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM api_tokens WHERE owner_id IN (SELECT o.id FROM owners o WHERE o.last_seen_at <= ? AND NOT EXISTS (SELECT 1 FROM pastes p WHERE p.owner_id = o.id))`, cutoff); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM api_tokens WHERE owner_id IN (SELECT o.id FROM owners o WHERE o.id <> 'system' AND o.last_seen_at <= ? AND NOT EXISTS (SELECT 1 FROM pastes p WHERE p.owner_id = o.id))`, cutoff); err != nil {
 		return 0, err
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM owners WHERE last_seen_at <= ? AND NOT EXISTS (SELECT 1 FROM pastes p WHERE p.owner_id = owners.id)`, cutoff)
+	res, err := tx.ExecContext(ctx, `DELETE FROM owners WHERE id <> 'system' AND last_seen_at <= ? AND NOT EXISTS (SELECT 1 FROM pastes p WHERE p.owner_id = owners.id)`, cutoff)
 	if err != nil {
 		return 0, err
 	}

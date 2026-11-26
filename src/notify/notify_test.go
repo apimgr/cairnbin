@@ -57,22 +57,46 @@ func TestBuildRequestTransports(t *testing.T) {
 		urlContains  []string
 		bodyContains []string
 	}{
-		{"telegram", "https://api.telegram.org/botX/sendMessage?chat_id=5", "POST", "",
-			[]string{"chat_id=5", "text=", "CRITICAL"}, nil},
-		{"discord", "https://discord.com/api/webhooks/1/x", "POST", "application/json",
-			nil, []string{`"content"`, `"username":"cairnbin"`, "Backup failed"}},
-		{"slack", "https://hooks.slack.com/services/a/b/c", "POST", "application/json",
-			nil, []string{`"text"`, "disk full"}},
-		{"mattermost", "https://mm.example.com/hooks/x", "POST", "application/json",
-			nil, []string{`"text"`}},
-		{"pushover", "https://api.pushover.net/1/messages.json", "POST", "application/x-www-form-urlencoded",
-			nil, []string{"title=", "message=", "priority="}},
-		{"gotify", "https://gotify.example.com/message?token=abc", "POST", "application/json",
-			nil, []string{`"title"`, `"message"`, `"priority"`}},
-		{"generic", "https://hook.example.com/in", "POST", "application/json",
-			nil, []string{`"role":"admin"`, `"event":"admin.backup_failed"`, `"project_name":"cairnbin"`, `"timestamp":1700000000`}},
-		{"unknownxyz", "https://hook.example.com/in", "POST", "application/json",
-			nil, []string{`"role":"admin"`, `"project_version":"1.2.3"`}},
+		{
+			"telegram", "https://api.telegram.org/botX/sendMessage?chat_id=5", "POST", "",
+			[]string{"chat_id=5", "text=", "CRITICAL"},
+			nil,
+		},
+		{
+			"discord", "https://discord.com/api/webhooks/1/x", "POST", "application/json",
+			nil,
+			[]string{`"content"`, `"username":"cairnbin"`, "Backup failed"},
+		},
+		{
+			"slack", "https://hooks.slack.com/services/a/b/c", "POST", "application/json",
+			nil,
+			[]string{`"text"`, "disk full"},
+		},
+		{
+			"mattermost", "https://mm.example.com/hooks/x", "POST", "application/json",
+			nil,
+			[]string{`"text"`},
+		},
+		{
+			"pushover", "https://api.pushover.net/1/messages.json", "POST", "application/x-www-form-urlencoded",
+			nil,
+			[]string{"title=", "message=", "priority="},
+		},
+		{
+			"gotify", "https://gotify.example.com/message?token=abc", "POST", "application/json",
+			nil,
+			[]string{`"title"`, `"message"`, `"priority"`},
+		},
+		{
+			"generic", "https://hook.example.com/in", "POST", "application/json",
+			nil,
+			[]string{`"role":"admin"`, `"event":"admin.backup_failed"`, `"project_name":"cairnbin"`, `"timestamp":1700000000`},
+		},
+		{
+			"unknownxyz", "https://hook.example.com/in", "POST", "application/json",
+			nil,
+			[]string{`"role":"admin"`, `"project_version":"1.2.3"`},
+		},
 	}
 
 	for _, tc := range tests {

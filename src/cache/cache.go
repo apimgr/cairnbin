@@ -3,7 +3,11 @@ package cache
 import (
 	"container/list"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,10 +51,14 @@ type Config struct {
 	Password string `yaml:"password"`
 	DB       int    `yaml:"db"`
 
-	TLS           bool `yaml:"tls"`
-	TLSSkipVerify bool `yaml:"tls_skip_verify"`
-	PoolSize      int  `yaml:"pool_size"`
-	MinIdle       int  `yaml:"min_idle"`
+	TLS           bool   `yaml:"tls"`
+	TLSSkipVerify bool   `yaml:"tls_skip_verify"`
+	TLSVerify     bool   `yaml:"-"`
+	TLSCA         string `yaml:"tls_ca"`
+	TLSCert       string `yaml:"tls_cert"`
+	TLSKey        string `yaml:"tls_key"`
+	PoolSize      int    `yaml:"pool_size"`
+	MinIdle       int    `yaml:"min_idle"`
 	// Timeout is the read/write/dial timeout for remote drivers.
 	Timeout time.Duration `yaml:"timeout"`
 	// Prefix is prepended to every key to avoid namespace collisions.
@@ -331,6 +339,7 @@ func (c *noopCache) Close() error                                              {
 func (c *noopCache) CheckRateLimit(context.Context, string, time.Time, int, time.Duration) (bool, time.Duration, error) {
 	return false, 0, fmt.Errorf("cache unavailable")
 }
+
 func (c *noopCache) RateLimitExceeded(context.Context, string, time.Time, int, time.Duration) (bool, error) {
 	return false, fmt.Errorf("cache unavailable")
 }
@@ -387,6 +396,44 @@ func newRedisCache(cfg Config, prefix string, defaultTTL time.Duration) (*redisC
 		opts.DialTimeout = cfg.Timeout
 		opts.ReadTimeout = cfg.Timeout
 		opts.WriteTimeout = cfg.Timeout
+	}
+	if cfg.TLS || cfg.TLSCA != "" || cfg.TLSCert != "" || cfg.TLSKey != "" {
+		tlsConfig := opts.TLSConfig
+		if tlsConfig == nil {
+			tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		} else {
+			tlsConfig = tlsConfig.Clone()
+		}
+		// TLS defaults to require mode: encrypted transport without peer
+		// verification. A CA file or explicit tls_skip_verify: false opts in to
+		// full chain and hostname verification.
+		tlsConfig.InsecureSkipVerify = !cfg.TLSVerify && cfg.TLSCA == "" //nolint:gosec
+		if cfg.TLSCA != "" {
+			caPEM, readErr := os.ReadFile(cfg.TLSCA)
+			if readErr != nil {
+				return nil, fmt.Errorf("cache: read TLS CA %s: %w", filepath.Base(cfg.TLSCA), readErr)
+			}
+			roots, poolErr := x509.SystemCertPool()
+			if poolErr != nil || roots == nil {
+				roots = x509.NewCertPool()
+			}
+			if !roots.AppendCertsFromPEM(caPEM) {
+				return nil, fmt.Errorf("cache: TLS CA file contains no certificates")
+			}
+			tlsConfig.RootCAs = roots
+			tlsConfig.InsecureSkipVerify = false
+		}
+		if (cfg.TLSCert == "") != (cfg.TLSKey == "") {
+			return nil, fmt.Errorf("cache: tls_cert and tls_key must be set together")
+		}
+		if cfg.TLSCert != "" {
+			certificate, certErr := tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
+			if certErr != nil {
+				return nil, fmt.Errorf("cache: load TLS client certificate: %w", certErr)
+			}
+			tlsConfig.Certificates = []tls.Certificate{certificate}
+		}
+		opts.TLSConfig = tlsConfig
 	}
 
 	client := redis.NewClient(opts)

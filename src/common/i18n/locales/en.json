@@ -338,6 +338,7 @@
   },
   "contact": {
     "title": "Contact",
+    "honeypot_label": "Leave this field empty",
     "name": "Name",
     "email": "Email",
     "subject": "Subject",
@@ -879,6 +880,12 @@
       "other": "{count} minutes"
     }
   },
+  "docs": {
+    "javascript_required": "JavaScript required",
+    "javascript_fallback": "The interactive documentation view needs JavaScript. Use these plain endpoints instead:",
+    "openapi_json": "OpenAPI JSON",
+    "graphql_endpoint": "GraphQL endpoint"
+  },
   "swagger": {
     "title": "API Documentation - {app_name}",
     "description": "Interactive REST API explorer",
@@ -962,7 +969,7 @@
     "returns_the_openapi_3_0_3_json_specification_for_015acf42": "Returns the OpenAPI 3.0.3 JSON specification for this API.",
     "openapi_json_spec_d1f38104": "OpenAPI JSON spec",
     "graphql_endpoint_0a863601": "GraphQL endpoint",
-    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "Executes a GraphQL query or mutation. The interactive GraphiQL explorer is available at /server/docs/graphql.",
+    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "Executes a read-only GraphQL query. Mutations are not available; use REST for writes. The interactive GraphiQL explorer is available at /server/docs/graphql.",
     "graphql_request_with_query_and_optional_variable_7b24cbff": "GraphQL request with query and optional variables.",
     "graphql_response_b96449ad": "GraphQL response",
     "compatibility_fa528d3a": "compatibility",
@@ -1429,7 +1436,7 @@
     "server_title": "a fast, public cairnbin service",
     "show_help_extended": "Show help (each command also supports --help)",
     "subcommand_details": "For details, run {command} --help.",
-    "maintenance_help": "Maintenance commands:\n\nbackup [file] - Create and verify an archive of service data\n  Default: {backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  --include-ssl includes ssl/; --include-data includes the data directory\nbackup test - Verify the security keypair without creating a backup\nrestore <file> - Restore an archive; the server stops and restarts\nupdate [cmd] - Manage updates: check, yes (install), or branch <stable|beta|devel>\nmode <mode> - Set production or development mode\nsetup - Reset server configuration (first run or root only)\npgp <action> - Manage the security keypair\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - export or delete paste data by owner-token prefix\nsecret rotate <name> - Rotate installation_secret or encryption_key\nemail test [--to ADDRESS] [--dry-run] - Test SMTP delivery or validate templates (root/operator token required)\ncompliance report - Print the compliance status summary\n\nExamples:\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
+    "maintenance_help": "Maintenance commands:\n\nbackup [file] - Create and verify an archive of service data\n  Default: {backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  --include-ssl includes ssl/; --include-data includes the data directory\nbackup test [file] - Verify and dry-run restore a backup; defaults to the newest full\nrestore [file] - Restore an archive; defaults to the newest full; the server stops and restarts\nupdate [cmd] - Manage updates: check, yes (install), or branch <stable|beta|devel>\nmode <mode> - Set production or development mode\nsetup - Reset server configuration (first run or root only)\npgp <action> - Manage the security keypair\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - export or delete paste data by owner-token prefix\nsecret rotate <name> - Rotate installation_secret or encryption_key\nemail test [--to ADDRESS] [--dry-run] - Test SMTP delivery or validate templates (root/operator token required)\ncompliance report - Print the compliance status summary\n\nExamples:\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
     "update_help": "Update management:\n\ncheck - Check for available updates; compare the installed version with the latest release\nyes - Download and install the latest update, replace the binary, and restart\nbranch <name> - Choose the release channel: stable (default), beta, or devel\n\nExamples:\n  {binary} --update check\n  {binary} --update yes\n  {binary} --update branch beta",
     "update_current": "Current:\n  Version: {version}\n  Branch:  {branch}",
     "update_latest": "  Latest:  {latest}",

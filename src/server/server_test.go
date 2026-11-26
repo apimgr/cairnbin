@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1880,6 +1881,9 @@ func TestNoTrailingSlash(t *testing.T) {
 		{"root unchanged", http.MethodGet, "/", http.StatusOK},
 		{"normal path unchanged", http.MethodGet, "/paste/abc", http.StatusOK},
 		{"trailing slash redirected", http.MethodGet, "/paste/", http.StatusMovedPermanently},
+		{"head trailing slash redirected", http.MethodHead, "/paste/", http.StatusMovedPermanently},
+		{"post trailing slash preserves method", http.MethodPost, "/paste/", http.StatusPermanentRedirect},
+		{"delete trailing slash preserves method", http.MethodDelete, "/paste/", http.StatusPermanentRedirect},
 		{"file with dot in last segment still redirects", http.MethodGet, "/static/app.js/", http.StatusMovedPermanently},
 		{"dpaste v1 endpoint preserves POST slash", http.MethodPost, "/api/", http.StatusOK},
 		{"dpaste v2 endpoint preserves POST slash", http.MethodPost, "/api/v2/", http.StatusOK},
@@ -4935,13 +4939,22 @@ func TestOnConfigChangeRestartPrefixMatch(t *testing.T) {
 		return false
 	}
 
-	t.Run("Tor outbound network change marks restart", func(t *testing.T) {
+	t.Run("Tor outbound network change hot reloads without restart", func(t *testing.T) {
 		cfg := config.DefaultConfig()
 		s := newMinimalServer(cfg)
 		next := config.DefaultConfig()
 		next.Server.Tor.UseNetwork = !cfg.Server.Tor.UseNetwork
 		s.OnConfigChange(next)
-		markedContains(t, s, "tor")
+		s.pendingRestartMu.Lock()
+		defer s.pendingRestartMu.Unlock()
+		for _, key := range s.pendingRestartKeys {
+			if strings.Contains(key, "tor") {
+				t.Fatalf("Tor hot reload marked a restart: %v", s.pendingRestartKeys)
+			}
+		}
+		if s.lastTorConfig.UseNetwork != next.Server.Tor.UseNetwork {
+			t.Fatal("Tor hot-reload state did not advance to the new configuration")
+		}
 	})
 
 	t.Run("daemonize change marks restart", func(t *testing.T) {
@@ -5002,14 +5015,23 @@ func TestOnConfigChangeRestartPrefixMatch(t *testing.T) {
 		}
 	})
 
-	t.Run("tor circuit timeout change marks restart", func(t *testing.T) {
+	t.Run("tor circuit timeout change hot reloads without restart", func(t *testing.T) {
 		cfg := config.DefaultConfig()
 		cfg.Server.Tor.CircuitTimeout = 30
 		s := newMinimalServer(cfg)
 		next := config.DefaultConfig()
 		next.Server.Tor.CircuitTimeout = 60
 		s.OnConfigChange(next)
-		markedContains(t, s, "tor")
+		s.pendingRestartMu.Lock()
+		defer s.pendingRestartMu.Unlock()
+		for _, key := range s.pendingRestartKeys {
+			if strings.Contains(key, "tor") {
+				t.Fatalf("Tor hot reload marked a restart: %v", s.pendingRestartKeys)
+			}
+		}
+		if s.lastTorConfig.CircuitTimeout != next.Server.Tor.CircuitTimeout {
+			t.Fatal("Tor hot-reload state did not advance to the new configuration")
+		}
 	})
 }
 
@@ -5864,4 +5886,23 @@ func TestSecurityHeadersNonceCSP(t *testing.T) {
 	if strings.Contains(rec2.Header().Get("Content-Security-Policy")+rec2.Header().Get("Content-Security-Policy-Report-Only"), "nonce-"+firstNonce) {
 		t.Error("nonce must differ between responses")
 	}
+}
+
+func TestOutboundHTTPClientSupportsConcurrentReload(t *testing.T) {
+	s := &Server{}
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func(seed int) {
+			defer wg.Done()
+			for n := 0; n < 1000; n++ {
+				if (n+seed)%2 == 0 {
+					s.outboundHTTPClient.Store(&http.Client{Timeout: time.Duration(n+1) * time.Millisecond})
+				} else {
+					_ = s.OutboundHTTPClient()
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
 }

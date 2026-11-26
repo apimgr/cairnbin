@@ -92,9 +92,9 @@ func WritePIDFile(pidPath string) error {
 		return fmt.Errorf("already running (pid %d)", existingPID)
 	}
 
-	perm := os.FileMode(0600)
+	perm := os.FileMode(0o600)
 	if os.Geteuid() == 0 {
-		perm = 0644
+		perm = 0o644
 	}
 	pid := os.Getpid()
 	return os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), perm)

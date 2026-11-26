@@ -41,7 +41,7 @@ func EnsureServiceAccount(username string) error {
 			return fmt.Errorf("service account: %w", err)
 		}
 		homeDir := fmt.Sprintf("/usr/local/var/%s/%s", orgName, appName)
-		if err := os.MkdirAll(homeDir, 0755); err != nil {
+		if err := os.MkdirAll(homeDir, 0o755); err != nil {
 			return fmt.Errorf("service account home %s: %w", homeDir, err)
 		}
 		return createMacOSServiceUser(name, id, homeDir)
@@ -54,7 +54,7 @@ func EnsureServiceAccount(username string) error {
 		idStr := strconv.Itoa(id)
 		homeDir := fmt.Sprintf("/usr/local/etc/%s/%s", orgName, appName)
 		// PART 23: the home directory must exist before the user is created.
-		if err := os.MkdirAll(homeDir, 0755); err != nil {
+		if err := os.MkdirAll(homeDir, 0o755); err != nil {
 			return fmt.Errorf("service account home %s: %w", homeDir, err)
 		}
 		exec.Command("pw", "groupadd", name, "-g", idStr).Run() //nolint:errcheck
@@ -74,7 +74,7 @@ func EnsureServiceAccount(username string) error {
 		idStr := strconv.Itoa(id)
 		homeDir := fmt.Sprintf("/etc/%s/%s", orgName, appName)
 		// PART 23: the home directory must exist before the user is created.
-		if err := os.MkdirAll(homeDir, 0755); err != nil {
+		if err := os.MkdirAll(homeDir, 0o755); err != nil {
 			return fmt.Errorf("service account home %s: %w", homeDir, err)
 		}
 		if output, err := exec.Command("groupadd", "-r", "-g", idStr, name).CombinedOutput(); err != nil {

@@ -222,9 +222,11 @@ func (t bineTor) Close() error { return t.tor.Close() }
 func (t bineTor) EnableNetwork(ctx context.Context, wait bool) error {
 	return t.tor.EnableNetwork(ctx, wait)
 }
+
 func (t bineTor) Dialer(ctx context.Context, conf *binettor.DialConf) (*binettor.Dialer, error) {
 	return t.tor.Dialer(ctx, conf)
 }
+
 func (t bineTor) GetInfo(keys ...string) ([]*control.KeyVal, error) {
 	return t.tor.Control.GetInfo(keys...)
 }

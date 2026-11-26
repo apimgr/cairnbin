@@ -53,7 +53,7 @@
             <input type="hidden" name="form_token" value="{{.ContactFormToken}}">
             <input type="hidden" name="step" value="submit">
             <div hidden aria-hidden="true">
-              <label for="contact-website">Leave this field empty</label>
+              <label for="contact-website">{{t .Lang "contact.honeypot_label"}}</label>
               <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off">
             </div>
             <input type="hidden" name="security_id" value="{{.SecurityID}}">
@@ -210,7 +210,7 @@
             <input type="hidden" name="form_token" value="{{.ContactFormToken}}">
             <input type="hidden" name="step" value="submit">
             <div hidden aria-hidden="true">
-              <label for="contact-website">Leave this field empty</label>
+              <label for="contact-website">{{t .Lang "contact.honeypot_label"}}</label>
               <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off">
             </div>
 

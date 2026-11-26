@@ -334,7 +334,7 @@ func TestCopyBinary_PreservesExecutableBit(t *testing.T) {
 	}
 
 	// copyBinary writes with 0755, so user execute bit should be set
-	if info.Mode().Perm()&0100 == 0 {
+	if info.Mode().Perm()&0o100 == 0 {
 		t.Errorf("dst mode = %o; expected executable bit set", info.Mode().Perm())
 	}
 }

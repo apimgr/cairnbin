@@ -143,9 +143,11 @@ func feedPlain(value string) string {
 	}
 	return strings.TrimSpace(b.String())
 }
+
 func xmlSafeRune(r rune) bool {
 	return r == 0x9 || r == 0xA || r == 0xD || (r >= 0x20 && r <= 0xD7FF) || (r >= 0xE000 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0x10FFFF)
 }
+
 func runeLimit(value string, limit int) string {
 	if !utf8.ValidString(value) {
 		value = strings.ToValidUTF8(value, "")
@@ -178,6 +180,7 @@ func (s *Server) writeFeed(w http.ResponseWriter, r *http.Request, contentType s
 		_, _ = w.Write(body)
 	}
 }
+
 func parseHTTPDate(value string) int64 {
 	parsed, err := http.ParseTime(value)
 	if err != nil {
@@ -185,6 +188,7 @@ func parseHTTPDate(value string) int64 {
 	}
 	return parsed.Unix()
 }
+
 func (s *Server) handleAtomFeed(w http.ResponseWriter, r *http.Request) {
 	entries, updated, title := s.publicFeedItems(r)
 	base := strings.TrimRight(s.baseURL(r), "/")
@@ -196,6 +200,7 @@ func (s *Server) handleAtomFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeFeed(w, r, "application/atom+xml", append([]byte(xml.Header), append(body, '\n')...), updated)
 }
+
 func (s *Server) handleRSSFeed(w http.ResponseWriter, r *http.Request) {
 	entries, updated, title := s.publicFeedItems(r)
 	base := strings.TrimRight(s.baseURL(r), "/")

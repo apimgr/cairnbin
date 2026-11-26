@@ -219,6 +219,26 @@ func TestGetTLSConfig_LocalCert_CertAndKey_Variant(t *testing.T) {
 	}
 }
 
+func TestGetTLSConfig_ExplicitCertificatePaths(t *testing.T) {
+	dir := t.TempDir()
+	certPEM, keyPEM := genCertPair(t, "custom.example.com", 24*time.Hour)
+	certPath, keyPath := filepath.Join(dir, "custom.crt"), filepath.Join(dir, "custom.key")
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := ssl.NewManager(ssl.Config{Enabled: true, Cert: certPath, Key: keyPath})
+	cfg, err := m.GetTLSConfig([]string{"custom.example.com"})
+	if err != nil {
+		t.Fatalf("GetTLSConfig: %v", err)
+	}
+	if cfg == nil || len(cfg.Certificates) != 1 {
+		t.Fatalf("TLS config certificates = %v, want one explicit certificate", cfg)
+	}
+}
+
 func TestGetTLSConfig_LocalCert_Expired_FallsThrough(t *testing.T) {
 	// Expired cert in priority-4 dir — validateCertFile rejects it, so we fall
 	// through to "no certs available" → error (LE disabled).

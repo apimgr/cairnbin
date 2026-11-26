@@ -572,11 +572,17 @@ func TestSSLRenewalFailedEmailIncludesExpiryDate(t *testing.T) {
 		ConfigDir: dir, FQDN: "example.com", OperatorEmail: "admin@example.com",
 		Mailer: m, SendRenewalFailed: true,
 	}
-	if err := SSLRenewalWithEmail(cfg)(context.Background()); err != nil { t.Fatal(err) }
-	if err := SSLRenewalWithEmail(cfg)(context.Background()); err != nil { t.Fatal(err) }
+	if err := SSLRenewalWithEmail(cfg)(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := SSLRenewalWithEmail(cfg)(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	for _, call := range m.calls {
 		if call.template == "ssl_renewal_failed" {
-			if call.vars["expiry_date"] == "" { t.Fatal("ssl_renewal_failed must include expiry_date") }
+			if call.vars["expiry_date"] == "" {
+				t.Fatal("ssl_renewal_failed must include expiry_date")
+			}
 			return
 		}
 	}

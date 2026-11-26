@@ -148,7 +148,7 @@ func TestApplyHotSettings_AllChanges(t *testing.T) {
 	prev := DefaultConfig()
 	prev.Server.Port = "8080"
 	prev.Server.Address = "0.0.0.0"
-	prev.Database.Type = "sqlite"
+	prev.Server.Database.Type = "sqlite"
 	prev.Server.Tor.Binary = ""
 	prev.Server.Logging.Level = "info"
 	prev.Server.Cors.AllowedOrigins = []string{"*"}
@@ -157,8 +157,8 @@ func TestApplyHotSettings_AllChanges(t *testing.T) {
 	next := DefaultConfig()
 	next.Server.Port = "9090"
 	next.Server.Address = "127.0.0.1"
-	next.Database.Type = "sqlite"
-	next.Database.Path = "/tmp/new.db"
+	next.Server.Database.Type = "sqlite"
+	next.Server.Database.Path = "/tmp/new.db"
 	next.Server.Tor.Binary = "/usr/bin/tor"
 	next.Server.Logging.Level = "debug"
 	next.Server.Cors.AllowedOrigins = []string{"https://example.com"}

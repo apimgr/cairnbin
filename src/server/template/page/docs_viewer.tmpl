@@ -13,5 +13,15 @@
       <h2 id="api-explorer-heading">{{.ViewerSection}}</h2>
       {{.ViewerContent}}
     </section>
+    <noscript>
+      <section class="section-card" aria-labelledby="docs-javascript-heading">
+        <h2 id="docs-javascript-heading">{{t .Lang "docs.javascript_required"}}</h2>
+        <p>{{t .Lang "docs.javascript_fallback"}}</p>
+        <ul>
+          <li><a href="{{.AssetPrefix}}{{.APIBase}}/server/swagger">{{t .Lang "docs.openapi_json"}}</a></li>
+          <li><a href="{{.AssetPrefix}}{{.APIBase}}/server/graphql">{{t .Lang "docs.graphql_endpoint"}}</a></li>
+        </ul>
+      </section>
+    </noscript>
   </div>
 {{end}}

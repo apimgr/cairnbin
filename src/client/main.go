@@ -14,6 +14,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
@@ -580,12 +581,33 @@ func checkCLIUpdate(serverURL, lang string) error {
 	osArch := runtime.GOOS + "-" + runtime.GOARCH
 	if info, ok := disc.CLIVersions[osArch]; ok {
 		if versionLessThan(Version, info.Version) {
-			fmt.Fprintln(os.Stderr, tf("update_notice",
-				"binary", binName(), "version", info.Version, "current", Version))
+			if term.IsTerminal(int(os.Stdin.Fd())) {
+				fmt.Fprintf(os.Stderr, "%s? [y/N]: ", tf("update_available", "current", Version, "latest", info.Version))
+				answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+				if isAffirmativeUpdateAnswer(answer) {
+					(&client{server: strings.TrimRight(serverURL, "/"), lang: lang}).cmdUpdate("yes")
+				}
+			} else {
+				fmt.Fprintln(os.Stderr, tf("update_notice",
+					"binary", binName(), "version", info.Version, "current", Version))
+			}
 		}
 	}
 
 	return nil
+}
+
+func shouldAutoUpdateCLI(cfg cliConfig, interactive bool) bool {
+	return cfg.Update.Auto && !interactive
+}
+
+func isAffirmativeUpdateAnswer(answer string) bool {
+	switch strings.ToLower(strings.TrimSpace(answer)) {
+	case "y", "yes", "s", "si", "sí", "o", "oui", "j", "ja", "はい", "是", "نعم":
+		return true
+	default:
+		return false
+	}
 }
 
 // versionLessThan returns true when semver a < b.
@@ -890,6 +912,10 @@ func main() {
 	// cli_min_version before any mode can make requests to the server.
 	isUpdateCommand := *doUpdate != "" || (len(args) > 0 && args[0] == "update")
 	if !isUpdateCommand {
+		if shouldAutoUpdateCLI(fileCfg, term.IsTerminal(int(os.Stdin.Fd()))) && *server != "" {
+			c := &client{server: strings.TrimRight(*server, "/"), lang: locale, quiet: true}
+			c.cmdUpdate("yes")
+		}
 		if err := checkCLIUpdate(*server, locale); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_update_check", "error", err))
 			os.Exit(exitConnection)
@@ -990,14 +1016,6 @@ func saveCLIConfigURL(serverURL string) error {
 // runTUI launches the interactive bubbletea TUI mode.
 // When no server is configured, the TUI setup wizard collects it.
 func runTUI(server, lang string, cfg cliConfig) {
-	// Auto-update check in TUI mode (non-fatal for version notices).
-	if server != "" {
-		if err := checkCLIUpdate(server, lang); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_update_check", "error", err))
-			os.Exit(exitConnection)
-		}
-	}
-
 	tuiCfg := tui.ClientConfig{
 		Server:  server,
 		Lang:    lang,

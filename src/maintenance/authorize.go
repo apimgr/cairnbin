@@ -179,7 +179,7 @@ func (a *authorizer) authorizeDataOp() error {
 // dbPath resolves the database path: database.path from server.yml wins,
 // falling back to the caller-supplied default (mirrors RunPGP).
 func (a *authorizer) dbPath() string {
-	if p := strings.TrimSpace(a.cfg.Database.Path); p != "" {
+	if p := strings.TrimSpace(a.cfg.Server.Database.Path); p != "" {
 		return p
 	}
 	return a.opts.DBPath

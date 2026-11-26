@@ -194,6 +194,7 @@
   },
   "contact": {
     "title": "Contact",
+    "honeypot_label": "Laissez ce champ vide",
     "name": "Nom",
     "email": "E-mail",
     "subject": "Sujet",
@@ -735,6 +736,12 @@
       "other": "{count} minutes"
     }
   },
+  "docs": {
+    "javascript_required": "JavaScript requis",
+    "javascript_fallback": "La vue interactive de la documentation nécessite JavaScript. Utilisez ces endpoints directs :",
+    "openapi_json": "JSON OpenAPI",
+    "graphql_endpoint": "Endpoint GraphQL"
+  },
   "swagger": {
     "title": "Documentation API - {app_name}",
     "description": "Explorateur REST API interactif",
@@ -818,7 +825,7 @@
     "returns_the_openapi_3_0_3_json_specification_for_015acf42": "Renvoie la spécification JSON OpenAPI 3.0.3 de cette API.",
     "openapi_json_spec_d1f38104": "Spécification JSON OpenAPI",
     "graphql_endpoint_0a863601": "Point de terminaison GraphQL",
-    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "Exécute une requête ou mutation GraphQL. L’explorateur GraphiQL est disponible sur /server/docs/graphql.",
+    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "Exécute une requête GraphQL en lecture seule. Les mutations ne sont pas disponibles ; utilisez REST pour écrire. L’explorateur GraphiQL est disponible sur /server/docs/graphql.",
     "graphql_request_with_query_and_optional_variable_7b24cbff": "Requête GraphQL avec requête et variables facultatives.",
     "graphql_response_b96449ad": "Réponse GraphQL",
     "compatibility_fa528d3a": "Compatibilité",
@@ -1285,7 +1292,7 @@
     "server_title": "un service Cairnbin public et rapide",
     "show_help_extended": "Afficher l’aide (chaque commande accepte aussi --help)",
     "subcommand_details": "Pour plus de détails, exécutez {command} --help.",
-    "maintenance_help": "Commandes de maintenance :\n\nbackup [file] - Créer et vérifier une archive des données du service\n  Par défaut : {backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  --include-ssl inclut ssl/ ; --include-data inclut le répertoire de données\nbackup test - Vérifier la paire de clés sans créer de sauvegarde\nrestore <file> - Restaurer une archive ; le serveur s’arrête puis redémarre\nupdate [cmd] - Gérer les mises à jour : check, yes (installer) ou branch <stable|beta|devel>\nmode <mode> - Définir le mode production ou development\nsetup - Réinitialiser la configuration (premier démarrage ou root uniquement)\npgp <action> - Gérer la paire de clés de sécurité\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - exporter ou supprimer les données par préfixe du jeton propriétaire\nsecret rotate <name> - Faire tourner installation_secret ou encryption_key\nemail test [--to ADDRESS] [--dry-run] - Tester SMTP ou valider les modèles (root ou jeton opérateur requis)\ncompliance report - Afficher le résumé de conformité\n\nExemples :\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
+    "maintenance_help": "Commandes de maintenance :\n\nbackup [file] - Créer et vérifier une archive des données du service\n  Par défaut : {backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  --include-ssl inclut ssl/ ; --include-data inclut le répertoire de données\nbackup test [file] - Vérifier et tester la restauration d’une sauvegarde ; utilise la sauvegarde complète la plus récente si le fichier est omis\nrestore [file] - Restaurer une archive ; utilise la sauvegarde complète la plus récente si le fichier est omis ; le serveur s’arrête puis redémarre\nupdate [cmd] - Gérer les mises à jour : check, yes (installer) ou branch <stable|beta|devel>\nmode <mode> - Définir le mode production ou development\nsetup - Réinitialiser la configuration (premier démarrage ou root uniquement)\npgp <action> - Gérer la paire de clés de sécurité\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - exporter ou supprimer les données par préfixe du jeton propriétaire\nsecret rotate <name> - Faire tourner installation_secret ou encryption_key\nemail test [--to ADDRESS] [--dry-run] - Tester SMTP ou valider les modèles (root ou jeton opérateur requis)\ncompliance report - Afficher le résumé de conformité\n\nExemples :\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
     "update_help": "Gestion des mises à jour :\n\ncheck - Rechercher les mises à jour et comparer la version installée à la dernière\nyes - Télécharger et installer la dernière mise à jour, remplacer le binaire et redémarrer\nbranch <name> - Choisir le canal : stable (par défaut), beta ou devel\n\nExemples :\n  {binary} --update check\n  {binary} --update yes\n  {binary} --update branch beta",
     "update_current": "Actuel :\n  Version : {version}\n  Canal :   {branch}",
     "update_latest": "  Dernière : {latest}",

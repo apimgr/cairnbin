@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,11 +25,15 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"gopkg.in/yaml.v3"
+
 	"golang.org/x/crypto/argon2"
 
 	"github.com/apimgr/cairnbin/src/audit"
 	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/common/secretbox"
+	"github.com/apimgr/cairnbin/src/config"
+	"github.com/apimgr/cairnbin/src/database"
 	"github.com/apimgr/cairnbin/src/paths"
 	"github.com/apimgr/cairnbin/src/pgp"
 )
@@ -38,9 +43,11 @@ import (
 // (AI.md 28945-28989: "Backups will NOT run unless encryption password is
 // set"). Callers can match it with errors.Is to distinguish a compliance
 // refusal from any other backup failure.
-var ErrComplianceBackupBlocked = errors.New("compliance mode requires an encryption password; backup refused")
-var ErrBaseMissing = errors.New("ERR_BASE_MISSING")
-var ErrBaseCorrupt = errors.New("ERR_BASE_CORRUPT")
+var (
+	ErrComplianceBackupBlocked = errors.New("compliance mode requires an encryption password; backup refused")
+	ErrBaseMissing             = errors.New("ERR_BASE_MISSING")
+	ErrBaseCorrupt             = errors.New("ERR_BASE_CORRUPT")
+)
 
 const (
 	orgName     = "apimgr"
@@ -123,6 +130,15 @@ type BackupOptions struct {
 	SnapshotAt   time.Time
 	// IncludeSSL adds {config_dir}/ssl/ to the archive (--include-ssl).
 	IncludeSSL bool
+	// ConnectionTLSFiles are the configured cache TLS files under config_dir/ssl.
+	ConnectionTLSFiles []string
+	// ExternalTLSCert and ExternalTLSKey are manual server certificate paths
+	// outside config_dir/ssl; these are always included and rewritten on restore.
+	ExternalTLSCert      string
+	ExternalTLSKey       string
+	DatabaseDriver       string
+	DatabasePath         string
+	DatabaseCacheEnabled bool
 	// IncludeData adds {data_dir}/ (except db/ and the backup dir) to the
 	// archive (--include-data).
 	IncludeData bool
@@ -131,7 +147,8 @@ type BackupOptions struct {
 	ComplianceEnabled bool
 	// Audit records the backup.compliance_blocked event when a backup is
 	// refused under compliance mode; nil = no audit logging.
-	Audit *audit.Writer
+	Audit    *audit.Writer
+	Database database.DB
 }
 
 // Backup creates a tar.gz (optionally AES-256-GCM encrypted) backup of the
@@ -181,14 +198,67 @@ func Backup(opts BackupOptions) error {
 		src string
 		// path inside the archive
 		name string
+		data []byte
 	}
 	var entries []entry
 	var contents []string
+	var snapshotDir string
+	databaseDriver := strings.ToLower(strings.TrimSpace(opts.DatabaseDriver))
+	if databaseDriver == "" || databaseDriver == "sqlite2" || databaseDriver == "sqlite3" {
+		databaseDriver = "sqlite"
+	}
+	databasePath := opts.DatabasePath
+	if databaseDriver == "sqlite" {
+		if databasePath == "" {
+			databasePath = filepath.Join(opts.DataDir, "db", "server.db")
+		} else if !filepath.IsAbs(databasePath) {
+			databasePath = filepath.Join(opts.DataDir, databasePath)
+		}
+	}
+	defer func() {
+		if snapshotDir != "" {
+			if err := os.RemoveAll(snapshotDir); err != nil {
+				log.Printf("WARN: remove temporary database snapshot directory: %v", err)
+			}
+		}
+	}()
+	snapshotDatabase := func() (string, error) {
+		snapshotDB := opts.Database
+		if snapshotDB == nil && databaseDriver == "sqlite" {
+			var err error
+			snapshotDB, err = database.NewDatabase("sqlite", databasePath)
+			if err != nil {
+				return "", fmt.Errorf("open SQLite database for snapshot: %w", err)
+			}
+			defer func() { _ = snapshotDB.Close() }()
+		}
+		snapshotter, ok := snapshotDB.(interface{ SnapshotTo(string) error })
+		if !ok {
+			return "", fmt.Errorf("active database connection does not support consistent snapshots")
+		}
+		if snapshotDir == "" {
+			var err error
+			snapshotDir, err = os.MkdirTemp(opts.BackupDir, ".cairnbin-snapshot-")
+			if err != nil {
+				return "", fmt.Errorf("create temporary database snapshot directory: %w", err)
+			}
+		}
+		path := filepath.Join(snapshotDir, "server.db")
+		if err := snapshotter.SnapshotTo(path); err != nil {
+			return "", err
+		}
+		return path, nil
+	}
 
 	addFile := func(src, name string) {
 		if _, err := os.Stat(src); err == nil {
-			entries = append(entries, entry{src, name})
-			contents = append(contents, name)
+			for _, existing := range entries {
+				if existing.name == filepath.ToSlash(name) {
+					return
+				}
+			}
+			entries = append(entries, entry{src: src, name: name})
+			contents = append(contents, filepath.ToSlash(name))
 		}
 	}
 	addDir := func(dir, prefix string) error {
@@ -212,15 +282,69 @@ func Backup(opts BackupOptions) error {
 	}
 
 	addFile(filepath.Join(opts.ConfigDir, "server.yml"), "server.yml")
-	addFile(filepath.Join(opts.ConfigDir, "secrets.yml"), "secrets.yml")
+	secretsPath := filepath.Join(opts.ConfigDir, "secrets.yml")
+	if data, err := os.ReadFile(secretsPath); err == nil {
+		data, err = blankBackupOperatorToken(data)
+		if err != nil {
+			return fmt.Errorf("sanitize secrets backup: %w", err)
+		}
+		entries = append(entries, entry{src: secretsPath, name: "secrets.yml", data: data})
+		contents = append(contents, "secrets.yml")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read secrets for backup: %w", err)
+	}
 	if err := addDir(filepath.Join(opts.ConfigDir, "yaml.d"), "yaml.d"); err != nil {
 		return fmt.Errorf("collect drop-in config backup files: %w", err)
 	}
 	if err := addDir(filepath.Join(opts.ConfigDir, "html"), "html"); err != nil {
 		return fmt.Errorf("collect operator content backup files: %w", err)
 	}
-	addFile(filepath.Join(opts.DataDir, "db", "server.db"), "server.db")
-	addFile(filepath.Join(opts.DataDir, "db", "users.db"), "users.db")
+	if err := addDir(filepath.Join(opts.ConfigDir, "assets"), "assets"); err != nil {
+		return fmt.Errorf("collect branding assets backup files: %w", err)
+	}
+	if databaseDriver == "sqlite" {
+		if _, err := os.Stat(databasePath); err == nil {
+			snapshotPath, err := snapshotDatabase()
+			if err != nil {
+				return fmt.Errorf("snapshot SQLite database for backup: %w", err)
+			}
+			addFile(snapshotPath, "server.db")
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("check SQLite database for backup: %w", err)
+		}
+	} else {
+		log.Printf("INFO: backup excludes remote database driver %s", databaseDriver)
+		if opts.DatabaseCacheEnabled {
+			snapshotPath, err := snapshotDatabase()
+			if err != nil {
+				return fmt.Errorf("snapshot synchronized remote database cache for backup: %w", err)
+			}
+			addFile(snapshotPath, "server.db")
+		}
+	}
+	if opts.Database != nil {
+		exporter, ok := opts.Database.(interface {
+			ExportAppSecrets() ([]database.AppSecretRecord, error)
+		})
+		if !ok {
+			return fmt.Errorf("database driver does not support app secret backup")
+		}
+		records, err := exporter.ExportAppSecrets()
+		if err != nil {
+			return fmt.Errorf("export app secrets: %w", err)
+		}
+		data, err := json.Marshal(records)
+		if err != nil {
+			return fmt.Errorf("encode app secret backup: %w", err)
+		}
+		entries = append(entries, entry{name: "app_secrets.json", data: data})
+		contents = append(contents, "app_secrets.json")
+	} else if databaseDriver != "sqlite" {
+		return fmt.Errorf("remote database backup requires an active database connection to export app secrets")
+	} else {
+		entries = append(entries, entry{name: "app_secrets.json", data: []byte("[]")})
+		contents = append(contents, "app_secrets.json")
+	}
 	for _, item := range []struct{ dir, prefix string }{
 		{filepath.Join(opts.ConfigDir, "template"), "template"},
 		{filepath.Join(opts.ConfigDir, "theme"), "theme"},
@@ -237,6 +361,38 @@ func Backup(opts BackupOptions) error {
 	if opts.IncludeSSL {
 		if err := addDir(filepath.Join(opts.ConfigDir, "ssl"), "ssl"); err != nil {
 			return fmt.Errorf("collect SSL backup files: %w", err)
+		}
+	}
+	if err := addConnectionTLSFiles(opts.ConfigDir, opts.ConnectionTLSFiles, addFile); err != nil {
+		return fmt.Errorf("collect connection TLS backup files: %w", err)
+	}
+	externalTLS := map[string]string{}
+	for archiveName, source := range map[string]string{
+		"ssl-external/cert.pem": opts.ExternalTLSCert,
+		"ssl-external/key.pem":  opts.ExternalTLSKey,
+	} {
+		if source == "" || pathWithin(filepath.Join(opts.ConfigDir, "ssl"), source) {
+			continue
+		}
+		if _, err := os.Stat(source); err != nil {
+			return fmt.Errorf("referenced external TLS file %s: %w", filepath.Base(source), err)
+		}
+		addFile(source, archiveName)
+		externalTLS[archiveName] = source
+	}
+	if len(externalTLS) > 0 {
+		for i := range entries {
+			if entries[i].name == "server.yml" || strings.HasPrefix(entries[i].name, "yaml.d/") {
+				data, err := os.ReadFile(entries[i].src)
+				if err != nil {
+					return fmt.Errorf("read server config for TLS backup: %w", err)
+				}
+				data, err = rewriteExternalTLSPaths(data, opts.ConfigDir, externalTLS)
+				if err != nil {
+					return fmt.Errorf("rewrite external TLS paths for backup: %w", err)
+				}
+				entries[i].data = data
+			}
 		}
 	}
 	if opts.IncludeData {
@@ -259,17 +415,21 @@ func Backup(opts BackupOptions) error {
 	changedEntries := make([]entry, 0, len(entries))
 	currentPaths := make(map[string]struct{}, len(entries))
 	for _, e := range entries {
-		data, readErr := os.ReadFile(e.src)
+		data, readErr := entryData(e.data, e.src)
 		if readErr != nil {
 			return fmt.Errorf("reading %s for backup manifest: %w", e.name, readErr)
 		}
-		info, statErr := os.Stat(e.src)
-		if statErr != nil {
-			return fmt.Errorf("stat %s for backup manifest: %w", e.name, statErr)
+		modTime := time.Unix(0, 0)
+		if e.src != "" {
+			info, statErr := os.Stat(e.src)
+			if statErr != nil {
+				return fmt.Errorf("stat %s for backup manifest: %w", e.name, statErr)
+			}
+			modTime = info.ModTime()
 		}
 		path := filepath.ToSlash(e.name)
 		fileHash := sha256.Sum256(data)
-		record := ManifestFile{Path: path, Size: int64(len(data)), MTime: info.ModTime().Unix(), SHA256: hex.EncodeToString(fileHash[:])}
+		record := ManifestFile{Path: path, Size: int64(len(data)), MTime: modTime.Unix(), SHA256: hex.EncodeToString(fileHash[:])}
 		currentFiles = append(currentFiles, record)
 		currentPaths[path] = struct{}{}
 		base, exists := baseFiles[path]
@@ -299,7 +459,7 @@ func Backup(opts BackupOptions) error {
 	// from hashing an archive that itself contains the checksum.
 	contentHash := sha256.New()
 	for _, e := range entries {
-		b, readErr := os.ReadFile(e.src)
+		b, readErr := entryData(e.data, e.src)
 		if readErr != nil {
 			return fmt.Errorf("reading %s for backup checksum: %w", e.name, readErr)
 		}
@@ -344,6 +504,12 @@ func Backup(opts BackupOptions) error {
 	tw := tar.NewWriter(gz)
 
 	for _, e := range entries {
+		if e.data != nil {
+			if err := addBytesToTar(tw, e.data, e.src, e.name); err != nil {
+				return fmt.Errorf("archiving %s: %w", e.name, err)
+			}
+			continue
+		}
 		if err := addToTar(tw, e.src, e.name); err != nil {
 			return fmt.Errorf("archiving %s: %w", e.name, err)
 		}
@@ -444,13 +610,41 @@ func RestoreWithVersion(archivePath, configDir, dataDir, password, runningVersio
 // the moment the file count, per-file size, expanded size, or expansion ratio
 // limit is crossed.
 func RestoreWithLimits(archivePath, configDir, dataDir, password, runningVersion string, limits RestoreLimits) error {
-	if err := limits.checkArchiveSize(archivePath); err != nil {
+	return restoreWithReport(archivePath, configDir, dataDir, password, runningVersion, limits, true)
+}
+
+func restoreWithReport(archivePath, configDir, dataDir, password, runningVersion string, limits RestoreLimits, report bool) error {
+	compressed, err := backupPairCompressedSize(archivePath, password, limits.MaxArchiveSize)
+	if err != nil {
 		return fmt.Errorf("backup rejected: %w", err)
 	}
+	if limits.MaxArchiveSize > 0 && compressed > limits.MaxArchiveSize {
+		return fmt.Errorf("backup pair is %d bytes, above server.restore.max_archive_size (%d)", compressed, limits.MaxArchiveSize)
+	}
+	budget := &extractBudget{limits: limits, compressed: compressed}
+	return restoreWithLimits(archivePath, configDir, dataDir, password, runningVersion, budget, report, "")
+}
+
+func restoreWithLimits(archivePath, configDir, dataDir, password, runningVersion string, budget *extractBudget, report bool, operatorToken string) error {
 	// Verify the backup before touching any live config or data (PART 21:
 	// "Only proceed with restore if ALL verification checks pass").
 	if err := VerifyBackup(archivePath, password); err != nil {
 		return fmt.Errorf("backup verification failed: %w", err)
+	}
+	generatedOperatorToken := false
+	if operatorToken == "" {
+		var err error
+		operatorToken, err = existingOperatorToken(configDir)
+		if err != nil {
+			return fmt.Errorf("reading target operator token: %w", err)
+		}
+		if operatorToken == "" {
+			operatorToken, err = config.GenerateServerToken()
+			if err != nil {
+				return fmt.Errorf("generating target operator token: %w", err)
+			}
+			generatedOperatorToken = true
+		}
 	}
 
 	data, err := os.ReadFile(archivePath)
@@ -495,6 +689,22 @@ func RestoreWithLimits(archivePath, configDir, dataDir, password, runningVersion
 	if err := manifestGzip.Close(); err != nil {
 		return fmt.Errorf("closing backup manifest: %w", err)
 	}
+	if manifest.Type == "incremental" {
+		if manifest.BaseBackup == "" || filepath.Base(manifest.BaseBackup) != manifest.BaseBackup || strings.ContainsAny(manifest.BaseBackup, `/\\`) {
+			return fmt.Errorf("invalid incremental base filename %q", manifest.BaseBackup)
+		}
+		basePath := filepath.Join(filepath.Dir(archivePath), manifest.BaseBackup)
+		baseManifest, err := ReadBackupManifest(basePath, password)
+		if err != nil {
+			return fmt.Errorf("reading incremental base manifest: %w", err)
+		}
+		if baseManifest.Type != "full" {
+			return fmt.Errorf("incremental base %q is not a full backup", manifest.BaseBackup)
+		}
+		if err := restoreWithLimits(basePath, configDir, dataDir, password, "", budget, false, operatorToken); err != nil {
+			return fmt.Errorf("restoring incremental base: %w", err)
+		}
+	}
 	if runningVersion != "" && manifest.AppVersion != "" && !sameAppVersion(runningVersion, manifest.AppVersion) {
 		fmt.Fprintf(os.Stderr, "Warning: backup app version %s differs from running version %s; restore may require schema updates\n", manifest.AppVersion, runningVersion)
 	}
@@ -506,7 +716,8 @@ func RestoreWithLimits(archivePath, configDir, dataDir, password, runningVersion
 	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
-	budget := &extractBudget{limits: limits, compressed: int64(len(data))}
+	var appSecrets []database.AppSecretRecord
+	appSecretsIncluded := false
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -521,13 +732,227 @@ func RestoreWithLimits(archivePath, configDir, dataDir, password, runningVersion
 		if err := budget.admit(hdr.Size); err != nil {
 			return fmt.Errorf("backup rejected: %w", err)
 		}
+		if hdr.Name == "app_secrets.json" {
+			encoded, err := io.ReadAll(io.LimitReader(tr, hdr.Size+1))
+			if err != nil {
+				return fmt.Errorf("reading app secret backup: %w", err)
+			}
+			if int64(len(encoded)) != hdr.Size {
+				return fmt.Errorf("app secret backup size does not match archive header")
+			}
+			if err := json.Unmarshal(encoded, &appSecrets); err != nil {
+				return fmt.Errorf("decoding app secret backup: %w", err)
+			}
+			appSecretsIncluded = true
+			continue
+		}
 		if err := extractEntryBudget(tr, hdr, configDir, dataDir, budget); err != nil {
 			return fmt.Errorf("extracting %s: %w", hdr.Name, err)
 		}
 	}
+	if manifest.Type == "incremental" {
+		for _, name := range manifest.Deleted {
+			dest, err := backupDestination(name, configDir, dataDir)
+			if err != nil {
+				return fmt.Errorf("invalid deleted path %q: %w", name, err)
+			}
+			if err := rejectSymlinkedPath(dest); err != nil {
+				return fmt.Errorf("checking deleted path %q: %w", name, err)
+			}
+			if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("deleting removed backup path %q: %w", name, err)
+			}
+		}
+	}
+	if err := persistOperatorToken(configDir, operatorToken); err != nil {
+		return fmt.Errorf("preserving target operator token: %w", err)
+	}
+	if appSecretsIncluded && len(appSecrets) > 0 {
+		if err := restoreApplicationSecrets(configDir, dataDir, appSecrets); err != nil {
+			return fmt.Errorf("restoring application secrets: %w", err)
+		}
+	}
 
-	fmt.Printf("Restore complete from: %s\n", archivePath)
+	if report {
+		if generatedOperatorToken {
+			fmt.Printf("server.token generated: %s\n", operatorToken)
+		}
+		fmt.Printf("Restore complete from: %s\n", archivePath)
+	}
 	return nil
+}
+
+func restoreApplicationSecrets(configDir, dataDir string, records []database.AppSecretRecord) error {
+	configPath := filepath.Join(configDir, "server.yml")
+	if _, err := os.Stat(configPath); err != nil {
+		return fmt.Errorf("restored server.yml is unavailable: %w", err)
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("load restored database configuration: %w", err)
+	}
+	db, err := openRestoredDatabase(cfg, dataDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	if strings.EqualFold(strings.TrimSpace(cfg.Server.Database.Type), "libsql") || strings.EqualFold(strings.TrimSpace(cfg.Server.Database.Type), "turso") {
+		seedPath := filepath.Join(dataDir, "db", "server.db")
+		if info, statErr := os.Stat(seedPath); statErr == nil && info.Mode().IsRegular() {
+			if _, err := database.SeedRemoteFromSQLite(db, seedPath); err != nil {
+				return fmt.Errorf("seed empty remote database: %w", err)
+			}
+		} else if statErr != nil && !os.IsNotExist(statErr) {
+			return fmt.Errorf("check restored database snapshot: %w", statErr)
+		}
+	}
+	importer, ok := db.(interface {
+		ImportAppSecrets([]database.AppSecretRecord) error
+	})
+	if !ok {
+		return fmt.Errorf("database driver does not support app secret restore")
+	}
+	return importer.ImportAppSecrets(records)
+}
+
+// OpenConfiguredDatabase opens the configured database with its credentials,
+// pool, and optional local read cache.
+func OpenConfiguredDatabase(cfg *config.Config, dataDir string) (database.DB, error) {
+	return openRestoredDatabase(cfg, dataDir)
+}
+
+func openRestoredDatabase(cfg *config.Config, dataDir string) (database.DB, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("database configuration is unavailable")
+	}
+	driver := strings.ToLower(strings.TrimSpace(cfg.Server.Database.Type))
+	path := cfg.Server.Database.Path
+	if driver != "libsql" && driver != "turso" {
+		if path == "" {
+			path = filepath.Join(dataDir, "db", "server.db")
+		} else {
+			path = database.ResolvePathFromConfig(path, dataDir)
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return nil, fmt.Errorf("create database directory: %w", err)
+		}
+	}
+	cache := database.LocalCacheConfig{
+		Enabled:      cfg.Server.Database.Cache.Enabled,
+		Path:         database.CachePathFromConfig(cfg.Server.Database.Cache.Path, dataDir),
+		OfflineMode:  cfg.Server.Database.Cache.OfflineMode,
+		SyncInterval: parseBackupDuration(cfg.Server.Database.Cache.SyncInterval, 30*time.Second),
+		MaxAge:       parseBackupDuration(cfg.Server.Database.Cache.MaxAge, time.Hour),
+	}
+	if driver == "libsql" || driver == "turso" {
+		if cache.Enabled && cache.Path == "" {
+			cache.Path = filepath.Join(dataDir, "db", "cache.db")
+		}
+		if cache.Enabled {
+			if err := os.MkdirAll(filepath.Dir(cache.Path), 0o700); err != nil {
+				return nil, fmt.Errorf("create restored database cache directory: %w", err)
+			}
+		}
+	}
+	return database.NewDatabaseWithCache(cfg.Server.Database.Type, path, cfg.Server.Database.Token, database.PoolConfig{
+		MaxOpen: cfg.Server.Database.Pool.MaxOpen, MaxIdle: cfg.Server.Database.Pool.MaxIdle,
+		MaxLifetime: cfg.Server.Database.Pool.MaxLifetime, MaxIdleTime: cfg.Server.Database.Pool.MaxIdleTime,
+	}, cache)
+}
+
+func parseBackupDuration(value string, fallback time.Duration) time.Duration {
+	parsed, err := time.ParseDuration(strings.TrimSpace(value))
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func backupPairCompressedSize(archivePath, password string, maxArchiveSize int64) (int64, error) {
+	archiveInfo, err := os.Stat(archivePath)
+	if err != nil {
+		return 0, fmt.Errorf("stat backup: %w", err)
+	}
+	if !archiveInfo.Mode().IsRegular() {
+		return 0, fmt.Errorf("backup is not a regular file")
+	}
+	if maxArchiveSize > 0 && archiveInfo.Size() > maxArchiveSize {
+		return 0, fmt.Errorf("backup is %d bytes, above server.restore.max_archive_size (%d)", archiveInfo.Size(), maxArchiveSize)
+	}
+	manifest, err := ReadBackupManifest(archivePath, password)
+	if err != nil {
+		return 0, fmt.Errorf("reading backup manifest: %w", err)
+	}
+	total := archiveInfo.Size()
+	if manifest.Type != "incremental" {
+		return total, nil
+	}
+	if manifest.BaseBackup == "" || filepath.Base(manifest.BaseBackup) != manifest.BaseBackup || strings.ContainsAny(manifest.BaseBackup, `/\\`) {
+		return 0, fmt.Errorf("invalid incremental base filename %q", manifest.BaseBackup)
+	}
+	basePath := filepath.Join(filepath.Dir(archivePath), manifest.BaseBackup)
+	baseInfo, err := os.Stat(basePath)
+	if err != nil {
+		return 0, fmt.Errorf("stat incremental base %q: %w", manifest.BaseBackup, err)
+	}
+	if !baseInfo.Mode().IsRegular() {
+		return 0, fmt.Errorf("incremental base %q is not a regular file", manifest.BaseBackup)
+	}
+	if maxArchiveSize > 0 && baseInfo.Size() > maxArchiveSize {
+		return 0, fmt.Errorf("incremental base is %d bytes, above server.restore.max_archive_size (%d)", baseInfo.Size(), maxArchiveSize)
+	}
+	baseManifest, err := ReadBackupManifest(basePath, password)
+	if err != nil {
+		return 0, fmt.Errorf("reading incremental base manifest: %w", err)
+	}
+	if baseManifest.Type != "full" {
+		return 0, fmt.Errorf("incremental base %q is not a full backup", manifest.BaseBackup)
+	}
+	return total + baseInfo.Size(), nil
+}
+
+// NewestFullBackup selects the scheduled daily full with the latest UTC date
+// encoded in its filename. It accepts legacy date-only and current timestamped
+// names. A same-date tie is resolved by modification time.
+func NewestFullBackup(dir, projectName string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	prefix := projectName + "_backup_"
+	var selected string
+	var selectedDate time.Time
+	var selectedMod time.Time
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) {
+			continue
+		}
+		datePart := strings.TrimPrefix(entry.Name(), prefix)
+		datePart = strings.TrimSuffix(strings.TrimSuffix(datePart, ".tar.gz.enc"), ".tar.gz")
+		dateText := datePart
+		if len(datePart) == len("2006-01-02_150405") {
+			if _, err := time.Parse("2006-01-02_150405", datePart); err != nil {
+				continue
+			}
+			dateText = datePart[:len("2006-01-02")]
+		} else if len(datePart) != len("2006-01-02") {
+			continue
+		}
+		date, err := time.Parse("2006-01-02", dateText)
+		if err != nil {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		if selected == "" || date.After(selectedDate) || (date.Equal(selectedDate) && info.ModTime().After(selectedMod)) {
+			selected = filepath.Join(dir, entry.Name())
+			selectedDate = date
+			selectedMod = info.ModTime()
+		}
+	}
+	return selected
 }
 
 func sameAppVersion(a, b string) bool {
@@ -839,6 +1264,58 @@ func TestSecurityKeypair(configDir string, installSecret []byte) error {
 	return nil
 }
 
+// TestBackupArchive verifies an archive, restores it into an isolated temporary
+// tree, and validates the archived security keypair against that backup's own
+// installation secret when the keypair is present.
+func TestBackupArchive(archivePath, password, runningVersion string, limits RestoreLimits) error {
+	if err := VerifyBackup(archivePath, password); err != nil {
+		return err
+	}
+	manifest, err := ReadBackupManifest(archivePath, password)
+	if err != nil {
+		return fmt.Errorf("reading backup manifest: %w", err)
+	}
+	tmpRoot, err := orgTempDir()
+	if err != nil {
+		return fmt.Errorf("creating backup test directory: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpRoot) }()
+	configDir := filepath.Join(tmpRoot, "config")
+	dataDir := filepath.Join(tmpRoot, "data")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		return fmt.Errorf("creating temporary config directory: %w", err)
+	}
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return fmt.Errorf("creating temporary data directory: %w", err)
+	}
+	if err := restoreWithReport(archivePath, configDir, dataDir, password, runningVersion, limits, false); err != nil {
+		return fmt.Errorf("dry-run restore: %w", err)
+	}
+	privatePath := filepath.Join(configDir, "security", "pgp.priv.asc.enc")
+	if _, err := os.Stat(privatePath); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("checking archived private key: %w", err)
+	}
+	db, err := database.NewDatabase("sqlite", filepath.Join(dataDir, "db", "server.db"))
+	if err != nil {
+		return fmt.Errorf("opening archived database: %w", err)
+	}
+	installSecret, secretErr := db.EnsureAppSecret("installation_secret")
+	closeErr := db.Close()
+	if secretErr != nil {
+		return fmt.Errorf("reading archived installation secret: %w", secretErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("closing archived database: %w", closeErr)
+	}
+	if err := TestSecurityKeypair(configDir, installSecret); err != nil {
+		return fmt.Errorf("archived security keypair: %w", err)
+	}
+	fmt.Printf("Backup verification OK: %s (type: %s)\n", filepath.Base(archivePath), manifest.Type)
+	return nil
+}
+
 // verifySQLiteMagic checks that a file begins with the SQLite3 magic header.
 func verifySQLiteMagic(path string) error {
 	const sqliteMagic = "SQLite format 3\x00"
@@ -870,6 +1347,290 @@ func (m *memBuf) Write(p []byte) (int, error) {
 }
 
 func (m *memBuf) Bytes() []byte { return m.b }
+
+func entryData(data []byte, src string) ([]byte, error) {
+	if data != nil {
+		return data, nil
+	}
+	return os.ReadFile(src)
+}
+
+func blankBackupOperatorToken(data []byte) ([]byte, error) {
+	document := yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return nil, err
+	}
+	if len(document.Content) == 0 {
+		return data, nil
+	}
+	root := document.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("secrets document must be a mapping")
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value != "server" || root.Content[i+1].Kind != yaml.MappingNode {
+			continue
+		}
+		server := root.Content[i+1]
+		for j := 0; j+1 < len(server.Content); j += 2 {
+			if server.Content[j].Value == "token" {
+				server.Content[j+1].Kind = yaml.ScalarNode
+				server.Content[j+1].Tag = "!!str"
+				server.Content[j+1].Value = ""
+			}
+		}
+	}
+	return yaml.Marshal(&document)
+}
+
+func existingOperatorToken(configDir string) (string, error) {
+	paths := []string{filepath.Join(configDir, "secrets.yml"), filepath.Join(configDir, "server.yml")}
+	var dropins []string
+	if err := filepath.WalkDir(filepath.Join(configDir, "yaml.d"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext == ".yaml" || ext == ".yml" {
+			dropins = append(dropins, path)
+		}
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	sort.Strings(dropins)
+	paths = append(paths, dropins...)
+	var fallback string
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		var doc yaml.Node
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			return "", fmt.Errorf("parse %s: %w", filepath.Base(path), err)
+		}
+		if len(doc.Content) == 0 {
+			continue
+		}
+		value := strings.TrimSpace(yamlStringPath(doc.Content[0], []string{"server", "token"}))
+		if value == "" {
+			continue
+		}
+		if path == paths[0] {
+			return value, nil
+		}
+		fallback = value
+	}
+	return fallback, nil
+}
+
+func persistOperatorToken(configDir, token string) error {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		return err
+	}
+	path := filepath.Join(configDir, "secrets.yml")
+	document := yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+	if data, err := os.ReadFile(path); err == nil {
+		if len(data) > 0 {
+			if err := yaml.Unmarshal(data, &document); err != nil {
+				return err
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if len(document.Content) == 0 {
+		document.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+	}
+	if err := setYAMLStringPath(document.Content[0], []string{"server", "token"}, token); err != nil {
+		return err
+	}
+	encoded, err := yaml.Marshal(&document)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(configDir, ".secrets-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(encoded); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	dir, err := os.Open(configDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = dir.Close() }()
+	return dir.Sync()
+}
+
+func pathWithin(base, path string) bool {
+	if path == "" {
+		return false
+	}
+	baseAbs, baseErr := filepath.Abs(base)
+	pathAbs, pathErr := filepath.Abs(path)
+	if baseErr != nil || pathErr != nil {
+		return false
+	}
+	rel, err := filepath.Rel(baseAbs, pathAbs)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && !filepath.IsAbs(rel)
+}
+
+func addConnectionTLSFiles(configDir string, files []string, addFile func(string, string)) error {
+	sslDir := filepath.Join(configDir, "ssl")
+	for _, source := range files {
+		if source == "" {
+			continue
+		}
+		resolved := source
+		if !filepath.IsAbs(resolved) {
+			resolved = filepath.Join(sslDir, resolved)
+		}
+		if !pathWithin(sslDir, resolved) {
+			return fmt.Errorf("connection TLS path must stay inside config_dir/ssl")
+		}
+		if _, err := os.Stat(resolved); err != nil {
+			return fmt.Errorf("referenced TLS file %s: %w", filepath.Base(resolved), err)
+		}
+		rel, err := filepath.Rel(sslDir, resolved)
+		if err != nil {
+			return err
+		}
+		addFile(resolved, filepath.ToSlash(filepath.Join("ssl", rel)))
+	}
+	return nil
+}
+
+func rewriteExternalTLSPaths(data []byte, configDir string, external map[string]string) ([]byte, error) {
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return nil, err
+	}
+	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("server config must be a mapping")
+	}
+	root := document.Content[0]
+	for _, item := range []struct{ key, name, field string }{
+		{"ssl-external/cert.pem", "cert", "external/cert.pem"},
+		{"ssl-external/key.pem", "key", "external/key.pem"},
+	} {
+		source := external[item.key]
+		if source == "" {
+			continue
+		}
+		value := yamlStringPath(root, []string{"server", "ssl", item.name})
+		if value == "" {
+			continue
+		}
+		resolved := value
+		if !filepath.IsAbs(resolved) {
+			resolved = filepath.Join(configDir, "ssl", resolved)
+		}
+		if filepath.Clean(resolved) != filepath.Clean(source) {
+			continue
+		}
+		if err := setYAMLStringPath(root, []string{"server", "ssl", item.name}, item.field); err != nil {
+			return nil, err
+		}
+	}
+	return yaml.Marshal(&document)
+}
+
+func yamlStringPath(node *yaml.Node, path []string) string {
+	for _, key := range path {
+		if node.Kind != yaml.MappingNode {
+			return ""
+		}
+		var next *yaml.Node
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == key {
+				next = node.Content[i+1]
+				break
+			}
+		}
+		if next == nil {
+			return ""
+		}
+		node = next
+	}
+	if node.Kind != yaml.ScalarNode {
+		return ""
+	}
+	return node.Value
+}
+
+func setYAMLStringPath(node *yaml.Node, path []string, value string) error {
+	if len(path) == 0 || node.Kind != yaml.MappingNode {
+		return fmt.Errorf("invalid YAML path")
+	}
+	key := path[0]
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value != key {
+			continue
+		}
+		if len(path) == 1 {
+			node.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+			return nil
+		}
+		if node.Content[i+1].Kind != yaml.MappingNode {
+			return fmt.Errorf("%s is not a mapping", key)
+		}
+		return setYAMLStringPath(node.Content[i+1], path[1:], value)
+	}
+	if len(path) == 1 {
+		node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
+		return nil
+	}
+	child := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, child)
+	return setYAMLStringPath(child, path[1:], value)
+}
+
+func addBytesToTar(tw *tar.Writer, data []byte, srcPath, archiveName string) error {
+	mode := int64(0o600)
+	modTime := time.Unix(0, 0)
+	if srcPath != "" {
+		info, err := os.Stat(srcPath)
+		if err != nil {
+			return err
+		}
+		mode = int64(info.Mode())
+		modTime = info.ModTime()
+	}
+	if err := tw.WriteHeader(&tar.Header{Name: archiveName, Size: int64(len(data)), Mode: mode, ModTime: modTime}); err != nil {
+		return err
+	}
+	_, err := tw.Write(data)
+	return err
+}
 
 func addToTar(tw *tar.Writer, srcPath, archiveName string) error {
 	f, err := os.Open(srcPath)
@@ -919,14 +1680,20 @@ func extractEntryBudget(tr *tar.Reader, hdr *tar.Header, configDir, dataDir stri
 		switch {
 		case strings.HasPrefix(hdr.Name, "template/"):
 			base, prefix = filepath.Join(configDir, "template"), "template/"
+		case strings.HasPrefix(hdr.Name, "yaml.d/"):
+			base, prefix = filepath.Join(configDir, "yaml.d"), "yaml.d/"
 		case strings.HasPrefix(hdr.Name, "theme/"):
 			base, prefix = filepath.Join(configDir, "theme"), "theme/"
 		case strings.HasPrefix(hdr.Name, "security/"):
 			base, prefix = filepath.Join(configDir, "security"), "security/"
 		case strings.HasPrefix(hdr.Name, "html/"):
 			base, prefix = filepath.Join(configDir, "html"), "html/"
+		case strings.HasPrefix(hdr.Name, "assets/"):
+			base, prefix = filepath.Join(configDir, "assets"), "assets/"
 		case strings.HasPrefix(hdr.Name, "ssl/"):
 			base, prefix = filepath.Join(configDir, "ssl"), "ssl/"
+		case strings.HasPrefix(hdr.Name, "ssl-external/"):
+			base, prefix = filepath.Join(configDir, "ssl", "external"), "ssl-external/"
 		case strings.HasPrefix(hdr.Name, "data/"):
 			base, prefix = dataDir, "data/"
 		default:
@@ -984,6 +1751,44 @@ func extractEntryBudget(tr *tar.Reader, hdr *tar.Header, configDir, dataDir stri
 		return fmt.Errorf("entry exceeds server.restore.max_file_size (%d)", budget.limits.MaxFileSize)
 	}
 	return budget.account(n)
+}
+
+func backupDestination(name, configDir, dataDir string) (string, error) {
+	switch name {
+	case "server.yml":
+		return filepath.Join(configDir, name), nil
+	case "secrets.yml":
+		return filepath.Join(configDir, name), nil
+	case "server.db":
+		return filepath.Join(dataDir, "db", name), nil
+	case "users.db":
+		return filepath.Join(dataDir, "db", name), nil
+	}
+	for _, item := range []struct{ prefix, base string }{
+		{"yaml.d/", filepath.Join(configDir, "yaml.d")},
+		{"template/", filepath.Join(configDir, "template")},
+		{"theme/", filepath.Join(configDir, "theme")},
+		{"security/", filepath.Join(configDir, "security")},
+		{"html/", filepath.Join(configDir, "html")},
+		{"assets/", filepath.Join(configDir, "assets")},
+		{"ssl/", filepath.Join(configDir, "ssl")},
+		{"ssl-external/", filepath.Join(configDir, "ssl", "external")},
+		{"data/", dataDir},
+	} {
+		if !strings.HasPrefix(name, item.prefix) {
+			continue
+		}
+		rel := filepath.FromSlash(strings.TrimPrefix(name, item.prefix))
+		if rel == "" || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return "", fmt.Errorf("path escapes backup directory")
+		}
+		dest := filepath.Join(item.base, rel)
+		if !strings.HasPrefix(dest, item.base+string(os.PathSeparator)) {
+			return "", fmt.Errorf("path escapes backup directory")
+		}
+		return dest, nil
+	}
+	return "", fmt.Errorf("path is not part of the backup layout")
 }
 
 // rejectSymlinkedPath walks every component of path from the filesystem root

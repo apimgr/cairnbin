@@ -111,7 +111,6 @@ func TestInstallSysV_RootBranches(t *testing.T) {
 	t.Cleanup(func() { _ = os.Remove(initPath) })
 
 	err := installSysV()
-
 	// update-rc.d/chkconfig may not exist, but script should be written
 	if err != nil {
 		t.Logf("installSysV: %v", err)

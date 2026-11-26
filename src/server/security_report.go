@@ -483,9 +483,11 @@ func (s *Server) handleSecurityReport(w http.ResponseWriter, r *http.Request, cf
 		"Thank you — your security report was received and encrypted. Your tracking ID is %s. An acknowledgment email may be sent with your private status link.",
 		trackingID)
 	// Clear the preserved fields so the form resets after a successful submit.
-	for _, k := range []string{"FormName", "FormEmail", "FormGPG", "FormComponentOther",
+	for _, k := range []string{
+		"FormName", "FormEmail", "FormGPG", "FormComponentOther",
 		"FormEndpoint", "FormSummary", "FormSteps", "FormImpact", "FormSuggestedFix",
-		"FormCreditName"} {
+		"FormCreditName",
+	} {
 		delete(data, k)
 	}
 	s.renderTemplate(w, r, "contact.html", data)

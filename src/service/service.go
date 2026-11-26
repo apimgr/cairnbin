@@ -316,7 +316,7 @@ func installUserService() error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve binary path: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(unitPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(unitPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create user service directory: %w", err)
 	}
 
@@ -338,7 +338,7 @@ func installUserService() error {
 </dict>
 </plist>
 `, launchdLabel, exePath)
-		if err := os.WriteFile(unitPath, []byte(plist), 0644); err != nil {
+		if err := os.WriteFile(unitPath, []byte(plist), 0o644); err != nil {
 			return fmt.Errorf("failed to write user agent: %w", err)
 		}
 		if err := exec.Command("launchctl", "load", "-w", unitPath).Run(); err != nil {
@@ -362,7 +362,7 @@ RestartSec=5
 [Install]
 WantedBy=default.target
 `, appName, exePath)
-	if err := os.WriteFile(unitPath, []byte(unit), 0644); err != nil {
+	if err := os.WriteFile(unitPath, []byte(unit), 0o644); err != nil {
 		return fmt.Errorf("failed to write user unit: %w", err)
 	}
 	if err := exec.Command("systemctl", "--user", "daemon-reload").Run(); err != nil {
@@ -551,7 +551,7 @@ func GetBinaryPath() string {
 
 func ensureSystemdWritablePaths(paths []string) error {
 	for _, dir := range paths {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("create %s: %w", dir, err)
 		}
 	}
@@ -578,7 +578,7 @@ func installSystemd() error {
 	servicePath := fmt.Sprintf("/etc/systemd/system/%s.service", appName)
 
 	// Write service file
-	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+	if err := os.WriteFile(servicePath, []byte(serviceContent), 0o644); err != nil {
 		return fmt.Errorf("failed to write service file: %w", err)
 	}
 
@@ -646,7 +646,7 @@ func installOpenRC() error {
 
 	rcContent := buildOpenRCScript(binaryPath)
 
-	if err := os.WriteFile(rcPath, []byte(rcContent), 0755); err != nil {
+	if err := os.WriteFile(rcPath, []byte(rcContent), 0o755); err != nil {
 		return fmt.Errorf("failed to write OpenRC init script: %w", err)
 	}
 
@@ -693,7 +693,7 @@ func installSysV() error {
 
 	initContent := buildSysVScript(binaryPath)
 
-	if err := os.WriteFile(initPath, []byte(initContent), 0755); err != nil {
+	if err := os.WriteFile(initPath, []byte(initContent), 0o755); err != nil {
 		return fmt.Errorf("failed to write SysV init script: %w", err)
 	}
 
@@ -765,32 +765,32 @@ func installRunit() error {
 	binaryPath := GetBinaryPath()
 
 	// Create service directory
-	if err := os.MkdirAll(svDir, 0755); err != nil {
+	if err := os.MkdirAll(svDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create service directory: %w", err)
 	}
 
 	runScript := buildRunitRunScript(binaryPath)
 
 	runPath := filepath.Join(svDir, "run")
-	if err := os.WriteFile(runPath, []byte(runScript), 0755); err != nil {
+	if err := os.WriteFile(runPath, []byte(runScript), 0o755); err != nil {
 		return fmt.Errorf("failed to write run script: %w", err)
 	}
 
 	// Create log service directory
 	logDir := filepath.Join(svDir, "log")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
 
 	// PART 24: svlogd writes into the standard log directory, not a relative path.
 	svlogdDir := fmt.Sprintf("/var/log/%s/%s", orgName, appName)
-	if err := os.MkdirAll(svlogdDir, 0755); err != nil {
+	if err := os.MkdirAll(svlogdDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create log destination: %w", err)
 	}
 
 	logRunScript := buildRunitLogRunScript()
 	logRunPath := filepath.Join(logDir, "run")
-	if err := os.WriteFile(logRunPath, []byte(logRunScript), 0755); err != nil {
+	if err := os.WriteFile(logRunPath, []byte(logRunScript), 0o755); err != nil {
 		return fmt.Errorf("failed to write log run script: %w", err)
 	}
 
@@ -803,7 +803,7 @@ func installRunit() error {
 
 	// Link into the active runsvdir so the service starts on boot
 	linkPath := runitLinkPath()
-	if err := os.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create runit service directory: %w", err)
 	}
 	if err := os.Symlink(svDir, linkPath); err != nil {
@@ -908,7 +908,7 @@ func installLaunchd() error {
 	plistContent := buildLaunchdPlist(binaryPath)
 
 	// Write plist file
-	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
+	if err := os.WriteFile(plistPath, []byte(plistContent), 0o644); err != nil {
 		return fmt.Errorf("failed to write plist file: %w", err)
 	}
 
@@ -952,7 +952,7 @@ func installBSDRC() error {
 
 	rcContent := buildBSDRCScript(binaryPath)
 
-	if err := os.WriteFile(rcPath, []byte(rcContent), 0755); err != nil {
+	if err := os.WriteFile(rcPath, []byte(rcContent), 0o755); err != nil {
 		return fmt.Errorf("failed to write rc.d script: %w", err)
 	}
 
@@ -994,7 +994,7 @@ func uninstallBSDRC() error {
 // copyBinary copies the binary to the destination
 func copyBinary(src, dst string) error {
 	// Create destination directory if needed
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
 
@@ -1005,7 +1005,7 @@ func copyBinary(src, dst string) error {
 	}
 
 	// Write to destination
-	if err := os.WriteFile(dst, data, 0755); err != nil {
+	if err := os.WriteFile(dst, data, 0o755); err != nil {
 		return err
 	}
 

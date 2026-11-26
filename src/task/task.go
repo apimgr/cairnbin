@@ -26,6 +26,7 @@ import (
 	"github.com/apimgr/cairnbin/src/audit"
 	"github.com/apimgr/cairnbin/src/common/domainutil"
 	"github.com/apimgr/cairnbin/src/common/retry"
+	"github.com/apimgr/cairnbin/src/database"
 	"github.com/apimgr/cairnbin/src/maintenance"
 	"github.com/apimgr/cairnbin/src/service"
 	"github.com/apimgr/cairnbin/src/updater"
@@ -63,6 +64,14 @@ type BackupConfig struct {
 	AppVersion  string
 	// Password is the AES-256-GCM encryption password; empty = no encryption.
 	Password string
+	// ConnectionTLSFiles are referenced cache TLS files inside config_dir/ssl.
+	ConnectionTLSFiles   []string
+	ExternalTLSCert      string
+	ExternalTLSKey       string
+	DatabaseDriver       string
+	DatabasePath         string
+	DatabaseCacheEnabled bool
+	Database             database.DB
 	// Compliance mirrors server.compliance.enabled (AI.md 28945-28989): when
 	// true and Password is empty, scheduled backups are skipped (not run
 	// unencrypted) and an audit warning is logged.
@@ -511,19 +520,7 @@ func LogRotation(rotator LogRotator) func(ctx context.Context) error {
 }
 
 func newestFullBackup(dir, projectName string) string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return ""
-	}
-	prefix := projectName + "_backup_"
-	for i := len(entries) - 1; i >= 0; i-- {
-		entry := entries[i]
-		if entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) || (!strings.HasSuffix(entry.Name(), ".tar.gz") && !strings.HasSuffix(entry.Name(), ".tar.gz.enc")) {
-			continue
-		}
-		return filepath.Join(dir, entry.Name())
-	}
-	return ""
+	return maintenance.NewestFullBackup(dir, projectName)
 }
 
 func createDailyIncremental(cfg BackupConfig, snapshotAt time.Time, extension string) (bool, error) {
@@ -572,7 +569,12 @@ func createDailyIncremental(cfg BackupConfig, snapshotAt time.Time, extension st
 	if err := maintenance.Backup(maintenance.BackupOptions{
 		ConfigDir: cfg.ConfigDir, DataDir: cfg.DataDir, BackupDir: cfg.BackupDir,
 		AppVersion: cfg.AppVersion, Password: cfg.Password, Filename: stageName,
-		BaseBackup: baseName, BaseManifest: baseManifest, BaseSHA256: baseSHA,
+		ConnectionTLSFiles: cfg.ConnectionTLSFiles,
+		ExternalTLSCert:    cfg.ExternalTLSCert, ExternalTLSKey: cfg.ExternalTLSKey,
+		DatabaseDriver: cfg.DatabaseDriver, DatabasePath: cfg.DatabasePath,
+		DatabaseCacheEnabled: cfg.DatabaseCacheEnabled,
+		Database:             cfg.Database,
+		BaseBackup:           baseName, BaseManifest: baseManifest, BaseSHA256: baseSHA,
 		SnapshotAt: snapshotAt, ComplianceEnabled: cfg.Compliance, Audit: cfg.Audit,
 	}); err != nil {
 		backupSendFailed(cfg, dailyName, err.Error())
@@ -661,15 +663,21 @@ func BackupDaily(cfg BackupConfig) func(ctx context.Context) error {
 		}
 
 		if err := maintenance.Backup(maintenance.BackupOptions{
-			ConfigDir:         cfg.ConfigDir,
-			DataDir:           cfg.DataDir,
-			BackupDir:         cfg.BackupDir,
-			AppVersion:        cfg.AppVersion,
-			Password:          cfg.Password,
-			Filename:          fullName,
-			SnapshotAt:        snapshotAt,
-			ComplianceEnabled: cfg.Compliance,
-			Audit:             cfg.Audit,
+			ConfigDir:          cfg.ConfigDir,
+			DataDir:            cfg.DataDir,
+			BackupDir:          cfg.BackupDir,
+			AppVersion:         cfg.AppVersion,
+			Password:           cfg.Password,
+			ConnectionTLSFiles: cfg.ConnectionTLSFiles,
+			ExternalTLSCert:    cfg.ExternalTLSCert,
+			ExternalTLSKey:     cfg.ExternalTLSKey,
+			DatabaseDriver:     cfg.DatabaseDriver, DatabasePath: cfg.DatabasePath,
+			DatabaseCacheEnabled: cfg.DatabaseCacheEnabled,
+			Database:             cfg.Database,
+			Filename:             fullName,
+			SnapshotAt:           snapshotAt,
+			ComplianceEnabled:    cfg.Compliance,
+			Audit:                cfg.Audit,
 		}); err != nil {
 			_ = os.Remove(fullPath)
 			backupSendFailed(cfg, fullName, err.Error())
@@ -738,14 +746,20 @@ func BackupHourly(cfg BackupConfig) func(ctx context.Context) error {
 		tmpPath := filepath.Join(cfg.BackupDir, tmpName)
 
 		if err := maintenance.Backup(maintenance.BackupOptions{
-			ConfigDir:         cfg.ConfigDir,
-			DataDir:           cfg.DataDir,
-			BackupDir:         cfg.BackupDir,
-			AppVersion:        cfg.AppVersion,
-			Password:          cfg.Password,
-			Filename:          tmpName,
-			ComplianceEnabled: cfg.Compliance,
-			Audit:             cfg.Audit,
+			ConfigDir:          cfg.ConfigDir,
+			DataDir:            cfg.DataDir,
+			BackupDir:          cfg.BackupDir,
+			AppVersion:         cfg.AppVersion,
+			Password:           cfg.Password,
+			ConnectionTLSFiles: cfg.ConnectionTLSFiles,
+			ExternalTLSCert:    cfg.ExternalTLSCert,
+			ExternalTLSKey:     cfg.ExternalTLSKey,
+			DatabaseDriver:     cfg.DatabaseDriver, DatabasePath: cfg.DatabasePath,
+			DatabaseCacheEnabled: cfg.DatabaseCacheEnabled,
+			Database:             cfg.Database,
+			Filename:             tmpName,
+			ComplianceEnabled:    cfg.Compliance,
+			Audit:                cfg.Audit,
 		}); err != nil {
 			_ = os.Remove(tmpPath)
 			backupSendFailed(cfg, hourlyName, err.Error())

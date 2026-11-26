@@ -29,7 +29,7 @@ func secretFixture(t *testing.T) (SecretOptions, *config.Config, string) {
 		t.Fatal(err)
 	}
 	dbPath := filepath.Join(dir, "server.db")
-	cfg.Database.Path = dbPath
+	cfg.Server.Database.Path = dbPath
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatal(err)
 	}

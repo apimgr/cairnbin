@@ -6,6 +6,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -60,6 +61,41 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if !a.Events.Configuration || !a.Events.Security || !a.Events.Backup || !a.Events.Server {
 		t.Errorf("Logging.Audit.Events: all categories should default true, got %+v", a.Events)
+	}
+}
+
+func TestBackupEncryptionPasswordLoadsFromSecrets(t *testing.T) {
+	path := tempConfigPath(t)
+	if err := os.WriteFile(path, []byte("server:\n  backup:\n    encryption:\n      enabled: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secretsPath := filepath.Join(filepath.Dir(path), "secrets.yml")
+	if err := os.WriteFile(secretsPath, []byte("server:\n  backup:\n    encryption_password: backup-secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.Server.Backup.Encryption.Enabled || cfg.Server.Backup.EncryptionPassword != "backup-secret" {
+		t.Fatalf("backup encryption config = enabled %v, password %q", cfg.Server.Backup.Encryption.Enabled, cfg.Server.Backup.EncryptionPassword)
+	}
+	if err := config.Save(path, cfg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	storedConfig, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(storedConfig), "backup-secret") {
+		t.Fatal("backup encryption password was written to server.yml")
+	}
+	storedSecrets, err := os.ReadFile(secretsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(storedSecrets), "backup-secret") {
+		t.Fatal("backup encryption password was not retained in secrets.yml")
 	}
 }
 
@@ -309,7 +345,7 @@ func TestResolvePort_Container(t *testing.T) {
 func TestPeekServerPortReadsOnlyPort(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
 	contents := "server:\n  port: 64777\n  address: invalid but ignored\ndatabase: [invalid-for-config]\n"
-	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := config.PeekServerPort(path); got != "64777" {
@@ -319,7 +355,7 @@ func TestPeekServerPortReadsOnlyPort(t *testing.T) {
 
 func TestPeekServerPortMissing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
-	if err := os.WriteFile(path, []byte("server:\n  address: localhost\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("server:\n  address: localhost\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := config.PeekServerPort(path); got != "" {
@@ -330,7 +366,7 @@ func TestPeekServerPortMissing(t *testing.T) {
 func TestPeekServerAddressReadsOnlyAddress(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
 	contents := "server:\n  address: '[::]'\n  port: invalid but ignored\ndatabase: [invalid-for-config]\n"
-	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := config.PeekServerAddress(path); got != "[::]" {
@@ -375,7 +411,7 @@ func TestLoadEncryptsDNSCredentialsAtRest(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
 	plain := "DO_AUTH_TOKEN: top-secret-token"
 	contents := "server:\n  ssl:\n    letsencrypt:\n      dns_credentials:\n        " + plain + "\n"
-	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(path)
@@ -399,16 +435,16 @@ func TestLoadEncryptsDNSCredentialsFromDropInDespiteOtherTypeError(t *testing.T)
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "server.yml")
 	dropInDir := filepath.Join(dir, "yaml.d")
-	if err := os.Mkdir(dropInDir, 0700); err != nil {
+	if err := os.Mkdir(dropInDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	key := strings.Repeat("a", 64)
 	root := "server:\n  security:\n    encryption_key: " + key + "\n  token: test-token\n  port: [bad-type]\n"
-	if err := os.WriteFile(configPath, []byte(root), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(root), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	dropInPath := filepath.Join(dropInDir, "dns.yml")
-	if err := os.WriteFile(dropInPath, []byte("server:\n  ssl:\n    letsencrypt:\n      dns_credentials:\n        DO_AUTH_TOKEN: drop-in-secret\n"), 0600); err != nil {
+	if err := os.WriteFile(dropInPath, []byte("server:\n  ssl:\n    letsencrypt:\n      dns_credentials:\n        DO_AUTH_TOKEN: drop-in-secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, _ := config.Load(configPath)
@@ -434,7 +470,7 @@ func TestLoadEncryptsDNSCredentialsFromDropInDespiteOtherTypeError(t *testing.T)
 
 func TestLoadMigratesLegacyTLSConfigKey(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
-	if err := os.WriteFile(path, []byte("server:\n  tls:\n    enabled: true\n    min_version: TLS1.3\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("server:\n  tls:\n    enabled: true\n    min_version: TLS1.3\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(path)
@@ -457,16 +493,16 @@ func TestLoadMigratesLegacyTLSDropInWithFieldPrecedence(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "server.yml")
 	dropInDir := filepath.Join(dir, "yaml.d")
-	if err := os.Mkdir(dropInDir, 0700); err != nil {
+	if err := os.Mkdir(dropInDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	root := "server:\n  security:\n    encryption_key: " + strings.Repeat("b", 64) + "\n  ssl:\n    enabled: false\n"
-	if err := os.WriteFile(path, []byte(root), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(root), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	dropInPath := filepath.Join(dropInDir, "legacy.yml")
 	legacy := "server:\n  tls:\n    enabled: true\n    letsencrypt:\n      dns_credentials:\n        DO_AUTH_TOKEN: legacy-secret\n"
-	if err := os.WriteFile(dropInPath, []byte(legacy), 0600); err != nil {
+	if err := os.WriteFile(dropInPath, []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(path)
@@ -728,6 +764,19 @@ func TestValidate(t *testing.T) {
 		}
 		if cfg.Server.Logging.Level != "warn" {
 			t.Errorf("Logging.Level changed: got %q", cfg.Server.Logging.Level)
+		}
+	})
+
+	t.Run("keyservers_require_bare_dns_hosts", func(t *testing.T) {
+		cfg := fresh()
+		cfg.Web.Security.Keyservers = []string{
+			"keys.openpgp.org", "KEYS.OPENPGP.ORG", "keyserver.ubuntu.com",
+			"https://keys.openpgp.org", "keys.example.org/path", "127.0.0.1", "bad host",
+		}
+		config.Validate(cfg)
+		want := []string{"keys.openpgp.org", "keyserver.ubuntu.com"}
+		if !reflect.DeepEqual(cfg.Web.Security.Keyservers, want) {
+			t.Fatalf("keyservers = %#v, want %#v", cfg.Web.Security.Keyservers, want)
 		}
 	})
 
@@ -1232,8 +1281,8 @@ func TestLoadEnv_AllVars(t *testing.T) {
 			value: "libsql",
 			check: func(t *testing.T, cfg *config.Config) {
 				t.Helper()
-				if cfg.Database.Type != "libsql" {
-					t.Errorf("Database.Type: got %q, want %q", cfg.Database.Type, "libsql")
+				if cfg.Server.Database.Type != "libsql" {
+					t.Errorf("Database.Type: got %q, want %q", cfg.Server.Database.Type, "libsql")
 				}
 			},
 		},
@@ -1243,8 +1292,8 @@ func TestLoadEnv_AllVars(t *testing.T) {
 			value: "/tmp/url.db",
 			check: func(t *testing.T, cfg *config.Config) {
 				t.Helper()
-				if cfg.Database.Path != "/tmp/url.db" {
-					t.Errorf("Database.Path: got %q, want %q", cfg.Database.Path, "/tmp/url.db")
+				if cfg.Server.Database.Path != "/tmp/url.db" {
+					t.Errorf("Database.Path: got %q, want %q", cfg.Server.Database.Path, "/tmp/url.db")
 				}
 			},
 		},
@@ -1282,13 +1331,13 @@ func TestLoadEnv_AllVars(t *testing.T) {
 			},
 		},
 		{
-			name:  "DB_PATH",
-			key:   "DB_PATH",
-			value: "/tmp/test.db",
+			name:  "CACHE_URL",
+			key:   "CACHE_URL",
+			value: "valkey://cache.example.com:6379",
 			check: func(t *testing.T, cfg *config.Config) {
 				t.Helper()
-				if cfg.Database.Path != "/tmp/test.db" {
-					t.Errorf("Database.Path: got %q, want %q", cfg.Database.Path, "/tmp/test.db")
+				if cfg.Server.Cache.URL != "valkey://cache.example.com:6379" || cfg.Server.Cache.Type != "valkey" {
+					t.Errorf("cache URL/type = %q/%q, want valkey URL/type", cfg.Server.Cache.URL, cfg.Server.Cache.Type)
 				}
 			},
 		},
@@ -1460,6 +1509,47 @@ func TestLoad_EnvOverridesFileValue(t *testing.T) {
 	}
 	if cfg.Server.Port != "22222" {
 		t.Errorf("env PORT should win over file; got %q, want %q", cfg.Server.Port, "22222")
+	}
+}
+
+func TestDatabaseEnvironmentSeedsOnlyFirstRunAndStoresCredentialURLAsSecret(t *testing.T) {
+	t.Setenv("DATABASE_URL", "libsql://db.example.com?authToken=initial-secret")
+	t.Setenv("DATABASE_DRIVER", "sqlite")
+	t.Setenv("CACHE_URL", "valkey://cache.example.com:6379")
+	path := tempConfigPath(t)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("first Load: %v", err)
+	}
+	if cfg.Server.Database.Type != "libsql" || cfg.Server.Database.Path != "libsql://db.example.com?authToken=initial-secret" {
+		t.Fatalf("first-run database = %q %q", cfg.Server.Database.Type, cfg.Server.Database.Path)
+	}
+	if cfg.Server.Cache.URL != "valkey://cache.example.com:6379" {
+		t.Fatalf("first-run cache URL = %q", cfg.Server.Cache.URL)
+	}
+	configBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretBytes, err := os.ReadFile(filepath.Join(filepath.Dir(path), "secrets.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(configBytes), "initial-secret") || !strings.Contains(string(secretBytes), "initial-secret") {
+		t.Fatal("credential-bearing DATABASE_URL was not moved to secrets.yml")
+	}
+	if !strings.Contains(string(configBytes), "valkey://cache.example.com:6379") {
+		t.Fatalf("first-run cache URL was not persisted in config: %s", configBytes)
+	}
+	t.Setenv("DATABASE_URL", "libsql://other.example.com?authToken=ignored-secret")
+	t.Setenv("DATABASE_DRIVER", "sqlite")
+	t.Setenv("CACHE_URL", "redis://other-cache.example.com:6379")
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("second Load: %v", err)
+	}
+	if loaded.Server.Database.Path != cfg.Server.Database.Path || loaded.Server.Cache.URL != "valkey://cache.example.com:6379" {
+		t.Fatalf("saved connection settings were overridden: database=%q cache=%q", loaded.Server.Database.Path, loaded.Server.Cache.URL)
 	}
 }
 

@@ -86,6 +86,26 @@ func TestPGPRotateReencryptsReportsAndRetainsOldPrivateKey(t *testing.T) {
 	if filepath.Base(m.rotatedPath()) != "pgp.priv.old.asc.enc" {
 		t.Fatalf("rotated key path = %q", m.rotatedPath())
 	}
+	firstRotatedPrivate := newPrivate
+	if err := m.rotate(); err != nil {
+		t.Fatalf("second rotation: %v", err)
+	}
+	secondRetiredPrivate, err := m.readPrivateKey(m.rotatedPath())
+	if err != nil || secondRetiredPrivate != firstRotatedPrivate {
+		t.Fatalf("second rotation did not replace .old with the retiring active key: %v", err)
+	}
+	meta, err := m.db.GetSecurityKeypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	activePublic, err := os.ReadFile(m.pubPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fingerprint, err := pgp.FingerprintFromPublic(string(activePublic))
+	if err != nil || fingerprint != meta.Fingerprint {
+		t.Fatalf("DB rotation marker %q does not match active public key %q: %v", meta.Fingerprint, fingerprint, err)
+	}
 }
 
 func TestPGPRotateFailureKeepsOldKeyAndReport(t *testing.T) {
@@ -113,4 +133,66 @@ func TestPGPRotateFailureKeepsOldKeyAndReport(t *testing.T) {
 	if err != nil || string(report.EncryptedBody) != "not an armored PGP message" {
 		t.Fatalf("failed rotation changed report: %+v, %v", report, err)
 	}
+}
+
+func TestRecoverPGPRotationUsesDatabaseFingerprintAsCommitMarker(t *testing.T) {
+	t.Run("committed staged key is installed", func(t *testing.T) {
+		m, oldKey := newPGPRotationManager(t, nil)
+		next, err := pgp.Generate(m.cfg.Web.SiteTitle, m.cfg.SecurityEmail(), time.Now(), pgpKeypairValidity)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := writeStagedFile(m.stagedPublicPath(), []byte(next.PublicArmored), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		sealed, err := m.sealPrivateKey(next.PrivateArmored)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := writeStagedFile(m.stagedPrivatePath(), sealed, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		rotatedAt := next.CreatedAt
+		if err := m.db.UpsertSecurityKeypair(&database.SecurityKeypair{
+			Fingerprint: next.Fingerprint, CreatedAt: next.CreatedAt,
+			ExpiresAt: next.ExpiresAt, LastRotatedAt: &rotatedAt,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := RecoverPGPRotation(m.configDir, m.db); err != nil {
+			t.Fatalf("recover committed rotation: %v", err)
+		}
+		activePrivate, err := m.readPrivateKey(m.privPath())
+		if err != nil || activePrivate != next.PrivateArmored {
+			t.Fatalf("new private key not installed: %v", err)
+		}
+		retiredPrivate, err := m.readPrivateKey(m.rotatedPath())
+		if err != nil || retiredPrivate != oldKey.PrivateArmored {
+			t.Fatalf("old private key not retained: %v", err)
+		}
+	})
+
+	t.Run("uncommitted staged key is discarded", func(t *testing.T) {
+		m, oldKey := newPGPRotationManager(t, nil)
+		next, err := pgp.Generate(m.cfg.Web.SiteTitle, m.cfg.SecurityEmail(), time.Now(), pgpKeypairValidity)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := writeStagedFile(m.stagedPublicPath(), []byte(next.PublicArmored), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := writeStagedFile(m.stagedPrivatePath(), []byte("staged"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := RecoverPGPRotation(m.configDir, m.db); err != nil {
+			t.Fatalf("recover uncommitted rotation: %v", err)
+		}
+		if _, err := os.Stat(m.stagedPublicPath()); !os.IsNotExist(err) {
+			t.Fatalf("uncommitted public key remains staged: %v", err)
+		}
+		activePrivate, err := m.readPrivateKey(m.privPath())
+		if err != nil || activePrivate != oldKey.PrivateArmored {
+			t.Fatalf("active private key changed: %v", err)
+		}
+	})
 }

@@ -40,8 +40,10 @@ func contactCaptchaWasVerified(r *http.Request) bool {
 
 const contactBodyLimit = 256 << 10
 
-var contactDomainPattern = regexp.MustCompile(`(?i)(?:[a-z][a-z0-9+.-]*://|www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+`)
-var contactMarkupPattern = regexp.MustCompile(`(?i)\[(?:url|img|b)(?:[=\s\]]|$)|\[/`)
+var (
+	contactDomainPattern = regexp.MustCompile(`(?i)(?:[a-z][a-z0-9+.-]*://|www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+`)
+	contactMarkupPattern = regexp.MustCompile(`(?i)\[(?:url|img|b)(?:[=\s\]]|$)|\[/`)
+)
 
 type contactSpamState struct {
 	accepted   map[string][]time.Time

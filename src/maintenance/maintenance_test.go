@@ -7,10 +7,45 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apimgr/cairnbin/src/audit"
+	"github.com/apimgr/cairnbin/src/database"
 	"github.com/apimgr/cairnbin/src/maintenance"
 )
+
+type backupCacheDB struct {
+	database.DB
+	snapshotDB database.DB
+	syncErr    error
+	syncCalls  int
+}
+
+func (db *backupCacheDB) SyncCache() error {
+	db.syncCalls++
+	return db.syncErr
+}
+
+func (db *backupCacheDB) SnapshotTo(path string) error {
+	if err := db.SyncCache(); err != nil {
+		return err
+	}
+	snapshotter, ok := db.snapshotDB.(interface{ SnapshotTo(string) error })
+	if !ok {
+		return errors.New("database snapshot is unavailable")
+	}
+	return snapshotter.SnapshotTo(path)
+}
+
+func (db *backupCacheDB) ExportAppSecrets() ([]database.AppSecretRecord, error) {
+	exporter, ok := db.DB.(interface {
+		ExportAppSecrets() ([]database.AppSecretRecord, error)
+	})
+	if !ok {
+		return nil, errors.New("application secret export is unavailable")
+	}
+	return exporter.ExportAppSecrets()
+}
 
 // makeTestDirs creates temp config and data directories with dummy files.
 func makeTestDirs(t *testing.T) (configDir, dataDir, backupDir string) {
@@ -57,9 +92,148 @@ func TestBackupAndVerify_NoEncryption(t *testing.T) {
 		t.Fatalf("no backup file created: %v", err)
 	}
 	bkpPath := filepath.Join(bkpDir, entries[0].Name())
+	if got := maintenance.NewestFullBackup(bkpDir, "cairnbin"); got != bkpPath {
+		t.Fatalf("default backup selection = %q, want generated archive %q", got, bkpPath)
+	}
 
 	if err := maintenance.VerifyBackup(bkpPath, ""); err != nil {
 		t.Fatalf("VerifyBackup error: %v", err)
+	}
+}
+
+func TestBackupRemoteDatabaseSelectsOnlyEnabledLocalCache(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		cache      bool
+		wantServer bool
+	}{
+		{name: "remote without cache", wantServer: false},
+		{name: "remote with cache", cache: true, wantServer: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfgDir, dataDir, backupDir := makeTestDirs(t)
+			stalePath := filepath.Join(dataDir, "db", "server.db")
+			cachePath := filepath.Join(dataDir, "db", "cache.db")
+			if err := os.WriteFile(filepath.Join(cfgDir, "server.yml"), []byte("server:\n  mode: production\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			db, err := database.NewDatabase("sqlite", filepath.Join(t.TempDir(), "export.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = db.Close() }()
+			backupDB := db
+			var cacheDB *backupCacheDB
+			if tc.cache {
+				cacheSource, err := database.NewDatabase("sqlite", cachePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = cacheSource.Close() }()
+				cacheDB = &backupCacheDB{DB: db, snapshotDB: cacheSource}
+				backupDB = cacheDB
+			}
+			for _, path := range []string{stalePath} {
+				localDB, err := database.NewDatabase("sqlite", path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := localDB.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := maintenance.Backup(maintenance.BackupOptions{
+				ConfigDir: cfgDir, DataDir: dataDir, BackupDir: backupDir,
+				DatabaseDriver: "libsql", DatabaseCacheEnabled: tc.cache,
+				Database: backupDB,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if tc.cache && cacheDB.syncCalls != 1 {
+				t.Fatalf("remote cache sync calls = %d, want one", cacheDB.syncCalls)
+			}
+			archives, err := os.ReadDir(backupDir)
+			if err != nil || len(archives) != 1 {
+				t.Fatalf("archives=%v, err=%v", archives, err)
+			}
+			manifest, err := maintenance.ReadBackupManifest(filepath.Join(backupDir, archives[0].Name()), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			foundSecrets := false
+			for _, file := range manifest.Files {
+				found = found || file.Path == "server.db"
+				foundSecrets = foundSecrets || file.Path == "app_secrets.json"
+			}
+			if found != tc.wantServer || !foundSecrets {
+				t.Fatalf("manifest server.db=%v app_secrets.json=%v; want %v and true", found, foundSecrets, tc.wantServer)
+			}
+		})
+	}
+}
+
+func TestBackupRefusesUnsynchronizedRemoteCache(t *testing.T) {
+	cfgDir, dataDir, backupDir := makeTestDirs(t)
+	baseDB, err := database.NewDatabase("sqlite", filepath.Join(t.TempDir(), "export.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = baseDB.Close() }()
+	cacheDB := &backupCacheDB{DB: baseDB, syncErr: errors.New("remote unavailable")}
+	err = maintenance.Backup(maintenance.BackupOptions{
+		ConfigDir: cfgDir, DataDir: dataDir, BackupDir: backupDir,
+		DatabaseDriver: "libsql", DatabaseCacheEnabled: true,
+		Database: cacheDB,
+	})
+	if err == nil || !strings.Contains(err.Error(), "remote unavailable") {
+		t.Fatalf("Backup error = %v, want cache synchronization failure", err)
+	}
+	entries, readErr := os.ReadDir(backupDir)
+	if readErr != nil || len(entries) != 0 {
+		t.Fatalf("backup files after failed synchronization = %v, read error = %v", entries, readErr)
+	}
+}
+
+func TestRestoreIncrementalAppliesLimitsToBaseAndDeltaTogether(t *testing.T) {
+	cfgDir, dataDir, backupDir := makeTestDirs(t)
+	baseName := "cairnbin_backup_2026-11-25.tar.gz"
+	basePath := filepath.Join(backupDir, baseName)
+	if err := os.WriteFile(filepath.Join(cfgDir, "server.yml"), []byte(strings.Repeat("a", 300)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.Backup(maintenance.BackupOptions{
+		ConfigDir: cfgDir, DataDir: dataDir, BackupDir: backupDir, Filename: baseName,
+	}); err != nil {
+		t.Fatalf("create full backup: %v", err)
+	}
+	baseManifest, err := maintenance.ReadBackupManifest(basePath, "")
+	if err != nil {
+		t.Fatalf("read full manifest: %v", err)
+	}
+	baseSHA, err := maintenance.FileSHA256(basePath)
+	if err != nil {
+		t.Fatalf("checksum full backup: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "server.yml"), []byte(strings.Repeat("b", 300)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	incrementalPath := filepath.Join(backupDir, "cairnbin-daily.tar.gz")
+	if err := maintenance.Backup(maintenance.BackupOptions{
+		ConfigDir: cfgDir, DataDir: dataDir, BackupDir: backupDir,
+		Filename: filepath.Base(incrementalPath), BaseBackup: baseName,
+		BaseManifest: baseManifest, BaseSHA256: baseSHA,
+	}); err != nil {
+		t.Fatalf("create incremental backup: %v", err)
+	}
+	configOut := filepath.Join(t.TempDir(), "config")
+	dataOut := filepath.Join(t.TempDir(), "data")
+	limits := maintenance.RestoreLimits{
+		MaxArchiveSize: 1 << 20, MaxExpandedSize: 500, MaxFiles: 10,
+		MaxFileSize: 400,
+	}
+	if err := maintenance.RestoreWithLimits(incrementalPath, configOut, dataOut, "", "", limits); err == nil {
+		t.Fatal("restore accepted a base plus delta larger than the combined expanded-size limit")
 	}
 }
 
@@ -282,6 +456,39 @@ func TestBackup_RejectsTraversalFilename(t *testing.T) {
 	}
 }
 
+func TestNewestFullBackupUsesFilenameDateThenModificationTime(t *testing.T) {
+	dir := t.TempDir()
+	files := []struct {
+		name string
+		mod  time.Time
+	}{
+		{"cairnbin_backup_2026-01-03.tar.gz.enc", time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)},
+		{"cairnbin_backup_2026-01-04.tar.gz", time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{"cairnbin_backup_2026-01-04.tar.gz.enc", time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)},
+		{"cairnbin_backup_2026-01-05_010203.tar.gz", time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{"cairnbin-daily.tar.gz", time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC)},
+	}
+	for _, file := range files {
+		path := filepath.Join(dir, file.name)
+		if err := os.WriteFile(path, []byte("backup"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, file.mod, file.mod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := filepath.Join(dir, "cairnbin_backup_2026-01-05_010203.tar.gz")
+	if got := maintenance.NewestFullBackup(dir, "cairnbin"); got != want {
+		t.Fatalf("NewestFullBackup = %q, want %q", got, want)
+	}
+}
+
+func TestNewestFullBackupReturnsEmptyWhenDirectoryHasNoFull(t *testing.T) {
+	if got := maintenance.NewestFullBackup(t.TempDir(), "cairnbin"); got != "" {
+		t.Fatalf("NewestFullBackup = %q, want empty", got)
+	}
+}
+
 func TestVerifyBackup_Nonexistent(t *testing.T) {
 	if err := maintenance.VerifyBackup("/nonexistent/backup.tar.gz", ""); err == nil {
 		t.Error("expected error for nonexistent file, got nil")
@@ -348,6 +555,13 @@ func TestBackupRestoresSecretsAndOperatorHTML(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(htmlDir, "about.md"), []byte("Operator page"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	assetsDir := filepath.Join(cfgDir, "assets")
+	if err := os.MkdirAll(assetsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(assetsDir, "logo.svg"), []byte("<svg/>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := maintenance.Backup(maintenance.BackupOptions{ConfigDir: cfgDir, DataDir: dataDir, BackupDir: bkpDir, AppVersion: "v1.0.0"}); err != nil {
 		t.Fatal(err)
 	}
@@ -359,10 +573,71 @@ func TestBackupRestoresSecretsAndOperatorHTML(t *testing.T) {
 	if err := maintenance.Restore(filepath.Join(bkpDir, entries[0].Name()), restoredConfig, restoredData, ""); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{filepath.Join(restoredConfig, "secrets.yml"), filepath.Join(restoredConfig, "html", "about.md")} {
+	for _, path := range []string{filepath.Join(restoredConfig, "secrets.yml"), filepath.Join(restoredConfig, "html", "about.md"), filepath.Join(restoredConfig, "assets", "logo.svg")} {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("restored backup is missing %s: %v", path, err)
 		}
+	}
+	secret, err := os.ReadFile(filepath.Join(restoredConfig, "secrets.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(secret), "secret-value") || !strings.Contains(string(secret), "token:") {
+		t.Errorf("restore must preserve or generate a target server.token, got %q", secret)
+	}
+	if source, err := os.ReadFile(filepath.Join(cfgDir, "secrets.yml")); err != nil || !strings.Contains(string(source), "secret-value") {
+		t.Errorf("backup modified source secrets: %q (%v)", source, err)
+	}
+}
+
+func TestBackupIncludesReferencedTLSFilesAndRewritesExternalPaths(t *testing.T) {
+	cfgDir, dataDir, backupDir := makeTestDirs(t)
+	sslDir := filepath.Join(cfgDir, "ssl")
+	if err := os.MkdirAll(sslDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	caPath := filepath.Join(sslDir, "cache-ca.pem")
+	if err := os.WriteFile(caPath, []byte("cache CA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	externalDir := t.TempDir()
+	certPath := filepath.Join(externalDir, "server-cert.pem")
+	keyPath := filepath.Join(externalDir, "server-key.pem")
+	if err := os.WriteFile(certPath, []byte("server certificate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, []byte("server private key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	serverConfig := []byte("server:\n  ssl:\n    cert: " + certPath + "\n    key: " + keyPath + "\n")
+	if err := os.WriteFile(filepath.Join(cfgDir, "server.yml"), serverConfig, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := maintenance.Backup(maintenance.BackupOptions{
+		ConfigDir: cfgDir, DataDir: dataDir, BackupDir: backupDir,
+		ConnectionTLSFiles: []string{caPath}, ExternalTLSCert: certPath, ExternalTLSKey: keyPath,
+	}); err != nil {
+		t.Fatalf("Backup: %v", err)
+	}
+	archives, err := os.ReadDir(backupDir)
+	if err != nil || len(archives) != 1 {
+		t.Fatalf("archives=%v, err=%v", archives, err)
+	}
+	configOut, dataOut := t.TempDir(), t.TempDir()
+	if err := maintenance.Restore(filepath.Join(backupDir, archives[0].Name()), configOut, dataOut, ""); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	for _, name := range []string{"cache-ca.pem", "external/cert.pem", "external/key.pem"} {
+		if _, err := os.Stat(filepath.Join(configOut, "ssl", name)); err != nil {
+			t.Errorf("restored TLS file %s: %v", name, err)
+		}
+	}
+	restoredConfig, err := os.ReadFile(filepath.Join(configOut, "server.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(restoredConfig), certPath) || strings.Contains(string(restoredConfig), keyPath) || !strings.Contains(string(restoredConfig), "external/cert.pem") || !strings.Contains(string(restoredConfig), "external/key.pem") {
+		t.Errorf("restored config did not rewrite external certificate paths: %s", restoredConfig)
 	}
 }
 
@@ -432,16 +707,16 @@ func TestPrintHelpUsesRequestedLanguage(t *testing.T) {
 
 // ─── VerifyBackup — SQLite magic ─────────────────────────────────────────────
 
-const sqliteMagic = "SQLite format 3\x00"
-
-// makeDirsWithDB creates config/data directories and a minimal SQLite-magic db.
+// makeDirsWithDB creates config/data directories and a valid SQLite database.
 func makeDirsWithDB(t *testing.T) (configDir, dataDir, backupDir string) {
 	t.Helper()
 	configDir, dataDir, backupDir = makeTestDirs(t)
 	dbDir := filepath.Join(dataDir, "db")
-	// Write a server.db with the SQLite magic header (+ padding to meet ReadFull len).
-	magic := sqliteMagic + strings.Repeat("\x00", 100)
-	if err := os.WriteFile(filepath.Join(dbDir, "server.db"), []byte(magic), 0o600); err != nil {
+	db, err := database.NewDatabase("sqlite", filepath.Join(dbDir, "server.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 	return configDir, dataDir, backupDir

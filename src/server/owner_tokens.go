@@ -22,8 +22,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const ownerCookieName = browsercookie.OwnerTokenName
-const tokenViewCookieName = "cairnbin_token_view"
+const (
+	ownerCookieName     = browsercookie.OwnerTokenName
+	tokenViewCookieName = "cairnbin_token_view"
+)
 
 func (s *Server) setTokenViewCookie(w http.ResponseWriter, r *http.Request, target string) {
 	http.SetCookie(w, &http.Cookie{Name: tokenViewCookieName, Value: target, Path: "/server/preferences/tokens", MaxAge: 60, HttpOnly: true, Secure: s.ownerCookieSecure(r), SameSite: http.SameSiteStrictMode})

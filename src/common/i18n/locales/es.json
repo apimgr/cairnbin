@@ -194,6 +194,7 @@
   },
   "contact": {
     "title": "Contacto",
+    "honeypot_label": "Deja este campo vacío",
     "name": "Nombre",
     "email": "Correo electrónico",
     "subject": "Asunto",
@@ -735,6 +736,12 @@
       "other": "{count} minutos"
     }
   },
+  "docs": {
+    "javascript_required": "Se requiere JavaScript",
+    "javascript_fallback": "La vista interactiva de la documentación necesita JavaScript. Usa estos endpoints sin interfaz interactiva:",
+    "openapi_json": "JSON de OpenAPI",
+    "graphql_endpoint": "Endpoint de GraphQL"
+  },
   "swagger": {
     "title": "Documentación de API - {app_name}",
     "description": "Explorador interactivo de API REST",
@@ -818,7 +825,7 @@
     "returns_the_openapi_3_0_3_json_specification_for_015acf42": "Devuelve la especificación JSON OpenAPI 3.0.3 de esta API.",
     "openapi_json_spec_d1f38104": "Especificación JSON OpenAPI",
     "graphql_endpoint_0a863601": "Punto de acceso GraphQL",
-    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "Ejecuta una consulta o mutación GraphQL. El explorador GraphiQL está disponible en /server/docs/graphql.",
+    "executes_a_graphql_query_or_mutation_the_interac_3b5040b1": "Ejecuta una consulta GraphQL de solo lectura. No se admiten mutaciones; usa REST para escribir. El explorador GraphiQL está disponible en /server/docs/graphql.",
     "graphql_request_with_query_and_optional_variable_7b24cbff": "Solicitud GraphQL con consulta y variables opcionales.",
     "graphql_response_b96449ad": "Respuesta GraphQL",
     "compatibility_fa528d3a": "Compatibilidad",
@@ -1285,7 +1292,7 @@
     "server_title": "un servicio Cairnbin público y rápido",
     "show_help_extended": "Mostrar ayuda (cada comando también admite --help)",
     "subcommand_details": "Para más detalles, ejecute {command} --help.",
-    "maintenance_help": "Comandos de mantenimiento:\n\nbackup [file] - Crear y verificar un archivo de datos del servicio\n  Predeterminado: {backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  --include-ssl incluye ssl/; --include-data incluye el directorio de datos\nbackup test - Verificar el par de claves sin crear una copia\nrestore <file> - Restaurar un archivo; el servidor se detiene y reinicia\nupdate [cmd] - Gestionar actualizaciones: check, yes (instalar) o branch <stable|beta|devel>\nmode <mode> - Establecer el modo production o development\nsetup - Restablecer la configuración (primer inicio o solo root)\npgp <action> - Gestionar el par de claves de seguridad\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - exportar o eliminar datos por prefijo de token propietario\nsecret rotate <name> - Rotar installation_secret o encryption_key\nemail test [--to ADDRESS] [--dry-run] - Probar SMTP o validar plantillas (requiere root o token de operador)\ncompliance report - Mostrar el resumen de cumplimiento\n\nEjemplos:\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
+    "maintenance_help": "Comandos de mantenimiento:\n\nbackup [file] - Crear y verificar un archivo de datos del servicio\n  Predeterminado: {backup_dir}/{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz\n  --include-ssl incluye ssl/; --include-data incluye el directorio de datos\nbackup test [file] - Verificar y probar la restauración de una copia; usa la copia completa más reciente si se omite el archivo\nrestore [file] - Restaurar una copia; usa la copia completa más reciente si se omite el archivo; el servidor se detiene y reinicia\nupdate [cmd] - Gestionar actualizaciones: check, yes (instalar) o branch <stable|beta|devel>\nmode <mode> - Establecer el modo production o development\nsetup - Restablecer la configuración (primer inicio o solo root)\npgp <action> - Gestionar el par de claves de seguridad\n  generate | rotate | publish | export public [path] | export private <path> | import <file> | delete\ntoken <action> - list | revoke <prefix>\ndata <action> <prefix> - exportar o eliminar datos por prefijo de token propietario\nsecret rotate <name> - Rotar installation_secret o encryption_key\nemail test [--to ADDRESS] [--dry-run] - Probar SMTP o validar plantillas (requiere root o token de operador)\ncompliance report - Mostrar el resumen de cumplimiento\n\nEjemplos:\n  {project_name} --maintenance backup\n  {project_name} --maintenance restore backup.tar.gz\n  {project_name} --maintenance mode development\n  {project_name} --maintenance pgp generate\n  {project_name} --maintenance token list\n  {project_name} --maintenance data export own_abc123\n  {project_name} --maintenance compliance report",
     "update_help": "Gestión de actualizaciones:\n\ncheck - Buscar actualizaciones disponibles y comparar la versión instalada con la última\nyes - Descargar e instalar la última actualización, reemplazar el binario y reiniciar\nbranch <name> - Elegir canal: stable (predeterminado), beta o devel\n\nEjemplos:\n  {binary} --update check\n  {binary} --update yes\n  {binary} --update branch beta",
     "update_current": "Actual:\n  Versión: {version}\n  Canal:   {branch}",
     "update_latest": "  Última:  {latest}",

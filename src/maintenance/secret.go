@@ -91,11 +91,11 @@ func RunSecret(action, name string, opts SecretOptions) error {
 	if err != nil {
 		return fmt.Errorf("secret rotate: load config: %w", err)
 	}
-	dbPath := cfg.Database.Path
+	dbPath := cfg.Server.Database.Path
 	if strings.TrimSpace(dbPath) == "" {
 		dbPath = opts.DBPath
 	}
-	rawDB, err := database.NewDatabase(cfg.Database.Type, dbPath)
+	rawDB, err := database.NewDatabase(cfg.Server.Database.Type, dbPath)
 	if err != nil {
 		return fmt.Errorf("secret rotate: open database: %w", err)
 	}
