@@ -76,6 +76,13 @@ The browser owner token is carried by an `HttpOnly`, `SameSite=Strict` cookie. I
 
 Enabled GeoIP databases, blocklist sources, and configured NVD/Trivy data sets also appear as ordered `checks.geoip_*`, `checks.blocklist_*`, and `checks.data_*` fields. Their cached status is `ok`, `degraded`, or `error`; the health request itself does not scan or parse data files. The `dataset_health` scheduler refreshes these results every 60 seconds, and data update tasks refresh them after reloads.
 
+GeoIP uses the `iptoasn-asn` and `iptoasn-country` PDDL databases plus the
+DB-IP Lite IPv4 and IPv6 city databases from the `latest` release at
+`sapics/ip-location-db`. Downloads use the GitHub Release assets and verify
+the matching published SHA-256 checksum before installing a replacement.
+DB-IP attribution is shown on `/server/about`; license and source details are
+in `LICENSE.md`.
+
 Each blocklist source has a separate `{id}.last_updated` UTC timestamp beside
 its list file. A successful update refreshes only that source's timestamp; a
 failed update retains its last good file and timestamp. Health becomes
