@@ -124,8 +124,11 @@ The built-in scheduler runs the following tasks automatically:
 | `token_cleanup` | Every 15 min | Expire CAPTCHA challenges and apply owner-token idle-purge policy |
 | `backup_hourly` | Hourly (disabled) | Hourly incremental backup |
 | `disk_check` | Every 5 min | Check available disk space and report low-space conditions |
-| `branding_refresh` | Every 24 hours | Refresh cached branding image variants |
 | `healthcheck_self` | Every 5 min | Self-health check |
 | `dataset_health` | Every 60 sec | Refresh cached data-set health checks without making health requests read data files |
 | `tor_health` | Every 10 min | Tor connectivity check |
 | `i2p_health` | Every 10 min when I2P is enabled | I2P connectivity check; startup is asynchronous and failure degrades health without stopping the HTTP listener |
+
+Remote branding images refresh lazily when a cached image is requested after
+24 hours. This fixed interval is part of the branding cache and is not a
+scheduler task or operator setting.

@@ -238,6 +238,12 @@ server:
       title: ""
 ```
 
+Branding images may use embedded defaults, local files or validated remote
+URLs. Remote sources fall back to the embedded image when fetching or decoding
+fails. Scaled variants are cached locally; remote images refresh lazily when
+requested after 24 hours. This interval is fixed and is not a scheduler
+setting.
+
 `/sitemap.xml` is always served and contains only anonymous public HTML pages
 allowed by the robots allow and deny rules. `/feed.xml` (Atom 1.0) and
 `/rss.xml` (RSS 2.0) are also always served with the same recent public pastes;
