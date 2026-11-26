@@ -46,12 +46,10 @@ README count, and this page must describe the same supported languages.
 Anyone may contribute a locale update through a pull request or send the
 locale file to the maintainer. A new language includes its locale file and the
 registry entry. Updating an existing language changes that locale file while
-preserving its complete key set. A fluent speaker must review machine-
-generated draft translations before they merge. Reviewers check placeholders,
-plural categories, terminology, and the layout sizes above.
-
-**Review status:** Italian (`it`) is a best-effort machine-translated draft;
-fluent-speaker review is pending.
+preserving its complete key set. AI-generated translations are expected and do
+not wait for native-speaker review; native-speaker review is welcome, and
+corrections can be submitted through the normal contribution flow. Reviewers
+check placeholders, plural categories, terminology, and the layout sizes above.
 
 When a language's script is not covered by the system font stack, add an
 appropriate font fallback and verify long text wraps without spaces. Keep every
