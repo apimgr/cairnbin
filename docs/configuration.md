@@ -44,7 +44,7 @@ Override the directory with: `--config /path/to/config-dir` (the file inside is 
 server:
   # Quote [::]; it enables dual-stack IPv4/IPv6 and falls back to IPv4 if IPv6 is unsupported.
   address: "[::]"
-  # first run picks a random unused 64000-64999 port and saves it here
+  # first run picks a random unused 64000-64999 port and saves it here; 0 and other invalid ports are replaced
   port: "64123"
   mode: "production"
   # URL path prefix; use / for the site root.
@@ -276,6 +276,11 @@ host from `Origin`, or `Referer` when no `Origin` exists, submitted email
 domains, and URL-valued request fields. It never checks the request `Host` or
 performs reverse DNS. A match rejects the request with `403` before its
 handler runs. The built-in `firehol_level1` IP source remains active.
+
+Each successful source update writes its own UTC RFC 3339 freshness file as
+`{id}.last_updated` beside `{id}.txt`. Health checks use that timestamp, so one
+source's successful update never refreshes another source's health. Sources
+that fail an update keep their previous list and timestamp.
 
 ### Tor (`server.tor`)
 

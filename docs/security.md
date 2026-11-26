@@ -74,6 +74,12 @@ Health responses never include connection strings, paths or configuration. Tor a
 
 Enabled GeoIP databases, blocklist sources, and configured NVD/Trivy data sets also appear as ordered `checks.geoip_*`, `checks.blocklist_*`, and `checks.data_*` fields. Their cached status is `ok`, `degraded`, or `error`; the health request itself does not scan or parse data files. The `dataset_health` scheduler refreshes these results every 60 seconds, and data update tasks refresh them after reloads.
 
+Each blocklist source has a separate `{id}.last_updated` UTC timestamp beside
+its list file. A successful update refreshes only that source's timestamp; a
+failed update retains its last good file and timestamp. Health becomes
+degraded after 72 hours without a successful update, and reports error when a
+source has never loaded.
+
 ## Domain Blocklists
 
 Operator-managed domain sources match the host from `Origin`, or `Referer` if
