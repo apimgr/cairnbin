@@ -10,7 +10,11 @@ func TestCheckConnectionProbesReadAndWritePaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close database: %v", err)
+		}
+	})
 	probe, ok := db.(ConnectionProbe)
 	if !ok {
 		t.Fatal("database does not expose its connection probe")

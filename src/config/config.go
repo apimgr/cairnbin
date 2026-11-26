@@ -68,15 +68,19 @@ func shouldLogConfigDebug() bool {
 type ServerConfig struct {
 	Port    string `yaml:"port"`
 	Address string `yaml:"address"`
-	FQDN    string `yaml:"fqdn"`
-	Mode    string `yaml:"mode"`
+	// FQDN is the host detected at first run for operator reference only.
+	FQDN string `yaml:"fqdn"`
+	// Domain is the runtime-only primary host resolved from DOMAIN. FQDN above
+	// is persisted for operator reference and is never an URL resolution source.
+	Domain string `yaml:"-"`
+	Mode   string `yaml:"mode"`
 	// Lang is the config-file equivalent of --lang: the output language used
 	// when no --lang flag is given (AI.md PART 30 detection priority 2).
 	// "auto" or empty falls through to LC_ALL/LANG, then "en".
 	Lang string `yaml:"lang"`
 	// APIVersion is the API route prefix segment (default v1): /api/{api_version}/.
 	APIVersion string `yaml:"api_version"`
-	// BaseURL overrides URL generation.
+	// BaseURL is the URL path prefix used for routes, links, and assets.
 	BaseURL string `yaml:"baseurl"`
 	// Branding holds the site title/tagline/description (PART 12/16).
 	Branding BrandingConfig `yaml:"branding"`
@@ -184,7 +188,8 @@ type ContactConfig struct {
 	// panics). NEVER public. Universal fallback for empty role addresses.
 	Admin ContactRole `yaml:"admin"`
 	// Security receives vulnerability reports. Public — surfaced in security.txt's
-	// Contact: line and the PGP keypair UID. Empty → falls back to admin.
+	// Contact: line and the PGP keypair UID. Empty → internal delivery falls back
+	// to admin; public security pages omit the email rather than exposing admin.
 	Security ContactRole `yaml:"security"`
 	// Abuse receives abuse reports (spam, harassment, illegal content, DMCA /
 	// takedown). Public — shown in the contact page "Abuse Reports" section when
@@ -1559,42 +1564,20 @@ type LetsEncryptConfig struct {
 // (PART 16 page-content sourcing); each has a real default drawn from IDEA.md so
 // the About page is never blank or generic.
 type BrandingConfig struct {
-	Title       string   `yaml:"title"`
-	Tagline     string   `yaml:"tagline"`
-	Description string   `yaml:"description"`
-	Favicon     string   `yaml:"favicon"`
-	Logo        string   `yaml:"logo"`
-	Features    []string `yaml:"features"`
-	// ImageRefreshInterval controls how often a remote logo/favicon/OG image
-	// URL is re-fetched (PART 16 Image Scaling: "configurable, default:
-	// daily"). Accepts a Go duration string (e.g. "24h", "12h"); empty or
-	// invalid falls back to the 24h default.
-	ImageRefreshInterval string                     `yaml:"image_refresh_interval"`
-	Links                []BrandingLink             `yaml:"links"`
-	Content              map[string]BrandingContent `yaml:"content"`
+	Title       string                     `yaml:"title"`
+	Tagline     string                     `yaml:"tagline"`
+	Description string                     `yaml:"description"`
+	Favicon     string                     `yaml:"favicon"`
+	Logo        string                     `yaml:"logo"`
+	Features    []string                   `yaml:"features"`
+	Links       []BrandingLink             `yaml:"links"`
+	Content     map[string]BrandingContent `yaml:"content"`
 }
 
 // BrandingContent is one sanitized, optional operator-authored page fragment.
 type BrandingContent struct {
 	Format string      `yaml:"format"`
 	Body   interface{} `yaml:"body"`
-}
-
-// DefaultImageRefreshInterval is the PART 16 Image Scaling default cadence for
-// re-fetching a remote branding image (logo/favicon/OG image) URL.
-const DefaultImageRefreshInterval = 24 * time.Hour
-
-// EffectiveImageRefreshInterval parses the configured refresh interval,
-// falling back to DefaultImageRefreshInterval when empty or invalid.
-func (b BrandingConfig) EffectiveImageRefreshInterval() time.Duration {
-	if b.ImageRefreshInterval == "" {
-		return DefaultImageRefreshInterval
-	}
-	d, err := time.ParseDuration(b.ImageRefreshInterval)
-	if err != nil || d <= 0 {
-		return DefaultImageRefreshInterval
-	}
-	return d
 }
 
 // BrandingLink is a single labeled hyperlink shown on the /server/about page.
@@ -1875,8 +1858,6 @@ type SchedulerTask struct {
 	MaxSize string `yaml:"max_size"`
 	// Retention applies to the backup task (max backups to keep).
 	Retention int `yaml:"retention"`
-	// RenewBefore applies to ssl_renewal (e.g. "7d").
-	RenewBefore string `yaml:"renew_before"`
 }
 
 // HSTSConfig controls Strict-Transport-Security emission.
@@ -2271,7 +2252,7 @@ func DefaultConfig() *Config {
 				},
 			},
 			Contact: ContactConfig{
-				Admin:    ContactRole{Email: "admin@{fqdn}", Webhooks: map[string]string{}},
+				Admin:    ContactRole{Webhooks: map[string]string{}},
 				Security: ContactRole{Email: "security@{fqdn}", Webhooks: map[string]string{}},
 				Abuse:    ContactRole{Email: "", Webhooks: map[string]string{}},
 				General:  ContactRole{Email: "", Webhooks: map[string]string{}},
@@ -2795,16 +2776,16 @@ func (c *Config) devModeForValidation() bool {
 	return strings.EqualFold(strings.TrimSpace(c.Server.Mode), "development")
 }
 
-// fqdn returns the server FQDN used to expand {fqdn} tokens in contact
-// addresses. It follows the AI.md {fqdn} resolution order (PART 12): the
-// configured/DOMAIN value first, then os.Hostname(), then $HOSTNAME, then the
-// first public IP, and only "localhost" as the last resort. Reverse-proxy
+// fqdn returns the host used to expand {fqdn} tokens in contact addresses. It
+// follows the AI.md resolution order (PART 12): DOMAIN, then os.Hostname(),
+// then $HOSTNAME, then the first public IP. The persisted server.fqdn value is
+// for operator reference only. It returns empty when no value resolves. Reverse-proxy
 // header detection (priority 1) is request-scoped and handled at the HTTP layer,
 // so it is out of scope here. The $HOSTNAME environment variable MUST pass
 // host validation for the current mode; an invalid value is skipped silently
 // and detection continues to the next source (PART 12).
 func (c *Config) fqdn() string {
-	if f := strings.TrimSpace(c.Server.FQDN); f != "" && !strings.EqualFold(f, "localhost") {
+	if f := strings.TrimSpace(c.Server.Domain); f != "" && !strings.EqualFold(f, "localhost") {
 		return f
 	}
 	devMode := c.devModeForValidation()
@@ -2827,7 +2808,7 @@ func (c *Config) fqdn() string {
 	if ip := PublicIP(); ip != "" {
 		return ip
 	}
-	return "localhost"
+	return ""
 }
 
 // publicIPMu guards the cached public IP refreshed by the public_ip_refresh
@@ -2867,8 +2848,8 @@ func RefreshPublicIP() string {
 }
 
 // ResolveFQDN exposes the configuration-scoped {fqdn} resolution chain (PART 12
-// priorities 2–7: configured/DOMAIN value → os.Hostname() → $HOSTNAME → first
-// public IP → "localhost") to the HTTP layer. The request-scoped reverse-proxy
+// priorities 2–6: configured/DOMAIN value → os.Hostname() → $HOSTNAME → first
+// public IP → unresolved empty value) to the HTTP layer. The request-scoped reverse-proxy
 // header step (priority 1) is applied by the caller before falling back here.
 func (c *Config) ResolveFQDN() string {
 	return c.fqdn()
@@ -2906,25 +2887,36 @@ func firstPublicIP() string {
 // expandFQDN substitutes the {fqdn} placeholder in a contact value with the
 // resolved server FQDN.
 func (c *Config) expandFQDN(s string) string {
-	return strings.ReplaceAll(strings.TrimSpace(s), "{fqdn}", c.fqdn())
+	s = strings.TrimSpace(s)
+	if strings.Contains(s, "{fqdn}") {
+		fqdn := c.fqdn()
+		if fqdn == "" {
+			return ""
+		}
+		s = strings.ReplaceAll(s, "{fqdn}", fqdn)
+	}
+	return s
 }
 
 // AdminEmail returns the resolved admin recipient — the universal fallback for
-// every other role (PART 12). Falls back to admin@{fqdn} when unset.
+// every other role (PART 12). It remains empty until the operator configures it.
 func (c *Config) AdminEmail() string {
-	if e := c.expandFQDN(c.Server.Contact.Admin.Email); e != "" {
-		return e
-	}
-	return "admin@" + c.fqdn()
+	return c.expandFQDN(c.Server.Contact.Admin.Email)
 }
 
-// SecurityEmail returns the resolved security-report recipient (PART 12).
-// Empty → falls back to the admin address. Public: security.txt Contact line.
+// SecurityEmail returns the resolved internal security-report recipient (PART 12).
+// Empty → falls back to the admin address.
 func (c *Config) SecurityEmail() string {
 	if e := c.expandFQDN(c.Server.Contact.Security.Email); e != "" {
 		return e
 	}
 	return c.AdminEmail()
+}
+
+// SecurityEmailPublic returns only the configured public security contact.
+// It never falls back to the admin address, which must remain private.
+func (c *Config) SecurityEmailPublic() string {
+	return c.expandFQDN(c.Server.Contact.Security.Email)
 }
 
 // SecurityReportEmail returns the operator recipient for coordinated-disclosure
@@ -3212,10 +3204,11 @@ func (c *Config) loadEnv() {
 	// pass host validation for the current mode; an invalid value is skipped
 	// silently and detection continues to the next source (PART 12).
 	if v := strings.TrimSpace(os.Getenv("DOMAIN")); v != "" {
-		if IsValidHost(v, c.devModeForValidation(), projectName) {
-			c.Server.FQDN = v
+		primary := strings.TrimSpace(strings.Split(v, ",")[0])
+		if IsValidHost(primary, c.devModeForValidation(), projectName) {
+			c.Server.Domain = primary
 		} else {
-			log.Printf("config: DOMAIN=%q failed host validation for mode %q; ignoring", v, c.Server.Mode)
+			log.Printf("config: DOMAIN primary host %q failed host validation for mode %q; ignoring", primary, c.Server.Mode)
 		}
 	}
 	// DATABASE_DRIVER selects the storage backend (AI.md 7550).
@@ -3373,6 +3366,15 @@ func validateLogFile(name string, c *LogFileConfig, def LogFileConfig, formats .
 // must always start with sane defaults even if the config file is malformed (PART 12).
 func Validate(cfg *Config) {
 	d := DefaultConfig()
+	prefix, prefixErr := paths.SafePath(cfg.Server.BaseURL)
+	if prefixErr != nil {
+		log.Printf("[config] WARNING: invalid server.baseurl %q, using default %q", cfg.Server.BaseURL, d.Server.BaseURL)
+		cfg.Server.BaseURL = d.Server.BaseURL
+	} else if prefix == "" {
+		cfg.Server.BaseURL = "/"
+	} else {
+		cfg.Server.BaseURL = "/" + prefix
+	}
 	cfg.Server.Maintenance.SelfHealing.Enabled = true
 	validateToastConfig(&cfg.Server.Notifications.WebUI, d.Server.Notifications.WebUI)
 	validateDatabaseErrorConfig(&cfg.Server.Notifications.DatabaseError, d.Server.Notifications.DatabaseError)
@@ -4928,17 +4930,12 @@ func (c *Config) StartupScheme() string {
 
 // StartupBaseURL builds the canonical base URL when no HTTP request is
 // available (startup banner, background-task email links, the raw-TCP termbin
-// reply). It mirrors the per-request baseURL(r) logic for the static config
-// path: server.base_url wins, otherwise {proto}://{fqdn}[:{port}] with the
-// standard :80/:443 stripped (PART 12).
+// reply). server.baseurl is a path prefix, never an absolute origin (PART 12).
 func (c *Config) StartupBaseURL() string {
-	if u := strings.TrimRight(c.Server.BaseURL, "/"); u != "" {
-		return u
-	}
 	proto := c.StartupScheme()
 	fqdn := c.ResolveFQDN()
 	if fqdn == "" {
-		fqdn = "localhost"
+		return ""
 	}
 	port := c.Server.Port
 	if strings.Contains(port, ",") {
@@ -4947,10 +4944,15 @@ func (c *Config) StartupBaseURL() string {
 	if (proto == "http" && port == "80") || (proto == "https" && port == "443") {
 		port = ""
 	}
+	host := fqdn
 	if port != "" {
-		return proto + "://" + fqdn + ":" + port
+		host = net.JoinHostPort(fqdn, port)
 	}
-	return proto + "://" + fqdn
+	base := proto + "://" + host
+	if prefix, err := paths.SafePath(c.Server.BaseURL); err == nil && prefix != "" {
+		base += "/" + prefix
+	}
+	return base
 }
 
 // legacyKeyMoves lists top-level config keys that older releases wrote outside

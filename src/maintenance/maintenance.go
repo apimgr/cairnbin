@@ -4,11 +4,14 @@ package maintenance
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,6 +19,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,6 +38,8 @@ import (
 // set"). Callers can match it with errors.Is to distinguish a compliance
 // refusal from any other backup failure.
 var ErrComplianceBackupBlocked = errors.New("compliance mode requires an encryption password; backup refused")
+var ErrBaseMissing = errors.New("ERR_BASE_MISSING")
+var ErrBaseCorrupt = errors.New("ERR_BASE_CORRUPT")
 
 const (
 	orgName     = "apimgr"
@@ -56,14 +62,44 @@ func maintenanceText(key string, args ...interface{}) string {
 
 // Manifest is embedded in every backup archive as manifest.json.
 type Manifest struct {
-	Version          string   `json:"version"`
-	CreatedAt        string   `json:"created_at"`
-	AppVersion       string   `json:"app_version"`
-	CreatedBy        string   `json:"created_by"`
-	Contents         []string `json:"contents"`
-	Encrypted        bool     `json:"encrypted"`
-	EncryptionMethod string   `json:"encryption_method,omitempty"`
-	Checksum         string   `json:"checksum"`
+	Version          string         `json:"version"`
+	CreatedAt        string         `json:"created_at"`
+	Type             string         `json:"type"`
+	SnapshotAt       string         `json:"snapshot_at"`
+	SHA256           string         `json:"sha256"`
+	Files            []ManifestFile `json:"files,omitempty"`
+	BaseBackup       string         `json:"base_backup,omitempty"`
+	BaseSHA256       string         `json:"base_sha256,omitempty"`
+	Deleted          []string       `json:"deleted,omitempty"`
+	AppVersion       string         `json:"app_version"`
+	CreatedBy        string         `json:"created_by"`
+	Contents         []string       `json:"contents"`
+	Encrypted        bool           `json:"encrypted"`
+	EncryptionMethod string         `json:"encryption_method,omitempty"`
+	Checksum         string         `json:"checksum"`
+}
+
+// ManifestFile describes one source file captured in a full or incremental
+// archive.
+type ManifestFile struct {
+	Path   string `json:"path"`
+	Size   int64  `json:"size"`
+	MTime  int64  `json:"mtime"`
+	SHA256 string `json:"sha256"`
+}
+
+// EncryptedBackupHeader is the cleartext, authenticated metadata prefix on an
+// encrypted archive. It contains no password or derived key material.
+type EncryptedBackupHeader struct {
+	Salt       []byte
+	MemoryKiB  uint32
+	Iterations uint32
+	Threads    uint8
+	Nonce      []byte
+	KeyID      string
+	BaseBackup string
+	AAD        []byte
+	Offset     int
 }
 
 // BackupOptions controls what gets included in the backup.
@@ -76,6 +112,14 @@ type BackupOptions struct {
 	Password string
 	// empty = auto-generate
 	Filename string
+	// BaseBackup records the base archive name in the authenticated header for
+	// an incremental backup.
+	BaseBackup string
+	// BaseManifest and BaseSHA256 identify the full archive used by an
+	// incremental backup.
+	BaseManifest *Manifest
+	BaseSHA256   string
+	SnapshotAt   time.Time
 	// IncludeSSL adds {config_dir}/ssl/ to the archive (--include-ssl).
 	IncludeSSL bool
 	// IncludeData adds {data_dir}/ (except db/ and the backup dir) to the
@@ -125,6 +169,11 @@ func Backup(opts BackupOptions) error {
 		return fmt.Errorf("invalid backup filename %q: must not contain path components", filename)
 	}
 	destPath := filepath.Join(opts.BackupDir, filename)
+	if _, err := os.Lstat(destPath); err == nil {
+		return fmt.Errorf("backup destination already exists: %s", filename)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("checking backup destination: %w", err)
+	}
 
 	// Collect files to archive.
 	type entry struct {
@@ -195,6 +244,55 @@ func Backup(opts BackupOptions) error {
 		}
 	}
 
+	if opts.BaseBackup != "" && (opts.BaseManifest == nil || opts.BaseSHA256 == "") {
+		return fmt.Errorf("incremental backup requires base manifest and archive checksum")
+	}
+	baseFiles := make(map[string]ManifestFile)
+	if opts.BaseManifest != nil {
+		for _, file := range opts.BaseManifest.Files {
+			baseFiles[filepath.ToSlash(file.Path)] = file
+		}
+	}
+	currentFiles := make([]ManifestFile, 0, len(entries))
+	changedFiles := make([]ManifestFile, 0, len(entries))
+	changedEntries := make([]entry, 0, len(entries))
+	currentPaths := make(map[string]struct{}, len(entries))
+	for _, e := range entries {
+		data, readErr := os.ReadFile(e.src)
+		if readErr != nil {
+			return fmt.Errorf("reading %s for backup manifest: %w", e.name, readErr)
+		}
+		info, statErr := os.Stat(e.src)
+		if statErr != nil {
+			return fmt.Errorf("stat %s for backup manifest: %w", e.name, statErr)
+		}
+		path := filepath.ToSlash(e.name)
+		fileHash := sha256.Sum256(data)
+		record := ManifestFile{Path: path, Size: int64(len(data)), MTime: info.ModTime().Unix(), SHA256: hex.EncodeToString(fileHash[:])}
+		currentFiles = append(currentFiles, record)
+		currentPaths[path] = struct{}{}
+		base, exists := baseFiles[path]
+		if opts.BaseManifest == nil || !exists || base.Size != record.Size || base.MTime != record.MTime || base.SHA256 != record.SHA256 {
+			changedEntries = append(changedEntries, e)
+			changedFiles = append(changedFiles, record)
+		}
+	}
+	deleted := make([]string, 0)
+	for path := range baseFiles {
+		if _, exists := currentPaths[path]; !exists {
+			deleted = append(deleted, path)
+		}
+	}
+	sort.Strings(deleted)
+	if opts.BaseManifest != nil {
+		entries = changedEntries
+		currentFiles = changedFiles
+		contents = contents[:0]
+		for _, e := range entries {
+			contents = append(contents, filepath.ToSlash(e.name))
+		}
+	}
+
 	// Compute content checksum: SHA-256 of all data file bytes in archive order,
 	// excluding the manifest. This avoids the circular-dependency that would arise
 	// from hashing an archive that itself contains the checksum.
@@ -207,11 +305,26 @@ func Backup(opts BackupOptions) error {
 		_, _ = contentHash.Write(b)
 	}
 
-	// Build and add manifest (with checksum already set — single archive pass).
+	// Build and add the manifest (with checksums set before the archive pass).
 	hostname, _ := os.Hostname()
+	snapshotAt := opts.SnapshotAt.UTC()
+	if snapshotAt.IsZero() {
+		snapshotAt = time.Now().UTC()
+	}
+	backupType := "full"
+	if opts.BaseManifest != nil {
+		backupType = "incremental"
+	}
 	manifest := Manifest{
 		Version:    "1.0.0",
-		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+		CreatedAt:  snapshotAt.Format(time.RFC3339),
+		Type:       backupType,
+		SnapshotAt: snapshotAt.Format(time.RFC3339),
+		SHA256:     "sha256:" + hex.EncodeToString(contentHash.Sum(nil)),
+		Files:      currentFiles,
+		BaseBackup: opts.BaseBackup,
+		BaseSHA256: opts.BaseSHA256,
+		Deleted:    deleted,
 		AppVersion: opts.AppVersion,
 		CreatedBy:  orgName + "/" + projectName + "@" + hostname,
 		Contents:   contents,
@@ -263,7 +376,7 @@ func Backup(opts BackupOptions) error {
 
 	var finalBytes []byte
 	if opts.Password != "" {
-		finalBytes, err = encrypt(archiveBytes, opts.Password)
+		finalBytes, err = encryptWithBase(archiveBytes, opts.Password, opts.BaseBackup)
 		if err != nil {
 			return fmt.Errorf("encrypting backup: %w", err)
 		}
@@ -298,10 +411,15 @@ func Backup(opts BackupOptions) error {
 	if err := VerifyBackup(tmpPath, opts.Password); err != nil {
 		return fmt.Errorf("verifying staged backup: %w", err)
 	}
-	if err := os.Rename(tmpPath, destPath); err != nil {
+	// A hard link installs the verified archive atomically without replacing an
+	// existing destination, including when another backup races this one.
+	if err := os.Link(tmpPath, destPath); err != nil {
 		return fmt.Errorf("installing verified backup: %w", err)
 	}
 	stageOwned = false
+	if err := os.Remove(tmpPath); err != nil {
+		return fmt.Errorf("removing staged backup after install: %w", err)
+	}
 
 	fmt.Printf("Backup written: %s\n", destPath)
 	return nil
@@ -560,9 +678,17 @@ func VerifyBackup(path, password string) error {
 	for strings.HasSuffix(checkPath, ".tmp") {
 		checkPath = strings.TrimSuffix(checkPath, ".tmp")
 	}
+	var encryptedHeader *EncryptedBackupHeader
 	if strings.HasSuffix(checkPath, ".enc") {
 		if password == "" {
 			return fmt.Errorf("verify: encrypted backup requires password")
+		}
+		if bytes.HasPrefix(data, []byte(backupHeaderMagic)) {
+			header, headerErr := ParseEncryptedBackupHeader(data)
+			if headerErr != nil {
+				return fmt.Errorf("verify: invalid encrypted header: %w", headerErr)
+			}
+			encryptedHeader = &header
 		}
 		data, err = decrypt(data, password)
 		if err != nil {
@@ -585,6 +711,7 @@ func VerifyBackup(path, password string) error {
 	contentHash := sha256.New()
 	var manifestFound bool
 	var manifestChecksum string
+	var manifest Manifest
 	tmpDir, err := orgTempDir()
 	if err != nil {
 		return fmt.Errorf("verify: temp dir: %w", err)
@@ -603,11 +730,10 @@ func VerifyBackup(path, password string) error {
 		if hdr.Name == "manifest.json" {
 			manifestFound = true
 			// Check 4: parse the manifest to retrieve the expected checksum.
-			var m Manifest
-			if jsonErr := json.NewDecoder(tr).Decode(&m); jsonErr != nil {
+			if jsonErr := json.NewDecoder(tr).Decode(&manifest); jsonErr != nil {
 				return fmt.Errorf("verify: invalid manifest: %w", jsonErr)
 			}
-			manifestChecksum = m.Checksum
+			manifestChecksum = manifest.Checksum
 			continue
 		}
 
@@ -648,6 +774,28 @@ func VerifyBackup(path, password string) error {
 		computedHex := "sha256:" + hex.EncodeToString(contentHash.Sum(nil))
 		if manifestChecksum != computedHex {
 			return fmt.Errorf("verify: checksum mismatch: expected %s, got %s", manifestChecksum, computedHex)
+		}
+	}
+	if manifest.Type == "incremental" {
+		if manifest.BaseBackup == "" || manifest.BaseSHA256 == "" {
+			return fmt.Errorf("verify: incremental backup is missing base metadata")
+		}
+		if encryptedHeader != nil && encryptedHeader.BaseBackup != manifest.BaseBackup {
+			return fmt.Errorf("verify: encrypted header base filename does not match manifest")
+		}
+		basePath := filepath.Join(filepath.Dir(path), manifest.BaseBackup)
+		if _, err := os.Lstat(basePath); err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("%w: %s", ErrBaseMissing, manifest.BaseBackup)
+			}
+			return fmt.Errorf("verify: check incremental base: %w", err)
+		}
+		baseSHA, err := FileSHA256(basePath)
+		if err != nil || baseSHA != manifest.BaseSHA256 {
+			return fmt.Errorf("%w: %s", ErrBaseCorrupt, manifest.BaseBackup)
+		}
+		if err := VerifyBackup(basePath, password); err != nil {
+			return fmt.Errorf("%w: %v", ErrBaseCorrupt, err)
 		}
 	}
 
@@ -863,14 +1011,26 @@ func rejectSymlinkedPath(path string) error {
 	}
 }
 
-// encrypt encrypts data using AES-256-GCM with a key derived via Argon2id.
-// Output format: [16-byte salt][12-byte nonce][ciphertext+tag].
-func encrypt(plaintext []byte, password string) ([]byte, error) {
+const (
+	backupHeaderMagic = "BKUP1"
+	backupMemoryKiB   = uint32(64 * 1024)
+	backupIterations  = uint32(1)
+	backupThreads     = uint8(4)
+	backupHeaderFixed = 5 + 16 + 4 + 4 + 1 + 12 + 8 + 2
+)
+
+func encryptWithBase(plaintext []byte, password, baseBackup string) ([]byte, error) {
+	if baseBackup != "" && (filepath.Base(baseBackup) != baseBackup || strings.Contains(baseBackup, "..")) {
+		return nil, fmt.Errorf("invalid incremental base filename %q", baseBackup)
+	}
+	if len(baseBackup) > 4096 {
+		return nil, fmt.Errorf("incremental base filename is too long")
+	}
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, err
 	}
-	key := argon2Key(password, salt)
+	key := argon2.IDKey([]byte(password), salt, backupIterations, backupMemoryKiB, backupThreads, 32)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -886,17 +1046,186 @@ func encrypt(plaintext []byte, password string) ([]byte, error) {
 		return nil, err
 	}
 
-	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
-
-	out := make([]byte, 0, 16+len(nonce)+len(ciphertext))
-	out = append(out, salt...)
-	out = append(out, nonce...)
-	out = append(out, ciphertext...)
+	header := make([]byte, 0, backupHeaderFixed+len(baseBackup))
+	header = append(header, backupHeaderMagic...)
+	header = append(header, salt...)
+	var params [8]byte
+	binary.BigEndian.PutUint32(params[0:4], backupMemoryKiB)
+	binary.BigEndian.PutUint32(params[4:8], backupIterations)
+	header = append(header, params[:]...)
+	header = append(header, backupThreads)
+	header = append(header, nonce...)
+	keyMAC := hmac.New(sha256.New, key)
+	_, _ = keyMAC.Write([]byte("key-id"))
+	header = append(header, []byte(hex.EncodeToString(keyMAC.Sum(nil)[:4]))...)
+	var nameLen [2]byte
+	binary.BigEndian.PutUint16(nameLen[:], uint16(len(baseBackup)))
+	header = append(header, nameLen[:]...)
+	header = append(header, baseBackup...)
+	ciphertext := gcm.Seal(nil, nonce, plaintext, header)
+	out := append(header, ciphertext...)
 	return out, nil
 }
 
-// decrypt reverses encrypt.
+// ParseEncryptedBackupHeader parses and bounds-checks an encrypted archive's
+// cleartext header. The raw header is retained as AAD for decryption.
+func ParseEncryptedBackupHeader(data []byte) (EncryptedBackupHeader, error) {
+	if len(data) < backupHeaderFixed || string(data[:5]) != backupHeaderMagic {
+		return EncryptedBackupHeader{}, fmt.Errorf("invalid or truncated BKUP1 header")
+	}
+	mem := binary.BigEndian.Uint32(data[21:25])
+	iterations := binary.BigEndian.Uint32(data[25:29])
+	threads := data[29]
+	if mem < 8*1024 || mem > 256*1024 || iterations < 1 || iterations > 10 || threads < 1 || threads > 8 {
+		return EncryptedBackupHeader{}, fmt.Errorf("invalid BKUP1 Argon2id parameters")
+	}
+	baseLen := int(binary.BigEndian.Uint16(data[50:52]))
+	end := backupHeaderFixed + baseLen
+	if end > len(data) || baseLen > 4096 {
+		return EncryptedBackupHeader{}, fmt.Errorf("invalid BKUP1 base filename length")
+	}
+	baseBackup := string(data[backupHeaderFixed:end])
+	if baseBackup != "" && (filepath.Base(baseBackup) != baseBackup || strings.Contains(baseBackup, "..")) {
+		return EncryptedBackupHeader{}, fmt.Errorf("invalid BKUP1 base filename")
+	}
+	return EncryptedBackupHeader{
+		Salt:       append([]byte(nil), data[5:21]...),
+		MemoryKiB:  mem,
+		Iterations: iterations,
+		Threads:    threads,
+		Nonce:      append([]byte(nil), data[30:42]...),
+		KeyID:      string(data[42:50]),
+		BaseBackup: baseBackup,
+		AAD:        append([]byte(nil), data[:end]...),
+		Offset:     end,
+	}, nil
+}
+
+// BackupKeyIDForPassword returns the key id for a password derived using the
+// archive header's own salt and Argon2id parameters.
+func BackupKeyIDForPassword(password string, header EncryptedBackupHeader) string {
+	key := argon2.IDKey([]byte(password), header.Salt, header.Iterations, header.MemoryKiB, header.Threads, 32)
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte("key-id"))
+	return hex.EncodeToString(mac.Sum(nil)[:4])
+}
+
+// ReadEncryptedBackupHeader reads just the cleartext metadata prefix.
+func ReadEncryptedBackupHeader(path string) (header EncryptedBackupHeader, retErr error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return EncryptedBackupHeader{}, err
+	}
+	defer func() {
+		if err := f.Close(); retErr == nil && err != nil {
+			retErr = fmt.Errorf("closing encrypted backup header: %w", err)
+		}
+	}()
+	magic := make([]byte, len(backupHeaderMagic))
+	if _, err := io.ReadFull(f, magic); err != nil || string(magic) != backupHeaderMagic {
+		return EncryptedBackupHeader{}, fmt.Errorf("invalid or truncated BKUP1 header")
+	}
+	data := make([]byte, backupHeaderFixed)
+	copy(data, magic)
+	if _, err := io.ReadFull(f, data[len(magic):]); err != nil {
+		return EncryptedBackupHeader{}, fmt.Errorf("invalid or truncated BKUP1 header")
+	}
+	baseLen := int(binary.BigEndian.Uint16(data[50:52]))
+	if baseLen > 4096 {
+		return ParseEncryptedBackupHeader(data)
+	}
+	if baseLen > 0 {
+		data = append(data, make([]byte, baseLen)...)
+		if _, err := io.ReadFull(f, data[backupHeaderFixed:]); err != nil {
+			return EncryptedBackupHeader{}, fmt.Errorf("invalid or truncated BKUP1 header")
+		}
+	}
+	return ParseEncryptedBackupHeader(data)
+}
+
+// FileSHA256 returns the SHA-256 digest of an archive file, including its
+// encrypted header when present.
+func FileSHA256(path string) (digest string, retErr error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err := f.Close(); retErr == nil && err != nil {
+			retErr = fmt.Errorf("closing backup archive: %w", err)
+		}
+	}()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// ReadBackupManifest reads the manifest from a verified or unverified backup.
+// Call VerifyBackup before using this metadata for restore or retention.
+func ReadBackupManifest(path, password string) (manifestResult *Manifest, retErr error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if strings.HasSuffix(path, ".enc") {
+		data, err = decrypt(data, password)
+		if err != nil {
+			return nil, fmt.Errorf("decrypting backup manifest: %w", err)
+		}
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := gz.Close(); retErr == nil && err != nil {
+			retErr = fmt.Errorf("closing backup manifest: %w", err)
+		}
+	}()
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if hdr.Name == "manifest.json" {
+			var manifest Manifest
+			if err := json.NewDecoder(tr).Decode(&manifest); err != nil {
+				return nil, err
+			}
+			return &manifest, nil
+		}
+	}
+	return nil, fmt.Errorf("backup manifest missing")
+}
+
+// decrypt reverses encrypt and continues to accept archives written before
+// BKUP1 was introduced.
 func decrypt(data []byte, password string) ([]byte, error) {
+	if bytes.HasPrefix(data, []byte(backupHeaderMagic)) {
+		header, err := ParseEncryptedBackupHeader(data)
+		if err != nil {
+			return nil, err
+		}
+		key := argon2.IDKey([]byte(password), header.Salt, header.Iterations, header.MemoryKiB, header.Threads, 32)
+		if !hmac.Equal([]byte(header.KeyID), []byte(BackupKeyIDForPassword(password, header))) {
+			return nil, fmt.Errorf("backup password does not match header key id")
+		}
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			return nil, err
+		}
+		gcm, err := cipher.NewGCM(block)
+		if err != nil {
+			return nil, err
+		}
+		return gcm.Open(nil, header.Nonce, data[header.Offset:], header.AAD)
+	}
 	if len(data) < 16+12 {
 		return nil, fmt.Errorf("backup too short to be valid")
 	}

@@ -228,7 +228,7 @@ func (s *Server) alertIPBlocked(ip string, dur time.Duration, threshold int) {
 	if !cfg.Server.Notifications.Email.Events.SecurityAlert {
 		return
 	}
-	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, cfg.StartupBaseURL(), cfg.Server.FQDN, cfg.Server.Lang)
+	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, cfg.StartupBaseURL(), cfg.ResolveFQDN(), cfg.Server.Lang)
 	if !m.Enabled() {
 		return
 	}

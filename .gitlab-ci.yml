@@ -55,6 +55,17 @@ lint:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
+build:check:
+  <<: *go-build
+  stage: build
+  script:
+    - go build -buildvcs=false -trimpath -o /dev/null ./src
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -o /dev/null ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -buildvcs=false -trimpath -o /dev/null ./src/agent; fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
 secret-scan:
   stage: security
   image:
@@ -353,7 +364,7 @@ release:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
 
 # =============================================================================
-# BETA BUILDS (Push to beta branch)
+# BETA BUILDS (push of a YYYYMMDDHHMMSS-beta tag)
 # =============================================================================
 
 build:beta:
@@ -361,7 +372,7 @@ build:beta:
   stage: build
   before_script:
     # All tooling is pre-installed in casjaysdev/go:latest — never `apk add` in a CI job
-    - export VERSION="$(date +%Y%m%d%H%M%S)-beta"
+    - export VERSION="${CI_COMMIT_TAG}"
     - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
     - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
@@ -398,7 +409,7 @@ build:beta:
       dotenv: release.env
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_BRANCH == "beta"
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 # =============================================================================
 # DEVEL BUILDS (Scheduled + main/master push) - All 8 platforms
@@ -485,7 +496,7 @@ sbom:beta:
       - ${PROJECT_NAME}-*-sbom.cdx.json
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_BRANCH == "beta"
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 sbom:devel:
   image: $BUILD_IMAGE
@@ -547,31 +558,31 @@ release:beta:
     assets:
       links:
         - name: "${PROJECT_NAME}-linux-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-linux-amd64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-linux-amd64?job=build:beta"
         - name: "${PROJECT_NAME}-linux-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-linux-arm64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-linux-arm64?job=build:beta"
         - name: "${PROJECT_NAME}-darwin-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-darwin-amd64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-darwin-amd64?job=build:beta"
         - name: "${PROJECT_NAME}-darwin-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-darwin-arm64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-darwin-arm64?job=build:beta"
         - name: "${PROJECT_NAME}-windows-amd64.exe"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-windows-amd64.exe?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-windows-amd64.exe?job=build:beta"
         - name: "${PROJECT_NAME}-windows-arm64.exe"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-windows-arm64.exe?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-windows-arm64.exe?job=build:beta"
         - name: "${PROJECT_NAME}-freebsd-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:beta"
         - name: "${PROJECT_NAME}-freebsd-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:beta"
         - name: "${PROJECT_NAME}-${RELEASE_VERSION}-sbom.cdx.json"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-sbom.cdx.json?job=release:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-sbom.cdx.json?job=release:beta"
         - name: "${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz?job=release:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz?job=release:beta"
         - name: "sha256.txt"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/sha256.txt?job=release:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/sha256.txt?job=release:beta"
         - name: "sha512.txt"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/sha512.txt?job=release:beta"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/sha512.txt?job=release:beta"
   rules:
-    - if: $CI_COMMIT_BRANCH == "beta"
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 release:devel:
   stage: release
@@ -661,12 +672,12 @@ docker:build:
   script:
     - |
       # Determine version and tags based on trigger
-      if [ -n "$CI_COMMIT_TAG" ]; then
+      if [[ "$CI_COMMIT_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         VERSION="${CI_COMMIT_TAG#v}"
         YYMM=$(date +%y%m)
         TAGS="-t $CI_REGISTRY_IMAGE:$VERSION -t $CI_REGISTRY_IMAGE:latest -t $CI_REGISTRY_IMAGE:$YYMM -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
-      elif [ "$CI_COMMIT_BRANCH" = "beta" ]; then
-        VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
+      elif [[ "$CI_COMMIT_TAG" =~ ^[0-9]{14}-beta$ ]]; then
+        VERSION="$CI_COMMIT_TAG"
         TAGS="-t $CI_REGISTRY_IMAGE:$VERSION -t $CI_REGISTRY_IMAGE:beta -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
       else
         VERSION="${CI_COMMIT_SHA:0:7}"
@@ -723,7 +734,7 @@ docker:build:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_BRANCH == "beta"
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 # =============================================================================
 # DEVEL IMAGE BUILD (own job — main/master pushes + daily schedule)

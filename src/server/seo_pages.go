@@ -294,7 +294,7 @@ func (s *Server) handleLLMs(w http.ResponseWriter, r *http.Request) {
 		} else {
 			fmt.Fprintf(&b, "Security: %s\n", cfg.SecurityReportURL())
 		}
-	} else if email := strings.TrimSpace(cfg.SecurityEmail()); email != "" {
+	} else if email := strings.TrimSpace(cfg.SecurityEmailPublic()); email != "" {
 		fmt.Fprintf(&b, "Security: mailto:%s\n", email)
 	} else {
 		fmt.Fprintf(&b, "Security: %s\n", cfg.SecurityReportURL())

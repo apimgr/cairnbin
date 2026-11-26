@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/apimgr/cairnbin/src/common/urlutil"
 	"github.com/apimgr/cairnbin/src/config"
@@ -310,6 +311,32 @@ func TestBrandingCachedPNG_GeneratesOnMiss(t *testing.T) {
 	}
 	if !bytes.Equal(data, data2) {
 		t.Errorf("expected identical bytes from cache hit")
+	}
+}
+
+func TestBrandingCachedPNG_RefreshesExpiredRemoteCache(t *testing.T) {
+	s := newBrandingTestServer(t)
+	s.cfg.Server.Branding.Favicon = "http://127.0.0.1/favicon.png"
+	cacheDir, err := brandingImageCacheDir(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cacheDir, brandingCacheFileName("favicon", "16"))
+	stale := solidPNG(t, 16, 16, color.RGBA{255, 0, 0, 255})
+	if err := os.WriteFile(path, stale, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * brandingImageRefreshInterval)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	refreshed, err := s.brandingCachedPNG("favicon", "16", faviconVariants(), s.cfg.Server.Branding.Favicon)
+	if err != nil {
+		t.Fatalf("brandingCachedPNG: %v", err)
+	}
+	if bytes.Equal(refreshed, stale) {
+		t.Fatal("expired remote cache was returned without refresh")
 	}
 }
 

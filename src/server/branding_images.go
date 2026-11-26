@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/apimgr/cairnbin/src/common/urlutil"
 )
@@ -205,8 +206,9 @@ var faviconSizes = []int{16, 32, 48, 180, 192, 512}
 var logoWidths = []int{0, 200, 50}
 
 const (
-	ogImageWidth  = 1200
-	ogImageHeight = 630
+	ogImageWidth                 = 1200
+	ogImageHeight                = 630
+	brandingImageRefreshInterval = 24 * time.Hour
 )
 
 // brandingCacheFileName returns the on-disk cache file name for one rendered
@@ -321,9 +323,7 @@ func ogImageVariants() map[string][2]int {
 // RefreshBrandingImages resolves and caches the favicon, logo, and OG-image
 // branding fields (server.branding.favicon/.logo, server.seo.og_image) at
 // every required PART 16 size, falling back to the embedded generated
-// default on any per-field local-read/remote-fetch/decode failure. Wired
-// into the "branding_refresh" scheduler task, mirroring UpdateGeoIP's
-// structure.
+// default on any per-field local-read/remote-fetch/decode failure.
 func (s *Server) RefreshBrandingImages() error {
 	cfg := s.liveCfg()
 	fetchCfg := urlutil.DefaultFetchRemoteImageConfig()
@@ -357,7 +357,13 @@ func (s *Server) brandingCachedPNG(field, variant string, variants map[string][2
 	}
 	path := filepath.Join(cacheDir, brandingCacheFileName(field, variant))
 	if data, err := os.ReadFile(path); err == nil {
-		return data, nil
+		kind, _ := classifyBrandingSource(configuredValue)
+		if kind != brandingSourceRemote {
+			return data, nil
+		}
+		if info, statErr := os.Stat(path); statErr == nil && time.Since(info.ModTime()) < brandingImageRefreshInterval {
+			return data, nil
+		}
 	}
 
 	fetchCfg := urlutil.DefaultFetchRemoteImageConfig()

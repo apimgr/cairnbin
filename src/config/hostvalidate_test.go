@@ -79,20 +79,30 @@ func TestLoadEnvDomainValidation(t *testing.T) {
 		t.Setenv("DOMAIN", "dev.local")
 		t.Setenv("MODE", "production")
 		c := DefaultConfig()
-		before := c.Server.FQDN
+		before := c.Server.Domain
 		c.loadEnv()
-		if c.Server.FQDN != before {
-			t.Errorf("expected invalid DOMAIN to be skipped, got FQDN=%q", c.Server.FQDN)
+		if c.Server.Domain != before {
+			t.Errorf("expected invalid DOMAIN to be skipped, got FQDN=%q", c.Server.Domain)
 		}
 	})
 
 	t.Run("valid DOMAIN accepted in production", func(t *testing.T) {
-		t.Setenv("DOMAIN", "paste.example.com")
+		t.Setenv("DOMAIN", "paste.example.com,www.paste.example.com")
 		t.Setenv("MODE", "production")
 		c := DefaultConfig()
 		c.loadEnv()
-		if c.Server.FQDN != "paste.example.com" {
-			t.Errorf("expected DOMAIN to be applied, got FQDN=%q", c.Server.FQDN)
+		if c.Server.Domain != "paste.example.com" {
+			t.Errorf("expected DOMAIN to be applied, got FQDN=%q", c.Server.Domain)
+		}
+	})
+
+	t.Run("invalid primary DOMAIN is not replaced by a later entry", func(t *testing.T) {
+		t.Setenv("DOMAIN", "dev.local,paste.example.com")
+		t.Setenv("MODE", "production")
+		c := DefaultConfig()
+		c.loadEnv()
+		if c.Server.Domain != "" {
+			t.Errorf("invalid primary DOMAIN selected %q", c.Server.Domain)
 		}
 	})
 
@@ -101,8 +111,8 @@ func TestLoadEnvDomainValidation(t *testing.T) {
 		t.Setenv("MODE", "development")
 		c := DefaultConfig()
 		c.loadEnv()
-		if c.Server.FQDN != "dev.local" {
-			t.Errorf("expected dev-mode DOMAIN to be applied, got FQDN=%q", c.Server.FQDN)
+		if c.Server.Domain != "dev.local" {
+			t.Errorf("expected dev-mode DOMAIN to be applied, got FQDN=%q", c.Server.Domain)
 		}
 	})
 }

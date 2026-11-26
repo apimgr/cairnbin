@@ -21,6 +21,7 @@ func newPGPRotationManager(t *testing.T, reportBody []byte) (*pgpManager, *pgp.K
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	cfg := config.DefaultConfig()
+	cfg.Server.Domain = "security.example.com"
 	oldKey, err := pgp.Generate(cfg.Web.SiteTitle, cfg.SecurityEmail(), time.Now(), pgpKeypairValidity)
 	if err != nil {
 		t.Fatal(err)

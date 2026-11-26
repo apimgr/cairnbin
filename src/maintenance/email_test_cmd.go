@@ -49,7 +49,7 @@ func RunEmail(action string, opts EmailOptions) error {
 	if err != nil {
 		return fmt.Errorf("email test: load config: %w", err)
 	}
-	mailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, cfg.StartupBaseURL(), cfg.Server.FQDN, cfg.Server.Lang)
+	mailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, cfg.StartupBaseURL(), cfg.ResolveFQDN(), cfg.Server.Lang)
 	if opts.DryRun {
 		issues := mailer.ValidateTemplates()
 		for _, issue := range issues {

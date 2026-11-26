@@ -2,8 +2,8 @@ name: Beta Release
 
 on:
   push:
-    branches:
-      - beta
+    tags:
+      - '*-beta'
   workflow_dispatch:
 
 concurrency:

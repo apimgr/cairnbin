@@ -43,7 +43,7 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Always-on `/sitemap.xml`, Atom `/feed.xml`, and RSS `/rss.xml` discovery endpoints for public pages and recent public pastes
 - CLI client (`cairnbin-cli`)
 - OpenAPI/Swagger docs at `/api/v1/server/swagger`
-- GraphQL at `/api/v1/server/graphql` (GraphiQL UI at `/server/docs/graphql`, read-only queries)
+- Read-only GraphQL queries at `/api/v1/server/graphql` and `/api/graphql` (GraphiQL UI at `/server/docs/graphql`)
 - MCP endpoint at `/api/v1/server/mcp` (aliases `/api/mcp`, `/mcp`) so AI clients can use the API as tools with the same Bearer tokens
 - Full route compatibility with pastebin.com, microbin, lenpaste, stikked, hastebin/haste-server, dpaste, the curl-upload family (sprunge/0x0/ix.io), and termbin/fiche (raw TCP on port 9999, enabled by default)
 - Built-in scheduler for expiry cleanup, backups, database health probes, low-disk alerts, security-database updates, and self-update checks (no external cron)

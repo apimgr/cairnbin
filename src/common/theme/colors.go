@@ -22,7 +22,7 @@ var ThemePaletteDark = ThemePalette{
 	Background: "#282a36", Foreground: "#f8f8f2",
 	Primary: "#bd93f9", Secondary: "#50fa7b", Accent: "#ff79c6",
 	Success: "#50fa7b", Warning: "#ffb86c", Error: "#ff5555", Info: "#8be9fd",
-	Surface: "#2b2d3a", SurfaceAlt: "#21222c", Border: "#44475a", Muted: "#6272a4",
+	Surface: "#2b2d3a", SurfaceAlt: "#21222c", Border: "#44475a", Muted: "#939fcc",
 }
 
 // ThemePaletteLight is the light theme palette

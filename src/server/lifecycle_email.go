@@ -65,7 +65,7 @@ func (s *Server) sendLifecycleEmail(cfg *config.Config, template string, enabled
 		return
 	}
 	to := strings.TrimSpace(cfg.AdminEmail())
-	mailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, lifecycleBaseURL(cfg), cfg.Server.FQDN, cfg.Server.Lang)
+	mailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, lifecycleBaseURL(cfg), cfg.ResolveFQDN(), cfg.Server.Lang)
 	if to == "" || !mailer.Enabled() {
 		return
 	}
@@ -78,7 +78,7 @@ func (s *Server) sendLifecycleEmail(cfg *config.Config, template string, enabled
 		mode = "production"
 	}
 	vars := map[string]string{
-		"fqdn": cfg.Server.FQDN, "hostname": hostname, "version": s.version,
+		"fqdn": cfg.ResolveFQDN(), "hostname": hostname, "version": s.version,
 		"mode": mode, "timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
 	if template == "server_stopped" {
@@ -106,9 +106,9 @@ func lifecycleBaseURL(cfg *config.Config) string {
 	if cfg.Server.TLS.Enabled || strings.TrimSpace(cfg.Server.Port) == "443" {
 		proto = "https"
 	}
-	host := strings.TrimSpace(cfg.Server.FQDN)
+	host := strings.TrimSpace(cfg.ResolveFQDN())
 	if host == "" {
-		host = "localhost"
+		return ""
 	}
 	port := strings.TrimSpace(cfg.Server.Port)
 	if port != "" && !strings.Contains(port, ",") && (proto != "http" || port != "80") && (proto != "https" || port != "443") {

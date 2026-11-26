@@ -291,6 +291,8 @@ type Server struct {
 	graphqlHandler     *graphql.Handler
 	metricsCollector   *metric.Collector
 	geoipDB            *geoip.DB
+	sslManagerMu       sync.RWMutex
+	sslManager         *ssl.Manager
 	torManager         *tor.Manager
 	outboundHTTPClient *http.Client
 	i2pManager         *i2p.Manager
@@ -468,6 +470,24 @@ func (s *Server) SetPrivilegeDrop(user, group string, chownPaths []string) {
 // SetPreparedListeners transfers sockets bound during the root setup phase.
 func (s *Server) SetPreparedListeners(listeners []net.Listener) {
 	s.preparedListeners = listeners
+}
+
+func (s *Server) setSSLManager(manager *ssl.Manager) {
+	s.sslManagerMu.Lock()
+	s.sslManager = manager
+	s.sslManagerMu.Unlock()
+}
+
+// RenewManagedCertificate renews the app-managed Let's Encrypt certificate
+// through the same manager that serves TLS.
+func (s *Server) RenewManagedCertificate(ctx context.Context) error {
+	s.sslManagerMu.RLock()
+	manager := s.sslManager
+	s.sslManagerMu.RUnlock()
+	if manager == nil {
+		return nil
+	}
+	return manager.RenewCertificate(ctx)
 }
 
 // SetStartupBannerFn registers the startup banner callback run after listeners
@@ -731,7 +751,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	s.notifier = notify.New(notify.Meta{
 		ProjectName:    "cairnbin",
 		ProjectVersion: version,
-		AppURL:         cfg.Server.BaseURL,
+		AppURL:         cfg.StartupBaseURL(),
 	}, nil)
 
 	// Cache SHA-256(server.token) early so it can be passed to handlers below.
@@ -1782,6 +1802,7 @@ func (s *Server) setupRoutes() {
 	for _, size := range []int{72, 96, 128, 144, 152, 180, 192, 384, 512} {
 		r.Get(fmt.Sprintf("/static/icons/icon-%d.png", size), s.handlePWAIcon(size))
 	}
+	r.Get("/static/icons/shortcut-preferences.png", s.handlePWAIcon(96))
 	for _, size := range []int{192, 512} {
 		r.Get(fmt.Sprintf("/static/icons/icon-maskable-%d.png", size), s.handlePWAIconMaskable(size))
 	}
@@ -2063,6 +2084,7 @@ func (s *Server) setupRoutes() {
 
 	// Unversioned aliases — same handler as versioned, served directly (no redirect) per PART 14.
 	r.Get("/api/swagger", s.swaggerHandler.ServeSpec)
+	r.Get("/api/graphql", s.graphqlHandler.ServeHTTP)
 	r.Post("/api/graphql", s.graphqlHandler.ServeHTTP)
 	// MCP: the same handler at all three paths, never a redirect (PART 11).
 	r.Post("/api/mcp", s.mcpHandler.ServeHTTP)
@@ -2432,7 +2454,7 @@ func (s *Server) buildCSP(r *http.Request) (header string, reportOnly bool) {
 		return "", false
 	}
 
-	fqdn := cfg.Server.FQDN
+	fqdn := cfg.ResolveFQDN()
 	reportURI := "/api/" + s.apiVersion() + "/server/reports/csp"
 
 	csp := cfg.Web.CSP
@@ -2520,7 +2542,7 @@ func (s *Server) buildCSP(r *http.Request) (header string, reportOnly bool) {
 // reverse proxy in front is the common case. Only an unresolvable FQDN omits them.
 func (s *Server) buildReportingHeaders() (endpoints, reportTo, nel string) {
 	cfg := s.liveCfg()
-	fqdn := cfg.Server.FQDN
+	fqdn := cfg.ResolveFQDN()
 	if fqdn == "" || fqdn == "localhost" {
 		return "", "", ""
 	}
@@ -3423,7 +3445,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 
 	// When TLS is configured, set up SSL manager and serve HTTPS.
 	if cfg.Server.TLS.Enabled {
-		fqdn := cfg.Server.FQDN
+		fqdn := cfg.ResolveFQDN()
 		dnsCreds, err := cfg.DecryptDNSCredentials()
 		if err != nil {
 			log.Printf("ERROR: ssl: failed to decrypt DNS-01 credential values")
@@ -3443,6 +3465,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 				OnDNSValidated:  s.dnsValidatedCallback(),
 			},
 		})
+		s.setSSLManager(sslMgr)
 
 		domains := []string{fqdn}
 		tlsCfg, err := sslMgr.GetTLSConfig(domains)
@@ -3522,7 +3545,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 // bound while still privileged so ports below 1024 succeed, then privileges are
 // dropped once before serving. Shutdown cancels both listeners together.
 func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, httpPort, httpsPort string, readTimeout, writeTimeout, idleTimeout time.Duration) error {
-	fqdn := cfg.Server.FQDN
+	fqdn := cfg.ResolveFQDN()
 	dnsCreds, err := cfg.DecryptDNSCredentials()
 	if err != nil {
 		log.Printf("ERROR: ssl: failed to decrypt DNS-01 credential values")
@@ -3542,6 +3565,7 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 			OnDNSValidated:  s.dnsValidatedCallback(),
 		},
 	})
+	s.setSSLManager(sslMgr)
 
 	domains := []string{fqdn}
 	tlsCfg, err := sslMgr.GetTLSConfig(domains)
@@ -5391,7 +5415,7 @@ func (s *Server) deliverReportContact(r *http.Request, cfg *config.Config, field
 		"Signature: " + strings.TrimSpace(fields["signature"]),
 		"Privacy request: " + strings.TrimSpace(fields["request_kind"]),
 	}, "\n\n")
-	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, s.baseURL(r), cfg.Server.FQDN, cfg.Server.Lang)
+	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, s.baseURL(r), cfg.ResolveFQDN(), cfg.Server.Lang)
 	emailReady := to != "" && m.Enabled()
 	webhookTargets := cfg.WebhookTargets(role)
 	if !emailReady && len(webhookTargets) == 0 {
@@ -5972,6 +5996,16 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 			{"src": basePath + "/static/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
 			{"src": basePath + "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
 		},
+		"shortcuts": []map[string]interface{}{
+			{
+				"name": "Preferences",
+				"url":  basePath + "/server/preferences?source=shortcut",
+				"icons": []map[string]string{{
+					"src":   basePath + "/static/icons/shortcut-preferences.png",
+					"sizes": "96x96",
+				}},
+			},
+		},
 	})
 }
 
@@ -6237,7 +6271,9 @@ func (s *Server) handleSecurity(w http.ResponseWriter, r *http.Request) {
 	if id := s.currentSecurityID(); id != "" {
 		_, _ = fmt.Fprintf(&b, "Contact: %s/server/contact?security_id=%s\n", strings.TrimRight(s.baseURL(r), "/"), id)
 	}
-	_, _ = fmt.Fprintf(&b, "Contact: mailto:%s\n", cfg.SecurityEmail())
+	if email := cfg.SecurityEmailPublic(); email != "" {
+		_, _ = fmt.Fprintf(&b, "Contact: mailto:%s\n", email)
+	}
 	_, _ = fmt.Fprintf(&b, "Expires: %s\n", expires)
 	// Encryption line seeded from the project PGP key (PART 11 → GPG Keypair
 	// Management). Emitted only when a key exists and publishing is enabled.
@@ -6991,7 +7027,7 @@ func (s *Server) publicSecurityEmail(r *http.Request) string {
 	if s.torRequestOnion(r) != "" || s.i2pRequestB32(r) != "" {
 		return strings.TrimSpace(s.liveCfg().Server.Tor.ContactEmail)
 	}
-	return s.liveCfg().SecurityEmail()
+	return s.liveCfg().SecurityEmailPublic()
 }
 
 // baseURL constructs the base URL for the current request (PART 12).
@@ -7017,10 +7053,6 @@ func (s *Server) baseURL(r *http.Request) string {
 	// chain integration": trusted for FQDN resolution exactly like .onion).
 	if b32 := s.i2pRequestB32(r); b32 != "" {
 		return "http://" + b32
-	}
-
-	if s.cfg.Server.BaseURL != "" {
-		return s.cfg.Server.BaseURL
 	}
 
 	trusted := s.isTrustedPeer(r)
@@ -7059,9 +7091,11 @@ func (s *Server) baseURL(r *http.Request) string {
 	// the original Host, so r.Host is the internal loopback/private address — fall
 	// back to the configured DOMAIN/FQDN. Absolute template URLs must render the
 	// public host the client actually reached, never the internal upstream.
-	if !hostFromProxy && !isRoutableHost(hostname) {
+	if !hostFromProxy && (!isRoutableHost(hostname) || !hostAllowedByDomain(hostname, os.Getenv("DOMAIN"))) {
 		if f := strings.TrimSpace(s.cfg.ResolveFQDN()); f != "" && !strings.EqualFold(f, "localhost") {
 			hostname, port = splitHostPort(f)
+		} else {
+			return ""
 		}
 	}
 	if trusted {
@@ -7081,19 +7115,30 @@ func (s *Server) baseURL(r *http.Request) string {
 
 	base := scheme + "://" + hostport
 
-	if trusted {
-		// Append reverse-proxy path prefix when present (trailing slash stripped).
-		for _, hdr := range []string{"X-Forwarded-Prefix", "X-Forwarded-Path", "X-Script-Name"} {
-			if prefix := r.Header.Get(hdr); prefix != "" {
-				prefix = strings.TrimRight(prefix, "/")
-				if validPathPrefix(prefix) {
-					base += prefix
-				}
-				break
-			}
+	return base + s.assetPrefix(r)
+}
+
+func hostAllowedByDomain(host, configured string) bool {
+	configured = strings.TrimSpace(configured)
+	if configured == "" {
+		return true
+	}
+	var domains []string
+	for _, domain := range strings.Split(configured, ",") {
+		if domain = strings.ToLower(strings.TrimSpace(domain)); domain != "" {
+			domains = append(domains, domain)
 		}
 	}
-	return base
+	if len(domains) == 0 {
+		return true
+	}
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	for _, domain := range domains {
+		if host == domain {
+			return true
+		}
+	}
+	return strings.HasSuffix(host, "."+domains[0])
 }
 
 // forwardedScheme resolves {proto} from trusted reverse-proxy headers in the

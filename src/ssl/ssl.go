@@ -1,6 +1,7 @@
 package ssl
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -33,7 +34,7 @@ import (
 // LetsEncryptStagingURL is the ACME directory URL for the Let's Encrypt staging CA.
 const LetsEncryptStagingURL = "https://acme-staging-v02.api.letsencrypt.org/directory"
 
-const appRenewBefore = 7 * 24 * time.Hour
+const appRenewBefore = 30 * 24 * time.Hour
 
 // Config holds SSL/TLS configuration.
 type Config struct {
@@ -117,6 +118,9 @@ func (m *Manager) GetTLSConfig(domains []string) (*tls.Config, error) {
 		dir := filepath.Join(m.config.CertDir, "letsencrypt", fqdn)
 		if cert, key := findCertPair(dir); cert != "" {
 			if err := validateCertFile(cert, fqdn); err == nil {
+				if m.config.LetsEncrypt.Enabled && ParseChallenge(m.config.LetsEncrypt.Challenge) != "dns-01" && config.IsValidSSLHost(fqdn) {
+					return m.getLetsEncryptTLSConfig([]string{fqdn})
+				}
 				log.Printf("ssl: using app-managed cert %s/", dir)
 				return tlsConfigFromFiles(cert, key)
 			}
@@ -178,6 +182,35 @@ func (m *Manager) GetTLSConfig(domains []string) (*tls.Config, error) {
 	return nil, fmt.Errorf("ssl: no certificates available for %q and Let's Encrypt not enabled", fqdn)
 }
 
+// RenewCertificate renews an app-managed Let's Encrypt certificate when 30 or
+// fewer days remain. HTTP/TLS-ALPN challenges use autocert's cached manager;
+// DNS-01 uses the configured provider and atomically replaces its files.
+func (m *Manager) RenewCertificate(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !m.config.Enabled || !m.config.LetsEncrypt.Enabled || strings.TrimSpace(m.config.FQDN) == "" || !config.IsValidSSLHost(m.config.FQDN) {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if ParseChallenge(m.config.LetsEncrypt.Challenge) == "dns-01" {
+		certPath := filepath.Join(m.config.CertDir, "letsencrypt", m.config.FQDN, "fullchain.pem")
+		if !certNeedsRenewal(certPath) {
+			return nil
+		}
+		_, err := m.getLetsEncryptTLSConfigDNS01([]string{m.config.FQDN})
+		return err
+	}
+	if m.certManager == nil {
+		if _, err := m.getLetsEncryptTLSConfig([]string{m.config.FQDN}); err != nil {
+			return err
+		}
+	}
+	_, err := m.certManager.GetCertificate(&tls.ClientHelloInfo{ServerName: m.config.FQDN})
+	return err
+}
+
 // getLetsEncryptTLSConfig configures autocert for Let's Encrypt.
 // Certificates are cached in {cert_dir}/letsencrypt/{fqdn}/.
 func (m *Manager) getLetsEncryptTLSConfig(domains []string) (*tls.Config, error) {
@@ -186,8 +219,7 @@ func (m *Manager) getLetsEncryptTLSConfig(domains []string) (*tls.Config, error)
 		return nil, fmt.Errorf("ssl: failed to create cert cache dir %s: %w", cacheDir, err)
 	}
 
-	// RenewBefore: app-managed certs renew 7 days before expiry (PART 15);
-	// autocert defaults to 30 days.
+	// App-managed certs renew when 30 days or fewer remain (PART 15).
 	acmeMgr := &autocert.Manager{
 		Prompt:      autocert.AcceptTOS,
 		HostPolicy:  autocert.HostWhitelist(domains...),
@@ -555,7 +587,14 @@ func tlsConfigFromFiles(cert, key string) (*tls.Config, error) {
 	}
 	return &tls.Config{
 		Certificates: []tls.Certificate{tlsCert},
-		MinVersion:   tls.VersionTLS12,
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			current, err := tls.LoadX509KeyPair(cert, key)
+			if err != nil {
+				return nil, err
+			}
+			return &current, nil
+		},
+		MinVersion: tls.VersionTLS12,
 	}, nil
 }
 

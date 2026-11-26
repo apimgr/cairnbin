@@ -407,7 +407,7 @@ func TestAssetPrefix_NoBaseURL_NoHeader(t *testing.T) {
 
 func TestAssetPrefix_BaseURLWithPath(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.BaseURL = "https://example.com/paste"
+	cfg.Server.BaseURL = "/paste"
 	s := newMinimalServer(cfg)
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	got := s.assetPrefix(r)
@@ -418,7 +418,7 @@ func TestAssetPrefix_BaseURLWithPath(t *testing.T) {
 
 func TestAssetPrefix_BaseURLRootPath_Empty(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.BaseURL = "https://example.com/"
+	cfg.Server.BaseURL = "/"
 	s := newMinimalServer(cfg)
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	got := s.assetPrefix(r)

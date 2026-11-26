@@ -1204,8 +1204,8 @@ func TestLoadEnv_AllVars(t *testing.T) {
 			value: "paste.example.com",
 			check: func(t *testing.T, cfg *config.Config) {
 				t.Helper()
-				if cfg.Server.FQDN != "paste.example.com" {
-					t.Errorf("Server.FQDN: got %q, want %q", cfg.Server.FQDN, "paste.example.com")
+				if cfg.Server.Domain != "paste.example.com" {
+					t.Errorf("Server.Domain: got %q, want %q", cfg.Server.Domain, "paste.example.com")
 				}
 			},
 		},
@@ -1256,11 +1256,11 @@ func TestLoadEnv_AllVars(t *testing.T) {
 		{
 			name:  "BASE_URL",
 			key:   "BASE_URL",
-			value: "https://paste.example.com",
+			value: "/myproject",
 			check: func(t *testing.T, cfg *config.Config) {
 				t.Helper()
-				if cfg.Server.BaseURL != "https://paste.example.com" {
-					t.Errorf("Server.BaseURL: got %q, want %q", cfg.Server.BaseURL, "https://paste.example.com")
+				if cfg.Server.BaseURL != "/myproject" {
+					t.Errorf("Server.BaseURL: got %q, want %q", cfg.Server.BaseURL, "/myproject")
 				}
 			},
 		},
@@ -1447,19 +1447,22 @@ func TestLoad_EnvOverridesFileValue(t *testing.T) {
 }
 
 // TestContactResolution exercises the PART 12 role-based contact resolution:
-// {fqdn} expansion, RFC 2142 defaults, and admin fallback for empty roles.
+// {fqdn} expansion and configured admin fallback for empty roles.
 func TestContactResolution(t *testing.T) {
 	c := &config.Config{}
-	c.Server.FQDN = "paste.example.org"
+	c.Server.Domain = "paste.example.org"
 
-	if got := c.AdminEmail(); got != "admin@paste.example.org" {
-		t.Errorf("AdminEmail default: got %q", got)
+	if got := c.AdminEmail(); got != "" {
+		t.Errorf("AdminEmail without operator configuration = %q, want empty", got)
 	}
-	if got := c.SecurityEmail(); got != "admin@paste.example.org" {
-		t.Errorf("SecurityEmail should fall back to admin: got %q", got)
+	if got := c.SecurityEmail(); got != "" {
+		t.Errorf("SecurityEmail should fall back to the configured admin only: got %q", got)
 	}
-	if got := c.GeneralEmail(); got != "admin@paste.example.org" {
-		t.Errorf("GeneralEmail should fall back to admin: got %q", got)
+	if got := c.SecurityEmailPublic(); got != "" {
+		t.Errorf("SecurityEmailPublic must not synthesize or fall back: got %q", got)
+	}
+	if got := c.GeneralEmail(); got != "" {
+		t.Errorf("GeneralEmail should fall back to the configured admin only: got %q", got)
 	}
 
 	c.Server.Contact.Admin.Email = "root@{fqdn}"
@@ -1471,33 +1474,33 @@ func TestContactResolution(t *testing.T) {
 	if got := c.SecurityEmail(); got != "security@paste.example.org" {
 		t.Errorf("SecurityEmail expand: got %q", got)
 	}
+	if got := c.SecurityEmailPublic(); got != "security@paste.example.org" {
+		t.Errorf("SecurityEmailPublic expand: got %q", got)
+	}
 	if got := c.GeneralEmail(); got != "hello@paste.example.org" {
 		t.Errorf("GeneralEmail expand: got %q", got)
+	}
+	c.Server.Contact.Security.Email = ""
+	if got := c.SecurityEmail(); got != "root@paste.example.org" {
+		t.Errorf("SecurityEmail internal fallback = %q, want configured admin", got)
+	}
+	if got := c.SecurityEmailPublic(); got != "" {
+		t.Errorf("SecurityEmailPublic must omit the admin fallback, got %q", got)
 	}
 }
 
 // TestContactResolutionNeverLocalhost verifies the PART 12 {fqdn} resolution
-// order for the public /server/contact page: an unset or "localhost" FQDN
-// must resolve to a validated real hostname or a public IP, never a bare
-// synthesized "admin@localhost" address. A single-label ambient hostname
-// (a container's own name, or a random hex container ID) does not count as
-// validated, matching IsValidHost's production-mode rules. Skipped only when
-// neither a validated hostname nor a public IP exists in this environment,
-// the one case where localhost genuinely is the correct last resort.
+// order for the public /server/contact page: an unresolved FQDN remains empty
+// rather than producing a localhost guess or a synthesized admin address.
 func TestContactResolutionNeverLocalhost(t *testing.T) {
-	h, herr := os.Hostname()
-	hostValid := herr == nil && config.IsValidHost(strings.TrimSpace(h), false, "")
-	if !hostValid && config.PublicIP() == "" {
-		t.Skip("no validated hostname or public IP in this environment; localhost fallback is correct here")
-	}
 	for _, fqdn := range []string{"", "localhost", "LocalHost"} {
 		c := &config.Config{}
-		c.Server.FQDN = fqdn
-		if got := c.AdminEmail(); got == "admin@localhost" {
-			t.Errorf("FQDN %q: AdminEmail must not synthesize admin@localhost; got %q", fqdn, got)
+		c.Server.Domain = fqdn
+		if got := c.AdminEmail(); got != "" {
+			t.Errorf("FQDN %q: AdminEmail without configuration = %q, want empty", fqdn, got)
 		}
-		if got := c.GeneralEmail(); got == "admin@localhost" {
-			t.Errorf("FQDN %q: GeneralEmail must not synthesize admin@localhost; got %q", fqdn, got)
+		if got := c.GeneralEmail(); got != "" {
+			t.Errorf("FQDN %q: GeneralEmail without a configured fallback = %q, want empty", fqdn, got)
 		}
 	}
 }
@@ -1536,9 +1539,24 @@ func TestContactWebhookFallback(t *testing.T) {
 // address template carries the {fqdn} token (PART 12 resolution priority).
 func TestContactFQDNDefault(t *testing.T) {
 	c := &config.Config{}
-	c.Server.FQDN = "paste.example.org"
-	if got := c.AdminEmail(); got != "admin@paste.example.org" {
+	c.Server.Domain = "paste.example.org"
+	c.Server.Contact.Admin.Email = "ops@{fqdn}"
+	if got := c.AdminEmail(); got != "ops@paste.example.org" {
 		t.Errorf("AdminEmail with explicit FQDN: got %q", got)
+	}
+}
+
+func TestResolveFQDNUsesDomainNotReferenceValue(t *testing.T) {
+	c := &config.Config{}
+	c.Server.FQDN = "stale-reference.example"
+	c.Server.Domain = "current-domain.example"
+	if got := c.ResolveFQDN(); got != "current-domain.example" {
+		t.Errorf("ResolveFQDN() = %q, want DOMAIN override", got)
+	}
+
+	c.Server.Domain = ""
+	if got := c.ResolveFQDN(); got == "stale-reference.example" {
+		t.Errorf("ResolveFQDN() used server.fqdn reference value %q", got)
 	}
 }
 
@@ -1580,19 +1598,34 @@ func TestStartupBaseURL(t *testing.T) {
 		mut  func(*config.Config)
 		want string
 	}{
-		{"explicit base_url", func(c *config.Config) { c.Server.BaseURL = "https://paste.example.com/" }, "https://paste.example.com"},
-		{"custom port kept", func(c *config.Config) { c.Server.FQDN = "paste.example.com"; c.Server.Port = "64111" }, "http://paste.example.com:64111"},
-		{"port 80 stripped", func(c *config.Config) { c.Server.FQDN = "paste.example.com"; c.Server.Port = "80" }, "http://paste.example.com"},
-		{"port 443 is https and stripped", func(c *config.Config) { c.Server.FQDN = "paste.example.com"; c.Server.Port = "443" }, "https://paste.example.com"},
-		{"dual port omits port", func(c *config.Config) { c.Server.FQDN = "paste.example.com"; c.Server.Port = "80,443" }, "https://paste.example.com"},
+		{"configured path prefix", func(c *config.Config) { c.Server.BaseURL = "/myproject/" }, "http://paste.example.com/myproject"},
+		{"custom port kept", func(c *config.Config) { c.Server.Domain = "paste.example.com"; c.Server.Port = "64111" }, "http://paste.example.com:64111"},
+		{"port 80 stripped", func(c *config.Config) { c.Server.Domain = "paste.example.com"; c.Server.Port = "80" }, "http://paste.example.com"},
+		{"port 443 is https and stripped", func(c *config.Config) { c.Server.Domain = "paste.example.com"; c.Server.Port = "443" }, "https://paste.example.com"},
+		{"dual port omits port", func(c *config.Config) { c.Server.Domain = "paste.example.com"; c.Server.Port = "80,443" }, "https://paste.example.com"},
 	}
 	for _, tc := range cases {
 		t.Setenv("DOMAIN", "")
 		cfg := config.DefaultConfig()
+		cfg.Server.Domain = "paste.example.com"
+		cfg.Server.Port = "80"
 		tc.mut(cfg)
 		if got := cfg.StartupBaseURL(); got != tc.want {
 			t.Errorf("%s: StartupBaseURL() = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestValidateBaseURLRequiresPathPrefix(t *testing.T) {
+	for _, input := range []string{"https://example.com/path", "//evil.example", "/../private"} {
+		t.Run(input, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.Server.BaseURL = input
+			config.Validate(cfg)
+			if cfg.Server.BaseURL != "" {
+				t.Errorf("invalid baseurl %q normalized to %q, want the empty default", input, cfg.Server.BaseURL)
+			}
+		})
 	}
 }
 

@@ -188,7 +188,11 @@ func (s *Server) seoMetaTags(r *http.Request) template.HTML {
 	if canonicalBase == "" {
 		canonicalBase = strings.TrimRight(s.baseURL(r), "/")
 	}
-	currentURL := html.EscapeString(canonicalBase + r.URL.Path)
+	canonicalPath := r.URL.Path
+	if canonicalPath == "/api/graphql" {
+		canonicalPath = "/api/" + s.apiVersion() + "/server/graphql"
+	}
+	currentURL := html.EscapeString(canonicalBase + canonicalPath)
 	robots := seoRobotsDirective(r.URL.Path)
 	if seo.NoIndex {
 		robots = "noindex,nofollow"
@@ -327,7 +331,7 @@ func (s *Server) seoMetaTags(r *http.Request) template.HTML {
 		"@type":       "WebSite",
 		"name":        b.EffectiveTitle(),
 		"description": b.EffectiveDescription(),
-		"url":         s.baseURL(r) + r.URL.Path,
+		"url":         canonicalBase + canonicalPath,
 	})
 	if err == nil {
 		sb.WriteString(`<script type="application/ld+json">`)

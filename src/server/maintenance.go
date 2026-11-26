@@ -154,11 +154,8 @@ func (s *Server) maintenanceNotify(event string, snap health.Snapshot) {
 	if !cfg.Server.Notifications.Email.Events.SecurityAlert {
 		return
 	}
-	baseURL := cfg.Server.BaseURL
-	if baseURL == "" {
-		baseURL = "http://" + cfg.Server.FQDN
-	}
-	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, baseURL, cfg.Server.FQDN, cfg.Server.Lang)
+	baseURL := cfg.StartupBaseURL()
+	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, baseURL, cfg.ResolveFQDN(), cfg.Server.Lang)
 	if !m.Enabled() {
 		return
 	}

@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1362,6 +1363,19 @@ func TestHandleSecurity(t *testing.T) {
 	}
 }
 
+func TestHandleSecurityDoesNotPublishAdminFallback(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Contact.Admin.Email = "admin-secret@example.com"
+	cfg.Server.Contact.Security.Email = ""
+	s := newMinimalServer(cfg)
+	w := httptest.NewRecorder()
+	s.handleSecurity(w, httptest.NewRequest(http.MethodGet, "/.well-known/security.txt", nil))
+
+	if strings.Contains(w.Body.String(), "admin-secret@example.com") || strings.Contains(w.Body.String(), "Contact: mailto:") {
+		t.Errorf("security.txt published admin fallback email: %q", w.Body.String())
+	}
+}
+
 // ─── Server.handleFavicon ─────────────────────────────────────────────────────
 
 func TestHandleFavicon(t *testing.T) {
@@ -1415,6 +1429,14 @@ func TestHandleManifest(t *testing.T) {
 	if cats, _ := body["categories"].([]interface{}); len(cats) != 1 || cats[0] != "utilities" {
 		t.Errorf("manifest categories = %v", body["categories"])
 	}
+	shortcuts, _ := body["shortcuts"].([]interface{})
+	if len(shortcuts) != 1 {
+		t.Fatalf("manifest shortcuts = %v, want the Preferences shortcut", body["shortcuts"])
+	}
+	shortcut, _ := shortcuts[0].(map[string]interface{})
+	if shortcut["name"] != "Preferences" || shortcut["url"] != "/server/preferences?source=shortcut" {
+		t.Errorf("manifest shortcut = %v, want Preferences at /server/preferences", shortcut)
+	}
 
 	cfg.Server.BaseURL = "/mount"
 	s = newMinimalServer(cfg)
@@ -1426,6 +1448,11 @@ func TestHandleManifest(t *testing.T) {
 	}
 	if body["start_url"] != "/mount/?source=pwa" || body["scope"] != "/mount/" {
 		t.Errorf("prefixed manifest start_url/scope = %v/%v", body["start_url"], body["scope"])
+	}
+	shortcuts, _ = body["shortcuts"].([]interface{})
+	shortcut, _ = shortcuts[0].(map[string]interface{})
+	if shortcut["url"] != "/mount/server/preferences?source=shortcut" {
+		t.Errorf("prefixed shortcut URL = %v", shortcut["url"])
 	}
 	icons, _ := body["icons"].([]interface{})
 	if len(icons) == 0 || icons[0].(map[string]interface{})["src"] != "/mount/static/icons/icon-72.png" {
@@ -1643,7 +1670,7 @@ func TestHandleAutodiscover(t *testing.T) {
 		host    string
 		want    string
 	}{
-		{"uses configured base_url", "https://paste.example.com", "ignored", "https://paste.example.com"},
+		{"uses request origin with configured prefix", "/myproject", "paste.example.com", "http://paste.example.com/myproject"},
 		{"falls back to request host", "", "myhost.com", "http://myhost.com"},
 	}
 	for _, tc := range cases {
@@ -2046,7 +2073,7 @@ func TestBuildReportingHeaders(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := config.DefaultConfig()
-			cfg.Server.FQDN = tc.fqdn
+			cfg.Server.Domain = tc.fqdn
 			cfg.Server.TLS.Enabled = tc.tlsEnabled
 			s := newMinimalServer(cfg)
 
@@ -2585,7 +2612,7 @@ func TestBaseURL(t *testing.T) {
 		proto      string
 		want       string
 	}{
-		{"configured base_url overrides all", "https://paste.example.com", "8.8.8.8:1234", "ignored", "", "https://paste.example.com"},
+		{"configured baseurl prefixes request origin", "/myproject", "8.8.8.8:1234", "paste.example.com", "", "http://paste.example.com/myproject"},
 		{"http for public remote", "", "8.8.8.8:1234", "myhost.com", "", "http://myhost.com"},
 		{"https from TLS on trusted peer", "", "127.0.0.1:1234", "myhost.com", "https", "https://myhost.com"},
 	}
@@ -2606,6 +2633,21 @@ func TestBaseURL(t *testing.T) {
 				t.Errorf("baseURL() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestBaseURLDomainAllowlistAndPrefixPriority(t *testing.T) {
+	t.Setenv("DOMAIN", "paste.example.com,www.paste.example.com")
+	cfg := config.DefaultConfig()
+	cfg.Server.Domain = "paste.example.com"
+	cfg.Server.BaseURL = "/configured"
+	s := newMinimalServer(cfg)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.RemoteAddr = "127.0.0.1:1234"
+	r.Host = "attacker.example.net"
+	r.Header.Set("X-Forwarded-Prefix", "/proxied")
+	if got := s.baseURL(r); got != "http://paste.example.com/proxied" {
+		t.Errorf("baseURL() = %q, want primary DOMAIN and trusted proxy prefix", got)
 	}
 }
 
@@ -3838,7 +3880,7 @@ func TestBuildCSPWithExtras(t *testing.T) {
 	cfg.Web.CSP.FrameSrcExtra = "https://embed.example.com"
 	cfg.Web.CSP.FormActionExtra = "https://forms.example.com"
 	cfg.Server.TLS.Enabled = true
-	cfg.Server.FQDN = "paste.example.com"
+	cfg.Server.Domain = "paste.example.com"
 	s := newMinimalServer(cfg)
 
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -3896,7 +3938,7 @@ func TestBaseURLWithForwardedPrefix(t *testing.T) {
 // DOMAIN/FQDN, never the internal upstream address.
 func TestBaseURLFallsBackToConfiguredFQDN(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Server.FQDN = "pb.pste.us"
+	cfg.Server.Domain = "pb.pste.us"
 	s := newMinimalServer(cfg)
 
 	r := httptest.NewRequest(http.MethodGet, "/remove/GAbj7GiR", nil)
@@ -4473,6 +4515,53 @@ func TestNewServeHTTP(t *testing.T) {
 				t.Errorf("%s %s: status = %d, want %d", tc.method, tc.path, w.Code, tc.want)
 			}
 		})
+	}
+}
+
+func TestGraphQLAliasMatchesVersionedRoute(t *testing.T) {
+	s := New(&stubDB{}, config.DefaultConfig(), nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
+	responses := make([]*httptest.ResponseRecorder, 0, 2)
+	for index, path := range []string{"/api/v1/server/graphql", "/api/graphql"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Host = "localhost"
+		if index == 1 {
+			for _, cookie := range responses[0].Result().Cookies() {
+				req.AddCookie(cookie)
+			}
+		}
+		response := httptest.NewRecorder()
+		s.router.ServeHTTP(response, req)
+		responses = append(responses, response)
+	}
+	if responses[1].Code != responses[0].Code {
+		t.Errorf("alias status = %d, canonical status = %d", responses[1].Code, responses[0].Code)
+	}
+	aliasHeaders := responses[1].Header().Clone()
+	canonicalHeaders := responses[0].Header().Clone()
+	aliasHeaders.Del("X-Request-Id")
+	canonicalHeaders.Del("X-Request-Id")
+	if !reflect.DeepEqual(aliasHeaders, canonicalHeaders) {
+		t.Errorf("alias headers differ from canonical: alias=%v canonical=%v", responses[1].Header(), responses[0].Header())
+	}
+	if responses[1].Body.String() != responses[0].Body.String() {
+		canonical, alias := responses[0].Body.String(), responses[1].Body.String()
+		index := 0
+		for index < len(canonical) && index < len(alias) && canonical[index] == alias[index] {
+			index++
+		}
+		start := index - 30
+		if start < 0 {
+			start = 0
+		}
+		end := index + 90
+		if end > len(canonical) {
+			end = len(canonical)
+		}
+		aliasEnd := end
+		if aliasEnd > len(alias) {
+			aliasEnd = len(alias)
+		}
+		t.Errorf("alias body differs from canonical GraphQL route near byte %d: canonical=%q alias=%q", index, canonical[start:end], alias[start:aliasEnd])
 	}
 }
 
@@ -5101,7 +5190,8 @@ func TestStartTermbin_RoundTrip(t *testing.T) {
 	port := freeTCPPort(t)
 	cfg := &config.Config{}
 	cfg.Server.Address = "127.0.0.1"
-	cfg.Server.BaseURL = "http://paste.example"
+	cfg.Server.BaseURL = "/paste"
+	cfg.Server.Domain = "paste.example"
 	cfg.Server.Termbin = config.TermbinConfig{Enabled: true, Port: port, MaxSize: 32768, Timeout: "2s"}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -5132,7 +5222,7 @@ func TestStartTermbin_RoundTrip(t *testing.T) {
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	resp, _ := io.ReadAll(conn)
-	if !strings.HasPrefix(string(resp), "http://paste.example/") {
+	if !strings.HasPrefix(string(resp), "http://paste.example/paste/") {
 		t.Fatalf("response = %q, want a base URL line", string(resp))
 	}
 }
@@ -5146,7 +5236,7 @@ func TestStartTermbin_BaseURLFallback(t *testing.T) {
 	// ResolveFQDN() chain, whose first priority is the configured FQDN.
 	// (os.Hostname() is environment-dependent, so the test pins a known
 	// value instead of asserting on the ultimate "localhost" floor.)
-	cfg.Server.FQDN = "test.example"
+	cfg.Server.Domain = "test.example"
 	cfg.Server.Termbin = config.TermbinConfig{Enabled: true, Port: port, MaxSize: 32768, Timeout: "bad-duration"}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -5395,8 +5485,8 @@ func TestInjectTermbinData(t *testing.T) {
 		if data["TermbinEnabled"] != true {
 			t.Errorf("TermbinEnabled = %v, want true", data["TermbinEnabled"])
 		}
-		if data["TermbinHost"] != "paste.example.org" {
-			t.Errorf("TermbinHost = %q, want paste.example.org (from BaseURL)", data["TermbinHost"])
+		if data["TermbinHost"] != "example.com" {
+			t.Errorf("TermbinHost = %q, want request host example.com", data["TermbinHost"])
 		}
 	})
 

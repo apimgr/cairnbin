@@ -1016,6 +1016,12 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		log.Printf("warning: config load: %v", err)
 	}
+	if cfg.ResolveFQDN() == "" {
+		log.Printf("WARN: public hostname is unresolved; generated URLs will be omitted until server.fqdn, DOMAIN, or a public hostname is available")
+	}
+	if strings.TrimSpace(cfg.AdminEmail()) == "" {
+		log.Printf("WARN: server.contact.admin.email is empty; email notifications are disabled until it is set")
+	}
 	if err := config.EnsureMetricsTokens(cfgFile, cfg); err != nil {
 		log.Printf("metrics: could not generate or persist service tokens: %v", err)
 		return 70
@@ -1099,7 +1105,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// ── SMTP auto-detect (first run, host not yet configured) ─────────────────
 
 	if cfg.Server.Notifications.Email.SMTP.Host == "" {
-		if host, port, ok := email.AutoDetect(cfg.Server.FQDN); ok {
+		if host, port, ok := email.AutoDetect(cfg.ResolveFQDN()); ok {
 			cfg.Server.Notifications.Email.SMTP.Host = host
 			cfg.Server.Notifications.Email.SMTP.Port = port
 			cfg.Server.Notifications.Email.Enabled = true
@@ -1112,7 +1118,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		if email.SMTPPrivateCertVerificationSkipped(smtpCfg.SMTP.Host, smtpCfg.SMTP.TLS) {
 			log.Printf("SMTP host %s is a private address: TLS certificate verification skipped", smtpCfg.SMTP.Host)
 		}
-		mailer := email.New(smtpCfg, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN, cfg.Server.Lang)
+		mailer := email.New(smtpCfg, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.ResolveFQDN(), cfg.Server.Lang)
 		if smtpErr := mailer.TestSMTP(); smtpErr != nil {
 			smtpCfg.Enabled = false
 			log.Printf("warning: email.configured=false: SMTP connection test failed; email notifications disabled: %v", smtpErr)
@@ -1232,7 +1238,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// Build the mailer once for task email dispatch (PART 17: backup/ssl events).
 	// The mailer is fail-open — if SMTP is unconfigured, Enabled() returns false
 	// and all email sends are silently skipped.
-	taskMailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN, cfg.Server.Lang)
+	taskMailer := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.ResolveFQDN(), cfg.Server.Lang)
 	taskOperatorEmail := strings.TrimSpace(cfg.AdminEmail())
 
 	// JSON Lines audit log (AI.md server.logs.audit): configuration, security,
@@ -1331,7 +1337,8 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	logSchedErr(sched.Register("ssl_renewal", "SSL Renewal", "0 3 * * *", true,
 		task.SSLRenewalWithEmail(task.SSLRenewalConfig{
 			ConfigDir:         configDir,
-			FQDN:              cfg.Server.FQDN,
+			FQDN:              cfg.ResolveFQDN(),
+			Renew:             srv.RenewManagedCertificate,
 			OperatorEmail:     taskOperatorEmail,
 			Mailer:            taskMailer,
 			SendExpiring:      cfg.Server.Notifications.Email.Events.SSLExpiring,
@@ -1511,7 +1518,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		updated := nextEmail
 		updated.Enabled = false
 		if strings.TrimSpace(updated.SMTP.Host) != "" {
-			probe := email.New(&updated, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN, resolvedLanguage)
+			probe := email.New(&updated, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.ResolveFQDN(), resolvedLanguage)
 			if smtpErr := probe.TestSMTP(); smtpErr != nil {
 				log.Printf("warning: email.configured=false: SMTP connection test failed after config reload; email notifications disabled: %v", smtpErr)
 			} else {
@@ -1544,19 +1551,6 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		return nil
 	}))
 
-	// Branding image refresh (PART 16 "Image Scaling"): re-fetches/re-renders
-	// the cached favicon/logo/OG-image variants on the operator-configured
-	// cadence (default 24h) so a remote branding URL's content changes
-	// eventually propagate without requiring a restart.
-	logSchedErr(sched.Register("branding_refresh", "Branding Image Refresh",
-		fmt.Sprintf("@every %s", cfg.Server.Branding.EffectiveImageRefreshInterval()), true, func(ctx context.Context) error {
-			if err := srv.RefreshBrandingImages(); err != nil {
-				return err
-			}
-			log.Printf("scheduler: branding images refreshed")
-			return nil
-		}))
-
 	// Tor health check — registered after srv so it can query srv.TorRunning().
 	logSchedErr(sched.Register("tor_health", "Tor Health", "@every 10m", srv.TorEnabled(),
 		task.TorHealth(srv.TorRunning, srv.TorRestart)))
@@ -1578,7 +1572,6 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 	// default with a 1h base delay; operators override per task in server.yml.
 	sched.SetRetry("blocklist_update", true, time.Hour, 0)
 	sched.SetRetry("cve_update", true, time.Hour, 0)
-	sched.SetRetry("branding_refresh", true, time.Hour, 0)
 	skippableTasks := map[string]bool{
 		"geoip_update": true, "blocklist_update": true, "cve_update": true,
 		"update_check": true, "backup_daily": true, "backup_hourly": true, "disk_check": true, "database_check": true,
@@ -1601,7 +1594,7 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 			}
 		}
 		if tc.RetryOnFail != nil || tc.RetryDelay != "" || tc.MaxRetries > 0 {
-			retryEnabled := id == "blocklist_update" || id == "cve_update" || id == "branding_refresh"
+			retryEnabled := id == "blocklist_update" || id == "cve_update"
 			if tc.RetryOnFail != nil {
 				retryEnabled = *tc.RetryOnFail
 			}
@@ -1710,9 +1703,6 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		switch listenHost {
 		case "", "0.0.0.0", "::", "[::]":
 			listenHost = cfg.ResolveFQDN()
-			if listenHost == "" {
-				listenHost = "localhost"
-			}
 		}
 		listenPort := cfg.Server.Port
 		if strings.Contains(listenPort, ",") {
@@ -1720,9 +1710,12 @@ func run(rawArgs []string, stdout, stderr io.Writer) int {
 		} else if (proto == "http" && listenPort == "80") || (proto == "https" && listenPort == "443") {
 			listenPort = ""
 		}
-		listenURL := proto + "://" + listenHost
-		if listenPort != "" {
-			listenURL += ":" + listenPort
+		listenURL := ""
+		if listenHost != "" {
+			listenURL = proto + "://" + listenHost
+			if listenPort != "" {
+				listenURL += ":" + listenPort
+			}
 		}
 		srv.SetStartupBannerFn(func() {
 			// Overlay URLs are only included after their managed services finish
@@ -2543,7 +2536,7 @@ func schedulerNotifier(cfg *config.Config, auditW *audit.Writer) scheduler.Notif
 		if to == "" {
 			return
 		}
-		m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.Server.FQDN, cfg.Server.Lang)
+		m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, startupBaseURL(cfg), cfg.ResolveFQDN(), cfg.Server.Lang)
 		if !m.Enabled() {
 			return
 		}

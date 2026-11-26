@@ -311,7 +311,8 @@ func TestCertNeedsRenewal(t *testing.T) {
 		want     bool
 	}{
 		{"expires in 3 days", time.Now().Add(3 * 24 * time.Hour), true},
-		{"expires in 30 days", time.Now().Add(30 * 24 * time.Hour), false},
+		{"expires in 31 days", time.Now().Add(31 * 24 * time.Hour), false},
+		{"expires in 30 days", time.Now().Add(30 * 24 * time.Hour), true},
 	}
 	for _, tc := range cases {
 		certPEM, _ := generateSelfSignedCert(t, "localhost", tc.notAfter)

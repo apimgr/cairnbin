@@ -108,7 +108,7 @@ func TestClearSiteDataValue(t *testing.T) {
 func TestSecurityHeadersSkipTLSSemanticsOverTor(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.TLS.Enabled = true
-	cfg.Server.FQDN = "example.com"
+	cfg.Server.Domain = "example.com"
 	cfg.Server.Tor.OnionAddress = "abcdefghij.onion"
 	s := newMinimalServer(cfg)
 

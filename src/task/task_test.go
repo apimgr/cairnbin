@@ -1,6 +1,7 @@
 package task_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -315,6 +316,74 @@ func TestBackupDaily_CreatesBackup(t *testing.T) {
 	// Expect at least one dated backup file.
 	if len(entries) == 0 {
 		t.Error("BackupDaily: no backup files created")
+	}
+}
+
+func TestBackupDailySecondFullUsesTimestampedName(t *testing.T) {
+	root := t.TempDir()
+	cfgDir := filepath.Join(root, "config")
+	dataDir := filepath.Join(root, "data")
+	bkpDir := filepath.Join(root, "backup")
+	for _, dir := range []string{cfgDir, filepath.Join(dataDir, "db"), bkpDir} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "server.yml"), []byte("mode: production\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := task.BackupConfig{
+		ProjectName: "cairnbin",
+		ConfigDir:   cfgDir,
+		DataDir:     dataDir,
+		BackupDir:   bkpDir,
+		AppVersion:  "v1.0.0",
+		Retention:   task.BackupRetention{MaxBackups: 5},
+	}
+	run := task.BackupDaily(cfg)
+	if err := run(context.Background()); err != nil {
+		t.Fatalf("first BackupDaily: %v", err)
+	}
+	entries, err := os.ReadDir(bkpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var firstName string
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "cairnbin_backup_") {
+			firstName = entry.Name()
+			break
+		}
+	}
+	if firstName == "" {
+		t.Fatalf("first full backup not found among %v", entries)
+	}
+	firstData, err := os.ReadFile(filepath.Join(bkpDir, firstName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := run(context.Background()); err != nil {
+		t.Fatalf("second BackupDaily: %v", err)
+	}
+	entries, err = os.ReadDir(bkpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fullCount := 0
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "cairnbin_backup_") {
+			fullCount++
+		}
+	}
+	if fullCount != 2 {
+		t.Fatalf("found %d full backups, want 2: %v", fullCount, entries)
+	}
+	got, err := os.ReadFile(filepath.Join(bkpDir, firstName))
+	if err != nil {
+		t.Fatalf("original full backup missing: %v", err)
+	}
+	if !bytes.Equal(got, firstData) {
+		t.Fatal("second full backup modified the original archive")
 	}
 }
 

@@ -105,7 +105,7 @@ func TestSecurityReportEmail_WithContactEmail(t *testing.T) {
 
 func TestSecurityReportEmail_FallsBackToSecurityEmail(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.FQDN = "paste.example.com"
+	cfg.Server.Domain = "paste.example.com"
 	cfg.Server.Contact.Security.Email = "security@example.com"
 	got := cfg.SecurityReportEmail()
 	if got != "security@example.com" {

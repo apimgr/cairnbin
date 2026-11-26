@@ -82,6 +82,13 @@ func TestBackupAndVerify_WithEncryption(t *testing.T) {
 		t.Fatalf("no backup file created: %v", err)
 	}
 	bkpPath := filepath.Join(bkpDir, entries[0].Name())
+	header, err := maintenance.ReadEncryptedBackupHeader(bkpPath)
+	if err != nil {
+		t.Fatalf("ReadEncryptedBackupHeader error: %v", err)
+	}
+	if got := maintenance.BackupKeyIDForPassword(opts.Password, header); got != header.KeyID {
+		t.Fatalf("backup key id = %q, header key id = %q", got, header.KeyID)
+	}
 
 	// Verify with correct password.
 	if err := maintenance.VerifyBackup(bkpPath, "s3cur3p@ssw0rd"); err != nil {

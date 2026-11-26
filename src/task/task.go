@@ -93,6 +93,8 @@ var sslEmailThresholds = []int{1, 3, 7}
 type SSLRenewalConfig struct {
 	ConfigDir string
 	FQDN      string
+	// Renew invokes the configured app-managed certificate renewal path.
+	Renew func(context.Context) error
 	// OperatorEmail is the admin recipient for ssl_expiring/ssl_renewed/
 	// ssl_renewal_failed emails.
 	OperatorEmail string
@@ -112,8 +114,7 @@ type SSLRenewalConfig struct {
 // expires within 30 days. ssl_expiring emails are sent only at the urgent
 // 7/3/1-day thresholds (30/14-day warnings are log-only per the Operator
 // Notifications matrix, AI.md:26824-26827) when a Mailer and OperatorEmail
-// are provided. Actual ACME renewal is delegated to autocert; this task
-// provides visibility and alerting only.
+// are provided.
 func SSLRenewal(configDir, fqdn string) func(ctx context.Context) error {
 	return SSLRenewalWithEmail(SSLRenewalConfig{ConfigDir: configDir, FQDN: fqdn})
 }
@@ -122,6 +123,18 @@ func SSLRenewal(configDir, fqdn string) func(ctx context.Context) error {
 // ssl_expiring emails at the PART 17 thresholds (30/14/7/3/1 days).
 func SSLRenewalWithEmail(cfg SSLRenewalConfig) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
+		if cfg.Renew != nil {
+			if err := cfg.Renew(ctx); err != nil {
+				if cfg.SendRenewalFailed && cfg.Mailer != nil && cfg.Mailer.Enabled() && cfg.OperatorEmail != "" {
+					if mailErr := cfg.Mailer.Send(cfg.OperatorEmail, "ssl_renewal_failed", map[string]string{
+						"fqdn": cfg.FQDN, "error": err.Error(), "expires_in": "", "expiry_date": "", "next_retry": "next daily ssl_renewal check",
+					}); mailErr != nil {
+						log.Printf("ssl_renewal: failed to send ssl_renewal_failed email: %v", mailErr)
+					}
+				}
+				return fmt.Errorf("ssl_renewal: renew app-managed certificate: %w", err)
+			}
+		}
 		certRoot := filepath.Join(cfg.ConfigDir, "ssl", "letsencrypt", cfg.FQDN)
 		if _, err := os.Stat(certRoot); os.IsNotExist(err) {
 			return nil
@@ -466,6 +479,92 @@ func LogRotation(rotator LogRotator) func(ctx context.Context) error {
 	}
 }
 
+func newestFullBackup(dir, projectName string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	prefix := projectName + "_backup_"
+	for i := len(entries) - 1; i >= 0; i-- {
+		entry := entries[i]
+	if entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) || (!strings.HasSuffix(entry.Name(), ".tar.gz") && !strings.HasSuffix(entry.Name(), ".tar.gz.enc")) {
+			continue
+		}
+		return filepath.Join(dir, entry.Name())
+	}
+	return ""
+}
+
+func createDailyIncremental(cfg BackupConfig, snapshotAt time.Time, extension string) (bool, error) {
+	basePath := newestFullBackup(cfg.BackupDir, cfg.ProjectName)
+	if basePath == "" {
+		log.Printf("backup_daily: no previous full backup; skipping daily incremental")
+		return false, nil
+	}
+	baseName := filepath.Base(basePath)
+	baseEncrypted := strings.HasSuffix(basePath, ".enc")
+	if baseEncrypted != (cfg.Password != "") {
+		log.Printf("backup_daily: backup encryption changed; skipping daily incremental based on %s", baseName)
+		return false, nil
+	}
+	if baseEncrypted {
+		if header, err := maintenance.ReadEncryptedBackupHeader(basePath); err == nil {
+			if maintenance.BackupKeyIDForPassword(cfg.Password, header) != header.KeyID {
+				log.Printf("backup_daily: backup password changed; skipping daily incremental based on %s", baseName)
+				return false, nil
+			}
+		} else if strings.HasPrefix(err.Error(), "invalid or truncated BKUP1 header") {
+			// Legacy encrypted backups have no public key id; successful manifest
+			// decryption below is the compatibility check.
+		} else {
+			log.Printf("backup_daily: corrupt base header in %s; skipping daily incremental: %v", baseName, err)
+			return false, nil
+		}
+	}
+	if err := maintenance.VerifyBackup(basePath, cfg.Password); err != nil {
+		log.Printf("backup_daily: corrupt base backup %s; skipping daily incremental: %v", baseName, err)
+		return false, nil
+	}
+	baseManifest, err := maintenance.ReadBackupManifest(basePath, cfg.Password)
+	if err != nil {
+		log.Printf("backup_daily: cannot read base manifest %s; skipping daily incremental: %v", baseName, err)
+		return false, nil
+	}
+	baseSHA, err := maintenance.FileSHA256(basePath)
+	if err != nil {
+		return false, fmt.Errorf("backup_daily: hash base backup: %w", err)
+	}
+	dailyName := fmt.Sprintf("%s-daily%s", cfg.ProjectName, extension)
+	stageName := dailyName + ".tmp"
+	stagePath := filepath.Join(cfg.BackupDir, stageName)
+	dailyPath := filepath.Join(cfg.BackupDir, dailyName)
+	if err := maintenance.Backup(maintenance.BackupOptions{
+		ConfigDir: cfg.ConfigDir, DataDir: cfg.DataDir, BackupDir: cfg.BackupDir,
+		AppVersion: cfg.AppVersion, Password: cfg.Password, Filename: stageName,
+		BaseBackup: baseName, BaseManifest: baseManifest, BaseSHA256: baseSHA,
+		SnapshotAt: snapshotAt, ComplianceEnabled: cfg.Compliance, Audit: cfg.Audit,
+	}); err != nil {
+		backupSendFailed(cfg, dailyName, err.Error())
+		auditBackupFailed(cfg, dailyName, err.Error())
+		return false, fmt.Errorf("backup_daily: create daily incremental: %w", err)
+	}
+	if err := maintenance.VerifyBackup(stagePath, cfg.Password); err != nil {
+		_ = os.Remove(stagePath)
+		backupSendFailed(cfg, dailyName, err.Error())
+		auditBackupVerificationFailed(cfg, dailyName, err.Error())
+		return false, fmt.Errorf("backup_daily: verify daily incremental: %w", err)
+	}
+	if err := os.Rename(stagePath, dailyPath); err != nil {
+		_ = os.Remove(stagePath)
+		backupSendFailed(cfg, dailyName, err.Error())
+		auditBackupFailed(cfg, dailyName, err.Error())
+		return false, fmt.Errorf("backup_daily: install daily incremental: %w", err)
+	}
+	log.Printf("backup_daily: daily incremental updated: %s", dailyName)
+	auditBackupDailyUpdated(cfg, dailyName)
+	return true, nil
+}
+
 // BackupDaily returns a task that runs the PART 21 backup protocol:
 //  1. Create a dated full backup using maintenance.Backup (with encryption if configured).
 //  2. Verify the backup immediately (6 checks per spec).
@@ -483,6 +582,8 @@ func BackupDaily(cfg BackupConfig) func(ctx context.Context) error {
 		if err := os.MkdirAll(cfg.BackupDir, 0o750); err != nil {
 			return fmt.Errorf("backup_daily: mkdir: %w", err)
 		}
+		// Use one instant for the whole scheduled backup run.
+		snapshotAt := time.Now().UTC()
 
 		// Compliance-mode pre-check (AI.md 28945-28989 / M11): skip rather than
 		// run an unencrypted backup when compliance mode requires a password.
@@ -505,10 +606,28 @@ func BackupDaily(cfg BackupConfig) func(ctx context.Context) error {
 			ext = ".tar.gz.enc"
 		}
 
-		// Step 1: full dated backup.
-		date := time.Now().Format("2006-01-02")
+		// Step 1: preserve the previous full-to-T0 delta before writing today's
+		// full snapshot. The rolling incremental is intentionally replaced.
+		if _, err := createDailyIncremental(cfg, snapshotAt, ext); err != nil {
+			return err
+		}
+
+		// Step 2: full dated backup. A second full on the same date uses the
+		// timestamped manual-backup form instead of replacing the first archive.
+		date := snapshotAt.Format("2006-01-02")
 		fullName := fmt.Sprintf("%s_backup_%s%s", cfg.ProjectName, date, ext)
 		fullPath := filepath.Join(cfg.BackupDir, fullName)
+		if _, err := os.Lstat(fullPath); err == nil {
+			fullName = fmt.Sprintf("%s_backup_%s%s", cfg.ProjectName, snapshotAt.Format("2006-01-02_150405"), ext)
+			fullPath = filepath.Join(cfg.BackupDir, fullName)
+			if _, err := os.Lstat(fullPath); err == nil {
+				return fmt.Errorf("backup_daily: timestamped backup already exists: %s", fullName)
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("backup_daily: check timestamped backup: %w", err)
+			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("backup_daily: check dated backup: %w", err)
+		}
 
 		if err := maintenance.Backup(maintenance.BackupOptions{
 			ConfigDir:         cfg.ConfigDir,
@@ -517,6 +636,7 @@ func BackupDaily(cfg BackupConfig) func(ctx context.Context) error {
 			AppVersion:        cfg.AppVersion,
 			Password:          cfg.Password,
 			Filename:          fullName,
+			SnapshotAt:        snapshotAt,
 			ComplianceEnabled: cfg.Compliance,
 			Audit:             cfg.Audit,
 		}); err != nil {
@@ -545,46 +665,7 @@ func BackupDaily(cfg BackupConfig) func(ctx context.Context) error {
 		backupSendComplete(cfg, fullName, fmt.Sprintf("%d KB", sizeKB))
 		auditBackupCreated(cfg, fullName, sizeBytes, cfg.Password != "")
 
-		// Step 3: create/replace the daily incremental.
-		dailyName := fmt.Sprintf("%s-daily%s", cfg.ProjectName, ext)
-		dailyPath := filepath.Join(cfg.BackupDir, dailyName)
-		dailyTmp := dailyPath + ".tmp"
-
-		if err := maintenance.Backup(maintenance.BackupOptions{
-			ConfigDir:         cfg.ConfigDir,
-			DataDir:           cfg.DataDir,
-			BackupDir:         cfg.BackupDir,
-			AppVersion:        cfg.AppVersion,
-			Password:          cfg.Password,
-			Filename:          dailyName + ".tmp",
-			ComplianceEnabled: cfg.Compliance,
-			Audit:             cfg.Audit,
-		}); err != nil {
-			_ = os.Remove(dailyTmp)
-			backupSendFailed(cfg, dailyName, err.Error())
-			auditBackupFailed(cfg, dailyName, err.Error())
-			return fmt.Errorf("backup_daily: create daily incremental: %w", err)
-		} else {
-			// Step 4: verify the daily incremental before replacing the existing one.
-			if err := maintenance.VerifyBackup(dailyTmp, cfg.Password); err != nil {
-				_ = os.Remove(dailyTmp)
-				backupSendFailed(cfg, dailyName, err.Error())
-				auditBackupVerificationFailed(cfg, dailyName, err.Error())
-				return fmt.Errorf("backup_daily: verification failed for %s: %w", dailyName, err)
-			} else {
-				if err := os.Rename(dailyTmp, dailyPath); err != nil {
-					_ = os.Remove(dailyTmp)
-					backupSendFailed(cfg, dailyName, err.Error())
-					auditBackupFailed(cfg, dailyName, err.Error())
-					return fmt.Errorf("backup_daily: install daily incremental: %w", err)
-				} else {
-					log.Printf("backup_daily: daily incremental updated: %s", dailyName)
-					auditBackupDailyUpdated(cfg, dailyName)
-				}
-			}
-		}
-
-		// Step 5: apply retention policy.
+		// Step 3: apply retention policy.
 		if err := applyRetention(cfg); err != nil {
 			log.Printf("backup_daily: retention warning: %v", err)
 		}

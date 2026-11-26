@@ -569,7 +569,7 @@ type securityEmailCtx struct {
 // delivered inline as an armored PGP message; an AES-256-GCM body is delivered as
 // an encrypted attachment with a warning that no PGP key was configured.
 func (s *Server) sendSecurityReportEmails(r *http.Request, cfg *config.Config, c securityEmailCtx) {
-	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, s.baseURL(r), cfg.Server.FQDN, cfg.Server.Lang)
+	m := email.New(&cfg.Server.Notifications.Email, cfg.Web.SiteTitle, s.baseURL(r), cfg.ResolveFQDN(), cfg.Server.Lang)
 	if !m.Enabled() {
 		return
 	}
@@ -589,7 +589,7 @@ func (s *Server) sendSecurityReportEmails(r *http.Request, cfg *config.Config, c
 				"Affected component: %s\r\n"+
 				"CVE requested: %s\r\n"+
 				"Requested disclosure window: %d days\r\n\r\n",
-			c.timestamp, cfg.Web.SiteTitle, cfg.Server.FQDN,
+			c.timestamp, cfg.Web.SiteTitle, cfg.ResolveFQDN(),
 			c.trackingID, c.severity, c.component, yn, c.disclosureDays)
 
 		var err error

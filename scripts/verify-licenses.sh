@@ -1,37 +1,41 @@
 #!/bin/bash
-# scripts/verify-licenses.sh
-# Verify all dependencies use compatible licenses (MIT/Apache/BSD/ISC/Public Domain).
-# Requires go-licenses — pre-installed in casjaysdev/go:latest; never install inline.
-# Run inside Docker: docker run --rm -v $PWD:/app -w /app casjaysdev/go:latest bash scripts/verify-licenses.sh
+# Verify shipped dependencies use compatible licenses.
+# Requires go-licenses, pre-installed in casjaysdev/go:latest; never install inline.
+# Run inside Docker: docker run --rm -v "$PWD":/app -w /app casjaysdev/go:latest bash scripts/verify-licenses.sh
 
 set -eo pipefail
 
 echo "Checking for incompatible licenses..."
 
 command -v go-licenses >/dev/null 2>&1 || {
-    echo "ERROR: go-licenses not found — run inside casjaysdev/go:latest"
-    exit 1
+    echo "ERROR: go-licenses not found — run inside casjaysdev/go:latest" >&2
+    exit 69
 }
 
-# Capture first - a scanner failure must abort (set -e), never read as "no match"
-echo "Scanning dependencies..."
-licenses=$(go-licenses csv ./...)
+echo "Scanning shipped dependencies..."
+mapfile -t IGNORE_ARGS < <(awk 'NF && $1 !~ /^#/ { printf "--ignore\n%s\n", $1 }' .github/license-overrides.txt 2>/dev/null || true)
+licenses=$(go-licenses csv ./src/... "${IGNORE_ARGS[@]}")
+OVERRIDE_REPORT=$(awk 'NF && $1 !~ /^#/ { print $1 "," $2 }' .github/license-overrides.txt 2>/dev/null || true)
+if [ -n "$OVERRIDE_REPORT" ]; then
+    licenses+=$'\n'"$OVERRIDE_REPORT"
+fi
 if echo "$licenses" | grep -iE 'GPL|AGPL|LGPL'; then
-    echo "ERROR: Copyleft license detected!"
-    echo "Remove the dependency or find an alternative."
+    echo "ERROR: Copyleft license detected!" >&2
+    echo "Remove the dependency or find an alternative." >&2
     exit 1
 fi
 
 echo "All licenses are compatible"
 
-echo "Generating license report..."
-go-licenses csv ./... > licenses.csv
-# modernc.org/mathutil is BSD-3-Clause but its license text is not classifiable by go-licenses; it is attributed in LICENSE.md
-go-licenses save ./... --force --ignore modernc.org/mathutil --save_path=third_party_licenses
+PROJECT_ORG=$(sed -n 's/^project_org:[[:space:]]*//p' IDEA.md | head -n1 | tr -d '[:space:]')
+INTERNAL_NAME=$(sed -n 's/^internal_name:[[:space:]]*//p' IDEA.md | head -n1 | tr -d '[:space:]')
+mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
+LICDIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
+trap 'rm -rf "$LICDIR"' EXIT
+go-licenses csv ./src/... "${IGNORE_ARGS[@]}" > "$LICDIR/licenses.csv"
+if [ -n "$OVERRIDE_REPORT" ]; then
+    printf '%s\n' "$OVERRIDE_REPORT" >> "$LICDIR/licenses.csv"
+fi
+go-licenses save ./src/... "${IGNORE_ARGS[@]}" --save_path="$LICDIR/third_party_licenses"
 
-echo "License report saved to licenses.csv and third_party_licenses/"
-echo ""
-echo "Next steps:"
-echo "1. Review licenses.csv"
-echo "2. Update LICENSE.md with any new dependencies"
-echo "3. Commit the changes"
+echo "License report generated in a temporary directory; temporary files are removed on exit."

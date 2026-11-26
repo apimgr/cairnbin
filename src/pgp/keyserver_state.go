@@ -54,7 +54,7 @@ func LoadKeyserverState(path, fingerprint string) (KeyserverStateFile, error) {
 	return state, nil
 }
 
-func WriteKeyserverState(path string, state KeyserverStateFile) error {
+func WriteKeyserverState(path string, state KeyserverStateFile) (retErr error) {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -68,7 +68,11 @@ func WriteKeyserverState(path string, state KeyserverStateFile) error {
 		return err
 	}
 	tempPath := file.Name()
-	defer os.Remove(tempPath)
+	defer func() {
+		if err := os.Remove(tempPath); retErr == nil && err != nil && !errors.Is(err, os.ErrNotExist) {
+			retErr = err
+		}
+	}()
 	if err := file.Chmod(0o600); err != nil {
 		_ = file.Close()
 		return err

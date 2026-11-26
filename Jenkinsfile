@@ -50,14 +50,14 @@ pipeline {
             steps {
                 script {
                     // Determine build type and version
-                    if (env.TAG_NAME) {
-                        // Release build (tag push) - matches release.yml
+                    if (env.TAG_NAME?.endsWith('-beta')) {
+                        // Beta build (YYYYMMDDHHMMSS-beta tag) - matches beta.yml
+                        env.BUILD_TYPE = 'beta'
+                        env.VERSION = env.TAG_NAME
+                    } else if (env.TAG_NAME) {
+                        // Stable release build (tag push) - matches release.yml
                         env.BUILD_TYPE = 'release'
                         env.VERSION = env.TAG_NAME.replaceFirst('^v', '')
-                    } else if (env.BRANCH_NAME == 'beta') {
-                        // Beta build - matches beta.yml
-                        env.BUILD_TYPE = 'beta'
-                        env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-beta'
                     } else if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
                         // Devel build - matches devel.yml
                         // Devel identity is the commit being built, not a timestamp
@@ -499,7 +499,7 @@ pipeline {
             }
         }
 
-        // Beta Release - matches beta.yml (beta branch only)
+        // Beta Release - matches beta.yml (beta tag only)
         stage('Release: Beta') {
             agent { label 'amd64' }
             when {
@@ -593,7 +593,7 @@ pipeline {
                         tags += " -t ${REGISTRY}:latest"
                         tags += " -t ${REGISTRY}:${yymm}"
                     } else if (env.BUILD_TYPE == 'beta') {
-                        // Beta branch - beta
+                        // Beta tag - beta
                         tags += " -t ${REGISTRY}:beta"
                     }
                     // else: all other branches get only the {commit_id} tag

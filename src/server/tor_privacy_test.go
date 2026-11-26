@@ -68,7 +68,7 @@ func TestTorRequestOnion(t *testing.T) {
 func TestBaseURLTorPriorityZero(t *testing.T) {
 	s := newTorTestServer("")
 	// server.base_url set: Tor detection must still win (priority 0).
-	s.cfg.Server.BaseURL = "https://paste.example.com"
+	s.cfg.Server.BaseURL = "/configured"
 	r := torRequest("/x")
 	r.Host = testOnion + ":80"
 	if got, want := s.baseURL(r), "http://"+testOnion; got != want {
