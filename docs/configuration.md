@@ -198,7 +198,7 @@ references.
 
 Operator page content lives under `server.branding.content` in `yaml.d/branding.yml`; see [Branding and SEO](#branding-and-seo-serverbranding-serverseo) for formats and language selection.
 
-`server.pages.contact` configures the contact form. Its antispam settings control signed form tokens, rate limits, blocked content, strikes, and duplicate detection. About, privacy, terms, header, and footer content use `server.branding.content`; help content remains under `server.pages.help`.
+`server.pages.contact` configures the contact form. Its antispam settings control signed form tokens, rate limits, blocked content, strikes, and duplicate detection. About, privacy, terms, header, and footer content use `server.branding.content`; help Markdown remains under `server.pages.help.content` and may be one string for every language or a language map. A map selects the resolved request language, then `default`, then its first key in alphabetical order.
 
 Configuration may be split between `server.yml` and the optional `yaml.d/`
 directory beside it. The server loads `server.yml` first, then regular `*.yml`
@@ -383,6 +383,11 @@ space is less than 2x the last backup size or disk usage exceeds
 `template/` and `theme/` directories; add `--include-ssl` for
 `{config_dir}/ssl/` and `--include-data` for `{data_dir}/` (excluding
 `db/` and the backup directory).
+
+Encrypted archives use the authenticated `BKUP1` header: it records the salt,
+Argon2id memory/iteration/parallelism values as big-endian 32-bit integers,
+nonce, eight-character key ID, and an optional UTF-8 base filename (maximum
+255 bytes). The complete header is authenticated as AES-GCM additional data.
 
 Restore applies hard limits from `server.restore`, aborting extraction
 when any is crossed:
