@@ -3,7 +3,6 @@
 [![CI](https://github.com/apimgr/cairnbin/actions/workflows/ci.yml/badge.svg)](https://github.com/apimgr/cairnbin/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/apimgr/cairnbin)](https://github.com/apimgr/cairnbin/releases)
 [![License](https://img.shields.io/github/license/apimgr/cairnbin)](LICENSE.md)
-[![Docs](https://readthedocs.org/projects/apimgr-cairnbin/badge/?version=latest)](https://apimgr-cairnbin.readthedocs.io)
 
 ## About
 
