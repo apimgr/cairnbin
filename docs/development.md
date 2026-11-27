@@ -114,20 +114,28 @@ The built-in scheduler runs the following tasks automatically:
 | `expire-pastes` | Every 10 min | Remove expired and burned pastes |
 | `ssl_renewal` | Daily 03:00 | Renew app-managed Let's Encrypt certificates when 30 days or fewer remain; warn and alert on expiring certificates |
 | `blocklist_update` | Daily 04:00 | Update IP/domain blocklists |
+| `security_cleanup` | Daily 03:30 | Remove expired closed security reports and retired PGP private keys |
 | `cve_update` | Daily 05:00 | Update CVE/NVD and Trivy vulnerability databases |
 | `update_check` | Daily 06:00 | Check the configured release channel; notify only unless automatic installation is enabled |
 | `backup_daily` | Daily 02:00 | Full backup and daily incremental backup |
+| `backup_hourly` | Hourly (disabled) | Hourly incremental backup |
 | `geoip_update` | Sunday 03:00 | Update GeoIP databases (only when GeoIP is enabled) |
 | `log_rotation` | Daily 00:00 | Rotate and compress logs |
 | `public_ip_refresh` | Every 12 hours | Refresh the cached public IP (also runs at startup) |
 | `ip_block_release` | Every minute | Release expired temporary IP blocks |
 | `token_cleanup` | Every 15 min | Expire CAPTCHA challenges and apply owner-token idle-purge policy |
-| `backup_hourly` | Hourly (disabled) | Hourly incremental backup |
+| `keyserver_retry` | Every 15 min | Retry due PGP public-key submissions |
 | `disk_check` | Every 5 min | Check available disk space and report low-space conditions |
+| `database_check` | Every minute by default | Probe the database and report configured consecutive failures |
 | `healthcheck_self` | Every 5 min | Self-health check |
 | `dataset_health` | Every 60 sec | Refresh cached data-set health checks without making health requests read data files |
 | `tor_health` | Every 10 min | Tor connectivity check |
 | `i2p_health` | Every 10 min when I2P is enabled | I2P connectivity check; startup is asynchronous and failure degrades health without stopping the HTTP listener |
+
+Schedules use `server.scheduler.timezone` (default `America/New_York`) and can be
+overridden under `server.scheduler.tasks` in `yaml.d/maintenance.yml`. Task
+state and execution history persist in the configured database; inspect or run
+tasks with the server binary's `--maintenance scheduler` commands.
 
 Remote branding images refresh lazily when a cached image is requested after
 24 hours. This fixed interval is part of the branding cache and is not a
