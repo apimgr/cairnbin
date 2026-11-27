@@ -56,6 +56,17 @@ The CLI reads these environment variables; explicit flags override their matchin
 
 Response caching and rotating logs can also be configured in `cli.yml` under `cache.*` and `logging.*`.
 
+## First-run connection setup
+
+When no server is configured, an interactive launch opens the setup flow for
+the detected display mode: the native GUI on a local desktop, the TUI in a
+terminal, or inline prompts when the TUI is disabled. The flow asks for a
+server URL and optional API token, tests the connection and token, and offers
+to save the connection or set it as the default. The GUI also offers a
+separate option to start automatically at login on Linux, macOS, and Windows.
+Noninteractive commands use the server selected by `--server`,
+`CAIRNBIN_SERVER_PRIMARY`, `cli.yml`, or the build's compiled default site.
+
 ## Commands
 
 ### create

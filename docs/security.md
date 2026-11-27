@@ -72,6 +72,8 @@
 
 Health responses never include connection strings, paths or configuration. Tor and I2P checks report `ok` while starting or healthy and `degraded` after startup failure or timeout; an unavailable overlay makes overall health `degraded` but does not stop clearnet service. Disabled overlays are omitted from checks. `/healthz` is an optional root alias for `/server/healthz`, mounted only when `server.healthz.root.enabled: true`. `/server/metrics` and `/metrics` are internal only; restrict them at the firewall or reverse proxy and protect them with the per-service bearer tokens under `server.metrics`.
 
+Database connection and schema migration failures keep the HTTP listener and health endpoint available. A connection failure enters maintenance and self-healing retries the connection; a migration failure remains in maintenance and is retried at the next start. When configured TLS cannot start, the server continues over HTTP, reports `checks.certificates_tls` as `error` (overall `degraded`), and retries certificate work through its scheduler.
+
 The browser owner token is carried by an `HttpOnly`, `SameSite=Strict` cookie. Its `Secure` attribute is omitted only when the request Host matches the configured `.b32.i2p` address, because I2P sites use plain HTTP; other requests keep the secure cookie behavior.
 
 Enabled GeoIP databases, blocklist sources, and configured NVD/Trivy data sets also appear as ordered `checks.geoip_*`, `checks.blocklist_*`, and `checks.data_*` fields. Their cached status is `ok`, `degraded`, or `error`; the health request itself does not scan or parse data files. The `dataset_health` scheduler refreshes these results every 60 seconds, and data update tasks refresh them after reloads.
