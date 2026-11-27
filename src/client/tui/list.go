@@ -22,6 +22,7 @@ type listModel struct {
 	err          error
 	server       string
 	lang         string
+	token        string
 }
 
 // pastesLoadedMsg carries the result of a fetchPastes call.
@@ -32,9 +33,15 @@ type pastesLoadedMsg struct {
 
 // newListModel creates an initialised list sub-model and fires the first load.
 func newListModel(server, lang string) (listModel, tea.Cmd) {
+	return newListModelWithToken(server, lang, "")
+}
+
+// newListModelWithToken creates a list model and authenticates its API calls when configured.
+func newListModelWithToken(server, lang, token string) (listModel, tea.Cmd) {
 	m := listModel{
 		server:  server,
 		lang:    lang,
+		token:   token,
 		loading: true,
 	}
 	return m, m.loadCmd()
@@ -44,8 +51,9 @@ func newListModel(server, lang string) (listModel, tea.Cmd) {
 func (m listModel) loadCmd() tea.Cmd {
 	server := m.server
 	lang := m.lang
+	token := m.token
 	return func() tea.Msg {
-		items, err := fetchPastes(server, lang, 1, 50)
+		items, err := fetchPastesWithToken(server, lang, token, 1, 50)
 		return pastesLoadedMsg{items: items, err: err}
 	}
 }

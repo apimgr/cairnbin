@@ -295,6 +295,9 @@ type Server struct {
 	geoipDB            *geoip.DB
 	sslManagerMu       sync.RWMutex
 	sslManager         *ssl.Manager
+	tlsHealthMu        sync.RWMutex
+	tlsHealthy         bool
+	tlsLoadedAt        time.Time
 	torManager         *tor.Manager
 	torServerPort      int
 	outboundHTTPClient atomic.Pointer[http.Client]
@@ -1110,6 +1113,7 @@ func New(db database.DB, cfg *config.Config, cfgMgr *config.ConfigManager, versi
 	s.resolvedProxyIPs = make(map[string][]net.IP)
 	s.registerBlocklistHealthChecks(cfg)
 	s.registerSecurityDataHealthChecks(cfg)
+	s.registerTLSHealthCheck(cfg)
 	s.ReloadBlocklists()
 
 	s.setupRoutes()
@@ -3560,12 +3564,11 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		domains := []string{fqdn}
 		tlsCfg, err := sslMgr.GetTLSConfig(domains)
 		if err != nil {
-			if ssl.ParseChallenge(cfg.Server.TLS.LetsEncrypt.Challenge) == "dns-01" {
-				return fmt.Errorf("ssl: dns-01 certificate request failed: %w", err)
-			}
-			log.Printf("ssl: TLS setup failed: %v — falling back to HTTP", err)
+			s.setTLSHealth(false)
+			log.Printf("warning: ssl: TLS setup failed; HTTPS is disabled for this run and the server is continuing over HTTP: %v", err)
 			// Fall through to plain HTTP so the server still starts.
 		} else if tlsCfg != nil {
+			s.setTLSHealth(true)
 			srv.TLSConfig = tlsCfg
 			// Wrap the router so autocert HTTP-01 challenges are handled on port 80.
 			srv.Handler = sslMgr.GetHTTPHandler(s.router)
@@ -3596,6 +3599,9 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 			case err := <-errCh:
 				return fmt.Errorf("serve https %s: %w", addr, err)
 			}
+		} else {
+			s.setTLSHealth(false)
+			log.Printf("warning: ssl: TLS setup returned no configuration; HTTPS is disabled for this run and the server is continuing over HTTP")
 		}
 	}
 
@@ -3662,11 +3668,16 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 	domains := []string{fqdn}
 	tlsCfg, err := sslMgr.GetTLSConfig(domains)
 	if err != nil {
-		return fmt.Errorf("dual-port: TLS setup failed for HTTPS on port %s: %w", httpsPort, err)
+		s.setTLSHealth(false)
+		log.Printf("warning: dual-port TLS setup failed; HTTPS is disabled for this run and the server is continuing on HTTP port %s: %v", httpPort, err)
+		return s.runHTTPOnly(ctx, cfg, host, httpPort, sslMgr.GetHTTPHandler(s.router), readTimeout, writeTimeout, idleTimeout)
 	}
 	if tlsCfg == nil {
-		return fmt.Errorf("dual-port: no TLS configuration available for HTTPS on port %s", httpsPort)
+		s.setTLSHealth(false)
+		log.Printf("warning: dual-port TLS setup returned no configuration; HTTPS is disabled for this run and the server is continuing on HTTP port %s", httpPort)
+		return s.runHTTPOnly(ctx, cfg, host, httpPort, sslMgr.GetHTTPHandler(s.router), readTimeout, writeTimeout, idleTimeout)
 	}
+	s.setTLSHealth(true)
 
 	httpsAddr := net.JoinHostPort(host, httpsPort)
 	httpAddr := net.JoinHostPort(host, httpPort)
@@ -3738,6 +3749,52 @@ func (s *Server) runDualPort(ctx context.Context, cfg *config.Config, host, http
 		return httpErr
 	case err := <-errCh:
 		return err
+	}
+}
+
+func (s *Server) runHTTPOnly(ctx context.Context, cfg *config.Config, host, port string, handler http.Handler, readTimeout, writeTimeout, idleTimeout time.Duration) error {
+	addr := net.JoinHostPort(host, port)
+	httpSrv := &http.Server{
+		Addr:         addr,
+		Handler:      handler,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
+		IdleTimeout:  idleTimeout,
+	}
+	if len(s.preparedListeners) > 1 {
+		for _, extra := range s.preparedListeners[1:] {
+			if extra != nil {
+				_ = extra.Close()
+			}
+		}
+		s.preparedListeners = s.preparedListeners[:1]
+	}
+	listeners, err := s.bindPrivilegedListenersAndDrop(addr)
+	if err != nil {
+		return fmt.Errorf("dual-port HTTP fallback: %w", err)
+	}
+	s.afterPrivilegeDrop(ctx, cfg)
+	s.startManagedNetworkServices(ctx)
+	ln, err := bindListenerAfterDrop(addr, listeners[0])
+	if err != nil {
+		return fmt.Errorf("dual-port HTTP fallback listen %s: %w", addr, err)
+	}
+	errCh := make(chan error, 1)
+	go func() {
+		if serveErr := httpSrv.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
+			errCh <- serveErr
+		}
+	}()
+	s.printStartupBanner()
+	s.serverStarted(cfg, addr)
+	select {
+	case <-ctx.Done():
+		s.shuttingDown.Store(true)
+		shut, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return httpSrv.Shutdown(shut)
+	case serveErr := <-errCh:
+		return fmt.Errorf("dual-port HTTP fallback serve %s: %w", addr, serveErr)
 	}
 }
 
@@ -7585,6 +7642,29 @@ func (s *Server) registerSecurityDataHealthChecks(cfg *config.Config) {
 			return info.ModTime(), foundDB && foundMetadata
 		})
 	}
+}
+
+func (s *Server) registerTLSHealthCheck(cfg *config.Config) {
+	if !cfg.Server.TLS.Enabled {
+		return
+	}
+	_ = s.datasetChecks.Register("certificates_tls", false, 0, func() (time.Time, bool) {
+		s.tlsHealthMu.RLock()
+		defer s.tlsHealthMu.RUnlock()
+		return s.tlsLoadedAt, s.tlsHealthy
+	})
+}
+
+func (s *Server) setTLSHealth(healthy bool) {
+	s.tlsHealthMu.Lock()
+	s.tlsHealthy = healthy
+	if healthy {
+		s.tlsLoadedAt = time.Now().UTC()
+	} else {
+		s.tlsLoadedAt = time.Time{}
+	}
+	s.tlsHealthMu.Unlock()
+	s.datasetChecks.Refresh(time.Now())
 }
 
 // buildBlocklists removes entries that overlap the networks this server always

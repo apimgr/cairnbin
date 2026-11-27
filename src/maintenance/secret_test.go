@@ -24,7 +24,7 @@ func secretFixture(t *testing.T) (SecretOptions, *config.Config, string) {
 		t.Fatal(err)
 	}
 	cfgPath := filepath.Join(cfgDir, "server.yml")
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.LoadFile(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestRotateEncryptionKey(t *testing.T) {
 		t.Fatalf("rotate: %v", err)
 	}
 
-	newCfg, err := config.Load(cfgPath)
+	newCfg, err := config.LoadFile(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}

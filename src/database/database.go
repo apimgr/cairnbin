@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -228,10 +229,14 @@ func dbCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
 
 // SQLiteDB implements DB for SQLite.
 type SQLiteDB struct {
-	db          *instrumentedSQLDB
-	driver      string
-	schemaReady atomic.Bool
+	db                *instrumentedSQLDB
+	driver            string
+	schemaReady       atomic.Bool
+	schemaMigrationMu sync.Mutex
+	schemaErr         atomic.Pointer[schemaFailure]
 }
+
+type schemaFailure struct{ err error }
 
 // PoolConfig mirrors server.database.pool from server.yml (AI.md PART 10). It
 // lives here rather than being imported from the config package so the database
@@ -271,14 +276,30 @@ func NewDatabaseWithPool(dbType, path string, pool PoolConfig) (DB, error) {
 // it; the libsql driver uses it when the URL carries no authToken parameter.
 // Driver aliases follow AI.md PART 3: sqlite/sqlite2/sqlite3 and libsql/turso.
 func NewDatabaseWithToken(dbType, path, token string, pool PoolConfig) (DB, error) {
+	db, err := newDatabaseWithToken(dbType, path, token, pool)
+	if db == nil && err != nil {
+		db = newUnavailableDB(err, func() (DB, error) {
+			return newDatabaseWithToken(dbType, path, token, pool)
+		})
+	}
+	return db, err
+}
+
+func newDatabaseWithToken(dbType, path, token string, pool PoolConfig) (DB, error) {
+	var db *SQLiteDB
+	var err error
 	switch strings.ToLower(strings.TrimSpace(dbType)) {
 	case "libsql", "turso":
-		return newLibSQLDB(path, token, pool)
+		db, err = newLibSQLDB(path, token, pool)
 	case "sqlite", "sqlite2", "sqlite3", "":
-		return newSQLiteDB(path, pool)
+		db, err = newSQLiteDB(path, pool)
 	default:
-		return newSQLiteDB(path, pool)
+		db, err = newSQLiteDB(path, pool)
 	}
+	if db == nil {
+		return nil, err
+	}
+	return db, err
 }
 
 func newSQLiteDB(path string, pool PoolConfig) (*SQLiteDB, error) {
@@ -307,17 +328,28 @@ func newSQLiteDB(path string, pool PoolConfig) (*SQLiteDB, error) {
 	db.SetConnMaxLifetime(pool.MaxLifetime)
 	db.SetConnMaxIdleTime(pool.MaxIdleTime)
 
-	if err := ensureSchema(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
 	store := &SQLiteDB{db: &instrumentedSQLDB{DB: db}, driver: "sqlite"}
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err = db.PingContext(checkCtx)
+	checkCancel()
+	if err != nil {
+		return store, fmt.Errorf("database connection check: %w", err)
+	}
+	if err := ensureSchema(db); err != nil {
+		store.setSchemaError(err)
+		return store, err
+	}
 	store.schemaReady.Store(true)
 	return store, nil
 }
 
 func ensureSchema(db *sql.DB) error {
+	ctx, cancel := dbCtx(dbMigrationTimeout)
+	defer cancel()
+	return ensureSchemaContext(ctx, db)
+}
+
+func ensureSchemaContext(ctx context.Context, db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS pastes (
 			id               TEXT PRIMARY KEY,
@@ -344,22 +376,22 @@ func ensureSchema(db *sql.DB) error {
 			id           TEXT PRIMARY KEY,
 			name         TEXT NOT NULL,
 			schedule     TEXT NOT NULL,
-			last_run     DATETIME,
-			last_status  TEXT NOT NULL DEFAULT 'pending',
-			last_error   TEXT NOT NULL DEFAULT '',
-			next_run     DATETIME,
+			last_run     INTEGER,
+			last_status  TEXT,
+			last_error   TEXT,
+			next_run     INTEGER,
 			run_count    INTEGER NOT NULL DEFAULT 0,
 			fail_count   INTEGER NOT NULL DEFAULT 0,
 			enabled      INTEGER NOT NULL DEFAULT 1
 		)`,
 		`CREATE TABLE IF NOT EXISTS scheduler_history (
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
-			task_id      TEXT NOT NULL REFERENCES scheduler_tasks(id),
-			started_at   DATETIME NOT NULL,
-			finished_at  DATETIME,
+			task_id      TEXT NOT NULL,
+			started_at   INTEGER NOT NULL,
+			finished_at  INTEGER,
 			status       TEXT NOT NULL,
-			error_msg    TEXT NOT NULL DEFAULT '',
-			duration_ms  INTEGER NOT NULL DEFAULT 0
+			error        TEXT,
+			duration_ms  INTEGER
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_sched_history_task ON scheduler_history(task_id)`,
 
@@ -533,68 +565,119 @@ func ensureSchema(db *sql.DB) error {
 		`ALTER TABLE api_tokens ADD COLUMN rotated_at INTEGER`,
 	}
 
-	ctx, cancel := dbCtx(dbMigrationTimeout)
-	defer cancel()
-
+	var secondary []string
 	for _, s := range stmts {
+		if isSecondarySchemaStatement(s) {
+			secondary = append(secondary, s)
+			continue
+		}
 		if _, err := db.ExecContext(ctx, s); err != nil {
-			return fmt.Errorf("schema: %w", err)
+			return schemaStatementError(s, err)
+		}
+	}
+	for _, s := range updates {
+		if err := applySchemaColumnAddition(ctx, db, s); err != nil {
+			return err
 		}
 	}
 	if err := migrateSchedulerSchema(ctx, db); err != nil {
-		return fmt.Errorf("schema scheduler migration: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_sched_history_started ON scheduler_history(started_at)`); err != nil {
-		return fmt.Errorf("schema scheduler history index: %w", err)
-	}
-
-	for _, s := range updates {
-		if _, err := db.ExecContext(ctx, s); err != nil {
-			if !isAlreadyExists(err) {
-				return fmt.Errorf("schema update: %w", err)
-			}
-		}
+		return fmt.Errorf("schema migration table scheduler_tasks/scheduler_history statement migrateSchedulerSchema: %w", err)
 	}
 	if err := ensureRateLimitPreviousCount(ctx, db); err != nil {
-		return fmt.Errorf("schema rate limit migration: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_api_tokens_owner ON api_tokens(owner_id)`); err != nil {
-		return fmt.Errorf("schema owner index: %w", err)
+		return fmt.Errorf("schema migration table rate_limits statement ensureRateLimitPreviousCount: %w", err)
 	}
 	publicUUID := `lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',(random() & 3) + 1,1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))`
-	if _, err := db.ExecContext(ctx, `UPDATE api_tokens SET public_id = `+publicUUID+` WHERE public_id = ''`); err != nil {
-		return fmt.Errorf("schema token public id migration: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_public_id ON api_tokens(public_id) WHERE public_id <> ''`); err != nil {
-		return fmt.Errorf("schema token public id index: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, `CREATE TRIGGER IF NOT EXISTS trg_api_tokens_public_id AFTER INSERT ON api_tokens WHEN NEW.public_id = '' BEGIN UPDATE api_tokens SET public_id = `+publicUUID+` WHERE id = NEW.id; END`); err != nil {
-		return fmt.Errorf("schema token public id trigger: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_owner_name ON api_tokens(owner_id, name) WHERE kind = 'linked' AND name IS NOT NULL`); err != nil {
-		return fmt.Errorf("schema owner token name index: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_owner_primary ON api_tokens(owner_id) WHERE kind = 'primary' AND owner_id <> ''`); err != nil {
-		return fmt.Errorf("schema owner primary index: %w", err)
+	statement := `UPDATE api_tokens SET public_id = ` + publicUUID + ` WHERE public_id = ''`
+	if _, err := db.ExecContext(ctx, statement); err != nil {
+		return schemaStatementError(statement, err)
 	}
 	if err := migrateLegacyOwners(ctx, db); err != nil {
-		return fmt.Errorf("schema owner migration: %w", err)
+		return fmt.Errorf("schema migration table owners/api_tokens/pastes statement migrateLegacyOwners: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO owners(id) VALUES ('system')`); err != nil {
-		return fmt.Errorf("schema system owner: %w", err)
+	statement = `INSERT OR IGNORE INTO owners(id) VALUES ('system')`
+	if _, err := db.ExecContext(ctx, statement); err != nil {
+		return schemaStatementError(statement, err)
+	}
+	for _, statement := range append(secondary, `CREATE INDEX IF NOT EXISTS idx_sched_history_started ON scheduler_history(started_at)`, `CREATE INDEX IF NOT EXISTS idx_api_tokens_owner ON api_tokens(owner_id)`, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_public_id ON api_tokens(public_id) WHERE public_id <> ''`, `CREATE TRIGGER IF NOT EXISTS trg_api_tokens_public_id AFTER INSERT ON api_tokens WHEN NEW.public_id = '' BEGIN UPDATE api_tokens SET public_id = `+publicUUID+` WHERE id = NEW.id; END`, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_owner_name ON api_tokens(owner_id, name) WHERE kind = 'linked' AND name IS NOT NULL`, `CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_owner_primary ON api_tokens(owner_id) WHERE kind = 'primary' AND owner_id <> ''`) {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			return schemaStatementError(statement, err)
+		}
 	}
 
 	return nil
 }
 
-func ensureRateLimitPreviousCount(ctx context.Context, db *sql.DB) (resultErr error) {
-	rows, err := db.QueryContext(ctx, `PRAGMA table_info(rate_limits)`)
+func isSecondarySchemaStatement(statement string) bool {
+	statement = strings.ToUpper(strings.TrimSpace(statement))
+	return strings.HasPrefix(statement, "CREATE INDEX ") || strings.HasPrefix(statement, "CREATE UNIQUE INDEX ") || strings.HasPrefix(statement, "CREATE TRIGGER ")
+}
+
+func applySchemaColumnAddition(ctx context.Context, db *sql.DB, statement string) error {
+	fields := strings.Fields(statement)
+	if len(fields) < 6 || !strings.EqualFold(fields[0], "ALTER") || !strings.EqualFold(fields[1], "TABLE") || !strings.EqualFold(fields[3], "ADD") || !strings.EqualFold(fields[4], "COLUMN") {
+		return fmt.Errorf("schema migration table unknown statement %q: unsupported column migration", statement)
+	}
+	table, column := strings.Trim(fields[2], "`\"[];"), strings.Trim(fields[5], "`\"[];")
+	columns, err := sqliteTableColumns(ctx, db, table)
 	if err != nil {
 		return err
 	}
+	if columns[column] {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, statement); err != nil && !isAlreadyExists(err) {
+		return schemaStatementError(statement, err)
+	}
+	return nil
+}
+
+func schemaStatementError(statement string, cause error) error {
+	table := "unknown"
+	fields := strings.Fields(strings.TrimSpace(statement))
+	if len(fields) >= 2 {
+		verb := strings.ToUpper(fields[0])
+		if verb == "CREATE" {
+			objectType := strings.ToUpper(strings.Join(fields[:min(len(fields), 3)], " "))
+			if strings.Contains(objectType, "INDEX") || strings.Contains(objectType, "TRIGGER") {
+				for i, field := range fields {
+					if strings.EqualFold(field, "ON") && i+1 < len(fields) {
+						table = fields[i+1]
+						break
+					}
+				}
+			} else {
+				for i, field := range fields {
+					if strings.EqualFold(field, "EXISTS") && i+1 < len(fields) {
+						table = fields[i+1]
+						break
+					}
+				}
+			}
+		} else if verb == "ALTER" || verb == "INSERT" || verb == "DELETE" {
+			for i, field := range fields {
+				if (strings.EqualFold(field, "TABLE") || strings.EqualFold(field, "INTO") || strings.EqualFold(field, "FROM")) && i+1 < len(fields) {
+					table = fields[i+1]
+					break
+				}
+			}
+		} else if verb == "UPDATE" {
+			table = fields[1]
+		}
+	}
+	table = strings.Trim(table, "`\"[];")
+	return fmt.Errorf("schema migration table %s statement %q: %w", table, strings.Join(fields, " "), cause)
+}
+
+func ensureRateLimitPreviousCount(ctx context.Context, db *sql.DB) (resultErr error) {
+	statement := `PRAGMA table_info(rate_limits)`
+	rows, err := db.QueryContext(ctx, statement)
+	if err != nil {
+		return fmt.Errorf("schema migration table rate_limits statement %q: %w", statement, err)
+	}
+	queryStatement := statement
 	defer func() {
 		if closeErr := rows.Close(); resultErr == nil && closeErr != nil {
-			resultErr = closeErr
+			resultErr = fmt.Errorf("schema migration table rate_limits statement %q: %w", queryStatement, closeErr)
 		}
 	}()
 	for rows.Next() {
@@ -603,26 +686,33 @@ func ensureRateLimitPreviousCount(ctx context.Context, db *sql.DB) (resultErr er
 		var notNull, primaryKey int
 		var defaultValue sql.NullString
 		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			return err
+			return fmt.Errorf("schema migration table rate_limits statement %q: %w", statement, err)
 		}
 		if name == "prev_count" {
-			return rows.Err()
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("schema migration table rate_limits statement %q: %w", statement, err)
+			}
+			return nil
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return fmt.Errorf("schema migration table rate_limits statement %q: %w", statement, err)
 	}
-	_, err = db.ExecContext(ctx, `ALTER TABLE rate_limits ADD COLUMN prev_count INTEGER NOT NULL DEFAULT 0`)
-	return err
+	statement = `ALTER TABLE rate_limits ADD COLUMN prev_count INTEGER NOT NULL DEFAULT 0`
+	if _, err := db.ExecContext(ctx, statement); err != nil {
+		return fmt.Errorf("schema migration table rate_limits statement %q: %w", statement, err)
+	}
+	return nil
 }
 
 // migrateLegacyOwners upgrades resource-bound tokens to stable anonymous owners.
 // Each legacy token becomes the primary token for its former resource; existing
 // paste rows retain access through the newly assigned owner_id.
 func migrateLegacyOwners(ctx context.Context, db *sql.DB) error {
-	rows, err := db.QueryContext(ctx, `SELECT id, resource_type, resource_id FROM api_tokens WHERE owner_id = ''`)
+	statement := `SELECT id, resource_type, resource_id FROM api_tokens WHERE owner_id = ''`
+	rows, err := db.QueryContext(ctx, statement)
 	if err != nil {
-		return err
+		return fmt.Errorf("schema migration table api_tokens statement %q: %w", statement, err)
 	}
 	type legacyToken struct {
 		id           int64
@@ -634,35 +724,41 @@ func migrateLegacyOwners(ctx context.Context, db *sql.DB) error {
 		var rec legacyToken
 		if err := rows.Scan(&rec.id, &rec.resourceType, &rec.resourceID); err != nil {
 			_ = rows.Close()
-			return err
+			return fmt.Errorf("schema migration table api_tokens statement %q: %w", statement, err)
 		}
 		records = append(records, rec)
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return err
+		return fmt.Errorf("schema migration table api_tokens statement %q: %w", statement, err)
 	}
 	if err := rows.Close(); err != nil {
-		return err
+		return fmt.Errorf("schema migration table api_tokens statement %q: %w", statement, err)
 	}
 	for _, rec := range records {
 		ownerID := fmt.Sprintf("legacy-%d", rec.id)
 		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("schema migration table owners statement BEGIN TRANSACTION: %w", err)
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO owners(id) VALUES (?)`, ownerID); err == nil {
-			_, err = tx.ExecContext(ctx, `UPDATE api_tokens SET owner_id = ?, kind = 'primary', resource_type = 'owner', resource_id = ? WHERE id = ?`, ownerID, ownerID, rec.id)
+		table := "owners"
+		statement = `INSERT OR IGNORE INTO owners(id) VALUES (?)`
+		if _, err = tx.ExecContext(ctx, statement, ownerID); err == nil {
+			table = "api_tokens"
+			statement = `UPDATE api_tokens SET owner_id = ?, kind = 'primary', resource_type = 'owner', resource_id = ? WHERE id = ?`
+			_, err = tx.ExecContext(ctx, statement, ownerID, ownerID, rec.id)
 		}
 		if err == nil && rec.resourceType == "paste" {
-			_, err = tx.ExecContext(ctx, `UPDATE pastes SET owner_id = ? WHERE id = ? AND owner_id = ''`, ownerID, rec.resourceID)
+			table = "pastes"
+			statement = `UPDATE pastes SET owner_id = ? WHERE id = ? AND owner_id = ''`
+			_, err = tx.ExecContext(ctx, statement, ownerID, rec.resourceID)
 		}
 		if err != nil {
 			_ = tx.Rollback()
-			return err
+			return fmt.Errorf("schema migration table %s statement %q: %w", table, statement, err)
 		}
 		if err := tx.Commit(); err != nil {
-			return err
+			return fmt.Errorf("schema migration table api_tokens statement COMMIT TRANSACTION: %w", err)
 		}
 	}
 	return nil
@@ -721,9 +817,39 @@ func (s *SQLiteDB) Type() string {
 
 // Ping verifies the database connection is alive.
 func (s *SQLiteDB) Ping() error {
+	if failure := s.schemaErr.Load(); failure != nil {
+		return fmt.Errorf("schema migration pending: %w", failure.err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	return s.db.PingContext(ctx)
+	err := s.db.PingContext(ctx)
+	cancel()
+	if err != nil {
+		return err
+	}
+	if !s.schemaReady.Load() {
+		s.schemaMigrationMu.Lock()
+		defer s.schemaMigrationMu.Unlock()
+		if failure := s.schemaErr.Load(); failure != nil {
+			return fmt.Errorf("schema migration pending: %w", failure.err)
+		}
+		if s.schemaReady.Load() {
+			return nil
+		}
+		migrationCtx, migrationCancel := dbCtx(dbMigrationTimeout)
+		defer migrationCancel()
+		if err := ensureSchemaContext(migrationCtx, s.db.DB); err != nil {
+			s.setSchemaError(err)
+			return err
+		}
+		s.schemaReady.Store(true)
+	}
+	return nil
+}
+
+func (s *SQLiteDB) setSchemaError(err error) {
+	if err != nil {
+		s.schemaErr.Store(&schemaFailure{err: err})
+	}
 }
 
 // CheckRateLimit atomically increments a persistent two-window counter and
@@ -1187,14 +1313,8 @@ func (s *SQLiteDB) DeleteBurnedPastes() (int64, error) {
 
 // UpsertSchedulerTask inserts or replaces a task's persistent state.
 func (s *SQLiteDB) UpsertSchedulerTask(t *TaskState) error {
-	var lastRun *time.Time
-	if !t.LastRun.IsZero() {
-		lastRun = &t.LastRun
-	}
-	var nextRun *time.Time
-	if !t.NextRun.IsZero() {
-		nextRun = &t.NextRun
-	}
+	lastRun := schedulerTimeValue(t.LastRun)
+	nextRun := schedulerTimeValue(t.NextRun)
 	enabled := 0
 	if t.Enabled {
 		enabled = 1
@@ -1277,10 +1397,6 @@ func (s *SQLiteDB) UpdateTaskRun(
 	taskID string, lastRun time.Time, status, lastError string,
 	runCount, failCount int64, nextRun time.Time,
 ) error {
-	var nextRunPtr *time.Time
-	if !nextRun.IsZero() {
-		nextRunPtr = &nextRun
-	}
 	ctx, cancel := dbCtx(dbWriteTimeout)
 	defer cancel()
 	_, err := s.db.ExecContext(ctx, `
@@ -1288,7 +1404,7 @@ func (s *SQLiteDB) UpdateTaskRun(
 		SET last_run = ?, last_status = ?, last_error = ?,
 		    run_count = ?, fail_count = ?, next_run = ?
 		WHERE id = ?`,
-		lastRun, status, lastError, runCount, failCount, nextRunPtr, taskID,
+		schedulerTimeValue(lastRun), status, lastError, runCount, failCount, schedulerTimeValue(nextRun), taskID,
 	)
 	return err
 }
@@ -1299,9 +1415,9 @@ func (s *SQLiteDB) RecordTaskHistory(h *TaskHistory) error {
 	defer cancel()
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO scheduler_history
-			(task_id, started_at, finished_at, status, error_msg, duration_ms)
+			(task_id, started_at, finished_at, status, error, duration_ms)
 		VALUES (?, ?, ?, ?, ?, ?)`,
-		h.TaskID, h.StartedAt, h.FinishedAt, h.Status, h.ErrorMsg, h.DurationMS,
+		h.TaskID, schedulerTimeValue(h.StartedAt), schedulerTimeValue(h.FinishedAt), h.Status, nullableText(h.ErrorMsg), h.DurationMS,
 	)
 	return err
 }
@@ -1315,7 +1431,7 @@ func (s *SQLiteDB) ListTaskHistory(taskID string, limit int) ([]*TaskHistory, er
 	ctx, cancel := dbCtx(dbReadTimeout)
 	defer cancel()
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT task_id, started_at, finished_at, status, error_msg, duration_ms
+		SELECT task_id, started_at, finished_at, status, error, duration_ms
 		FROM   scheduler_history
 		WHERE  task_id = ?
 		ORDER  BY started_at DESC
@@ -1327,9 +1443,23 @@ func (s *SQLiteDB) ListTaskHistory(taskID string, limit int) ([]*TaskHistory, er
 	var out []*TaskHistory
 	for rows.Next() {
 		h := &TaskHistory{}
-		if err := rows.Scan(&h.TaskID, &h.StartedAt, &h.FinishedAt, &h.Status, &h.ErrorMsg, &h.DurationMS); err != nil {
+		var startedAt, finishedAt any
+		var status, errorMsg sql.NullString
+		var durationMS sql.NullInt64
+		if err := rows.Scan(&h.TaskID, &startedAt, &finishedAt, &status, &errorMsg, &durationMS); err != nil {
 			return nil, err
 		}
+		h.StartedAt, err = schedulerTimeFromValue(startedAt)
+		if err != nil {
+			return nil, fmt.Errorf("decode scheduler history started_at: %w", err)
+		}
+		h.FinishedAt, err = schedulerTimeFromValue(finishedAt)
+		if err != nil {
+			return nil, fmt.Errorf("decode scheduler history finished_at: %w", err)
+		}
+		h.Status = status.String
+		h.ErrorMsg = errorMsg.String
+		h.DurationMS = durationMS.Int64
 		out = append(out, h)
 	}
 	return out, rows.Err()
@@ -1948,22 +2078,68 @@ type rowScanner interface {
 
 func scanTaskState(row rowScanner) (*TaskState, error) {
 	t := &TaskState{}
-	var lastRun, nextRun *time.Time
+	var lastRun, nextRun any
+	var lastStatus, lastError sql.NullString
 	var enabled int
 	err := row.Scan(
 		&t.TaskID, &t.TaskName, &t.Schedule,
-		&lastRun, &t.LastStatus, &t.LastError,
+		&lastRun, &lastStatus, &lastError,
 		&nextRun, &t.RunCount, &t.FailCount, &enabled,
 	)
 	if err != nil {
 		return nil, err
 	}
-	if lastRun != nil {
-		t.LastRun = *lastRun
+	if t.LastRun, err = schedulerTimeFromValue(lastRun); err != nil {
+		return nil, fmt.Errorf("decode scheduler task last_run: %w", err)
 	}
-	if nextRun != nil {
-		t.NextRun = *nextRun
+	if t.NextRun, err = schedulerTimeFromValue(nextRun); err != nil {
+		return nil, fmt.Errorf("decode scheduler task next_run: %w", err)
 	}
+	t.LastStatus = lastStatus.String
+	t.LastError = lastError.String
 	t.Enabled = enabled != 0
 	return t, nil
+}
+
+func schedulerTimeValue(value time.Time) any {
+	if value.IsZero() {
+		return nil
+	}
+	return value.Unix()
+}
+
+func schedulerTimeFromValue(value any) (time.Time, error) {
+	switch typed := value.(type) {
+	case nil:
+		return time.Time{}, nil
+	case int64:
+		return time.Unix(typed, 0).UTC(), nil
+	case int:
+		return time.Unix(int64(typed), 0).UTC(), nil
+	case float64:
+		return time.Unix(int64(typed), 0).UTC(), nil
+	case time.Time:
+		return typed.UTC(), nil
+	case []byte:
+		return schedulerTimeFromValue(string(typed))
+	case string:
+		if seconds, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64); err == nil {
+			return time.Unix(seconds, 0).UTC(), nil
+		}
+		for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.999999999Z07:00", "2006-01-02 15:04:05"} {
+			if parsed, err := time.Parse(layout, typed); err == nil {
+				return parsed.UTC(), nil
+			}
+		}
+		return time.Time{}, fmt.Errorf("unsupported timestamp %q", typed)
+	default:
+		return time.Time{}, fmt.Errorf("unsupported timestamp type %T", value)
+	}
+}
+
+func nullableText(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }

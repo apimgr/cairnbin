@@ -4,12 +4,16 @@ package gui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gogpu/ui/core/button"
+	"github.com/gogpu/ui/core/checkbox"
 	"github.com/gogpu/ui/core/scrollview"
 	"github.com/gogpu/ui/core/textfield"
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/widget"
+
+	"github.com/apimgr/cairnbin/src/client/setup"
 )
 
 // errColor is the text color used for inline error messages on every
@@ -21,20 +25,54 @@ var errColor = widget.RGBA8(220, 68, 68, 255)
 func (s *guiState) showSetup() {
 	s.serverField = textfield.New(
 		textfield.Placeholder(t("setup_server_url_label")),
+		textfield.InitialValue(s.config.Server),
+	)
+	s.tokenField = textfield.New(
+		textfield.Placeholder(t("setup_token_label")),
+		textfield.InitialValue(s.config.Token),
+		textfield.InputTypeOpt(textfield.TypePassword),
 	)
 
-	connectBtn := button.New(
-		button.TextOpt(t("setup_connect")),
+	testBtn := button.New(
+		button.TextOpt(t("setup_test_connection")),
 		button.OnClick(func() {
-			s.trySetupConnect()
+			s.testSetupConnection()
 		}),
 	)
+	connectBtn := button.New(
+		button.TextOpt(t("setup_connect")),
+		button.OnClick(func() { s.trySetupConnect() }),
+	)
+	cancelBtn := button.New(
+		button.TextOpt(t("setup_cancel")),
+		button.OnClick(func() {
+			if s.close != nil {
+				s.close()
+			}
+		}),
+	)
+	options := []widget.Widget{
+		checkbox.New(checkbox.Label(t("setup_save_config")), checkbox.Checked(s.saveConfig), checkbox.OnToggle(func(value bool) { s.saveConfig = value })),
+		checkbox.New(checkbox.Label(t("setup_set_default")), checkbox.Checked(s.setDefault), checkbox.OnToggle(func(value bool) { s.setDefault = value })),
+	}
+	if s.config.SetAutostart != nil {
+		options = append(options, checkbox.New(checkbox.Label(t("setup_start_on_login")), checkbox.Checked(s.startOnLogin), checkbox.OnToggle(func(value bool) { s.startOnLogin = value })))
+	}
 
 	children := []widget.Widget{
 		primitives.Text(t("setup_title")).FontSize(28).Bold(),
 		primitives.Text(t("setup_hint")).FontSize(14),
 		s.serverField,
-		connectBtn,
+		s.tokenField,
+		primitives.VBox(options...).Gap(4),
+		testBtn,
+		primitives.HBox(cancelBtn, connectBtn).Gap(8),
+	}
+	if s.setupInfo.Name != "" || s.setupInfo.Version != "" {
+		children = append(children, primitives.Text(tf("setup_server_info", "name", s.setupInfo.Name, "version", s.setupInfo.Version)))
+	}
+	if s.setupInfo.TokenKind != "" {
+		children = append(children, primitives.Text(tf("setup_token_kind", "kind", s.setupInfo.TokenKind)))
 	}
 	if s.setupErr != "" {
 		children = append(children, primitives.Text(s.setupErr).Color(errColor))
@@ -43,23 +81,80 @@ func (s *guiState) showSetup() {
 	s.app.SetRoot(primitives.Box(primitives.VBox(children...).Gap(12)).Padding(24))
 }
 
+// testSetupConnection validates the connection without changing configuration.
+func (s *guiState) testSetupConnection() {
+	server := strings.TrimRight(strings.TrimSpace(s.serverField.Text()), "/")
+	token := strings.TrimSpace(s.tokenField.Text())
+	if server == "" {
+		s.setupErr = t("setup_url_invalid")
+		s.showSetup()
+		return
+	}
+	if s.config.TestSetup == nil {
+		s.setupErr = t("setup_test_unavailable")
+		s.showSetup()
+		return
+	}
+	s.config.Server = server
+	s.config.Token = token
+	info, err := s.config.TestSetup(server, token)
+	if err != nil {
+		s.setupErr = tf("setup_test_failed", "error", err.Error())
+		s.showSetup()
+		return
+	}
+	s.setupInfo = info
+	s.setupErr = ""
+	s.showSetup()
+}
+
 // trySetupConnect validates and saves the entered server URL, then advances
 // to the list screen and kicks off the first paste fetch.
 func (s *guiState) trySetupConnect() {
-	url := s.serverField.Text()
+	url := strings.TrimRight(strings.TrimSpace(s.serverField.Text()), "/")
+	token := strings.TrimSpace(s.tokenField.Text())
 	if url == "" {
 		s.setupErr = t("setup_url_invalid")
 		s.showSetup()
 		return
 	}
-	if s.config.SaveURL != nil {
+	s.config.Server = url
+	s.config.Token = token
+	if s.config.TestSetup == nil {
+		s.setupErr = t("setup_test_unavailable")
+		s.showSetup()
+		return
+	}
+	info, err := s.config.TestSetup(url, token)
+	if err != nil {
+		s.setupErr = tf("setup_test_failed", "error", err.Error())
+		s.showSetup()
+		return
+	}
+	options := setup.Options{Server: url, Token: token, SaveToConfig: s.saveConfig, SetDefault: s.setDefault, StartOnLogin: s.startOnLogin}
+	if s.config.SaveSetup != nil {
+		if err := s.config.SaveSetup(options); err != nil {
+			s.setupErr = tf("setup_save_failed", "error", err.Error())
+			s.showSetup()
+			return
+		}
+	} else if s.config.SaveURL != nil && options.SaveToConfig {
 		if err := s.config.SaveURL(url); err != nil {
 			s.setupErr = tf("setup_save_failed", "error", err.Error())
 			s.showSetup()
 			return
 		}
 	}
+	if s.config.SetAutostart != nil && options.StartOnLogin {
+		if err := s.config.SetAutostart(true); err != nil {
+			s.setupErr = tf("setup_autostart_failed", "error", err.Error())
+			s.showSetup()
+			return
+		}
+	}
 	s.config.Server = url
+	s.config.Token = token
+	s.setupInfo = info
 	s.setupErr = ""
 	s.showList()
 	s.startRefresh()
@@ -110,7 +205,7 @@ func (s *guiState) showList() {
 // then re-renders the list screen with the fetched data or an error.
 func (s *guiState) startRefresh() {
 	s.listErr = ""
-	pastes, err := fetchPastes(s.config.Server, s.config.Lang, listPage, listPageSize)
+	pastes, err := fetchPastesWithToken(s.config.Server, s.config.Lang, s.config.Token, listPage, listPageSize)
 	if err != nil {
 		s.listErr = tf("list_error", "error", err.Error())
 		s.showList()
@@ -123,7 +218,7 @@ func (s *guiState) startRefresh() {
 // openPaste fetches a single paste's raw content and switches to the detail
 // screen.
 func (s *guiState) openPaste(id string) {
-	body, err := fetchPasteRaw(s.config.Server, s.config.Lang, id)
+	body, err := fetchPasteRawWithToken(s.config.Server, s.config.Lang, s.config.Token, id)
 	if err != nil {
 		s.listErr = tf("list_error", "error", err.Error())
 		s.showList()

@@ -39,11 +39,16 @@ const apiVersion = "v1"
 type apiClient struct {
 	server string
 	lang   string
+	token  string
 }
 
 // newAPIClient creates an apiClient with the given server base URL and language.
-func newAPIClient(server, lang string) *apiClient {
-	return &apiClient{server: server, lang: lang}
+func newAPIClient(server, lang string, token ...string) *apiClient {
+	a := &apiClient{server: server, lang: lang}
+	if len(token) > 0 {
+		a.token = token[0]
+	}
+	return a
 }
 
 // get performs a GET request, setting the standard GUI headers.
@@ -58,12 +63,20 @@ func (a *apiClient) get(path string) (*http.Response, error) {
 	if a.lang != "" {
 		req.Header.Set("Accept-Language", a.lang)
 	}
+	if a.token != "" {
+		req.Header.Set("Authorization", "Bearer "+a.token)
+	}
 	return hc.Do(req)
 }
 
 // fetchPastes retrieves a page of public pastes from the server.
 func fetchPastes(server, lang string, page, limit int) ([]PasteListItem, error) {
-	a := newAPIClient(server, lang)
+	return fetchPastesWithToken(server, lang, "", page, limit)
+}
+
+// fetchPastesWithToken retrieves a page of public pastes with optional API authentication.
+func fetchPastesWithToken(server, lang, token string, page, limit int) ([]PasteListItem, error) {
+	a := newAPIClient(server, lang, token)
 	path := fmt.Sprintf("/api/%s/pastes?page=%d&limit=%d", apiVersion, page, limit)
 	resp, err := a.get(path)
 	if err != nil {
@@ -84,7 +97,12 @@ func fetchPastes(server, lang string, page, limit int) ([]PasteListItem, error) 
 
 // fetchPasteRaw retrieves the raw text content of a single paste.
 func fetchPasteRaw(server, lang, id string) (string, error) {
-	a := newAPIClient(server, lang)
+	return fetchPasteRawWithToken(server, lang, "", id)
+}
+
+// fetchPasteRawWithToken retrieves raw content with optional API authentication.
+func fetchPasteRawWithToken(server, lang, token, id string) (string, error) {
+	a := newAPIClient(server, lang, token)
 	resp, err := a.get("/raw/" + url.PathEscape(id))
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", t("err_get"), err)

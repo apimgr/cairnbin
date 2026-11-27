@@ -46,7 +46,7 @@ func RunData(action, prefix string, opts DataOptions) error {
 	}
 
 	cfgPath := filepath.Join(opts.ConfigDir, "server.yml")
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.LoadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("data: load config: %w", err)
 	}

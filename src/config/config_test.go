@@ -73,7 +73,7 @@ func TestBackupEncryptionPasswordLoadsFromSecrets(t *testing.T) {
 	if err := os.WriteFile(secretsPath, []byte("server:\n  backup:\n    encryption_password: backup-secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestWebUIToastConfigDefaultsAndValidation(t *testing.T) {
 // ─── Save / Load round-trip ───────────────────────────────────────────────────
 
 // TestSaveAndLoad persists a config to a file and reloads it, verifying fields survive.
-func TestSaveAndLoad(t *testing.T) {
+func TestSaveAndLoadFile(t *testing.T) {
 	path := tempConfigPath(t)
 
 	orig := config.DefaultConfig()
@@ -180,7 +180,7 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	loaded, err := config.Load(path)
+	loaded, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestLoad_UnknownKeyReturnsError(t *testing.T) {
 	if err := os.WriteFile(path, []byte("server:\n  port: \"12345\"\n  unknown_option: true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "unknown_option") {
+	if _, err := config.LoadFile(path); err == nil || !strings.Contains(err.Error(), "unknown_option") {
 		t.Fatalf("Load error = %v; want an unknown-key error", err)
 	}
 }
@@ -215,7 +215,7 @@ func TestLoad_CreatesFileIfAbsent(t *testing.T) {
 		t.Fatal("expected file to not exist before Load")
 	}
 
-	_, err := config.Load(path)
+	_, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load on absent file: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestLoad_FirstRunDoesNotBakeEnvVars(t *testing.T) {
 
 	path := tempConfigPath(t)
 
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -246,14 +246,14 @@ func TestLoad_FirstRunDoesNotBakeEnvVars(t *testing.T) {
 	}
 
 	// Persisted file must contain canonical defaults, NOT the env-var values.
-	saved, err := config.Load(path)
+	saved, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load of saved file: %v", err)
 	}
 	// Clear env so we read the file value only.
 	t.Setenv("MODE", "")
 	t.Setenv("DEBUG", "")
-	savedNoEnv, err := config.Load(path)
+	savedNoEnv, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load of saved file (no env): %v", err)
 	}
@@ -270,7 +270,7 @@ func TestLoadEnv_PORT(t *testing.T) {
 	t.Setenv("PORT", "9999")
 
 	path := tempConfigPath(t)
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestLoadEnv_SITE_TITLE(t *testing.T) {
 	t.Setenv("SITE_TITLE", "MyPaste")
 
 	path := tempConfigPath(t)
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestLoadEnv_MAX_SIZE_BYTES(t *testing.T) {
 	t.Setenv("MAX_SIZE_BYTES", "5242880")
 
 	path := tempConfigPath(t)
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestLoadEnv_MAX_SIZE(t *testing.T) {
 	t.Setenv("MAX_SIZE", "5mb")
 
 	path := tempConfigPath(t)
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -414,9 +414,9 @@ func TestLoadEncryptsDNSCredentialsAtRest(t *testing.T) {
 	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
-		t.Fatalf("Load(): %v", err)
+		t.Fatalf("LoadFile(): %v", err)
 	}
 	got, err := cfg.DecryptDNSCredentials()
 	if err != nil || got["DO_AUTH_TOKEN"] != "top-secret-token" {
@@ -447,7 +447,7 @@ func TestLoadEncryptsDNSCredentialsFromDropInDespiteOtherTypeError(t *testing.T)
 	if err := os.WriteFile(dropInPath, []byte("server:\n  ssl:\n    letsencrypt:\n      dns_credentials:\n        DO_AUTH_TOKEN: drop-in-secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, _ := config.Load(configPath)
+	cfg, _ := config.LoadFile(configPath)
 	creds, err := cfg.DecryptDNSCredentials()
 	if err != nil || creds["DO_AUTH_TOKEN"] != "drop-in-secret" {
 		t.Fatalf("DecryptDNSCredentials() = (%v, %v)", creds, err)
@@ -473,9 +473,9 @@ func TestLoadMigratesLegacyTLSConfigKey(t *testing.T) {
 	if err := os.WriteFile(path, []byte("server:\n  tls:\n    enabled: true\n    min_version: TLS1.3\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
-		t.Fatalf("Load(): %v", err)
+		t.Fatalf("LoadFile(): %v", err)
 	}
 	if !cfg.Server.TLS.Enabled || cfg.Server.TLS.MinVersion != "TLS1.3" {
 		t.Fatalf("legacy TLS values were lost: %+v", cfg.Server.TLS)
@@ -505,9 +505,9 @@ func TestLoadMigratesLegacyTLSDropInWithFieldPrecedence(t *testing.T) {
 	if err := os.WriteFile(dropInPath, []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
-		t.Fatalf("Load(): %v", err)
+		t.Fatalf("LoadFile(): %v", err)
 	}
 	if !cfg.Server.TLS.Enabled {
 		t.Fatal("later legacy drop-in did not override base SSL setting")
@@ -597,7 +597,7 @@ func TestResolvePort_RandomPort(t *testing.T) {
 	}
 
 	// Re-loading must return the same port.
-	loaded, err := config.Load(path)
+	loaded, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load after ResolvePort: %v", err)
 	}
@@ -1222,7 +1222,7 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	if err := os.WriteFile(path, []byte(":::invalid: yaml: [\n"), 0o640); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	// err may or may not be set depending on implementation; what matters is that
 	// cfg is not nil (the server must always get a usable config struct).
 	if cfg == nil && err != nil {
@@ -1233,7 +1233,7 @@ func TestLoad_InvalidYAML(t *testing.T) {
 // ─── LoadEnv all vars ─────────────────────────────────────────────────────────
 
 // TestLoadEnv_AllVars verifies that every env var handled by loadEnv is picked
-// up by Load(). Each sub-test sets one env var and asserts the corresponding
+// up by LoadFile(). Each sub-test sets one env var and asserts the corresponding
 // config field is populated.
 func TestLoadEnv_AllVars(t *testing.T) {
 	cases := []struct {
@@ -1479,7 +1479,7 @@ func TestLoadEnv_AllVars(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(tc.key, tc.value)
 			path := tempConfigPath(t)
-			cfg, err := config.Load(path)
+			cfg, err := config.LoadFile(path)
 			if err != nil {
 				t.Fatalf("Load: %v", err)
 			}
@@ -1503,7 +1503,7 @@ func TestLoad_EnvOverridesFileValue(t *testing.T) {
 	// Override with env.
 	t.Setenv("PORT", "22222")
 
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1517,7 +1517,7 @@ func TestDatabaseEnvironmentSeedsOnlyFirstRunAndStoresCredentialURLAsSecret(t *t
 	t.Setenv("DATABASE_DRIVER", "sqlite")
 	t.Setenv("CACHE_URL", "valkey://cache.example.com:6379")
 	path := tempConfigPath(t)
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("first Load: %v", err)
 	}
@@ -1544,7 +1544,7 @@ func TestDatabaseEnvironmentSeedsOnlyFirstRunAndStoresCredentialURLAsSecret(t *t
 	t.Setenv("DATABASE_URL", "libsql://other.example.com?authToken=ignored-secret")
 	t.Setenv("DATABASE_DRIVER", "sqlite")
 	t.Setenv("CACHE_URL", "redis://other-cache.example.com:6379")
-	loaded, err := config.Load(path)
+	loaded, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("second Load: %v", err)
 	}
@@ -1677,7 +1677,7 @@ func TestLoad_UnknownKeyStillGeneratesSecrets(t *testing.T) {
 	if err := os.WriteFile(path, []byte(in), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err == nil || !strings.Contains(err.Error(), "unknown_option") {
 		t.Fatalf("Load error = %v, want unknown_option error", err)
 	}
@@ -1745,7 +1745,7 @@ func TestLoad_LegacyTopLevelRateLimitMigrates(t *testing.T) {
 	if err := os.WriteFile(path, []byte(in), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1762,7 +1762,7 @@ func TestLoad_ServerRateLimitWinsOverLegacy(t *testing.T) {
 	if err := os.WriteFile(path, []byte(in), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

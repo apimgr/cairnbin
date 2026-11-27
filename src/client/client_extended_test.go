@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/apimgr/cairnbin/src/client/setup"
 )
 
 // cliConfigPath's darwin/XDG branches moved with the function itself to the
@@ -55,6 +57,51 @@ func TestSaveCLIConfigURL_CreatesNewFile(t *testing.T) {
 	}
 	if cfg.Server.Primary != "https://fresh.example.com" {
 		t.Errorf("Server = %q; want https://fresh.example.com", cfg.Server.Primary)
+	}
+}
+
+func TestSaveCLISetupDoesNotAssociateTokenWithAnotherPrimary(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "cli.yml")
+	t.Setenv("CLI_CONFIG", cfgFile)
+	if err := os.WriteFile(cfgFile, []byte("server:\n  primary: https://existing.example.com\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveCLISetup(setup.Options{
+		Server:       "https://new.example.com",
+		Token:        "own_test-token",
+		SaveToConfig: true,
+	}); err != nil {
+		t.Fatalf("saveCLISetup: %v", err)
+	}
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		t.Fatalf("loadCLIConfig: %v", err)
+	}
+	if cfg.Server.Primary != "https://existing.example.com" {
+		t.Errorf("primary = %q, want existing server", cfg.Server.Primary)
+	}
+	if cfg.Auth.Token != "" {
+		t.Errorf("token = %q, want no token saved for a different primary server", cfg.Auth.Token)
+	}
+}
+
+func TestSaveCLISetupSetDefaultReplacesPrimary(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "cli.yml")
+	t.Setenv("CLI_CONFIG", cfgFile)
+	if err := os.WriteFile(cfgFile, []byte("server:\n  primary: https://existing.example.com\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveCLISetup(setup.Options{Server: "https://new.example.com", SetDefault: true}); err != nil {
+		t.Fatalf("saveCLISetup: %v", err)
+	}
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		t.Fatalf("loadCLIConfig: %v", err)
+	}
+	if cfg.Server.Primary != "https://new.example.com" {
+		t.Errorf("primary = %q, want selected default", cfg.Server.Primary)
 	}
 }
 

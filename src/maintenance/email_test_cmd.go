@@ -45,7 +45,7 @@ func RunEmail(action string, opts EmailOptions) error {
 	if action != "test" {
 		return errors.New(i18n.TranslateFormat(lang, "cli.email_unknown_action", i18n.Args("action", action)))
 	}
-	cfg, err := config.Load(filepath.Join(opts.ConfigDir, "server.yml"))
+	cfg, err := config.LoadFile(filepath.Join(opts.ConfigDir, "server.yml"))
 	if err != nil {
 		return fmt.Errorf("email test: load config: %w", err)
 	}

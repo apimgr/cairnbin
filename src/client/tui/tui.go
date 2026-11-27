@@ -30,10 +30,16 @@ const (
 type ClientConfig struct {
 	// Server is the base URL of the cairnbin server (may be empty on first run).
 	Server string
+	// Token is the optional API token used by setup and subsequent API requests.
+	Token string
 	// Lang is the resolved Accept-Language locale string.
 	Lang string
 	// SaveURL persists a newly configured server URL to cli.yml.
 	SaveURL func(string) error
+	// TestSetup validates the server and optional API token before configuration changes.
+	TestSetup func(string, string) (SetupServerInfo, error)
+	// SaveSetup receives the connection and persistence options selected by the user.
+	SaveSetup func(SetupOptions) error
 	// CfgPath is the path to cli.yml (used for display in setup prompts).
 	CfgPath string
 	// Theme is the resolved tui.theme value from cli.yml ("dark", "light",
@@ -99,11 +105,14 @@ func newModel(cfg ClientConfig) Model {
 
 	if !checkServerURL(cfg.Server) {
 		m.state = stateSetup
-		m.setup = newSetupModel(cfg.SaveURL)
+		m.setup = newSetupWizard(cfg.Server, cfg.Token, true, false, cfg.TestSetup, cfg.SaveSetup)
+		if cfg.TestSetup == nil && cfg.SaveSetup == nil {
+			m.setup.saveURL = cfg.SaveURL
+		}
 	} else {
 		m.state = stateListing
 		var cmd tea.Cmd
-		m.list, cmd = newListModel(cfg.Server, cfg.Lang)
+		m.list, cmd = newListModelWithToken(cfg.Server, cfg.Lang, cfg.Token)
 		// cmd is consumed in Init.
 		_ = cmd
 	}
@@ -154,15 +163,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Setup wizard: URL saved — move to listing.
 	case serverURLSavedMsg:
-		m.cfg.Server = msg.url
+		m.cfg.Server = msg.options.Server
+		if m.cfg.Server == "" {
+			m.cfg.Server = msg.url
+		}
+		m.cfg.Token = msg.options.Token
+		m.setup.info = msg.info
 		m.state = stateListing
 		var cmd tea.Cmd
-		m.list, cmd = newListModel(m.cfg.Server, m.cfg.Lang)
+		m.list, cmd = newListModelWithToken(m.cfg.Server, m.cfg.Lang, m.cfg.Token)
 		return m, cmd
 
 	// Setup wizard: save error — display it in setup.
 	case serverURLErrorMsg:
 		m.setup.err = tf("setup_save_failed", "error", msg.err)
+		return m, nil
+
+	case setupTestErrorMsg:
+		m.setup.err = tf("setup_test_failed", "error", msg.err)
+		return m, nil
+
+	case serverSetupTestedMsg:
+		m.setup.info = msg.info
+		m.setup.err = ""
 		return m, nil
 
 	// List view: pastes loaded.
@@ -210,7 +233,7 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEnter && !prevList.searching {
 			if item := prevList.selectedItem(); item != nil {
 				var loadCmd tea.Cmd
-				m.detail, loadCmd = newDetailModel(m.cfg.Server, m.cfg.Lang, item.ID, m.width, m.height)
+				m.detail, loadCmd = newDetailModelWithToken(m.cfg.Server, m.cfg.Lang, m.cfg.Token, item.ID, m.width, m.height)
 				m.state = stateDetail
 				return m, loadCmd
 			}

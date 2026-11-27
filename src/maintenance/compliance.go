@@ -41,7 +41,7 @@ func RunCompliance(action string, opts ComplianceOptions) error {
 	}
 
 	cfgPath := filepath.Join(opts.ConfigDir, "server.yml")
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.LoadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("compliance: load config: %w", err)
 	}

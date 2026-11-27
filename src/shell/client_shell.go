@@ -25,7 +25,7 @@ func PrintClientCompletions(binName, shellName string) error {
 	case "fish":
 		printClientFish(binName)
 	case "sh", "dash", "ksh":
-		printClientPOSIX(binName)
+		return &NoProgrammableCompletionError{Shell: sh}
 	case "powershell":
 		printClientPowerShell(binName)
 	}
@@ -172,15 +172,6 @@ complete -c %s -n '__fish_seen_subcommand_from list' -l page  -d 'Page number' -
 		bin, bin, bin, bin, bin,
 		bin, bin, bin, bin, bin,
 		bin, bin)
-}
-
-func printClientPOSIX(bin string) {
-	fmt.Printf(`# POSIX sh/dash/ksh completion for %s — source this file
-# Usage: . <(%s --shell completions sh)
-if [ -n "$BASH_VERSION" ]; then
-    complete -W "--server --json --color --debug --version --help --shell create get delete list scheduler update version" %s
-fi
-`, bin, bin, bin)
 }
 
 func printClientPowerShell(bin string) {

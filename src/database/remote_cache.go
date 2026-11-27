@@ -47,31 +47,50 @@ type CachedDB struct {
 // NewDatabaseWithCache opens the configured database and optionally adds its
 // local SQLite read cache. Cache settings are ignored for the SQLite driver.
 func NewDatabaseWithCache(dbType, path, token string, pool PoolConfig, cacheConfig LocalCacheConfig) (DB, error) {
-	primary, err := NewDatabaseWithToken(dbType, path, token, pool)
+	db, err := newDatabaseWithCache(dbType, path, token, pool, cacheConfig)
+	if db == nil && err != nil {
+		db = newUnavailableDB(err, func() (DB, error) {
+			return newDatabaseWithCache(dbType, path, token, pool, cacheConfig)
+		})
+	}
+	return db, err
+}
+
+func newDatabaseWithCache(dbType, path, token string, pool PoolConfig, cacheConfig LocalCacheConfig) (DB, error) {
+	primary, err := newDatabaseWithToken(dbType, path, token, pool)
+	var startupErr error
 	if err != nil {
 		if !cacheConfig.Enabled || !cacheConfig.OfflineMode || !strings.EqualFold(strings.TrimSpace(dbType), "libsql") && !strings.EqualFold(strings.TrimSpace(dbType), "turso") {
-			return nil, err
-		}
-		openErr := err
-		primary, err = newLibSQLDBUninitialized(path, token, pool)
-		if err != nil {
-			return nil, errors.Join(openErr, err)
+			if primary == nil {
+				return nil, err
+			}
+			startupErr = err
+		} else {
+			openErr := err
+			fallback, fallbackErr := newLibSQLDBUninitialized(path, token, pool)
+			if fallbackErr != nil {
+				if primary == nil {
+					return nil, errors.Join(openErr, fallbackErr)
+				}
+				startupErr = errors.Join(openErr, fallbackErr)
+			} else {
+				primary = fallback
+			}
 		}
 	}
 	if !cacheConfig.Enabled || !strings.EqualFold(strings.TrimSpace(dbType), "libsql") && !strings.EqualFold(strings.TrimSpace(dbType), "turso") {
-		return primary, nil
+		return primary, startupErr
 	}
 	remote, ok := primary.(*SQLiteDB)
 	if !ok {
-		_ = primary.Close()
-		return nil, fmt.Errorf("database cache requires the libSQL driver")
+		return primary, errors.Join(startupErr, fmt.Errorf("database cache requires the libSQL driver"))
 	}
 	cached, err := newCachedDB(remote, cacheConfig, true)
 	if err != nil {
-		_ = remote.Close()
-		return nil, err
+		log.Printf("WARN: database cache unavailable; continuing with the configured database: %v", err)
+		return primary, startupErr
 	}
-	return cached, nil
+	return cached, startupErr
 }
 
 func newCachedDB(remote *SQLiteDB, cfg LocalCacheConfig, startBackgroundSync bool) (*CachedDB, error) {

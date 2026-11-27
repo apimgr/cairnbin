@@ -787,7 +787,7 @@ func restoreApplicationSecrets(configDir, dataDir string, records []database.App
 	if _, err := os.Stat(configPath); err != nil {
 		return fmt.Errorf("restored server.yml is unavailable: %w", err)
 	}
-	cfg, err := config.Load(configPath)
+	cfg, err := config.LoadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("load restored database configuration: %w", err)
 	}

@@ -29,7 +29,7 @@ func TestLoadMergesYAMLDropInsInFilenameOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cfg, err := Load(root)
+	cfg, err := LoadFile(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestLoadRejectsDuplicateAndNullDropInKeys(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dropDir, "broken.yml"), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := Load(root); err == nil || !strings.Contains(err.Error(), "broken.yml:") {
+		if _, err := LoadFile(root); err == nil || !strings.Contains(err.Error(), "broken.yml:") {
 			t.Fatalf("expected sourced parse error, got %v", err)
 		}
 	}
@@ -82,7 +82,7 @@ func TestLoadSecuresWritableDropInBeforeReading(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(root)
+	cfg, err := LoadFile(root)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,9 +1,11 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	// libSQL/Turso remote driver, registered as "libsql" (AI.md PART 3).
 	// Pure Go and remote-only, so it never pulls in cgo.
@@ -56,12 +58,17 @@ func newLibSQLDB(url, token string, pool PoolConfig) (*SQLiteDB, error) {
 	db.SetConnMaxLifetime(pool.MaxLifetime)
 	db.SetConnMaxIdleTime(pool.MaxIdleTime)
 
-	if err := ensureSchema(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
 	store := &SQLiteDB{db: &instrumentedSQLDB{DB: db}, driver: "libsql"}
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err = db.PingContext(checkCtx)
+	checkCancel()
+	if err != nil {
+		return store, fmt.Errorf("database connection check: %w", err)
+	}
+	if err := ensureSchema(db); err != nil {
+		store.setSchemaError(err)
+		return store, err
+	}
 	store.schemaReady.Store(true)
 	return store, nil
 }

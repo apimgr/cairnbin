@@ -232,7 +232,7 @@ func TestSetUpdateBranch_CreatesFile(t *testing.T) {
 	if err := config.SetUpdateBranch(path, "beta"); err != nil {
 		t.Fatalf("SetUpdateBranch: %v", err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load after SetUpdateBranch: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestSetUpdateBranch_UpdatesExisting(t *testing.T) {
 	if err := config.SetUpdateBranch(path, "devel"); err != nil {
 		t.Fatalf("second SetUpdateBranch: %v", err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestTorOnionAddressLegacyConfigKeyIsRejected(t *testing.T) {
 	if err := os.WriteFile(path, []byte("server:\n  tor:\n    onion_address: legacyaddress.onion\n    contact_email: tor@example.test\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "onion_address") {
+	if _, err := config.LoadFile(path); err == nil || !strings.Contains(err.Error(), "onion_address") {
 		t.Fatalf("Load legacy onion_address: err=%v, want unknown-key error", err)
 	}
 }
@@ -275,7 +275,7 @@ func TestTorContactEmailLoadsWithoutOnionConfig(t *testing.T) {
 	if err := os.WriteFile(path, []byte("server:\n  tor:\n    contact_email: tor@example.test\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

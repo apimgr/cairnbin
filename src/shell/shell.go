@@ -4,6 +4,7 @@
 package shell
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,24 @@ import (
 
 	"github.com/apimgr/cairnbin/src/common/i18n"
 )
+
+// ErrNoProgrammableCompletion identifies shells that cannot load generated
+// completion scripts. The CLI maps this usage error to exit status 2.
+var ErrNoProgrammableCompletion = errors.New("no programmable completion")
+
+// NoProgrammableCompletionError identifies the shell without a programmable
+// completion interface so callers can print a localized usage error.
+type NoProgrammableCompletionError struct {
+	Shell string
+}
+
+func (e *NoProgrammableCompletionError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Shell, ErrNoProgrammableCompletion)
+}
+
+func (e *NoProgrammableCompletionError) Unwrap() error {
+	return ErrNoProgrammableCompletion
+}
 
 // Detect returns the name of the running shell by inspecting $SHELL, the
 // parent process, and $0 in that order. Falls back to "bash".
@@ -80,15 +99,18 @@ func PrintInit(binName, shellName string) error {
 	}
 
 	switch sh {
+	case "bash":
+		fmt.Printf("source <(%s --shell completions bash)\n", binName)
 	case "fish":
 		fmt.Printf("%s --shell completions fish | source\n", binName)
 	case "zsh":
 		fmt.Printf("source <(%s --shell completions zsh)\n", binName)
 	case "powershell":
 		fmt.Printf("%s --shell completions powershell | Out-String | Invoke-Expression\n", binName)
+	case "sh", "dash", "ksh":
+		fmt.Printf("# %s: %s has no programmable completion, nothing to load\n", binName, sh)
 	default:
-		// bash / sh / dash / ksh
-		fmt.Printf("source <(%s --shell completions %s)\n", binName, sh)
+		return fmt.Errorf("unsupported shell %q", sh)
 	}
 	return nil
 }
@@ -114,7 +136,7 @@ func PrintCompletions(binName, shellName string) error {
 	case "fish":
 		printFish(binName)
 	case "sh", "dash", "ksh":
-		printPOSIX(binName)
+		return &NoProgrammableCompletionError{Shell: sh}
 	case "powershell":
 		printPowerShell(binName)
 	}
@@ -237,16 +259,6 @@ complete -c %s -l lang    -d 'Language'          -xa '%s'
 		bin, bin, bin, bin, bin, bin,
 		bin, bin, bin, bin, bin, bin, strings.Join(i18n.SupportedCodes(), " "))
 	fmt.Print(completion)
-}
-
-func printPOSIX(bin string) {
-	// POSIX sh / dash / ksh — minimal completion using _command / ENV
-	fmt.Printf(`# POSIX sh/dash/ksh completion for %s — source this file
-# Usage: . <(%s --shell completions sh)
-if [ -n "$BASH_VERSION" ]; then
-    complete -W "--help --version --status --daemon --debug --shell --service --maintenance --update --config --data --cache --log --backup --pid --port --address --baseurl --mode --color --lang" %s
-fi
-`, bin, bin, bin)
 }
 
 func printPowerShell(bin string) {

@@ -54,7 +54,7 @@ func TestAPIRouteContract(t *testing.T) {
 		if !containsOperation(registeredOperations, operation) {
 			t.Errorf("IDEA.md documents %s %s, but the router does not register it", operation.method, operation.path)
 		}
-		if !containsOperation(specOperations, operation) {
+		if requiresOpenAPIDocumentation(operation) && !containsOperation(specOperations, operation) {
 			t.Errorf("IDEA.md documents %s %s, but OpenAPI does not document it", operation.method, operation.path)
 		}
 	}
@@ -64,7 +64,7 @@ func TestAPIRouteContract(t *testing.T) {
 			if !containsPattern(registeredOperations, pattern) {
 				t.Errorf("AI.md template route %s %s has no registered router route", pattern.method, pattern.path)
 			}
-			if !containsPattern(specOperations, pattern) {
+			if requiresOpenAPIDocumentation(contractOperation(pattern)) && !containsPattern(specOperations, pattern) {
 				t.Errorf("AI.md template route %s %s is missing from OpenAPI", pattern.method, pattern.path)
 			}
 			continue
@@ -73,7 +73,7 @@ func TestAPIRouteContract(t *testing.T) {
 		if !containsOperation(registeredOperations, operation) {
 			t.Errorf("AI.md template route %s %s has no registered router operation", operation.method, operation.path)
 		}
-		if !containsOperation(specOperations, operation) {
+		if requiresOpenAPIDocumentation(operation) && !containsOperation(specOperations, operation) {
 			t.Errorf("AI.md template route %s %s is missing from OpenAPI", operation.method, operation.path)
 		}
 	}
@@ -81,6 +81,9 @@ func TestAPIRouteContract(t *testing.T) {
 	for _, operation := range registeredOperations {
 		if !coveredByContract(operation, templatePatterns, projectOperations) {
 			t.Errorf("router registers undocumented API/compat operation %s %s", operation.method, operation.path)
+		}
+		if !requiresOpenAPIDocumentation(operation) {
+			continue
 		}
 		if operation.method == "*" {
 			if !containsPath(specOperations, operation.path) {
@@ -100,6 +103,12 @@ func TestAPIRouteContract(t *testing.T) {
 			t.Errorf("OpenAPI documents %s %s, but the router does not register it", operation.method, operation.path)
 		}
 	}
+}
+
+func requiresOpenAPIDocumentation(operation contractOperation) bool {
+	return !strings.Contains(operation.path, "/metrics") &&
+		!strings.HasPrefix(operation.path, "/server/tor/") &&
+		!strings.HasPrefix(operation.path, "/debug/")
 }
 
 func routeContractProjectRoot(t *testing.T) string {

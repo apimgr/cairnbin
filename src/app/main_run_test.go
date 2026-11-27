@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -238,6 +238,18 @@ func TestRunShellCompletionsFish(t *testing.T) {
 	code, _, _ := runCapture("--shell", "completions", "fish")
 	if code != 0 {
 		t.Errorf("--shell completions fish: exit %d, want 0", code)
+	}
+}
+
+func TestRunShellCompletionsPOSIXReturnsUsageError(t *testing.T) {
+	for _, sh := range []string{"sh", "dash", "ksh"} {
+		code, _, errOut := runCapture("--shell", "completions", sh)
+		if code != 2 {
+			t.Errorf("--shell completions %s: exit %d, want 2 (stderr %q)", sh, code, errOut)
+		}
+		if !strings.Contains(errOut, sh) {
+			t.Errorf("--shell completions %s: stderr %q does not identify the shell", sh, errOut)
+		}
 	}
 }
 

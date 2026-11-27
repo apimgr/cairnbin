@@ -6,4 +6,4 @@ package main
 // here after guiAvailable() has returned true, and that is compiled to a
 // constant false in this build. It exists so main.go needs no build tags of
 // its own.
-func runGUI(server, lang string, cfg cliConfig) {}
+func runGUI(server, lang string, cfg cliConfig, token string) {}

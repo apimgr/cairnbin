@@ -1,7 +1,7 @@
 package config_test
 
 // Targeted coverage tests for config.go paths not covered by existing tests.
-// Focuses on: Load() needSave paths, ContactWebhook abuse role,
+// Focuses on: LoadFile() needSave paths, ContactWebhook abuse role,
 // SecurityReportEmail with ContactEmail, WebhookSecret, WebhookTargets.
 
 import (
@@ -28,7 +28,7 @@ func tempCovPath(t *testing.T) string {
 	return filepath.Join(dir, "server.yml")
 }
 
-// ─── Load() needSave paths ────────────────────────────────────────────────────
+// ─── LoadFile() needSave paths ────────────────────────────────────────────────────
 
 func TestLoad_ExistingFile_MissingEncryptionKey_GeneratesOne(t *testing.T) {
 	path := tempCovPath(t)
@@ -37,14 +37,14 @@ func TestLoad_ExistingFile_MissingEncryptionKey_GeneratesOne(t *testing.T) {
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	loaded, err := config.Load(path)
+	loaded, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if loaded.Server.Security.EncryptionKey == "" {
 		t.Error("Load should generate EncryptionKey for existing config with blank key")
 	}
-	reloaded, err := config.Load(path)
+	reloaded, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load reload: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestLoad_ExistingFile_MissingToken_GeneratesOne(t *testing.T) {
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	loaded, err := config.Load(path)
+	loaded, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestLoad_ExistingFile_WithWebhookURL_GeneratesSecret(t *testing.T) {
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	loaded, err := config.Load(path)
+	loaded, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

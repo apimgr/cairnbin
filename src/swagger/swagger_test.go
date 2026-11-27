@@ -105,6 +105,24 @@ func TestServeSpec_RequiredTopLevelKeys(t *testing.T) {
 	}
 }
 
+func TestServeSpec_ExcludesInternalRoutes(t *testing.T) {
+	h := swagger.New("Test API", "1.0.0", "https://api.example.com", "")
+	rec := httptest.NewRecorder()
+	h.ServeSpec(rec, httptest.NewRequest(http.MethodGet, "/api/v1/server/swagger", nil))
+
+	var spec struct {
+		Paths map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &spec); err != nil {
+		t.Fatalf("unmarshal OpenAPI spec: %v", err)
+	}
+	for path := range spec.Paths {
+		if strings.Contains(path, "/metrics") || strings.Contains(path, "/debug/") || strings.Contains(path, "/tor/control") {
+			t.Errorf("internal route %q must not appear in OpenAPI", path)
+		}
+	}
+}
+
 // TestServeSpec_InfoBlock verifies info.title and info.version reflect what
 // was passed to New.
 func TestServeSpec_InfoBlock(t *testing.T) {

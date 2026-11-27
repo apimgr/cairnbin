@@ -40,7 +40,7 @@ type PGPOptions struct {
 // web UI or admin API route for it.
 func RunPGP(action string, actionArgs []string, opts PGPOptions) error {
 	cfgPath := filepath.Join(opts.ConfigDir, "server.yml")
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.LoadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("pgp: load config: %w", err)
 	}

@@ -31,6 +31,9 @@ func EnforcePrivatePath(path string, createDirectory bool) error {
 		if err := os.Chmod(path, 0o600); err != nil {
 			return privatePathError(path, info.Mode().Perm(), err)
 		}
+		if err := enforcePrivateACL(path, false); err != nil {
+			return privatePathError(path, info.Mode().Perm(), err)
+		}
 		return nil
 	}
 	return filepath.WalkDir(path, func(current string, entry fs.DirEntry, walkErr error) error {
@@ -51,8 +54,34 @@ func EnforcePrivatePath(path string, createDirectory bool) error {
 		if err := os.Chmod(current, mode); err != nil {
 			return privatePathError(current, item.Mode().Perm(), err)
 		}
+		if err := enforcePrivateACL(current, entry.IsDir()); err != nil {
+			return privatePathError(current, item.Mode().Perm(), err)
+		}
 		return nil
 	})
+}
+
+// EnforceUserPrivatePath secures one user-owned credential file. Windows
+// custom paths receive a protected ACL for the current user; normal profile
+// paths retain the platform's existing private-file behavior.
+func EnforceUserPrivatePath(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return privatePathError(path, 0, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return privatePathError(path, info.Mode().Perm(), fmt.Errorf("expected a regular file, not a symlink"))
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return privatePathError(path, info.Mode().Perm(), err)
+	}
+	if err := enforceUserPrivateACL(path); err != nil {
+		return privatePathError(path, info.Mode().Perm(), err)
+	}
+	return nil
 }
 
 func privatePathError(path string, mode os.FileMode, cause error) error {

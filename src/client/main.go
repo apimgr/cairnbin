@@ -37,9 +37,11 @@ import (
 	"time"
 
 	"github.com/apimgr/cairnbin/src/client/paths"
+	"github.com/apimgr/cairnbin/src/client/setup"
 	"github.com/apimgr/cairnbin/src/client/tui"
 	"github.com/apimgr/cairnbin/src/common/i18n"
 	"github.com/apimgr/cairnbin/src/config"
+	serverpaths "github.com/apimgr/cairnbin/src/paths"
 	"github.com/apimgr/cairnbin/src/shell"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -235,7 +237,11 @@ func loadCLIConfig() (cliConfig, error) {
 	cfg.Defaults.Public = "unlisted"
 	cfg.Defaults.Limit = 20
 
-	data, err := os.ReadFile(paths.Resolved())
+	configPath := paths.Resolved()
+	if err := serverpaths.EnforceUserPrivatePath(configPath); err != nil {
+		return cfg, fmt.Errorf("secure CLI config: %w", err)
+	}
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// PART 32: cli.yml is auto-created on first run with sane defaults.
@@ -268,10 +274,7 @@ func saveCLIConfig(cfg cliConfig) error {
 	if err := os.WriteFile(p, data, 0o600); err != nil {
 		return err
 	}
-	if runtime.GOOS != "windows" {
-		return os.Chmod(p, 0o600)
-	}
-	return nil
+	return serverpaths.EnforceUserPrivatePath(p)
 }
 
 // saveIfUnset updates dst with src when dst is empty or invalid, and
@@ -795,6 +798,11 @@ func main() {
 				shellShell = args[1]
 			}
 			if err := shell.PrintClientCompletions(binName(), shellShell); err != nil {
+				var noCompletion *shell.NoProgrammableCompletionError
+				if errors.As(err, &noCompletion) {
+					fmt.Fprintln(os.Stderr, i18n.TranslateFormat(uiLang, "cli.error_no_completion_shell", i18n.Args("shell", noCompletion.Shell)))
+					os.Exit(2)
+				}
 				fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_shell_completions", "error", err))
 				os.Exit(exitUsage)
 			}
@@ -838,6 +846,7 @@ func main() {
 	if resolved != "" {
 		*server = resolved
 	}
+	serverConfigured := strings.TrimSpace(*server) != ""
 
 	*server = defaultServerURL(*server, OfficialSite)
 
@@ -947,12 +956,24 @@ func main() {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), t("gui_unavailable"))
 			os.Exit(exitGeneral)
 		}
-		runGUI(*server, locale, fileCfg)
+		runGUI(*server, locale, fileCfg, token)
 		return
 	}
 	if mode == "tui" {
-		runTUI(*server, locale, fileCfg)
+		runTUI(*server, locale, fileCfg, token)
 		return
+	}
+
+	// When interactive mode resolves to plain CLI because GUI/TUI is unavailable
+	// or disabled, collect first-run connection settings inline in the terminal.
+	if mode == "cli" && argsAreConfigOnly(args) && !serverConfigured &&
+		term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
+		serverURL, apiToken, err := runInlineSetup("", token, fileCfg.Server.APIVersion)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), err)
+			os.Exit(exitConnection)
+		}
+		*server, token = serverURL, apiToken
 	}
 
 	if len(args) == 0 {
@@ -1006,24 +1027,134 @@ func main() {
 	}
 }
 
-// saveCLIConfigURL updates the server URL field in cli.yml.
-func saveCLIConfigURL(serverURL string) error {
-	cfg, _ := loadCLIConfig()
-	cfg.Server.Primary = serverURL
+// saveCLISetup applies the wizard's persistence choices using the cli.yml schema.
+func saveCLISetup(options setup.Options) error {
+	if options.Server != "" && !isValidURL(options.Server) {
+		return fmt.Errorf("invalid server URL")
+	}
+	if !options.SaveToConfig && !options.SetDefault {
+		return nil
+	}
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		return fmt.Errorf("load CLI configuration: %w", err)
+	}
+	if options.SetDefault {
+		cfg.Server.Primary = options.Server
+	} else if options.SaveToConfig && (cfg.Server.Primary == "" || !isValidURL(cfg.Server.Primary)) {
+		cfg.Server.Primary = options.Server
+	}
+	if (options.SaveToConfig || options.SetDefault) && options.Token != "" && cfg.Server.Primary == options.Server {
+		cfg.Auth.Token = options.Token
+	}
 	return saveCLIConfig(cfg)
+}
+
+// runInlineSetup prompts for the same connection and persistence choices used by
+// the GUI and TUI setup flows. It is only called when stdin and stdout are TTYs.
+func runInlineSetup(currentServer, currentToken, apiVersion string) (string, string, error) {
+	reader := bufio.NewReader(os.Stdin)
+	read := func(label, fallback string) (string, error) {
+		if fallback != "" {
+			_, _ = fmt.Fprintf(os.Stdout, "%s [%s]: ", label, fallback)
+		} else {
+			_, _ = fmt.Fprintf(os.Stdout, "%s: ", label)
+		}
+		value, err := reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return "", err
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			value = fallback
+		}
+		return value, nil
+	}
+	confirm := func(label string, defaultYes bool) (bool, error) {
+		for {
+			value, err := read(fmt.Sprintf("%s (%s/%s)", label, t("sched_yes"), t("sched_no")), "")
+			if err != nil {
+				return false, err
+			}
+			if value == "" {
+				return defaultYes, nil
+			}
+			switch strings.ToLower(value) {
+			case "y", "yes":
+				return true, nil
+			case "n", "no":
+				return false, nil
+			}
+			if strings.EqualFold(value, t("sched_yes")) {
+				return true, nil
+			}
+			if strings.EqualFold(value, t("sched_no")) {
+				return false, nil
+			}
+		}
+	}
+	_, _ = fmt.Fprintln(os.Stdout, t("setup_title"))
+	for {
+		serverURL, err := read(t("setup_server_url_label"), firstNonEmpty(currentServer, "https://"))
+		if err != nil {
+			return "", "", err
+		}
+		apiToken, err := read(t("setup_token_label"), currentToken)
+		if err != nil {
+			return "", "", err
+		}
+		save, err := confirm(t("setup_save_config"), true)
+		if err != nil {
+			return "", "", err
+		}
+		setDefault, err := confirm(t("setup_set_default"), false)
+		if err != nil {
+			return "", "", err
+		}
+		info, testErr := setup.TestConnection(serverURL, apiToken, apiVersion)
+		if testErr != nil {
+			_, _ = fmt.Fprintln(os.Stderr, tf("setup_test_failed", "error", testErr))
+			retry, retryErr := confirm(t("setup_retry"), true)
+			if retryErr != nil {
+				return "", "", retryErr
+			}
+			if !retry {
+				return "", "", testErr
+			}
+			currentServer, currentToken = serverURL, apiToken
+			continue
+		}
+		_, _ = fmt.Fprintln(os.Stdout, tf("setup_server_info", "name", info.Name, "version", info.Version))
+		if info.TokenKind != "" {
+			_, _ = fmt.Fprintln(os.Stdout, tf("setup_token_kind", "kind", info.TokenKind))
+		}
+		if err := saveCLISetup(setup.Options{Server: serverURL, Token: apiToken, SaveToConfig: save, SetDefault: setDefault}); err != nil {
+			return "", "", fmt.Errorf("save setup: %w", err)
+		}
+		return serverURL, apiToken, nil
+	}
+}
+
+// saveCLIConfigURL preserves the explicit URL override behavior used by existing callers.
+func saveCLIConfigURL(serverURL string) error {
+	return saveCLISetup(setup.Options{Server: serverURL, SetDefault: true})
 }
 
 // runTUI launches the interactive bubbletea TUI mode.
 // When no server is configured, the TUI setup wizard collects it.
-func runTUI(server, lang string, cfg cliConfig) {
+func runTUI(server, lang string, cfg cliConfig, token string) {
 	tuiCfg := tui.ClientConfig{
-		Server:  server,
-		Lang:    lang,
-		SaveURL: saveCLIConfigURL,
-		CfgPath: paths.Resolved(),
-		Theme:   cfg.TUI.Theme,
-		Mouse:   cfg.TUI.Mouse,
-		Unicode: cfg.TUI.Unicode,
+		Server: server,
+		Token:  token,
+		Lang:   lang,
+		TestSetup: func(serverURL, apiToken string) (setup.ServerInfo, error) {
+			return setup.TestConnection(serverURL, apiToken, cfg.Server.APIVersion)
+		},
+		SaveSetup: saveCLISetup,
+		CfgPath:   paths.Resolved(),
+		Theme:     cfg.TUI.Theme,
+		Mouse:     cfg.TUI.Mouse,
+		Unicode:   cfg.TUI.Unicode,
 	}
 	if err := tui.Run(tuiCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", binName(), tf("op_tui", "error", err))

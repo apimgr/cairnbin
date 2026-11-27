@@ -22,6 +22,7 @@ type detailModel struct {
 	deleteSuccess string
 	server        string
 	lang          string
+	token         string
 }
 
 // pasteRawMsg carries the result of a fetchPasteRaw call.
@@ -38,6 +39,11 @@ type pasteDeleteErrMsg struct{ err error }
 
 // newDetailModel creates a detail model for the given paste ID and kicks off the load.
 func newDetailModel(server, lang, pasteID string, width, height int) (detailModel, tea.Cmd) {
+	return newDetailModelWithToken(server, lang, "", pasteID, width, height)
+}
+
+// newDetailModelWithToken creates a detail model whose reads use optional API authentication.
+func newDetailModelWithToken(server, lang, token, pasteID string, width, height int) (detailModel, tea.Cmd) {
 	vp := viewport.New(width, height-4)
 	vp.SetContent("")
 
@@ -54,6 +60,7 @@ func newDetailModel(server, lang, pasteID string, width, height int) (detailMode
 		deleteInput: ti,
 		server:      server,
 		lang:        lang,
+		token:       token,
 	}
 	return m, m.loadCmd()
 }
@@ -62,9 +69,10 @@ func newDetailModel(server, lang, pasteID string, width, height int) (detailMode
 func (m detailModel) loadCmd() tea.Cmd {
 	server := m.server
 	lang := m.lang
+	token := m.token
 	id := m.pasteID
 	return func() tea.Msg {
-		content, err := fetchPasteRaw(server, lang, id)
+		content, err := fetchPasteRawWithToken(server, lang, token, id)
 		return pasteRawMsg{content: content, err: err}
 	}
 }

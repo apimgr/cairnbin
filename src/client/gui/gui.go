@@ -7,9 +7,11 @@ import (
 
 	"github.com/gogpu/gogpu"
 	"github.com/gogpu/ui/app"
+	"github.com/gogpu/ui/core/checkbox"
 	"github.com/gogpu/ui/core/textfield"
 	"github.com/gogpu/ui/desktop"
 
+	"github.com/apimgr/cairnbin/src/client/setup"
 	"github.com/apimgr/cairnbin/src/common/display"
 )
 
@@ -19,10 +21,18 @@ import (
 type Config struct {
 	// Server is the base URL of the cairnbin server (may be empty on first run).
 	Server string
+	// Token is the optional API token used by setup and subsequent API requests.
+	Token string
 	// Lang is the resolved Accept-Language locale string.
 	Lang string
 	// SaveURL persists a newly configured server URL to cli.yml.
 	SaveURL func(string) error
+	// TestSetup validates a server and optional API token before configuration changes.
+	TestSetup func(string, string) (setup.ServerInfo, error)
+	// SaveSetup persists the settings selected by the user.
+	SaveSetup func(setup.Options) error
+	// SetAutostart creates or removes this user's OS login autostart entry.
+	SetAutostart func(bool) error
 	// CfgPath is the path to cli.yml (used for display in setup prompts).
 	CfgPath string
 	// Theme is the resolved gui theme value from cli.yml ("dark", "light",
@@ -38,10 +48,16 @@ type Config struct {
 type guiState struct {
 	app    *app.App
 	config *Config
+	close  func()
 
 	// Setup screen.
-	serverField *textfield.Widget
-	setupErr    string
+	serverField  *textfield.Widget
+	tokenField   *textfield.Widget
+	setupErr     string
+	setupInfo    setup.ServerInfo
+	saveConfig   bool
+	setDefault   bool
+	startOnLogin bool
 
 	// List screen.
 	pastes  []PasteListItem
@@ -88,7 +104,7 @@ func LaunchGUI(config *Config) error {
 		app.WithTheme(newTheme(config.Theme)),
 	)
 
-	st := &guiState{app: uiApp, config: config}
+	st := &guiState{app: uiApp, config: config, close: gogpuApp.Close, saveConfig: true}
 	if config.Server == "" {
 		st.showSetup()
 	} else {

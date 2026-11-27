@@ -95,7 +95,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 - **Raw view, file download, and embeds** — raw content view, download-as-file, an iframe-embeddable view with copy-ready HTML/Markdown snippets, and a QR code page plus PNG image for every paste
 - **View count tracking** with automatic background cleanup of expired and burned pastes
 - **Full web frontend** — server-rendered Go templates, dark/light/auto theme, installable PWA with offline recovery at the root or under a mounted base path, mobile-first, fully usable without JavaScript
-- **CLI client** (`cairnbin-cli`) — full API access from the terminal
+- **CLI client** (`cairnbin-cli`) — full API access from the terminal; first-run interactive setup detects GUI or terminal mode, tests the server and optional API token, and can save the connection or set it as the default; GUI setup can enable login autostart on Linux, macOS, and Windows
 - **OpenAPI/Swagger docs** and a **read-only GraphQL query interface** (create/delete remain REST-only)
 - **Public discovery** — `/sitemap.xml` lists anonymous pages allowed by robots rules; Atom `/feed.xml` and RSS `/rss.xml` list recent public pastes
 - **Machine token check** — `GET /api/{api_version}/server/auth/check` identifies an operator or owner Bearer token without updating activity or returning the credential

@@ -11,6 +11,12 @@ type ConnectionProbe interface {
 }
 
 func (s *SQLiteDB) CheckConnection(parent context.Context) error {
+	if failure := s.schemaErr.Load(); failure != nil {
+		return fmt.Errorf("schema migration pending: %w", failure.err)
+	}
+	if !s.schemaReady.Load() {
+		return fmt.Errorf("database schema migration is pending")
+	}
 	if parent == nil {
 		parent = context.Background()
 	}

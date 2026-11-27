@@ -7,7 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net"
@@ -66,8 +68,13 @@ func shouldLogConfigDebug() bool {
 
 // ServerConfig holds listener and runtime settings.
 type ServerConfig struct {
-	Port    string `yaml:"port"`
-	Address string `yaml:"address"`
+	Command      CLIOptions `yaml:"-"`
+	Version      string     `yaml:"-"`
+	CommitID     string     `yaml:"-"`
+	BuildEpoch   string     `yaml:"-"`
+	OfficialSite string     `yaml:"-"`
+	Port         string     `yaml:"port"`
+	Address      string     `yaml:"address"`
 	// FQDN is the host detected at first run for operator reference only.
 	FQDN string `yaml:"fqdn"`
 	// Domain is the runtime-only primary host resolved from DOMAIN. FQDN above
@@ -2450,10 +2457,111 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Load reads config from path, creating it with defaults if absent.
+// CLIParseError marks a command-line usage error for the thin process entry point.
+type CLIParseError struct{ Err error }
+
+func (e *CLIParseError) Error() string { return e.Err.Error() }
+func (e *CLIParseError) Unwrap() error { return e.Err }
+func (e *CLIParseError) ExitCode() int { return 2 }
+
+// CLIOptions contains parsed server command-line settings consumed by app.Run.
+type CLIOptions struct {
+	Port, Address, Mode, Config, Data, Log, Cache, Backup, PID, BaseURL string
+	Color, Lang, Shell, Service, Maintenance, Update                    string
+	ShowVersion, ShowStatus, ShowHelp, Daemon, Debug, I2P, I2PSet       bool
+	IncludeSSL, IncludeData                                             bool
+	ShellArg, MaintenanceArg                                            string
+	MaintenanceArgs, Positional                                         []string
+}
+
+// Load parses server CLI arguments into a runtime configuration value. File-backed
+// settings are loaded by LoadFile; application-specific command execution remains
+// in src/app.
+func Load(args []string) (*ServerConfig, error) {
+	args = append([]string(nil), args...)
+	for i, arg := range args {
+		switch arg {
+		case "-h":
+			args[i] = "--help"
+		case "-v":
+			args[i] = "--version"
+		}
+	}
+	if len(args) > 0 && args[len(args)-1] == "--update" {
+		args = append(args, "yes")
+	}
+	var o CLIOptions
+	fs := flag.NewFlagSet(filepath.Base(os.Args[0]), flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.BoolVar(&o.ShowHelp, "help", false, "Show help")
+	fs.BoolVar(&o.ShowHelp, "h", false, "Show help")
+	fs.BoolVar(&o.ShowVersion, "version", false, "Show version")
+	fs.BoolVar(&o.ShowVersion, "v", false, "Show version")
+	fs.BoolVar(&o.ShowStatus, "status", false, "Show server status and health")
+	fs.BoolVar(&o.Daemon, "daemon", false, "Run as daemon (detach from terminal)")
+	fs.BoolVar(&o.Debug, "debug", false, "Enable debug mode")
+	fs.BoolVar(&o.I2P, "i2p", false, "Set I2P eepsite state")
+	fs.StringVar(&o.Port, "port", "", "Listen port")
+	fs.StringVar(&o.Address, "address", "", "Listen address")
+	fs.StringVar(&o.Mode, "mode", "", "Application mode")
+	fs.StringVar(&o.Config, "config", "", "Config directory")
+	fs.StringVar(&o.Data, "data", "", "Data directory")
+	fs.StringVar(&o.Log, "log", "", "Log directory")
+	fs.StringVar(&o.Cache, "cache", "", "Cache directory")
+	fs.StringVar(&o.Backup, "backup", "", "Backup directory")
+	fs.StringVar(&o.PID, "pid", "", "PID file path")
+	fs.StringVar(&o.BaseURL, "baseurl", "", "URL path prefix")
+	fs.StringVar(&o.Color, "color", "auto", "Color output")
+	fs.StringVar(&o.Lang, "lang", "", "Language for output")
+	fs.StringVar(&o.Shell, "shell", "", "Shell integration")
+	fs.StringVar(&o.Service, "service", "", "Service management")
+	fs.StringVar(&o.Maintenance, "maintenance", "", "Maintenance operations")
+	fs.StringVar(&o.Update, "update", "", "Check/perform updates")
+	fs.BoolVar(&o.IncludeSSL, "include-ssl", false, "Include config ssl directory in backup")
+	fs.BoolVar(&o.IncludeData, "include-data", false, "Include data directory in backup")
+	if err := fs.Parse(args); err != nil {
+		return nil, &CLIParseError{Err: err}
+	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "i2p" {
+			o.I2PSet = true
+		}
+	})
+	o.Positional = fs.Args()
+	if o.Shell != "" && len(o.Positional) > 0 {
+		o.ShellArg = o.Positional[0]
+	}
+	if o.Maintenance != "" && len(o.Positional) > 0 {
+		o.MaintenanceArg = o.Positional[0]
+		switch o.Maintenance {
+		case "pgp", "token", "data", "secret", "backup":
+			o.MaintenanceArgs = o.Positional[1:]
+		}
+	}
+	if strings.HasPrefix(o.Update, "branch") && len(o.Positional) > 0 {
+		o.Update += " " + o.Positional[0]
+	}
+	cfg := DefaultConfig().Server
+	cfg.Command = o
+	if o.Port != "" {
+		cfg.Port = o.Port
+	}
+	if o.Address != "" {
+		cfg.Address = o.Address
+	}
+	if o.Mode != "" {
+		cfg.Mode = o.Mode
+	}
+	if o.BaseURL != "" {
+		cfg.BaseURL = o.BaseURL
+	}
+	return &cfg, nil
+}
+
+// LoadFile reads config from path, creating it with defaults if absent.
 // On first run (or when encryption_key is empty) an AES-256-GCM key is
 // auto-generated and persisted to server.yml immediately.
-func Load(path string) (*Config, error) {
+func LoadFile(path string) (*Config, error) {
 	cfg := DefaultConfig()
 	cfg.configPath = path
 	cfg.loadEnv()
@@ -4684,7 +4792,7 @@ func SetUpdateBranch(path, branch string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
-	cfg, err := Load(path)
+	cfg, err := LoadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("loading config: %w", err)
 	}
@@ -4702,7 +4810,7 @@ func SetB32Address(path, addr string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
-	cfg, err := Load(path)
+	cfg, err := LoadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("loading config: %w", err)
 	}
@@ -5010,7 +5118,7 @@ func (m *ConfigManager) checkFileChanges() *Config {
 		return nil
 	}
 
-	next, err := Load(m.configPath)
+	next, err := LoadFile(m.configPath)
 	if err != nil {
 		log.Printf("[config] reload error: %v", err)
 		return nil

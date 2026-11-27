@@ -110,6 +110,10 @@ sudo mv cairnbin-cli-linux-amd64 /usr/local/bin/cairnbin-cli
 
 ### Configure
 
+On first interactive launch, the client guides you through connecting to a
+server. See the [CLI Reference](docs/cli.md#first-run-connection-setup) for
+setup modes, saved connections, and login autostart.
+
 ```bash
 # Target a custom server (default: https://pste.us)
 cairnbin-cli --server https://your-server.example.com create myfile.txt

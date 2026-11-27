@@ -58,7 +58,7 @@ type authorizer struct {
 // defaults on error, matching the "backup test" pattern in main.go) and wires
 // the default OS-backed detection functions.
 func newAuthorizer(opts AuthOptions) *authorizer {
-	cfg, _ := config.Load(filepath.Join(opts.ConfigDir, "server.yml"))
+	cfg, _ := config.LoadFile(filepath.Join(opts.ConfigDir, "server.yml"))
 	return &authorizer{
 		opts:          opts,
 		cfg:           cfg,
@@ -298,7 +298,7 @@ func databaseEmpty(dbPath string) (bool, error) {
 // writer from server.yml the same way RunPGP does; a disabled audit config
 // silently drops the entry.
 func AuditMaintenanceEvent(opts AuthOptions, event string, details map[string]any) {
-	cfg, _ := config.Load(filepath.Join(opts.ConfigDir, "server.yml"))
+	cfg, _ := config.LoadFile(filepath.Join(opts.ConfigDir, "server.yml"))
 	ac := cfg.Server.Logging.Audit
 	auditW := audit.New(audit.Config{
 		Enabled:          ac.Enabled,

@@ -9,3 +9,11 @@ import "os"
 func isRoot() bool {
 	return os.Geteuid() == 0
 }
+
+func enforcePrivateACL(string, bool) error {
+	return nil
+}
+
+func enforceUserPrivateACL(string) error {
+	return nil
+}

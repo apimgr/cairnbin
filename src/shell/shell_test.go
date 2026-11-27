@@ -1,6 +1,7 @@
 package shell_test
 
 import (
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -142,6 +143,20 @@ func TestPrintInit_AllShells(t *testing.T) {
 	}
 }
 
+func TestPrintInit_POSIXShellsAreSafeNoop(t *testing.T) {
+	for _, sh := range []string{"sh", "dash", "ksh"} {
+		got := captureStdout(t, func() {
+			if err := shell.PrintInit("cairnbin", sh); err != nil {
+				t.Errorf("PrintInit(%q): unexpected error: %v", sh, err)
+			}
+		})
+		want := "# cairnbin: " + sh + " has no programmable completion, nothing to load\n"
+		if got != want {
+			t.Errorf("PrintInit(%q) = %q, want one harmless comment line %q", sh, got, want)
+		}
+	}
+}
+
 func TestPrintInit_UnknownShell(t *testing.T) {
 	if err := shell.PrintInit("cairnbin", "tcsh"); err == nil {
 		t.Error("PrintInit(tcsh): expected error, got nil")
@@ -161,10 +176,19 @@ func TestPrintInit_EmptyShell_DetectsAuto(t *testing.T) {
 // ─── PrintCompletions ─────────────────────────────────────────────────────────
 
 func TestPrintCompletions_AllShells(t *testing.T) {
-	shells := []string{"bash", "zsh", "fish", "sh", "dash", "ksh", "powershell", "pwsh"}
+	shells := []string{"bash", "zsh", "fish", "powershell", "pwsh"}
 	for _, sh := range shells {
 		if err := shell.PrintCompletions("cairnbin", sh); err != nil {
 			t.Errorf("PrintCompletions(%q): unexpected error: %v", sh, err)
+		}
+	}
+}
+
+func TestPrintCompletions_POSIXShellsReturnUsageError(t *testing.T) {
+	for _, sh := range []string{"sh", "dash", "ksh"} {
+		err := shell.PrintCompletions("cairnbin", sh)
+		if !errors.Is(err, shell.ErrNoProgrammableCompletion) {
+			t.Errorf("PrintCompletions(%q) error = %v, want ErrNoProgrammableCompletion", sh, err)
 		}
 	}
 }
@@ -187,10 +211,19 @@ func TestPrintCompletions_BashContainsExpectedFlags(t *testing.T) {
 // ─── PrintClientCompletions ───────────────────────────────────────────────────
 
 func TestPrintClientCompletions_AllShells(t *testing.T) {
-	shells := []string{"bash", "zsh", "fish", "sh", "dash", "ksh", "powershell", "pwsh"}
+	shells := []string{"bash", "zsh", "fish", "powershell", "pwsh"}
 	for _, sh := range shells {
 		if err := shell.PrintClientCompletions("cairnbin-cli", sh); err != nil {
 			t.Errorf("PrintClientCompletions(%q): unexpected error: %v", sh, err)
+		}
+	}
+}
+
+func TestPrintClientCompletions_POSIXShellsReturnUsageError(t *testing.T) {
+	for _, sh := range []string{"sh", "dash", "ksh"} {
+		err := shell.PrintClientCompletions("cairnbin-cli", sh)
+		if !errors.Is(err, shell.ErrNoProgrammableCompletion) {
+			t.Errorf("PrintClientCompletions(%q) error = %v, want ErrNoProgrammableCompletion", sh, err)
 		}
 	}
 }
@@ -221,4 +254,28 @@ func TestNormalize_ErrorContainsShellName(t *testing.T) {
 	if !strings.Contains(err.Error(), "cmd") {
 		t.Errorf("error message should mention the shell name: %v", err)
 	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Stdout
+	os.Stdout = writer
+	t.Cleanup(func() { os.Stdout = previous })
+	fn()
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = previous
+	output, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return string(output)
 }

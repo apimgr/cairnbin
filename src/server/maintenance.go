@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/apimgr/cairnbin/src/common/email"
 	"github.com/apimgr/cairnbin/src/common/i18n"
+	"github.com/apimgr/cairnbin/src/database"
 	"github.com/apimgr/cairnbin/src/health"
 )
 
@@ -20,7 +22,16 @@ import (
 // database connection and the ability to write files. It returns ok=true when
 // both are healthy, or a reason code and message describing the fault.
 func (s *Server) criticalCheck() (bool, string, string) {
-	if err := s.db.Ping(); err != nil {
+	if s.db == nil {
+		return false, health.ReasonDatabaseConnection, "Database connection failed"
+	}
+	var databaseErr error
+	if probe, ok := s.db.(database.ConnectionProbe); ok {
+		databaseErr = probe.CheckConnection(context.Background())
+	} else {
+		databaseErr = s.db.Ping()
+	}
+	if databaseErr != nil {
 		return false, health.ReasonDatabaseConnection, "Database connection failed"
 	}
 	if !s.checkDisk() {
