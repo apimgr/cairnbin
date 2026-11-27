@@ -76,7 +76,7 @@ tagline: Drop-in compatibility for pastebin.com, microbin, lenpaste, stikked, ha
 
 **Non-goals:**
 - No user accounts, registration, or login of any kind
-- No admin web panel — server configured via `server.yml` only; no general-purpose runtime configuration API (the scheduler management endpoints under `/api/v1/schedulers/*` are the spec-mandated exception)
+- No admin web panel — server configured through `server.yml` and its YAML drop-ins; no runtime configuration API. Scheduler status and manual task control use the server binary's `--maintenance scheduler` commands.
 - No paste editing after creation — pastes are immutable
 - No password-protected pastes (microbin per-paste encryption not implemented)
 - No paid tiers, no rate-limited access tiers, no feature gating
@@ -188,7 +188,7 @@ Native capabilities, exposed on both the API surface and the browser frontend:
 - Get a paste's QR code — as a page and as a PNG image
 - Delete a paste — requires the paste's owner token, or the operator token which may delete any paste
 - List recent public pastes anonymously, or list the authenticated owner's non-expired pastes (including unlisted) with `scope=owned` — paginated (max 250/page), searchable by ID/title/content, filterable by content type, sortable by date/name/views/id in either order
-- Scheduler management — operator-token gated; the sole runtime-configuration exception (see Non-goals)
+- Scheduler status and manual task control through the server binary's `--maintenance scheduler` commands
 - API documentation UIs — Swagger and GraphQL browsers
 
 Compat endpoints are the one place where concrete paths, field names, status codes, and content types are business logic rather than implementation detail: they are external wire contracts owned by the services being emulated, not routes this project is free to choose. They are specified in the Compat targets table above, and in the raw-TCP termbin/fiche listener described there.
@@ -225,12 +225,6 @@ The routes below are the Cairnbin paste API and the external wire-compatible API
 | GET | `/api/{api_version}/pasta` | None | List pastes using the microbin-compatible response format selected by `Accept`. |
 | GET | `/api/{api_version}/pasta/{id}` | None | Retrieve a microbin-compatible paste using the response format selected by `Accept`. |
 | DELETE | `/api/{api_version}/pasta/{id}` | Compat delete token | Delete a microbin-compatible paste; returns the protocol result. |
-| GET | `/api/{api_version}/schedulers` | None | List registered background schedulers and their current status. |
-| GET | `/api/{api_version}/schedulers/{id}` | None | Return the configuration and current status of one scheduler. |
-| GET | `/api/{api_version}/schedulers/{id}/history` | None | Return recent execution history for one scheduler. |
-| POST | `/api/{api_version}/schedulers/{id}/run` | Operator Bearer token | Trigger one scheduler run; returns the run result. |
-| POST | `/api/{api_version}/schedulers/{id}/enable` | Operator Bearer token | Enable one scheduler; returns its updated status. |
-| POST | `/api/{api_version}/schedulers/{id}/disable` | Operator Bearer token | Disable one scheduler; returns its updated status. |
 | POST | `/upload` | None | Create a microbin-compatible paste using its upload form; returns the protocol response and compat delete token. |
 | GET | `/upload/{id}` | None | Render a microbin-compatible paste view. |
 | POST | `/api/create` | None; supplied `apikey` is ignored | Create a stikked-compatible paste from form fields; returns a view URL or `Error: <message>`. |

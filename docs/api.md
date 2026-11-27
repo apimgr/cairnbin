@@ -284,19 +284,9 @@ envelope. The endpoint is public.
 
 ### Scheduler
 
-The scheduler API is rooted at `/api/v1/schedulers`. Listing tasks, viewing one
-task, and viewing its recent history are public read operations. Running,
-enabling, or disabling a task requires the operator token in the Bearer
-authorization header.
-
-| Method | Route | Access | Purpose |
-|--------|-------|--------|---------|
-| `GET` | `/api/v1/schedulers` | Public | List scheduled tasks |
-| `GET` | `/api/v1/schedulers/{id}` | Public | Show one task |
-| `GET` | `/api/v1/schedulers/{id}/history` | Public | Show recent execution history |
-| `POST` | `/api/v1/schedulers/{id}/run` | Operator token | Run a task immediately |
-| `POST` | `/api/v1/schedulers/{id}/enable` | Operator token | Enable a task |
-| `POST` | `/api/v1/schedulers/{id}/disable` | Operator token | Disable a task |
+Scheduler status and manual task control are available only through the server
+binary's `--maintenance scheduler` commands. There is no scheduler API route;
+see [CLI](cli.md#scheduler-maintenance).
 
 ### Browser reports
 

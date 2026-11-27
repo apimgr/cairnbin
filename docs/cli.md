@@ -223,20 +223,20 @@ cairnbin-cli list [--limit N] [--page N] [--output FORMAT]
 cairnbin-cli list --limit 20
 ```
 
-### scheduler
+### Scheduler maintenance
 
-Inspect and control the server's built-in scheduled tasks.
+Inspect and control scheduled tasks with the server binary. Commands require root or operator authorization.
 
 ```bash
-cairnbin-cli scheduler list
-cairnbin-cli scheduler show <id>
-cairnbin-cli scheduler history <id>
-cairnbin-cli scheduler run <id>
-cairnbin-cli scheduler enable <id>
-cairnbin-cli scheduler disable <id>
+cairnbin --maintenance scheduler list
+cairnbin --maintenance scheduler show <id>
+cairnbin --maintenance scheduler history <id>
+cairnbin --maintenance scheduler run <id>
+cairnbin --maintenance scheduler enable <id>
+cairnbin --maintenance scheduler disable <id>
 ```
 
-`list`, `show` and `history` are read-only. `run`, `enable` and `disable` need the operator token (`--token` or `auth.token` in `cli.yml`). Status symbols: `✓` success, `●` running, `✗` failed, `○` pending, `◐` skipped. Supports `--output json|yaml|csv|table`.
+Task state and history are read from the configured database. Enable/disable changes are stored in `yaml.d/maintenance.yml`; manual runs use the same registered task function and persistence path as scheduled runs.
 
 ## Shell Pipeline Examples
 
