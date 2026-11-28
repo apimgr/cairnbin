@@ -294,9 +294,12 @@ func TestRunServiceUnknown(t *testing.T) {
 
 // TestRunMaintenanceHelp verifies --maintenance --help exits 0.
 func TestRunMaintenanceHelp(t *testing.T) {
-	code, _, _ := runCapture("--maintenance", "--help")
+	code, out, _ := runCapture("--maintenance", "--help")
 	if code != 0 {
 		t.Errorf("--maintenance --help: exit %d, want 0", code)
+	}
+	if !strings.Contains(out, "scheduler {list|show|history|run|enable|disable} [id]") {
+		t.Errorf("--maintenance --help: missing scheduler commands; got %q", out)
 	}
 }
 

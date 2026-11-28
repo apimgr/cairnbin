@@ -1130,6 +1130,9 @@ func updateSendInstalled(mailer Mailer, operatorEmail string, notify bool, curre
 // scheduler run for a missing provider — I2P is best-effort by contract.
 func I2PHealth(i2pRunning func() bool, i2pRestart func() error) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
+		if ctx.Err() != nil {
+			return nil
+		}
 		if i2pRunning == nil {
 			return nil
 		}
@@ -1139,6 +1142,9 @@ func I2PHealth(i2pRunning func() bool, i2pRestart func() error) func(ctx context
 		}
 		if i2pRestart == nil {
 			log.Printf("i2p_health: I2P eepsite is not running (no restart configured)")
+			return nil
+		}
+		if ctx.Err() != nil {
 			return nil
 		}
 		log.Printf("i2p_health: I2P eepsite is not running — attempting restart")
@@ -1156,6 +1162,9 @@ func I2PHealth(i2pRunning func() bool, i2pRestart func() error) func(ctx context
 
 func TorHealth(torRunning func() bool, torRestart func() error) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
+		if ctx.Err() != nil {
+			return nil
+		}
 		if torRunning == nil {
 			return nil
 		}
@@ -1165,6 +1174,9 @@ func TorHealth(torRunning func() bool, torRestart func() error) func(ctx context
 		}
 		if torRestart == nil {
 			log.Printf("tor_health: Tor hidden service is not running (no restart configured)")
+			return nil
+		}
+		if ctx.Err() != nil {
 			return nil
 		}
 		log.Printf("tor_health: Tor hidden service is not running — attempting restart")

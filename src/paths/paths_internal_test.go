@@ -39,6 +39,32 @@ func applyEnv(t *testing.T, e pathEnv) {
 	})
 }
 
+func TestSystemInitOverridesContainerDetection(t *testing.T) {
+	tests := []struct {
+		name          string
+		invocationID  string
+		rcServiceName string
+		pid1          string
+		openRCInit    bool
+		want          bool
+	}{
+		{name: "systemd service", invocationID: "unit-id", pid1: "systemd", want: true},
+		{name: "openrc service", rcServiceName: "cairnbin", pid1: "openrc-init", want: true},
+		{name: "systemd system container", pid1: "systemd", want: true},
+		{name: "openrc system container", pid1: "openrc-init", want: true},
+		{name: "openrc legacy init", pid1: "init", openRCInit: true, want: true},
+		{name: "application container", pid1: "tini", want: false},
+		{name: "ordinary host", pid1: "init", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := systemInitOverridesContainer(tt.invocationID, tt.rcServiceName, tt.pid1, tt.openRCInit); got != tt.want {
+				t.Fatalf("systemInitOverridesContainer() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
 // ── Container paths ───────────────────────────────────────────────────────────
 
 func TestGetConfigDir_Container(t *testing.T) {

@@ -270,7 +270,7 @@ func runWithConfigWithError(parent context.Context, runtimeCfg config.ServerConf
 
 	// ── Maintenance operations ────────────────────────────────────────────────
 
-	if maintenanceCmd != "" {
+	if maintenanceCmd != "" && maintenanceCmd != "scheduler" {
 		// Paths must be resolved before maintenance commands.
 		mcConfigDir := paths.GetConfigDir(appName)
 		mcDataDir := paths.GetDataDir(appName)
@@ -288,7 +288,7 @@ func runWithConfigWithError(parent context.Context, runtimeCfg config.ServerConf
 
 		switch maintenanceCmd {
 		case "--help", "help":
-			maintenance.PrintHelp(binaryName, earlyLang)
+			maintenance.PrintHelpTo(stdout, binaryName, earlyLang)
 		case "backup":
 			// "backup test" verifies and dry-run restores an archive without
 			// touching the live config or data directories.
@@ -926,20 +926,21 @@ func runWithConfigWithError(parent context.Context, runtimeCfg config.ServerConf
 		return 73
 	}
 
-	// PART 8 early config peeks read only listener and service identity values.
+	// PART 8 early config peeks read only listener values needed before startup.
 	earlyConfigPort := config.PeekServerPort(cfgFile)
 	earlyConfigAddress := config.PeekServerAddress(cfgFile)
-	earlyConfigUser := config.PeekServerUser(cfgFile)
-	earlyConfigGroup := config.PeekServerGroup(cfgFile)
 	// This early daemonize peek preserves daemon re-exec before root setup ends;
 	// the startup rules currently list only port and address for early reads.
-	if !daemonFlag && daemon.ShouldDaemonize(false, config.PeekServerDaemonize(cfgFile)) {
+	if maintenanceCmd != "scheduler" && !daemonFlag && daemon.ShouldDaemonize(false, config.PeekServerDaemonize(cfgFile)) {
 		if err := daemon.Daemonize(activeLang); err != nil {
 			log.Printf("warning: daemonization failed; continuing in foreground: %v", err)
 		}
 	}
-	if err := service.EnsureServiceAccount(earlyConfigUser); err != nil {
-		log.Printf("warning: could not ensure service account: %v", err)
+	if maintenanceCmd != "scheduler" {
+		if err := service.EnsureServiceAccount(""); err != nil {
+			log.Printf("ERROR: could not ensure service account: %v", err)
+			return 69
+		}
 	}
 	earlyPort := portFlag
 	if earlyPort == "" {
@@ -962,12 +963,16 @@ func runWithConfigWithError(parent context.Context, runtimeCfg config.ServerConf
 		listenAddress = addressFlag
 	}
 	listenAddrs := earlyListenAddresses(listenAddress, earlyPort)
-	preparedListeners, err := server.PreparePrivilegeDrop(earlyConfigUser, earlyConfigGroup, []string{
-		configDir, dataDir, logsDir, cacheDir, backupDir, filepath.Dir(pidFile),
-	}, listenAddrs...)
-	if err != nil {
-		log.Printf("startup privilege preparation: %v", err)
-		return 73
+	var preparedListeners []net.Listener
+	if maintenanceCmd != "scheduler" {
+		listeners, prepareErr := server.PreparePrivilegeDrop("", "", []string{
+			configDir, dataDir, logsDir, cacheDir, backupDir, filepath.Dir(pidFile),
+		}, listenAddrs...)
+		if prepareErr != nil {
+			log.Printf("startup privilege preparation: %v", prepareErr)
+			return 73
+		}
+		preparedListeners = listeners
 	}
 	defer func() {
 		for _, listener := range preparedListeners {
@@ -1177,6 +1182,9 @@ func runWithConfigWithError(parent context.Context, runtimeCfg config.ServerConf
 	// ── Background scheduler ──────────────────────────────────────────────────
 
 	sched := scheduler.New(db)
+	if maintenanceCmd == "scheduler" {
+		sched.SetLockOwner(fmt.Sprintf("cli:%d", os.Getpid()))
+	}
 
 	// Scheduler timezone (PART 18): use the configured IANA zone with a stable fallback.
 	schedTZ := strings.TrimSpace(cfg.Server.Scheduler.Timezone)
@@ -1603,11 +1611,97 @@ func runWithConfigWithError(parent context.Context, runtimeCfg config.ServerConf
 	sched.SetLogger(logMgr.Server)
 	sched.SetNotifier(schedulerNotifier(cfg, auditW))
 
-	defer sched.Stop()
+	if maintenanceCmd == "scheduler" {
+		schedulerAuth := maintenance.AuthOptions{
+			ConfigDir:   configDir,
+			DBPath:      paths.GetDBPath(appName),
+			LogDir:      paths.GetLogsDir(appName),
+			ServiceUser: appName,
+		}
+		if err := maintenance.AuthorizeScheduler(schedulerAuth); err != nil {
+			writeMaintenanceFailure(stderr, earlyLang, binaryName, "scheduler", err)
+			return 1
+		}
+		if err := sched.LoadPersistedState(); err != nil {
+			writeMaintenanceFailure(stderr, earlyLang, binaryName, "scheduler state", err)
+			return 1
+		}
+		var taskID string
+		if len(maintenancePGP) > 0 {
+			taskID = maintenancePGP[0]
+		}
+		switch maintenanceArg {
+		case "list":
+			maintenance.PrintSchedulerTasks(stdout, sched.GetTasks())
+		case "show":
+			if taskID == "" {
+				_, _ = fmt.Fprintln(stderr, "Usage: "+binaryName+" --maintenance scheduler show <id>")
+				return 2
+			}
+			state, ok := sched.GetTask(taskID)
+			if !ok {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "scheduler show", fmt.Errorf("task %q not found", taskID))
+				return 1
+			}
+			maintenance.PrintSchedulerTask(stdout, state)
+		case "history":
+			if taskID == "" {
+				_, _ = fmt.Fprintln(stderr, "Usage: "+binaryName+" --maintenance scheduler history <id>")
+				return 2
+			}
+			history, err := db.ListTaskHistory(taskID, 20)
+			if err != nil {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "scheduler history", err)
+				return 1
+			}
+			maintenance.PrintSchedulerHistory(stdout, history)
+		case "run":
+			if taskID == "" {
+				_, _ = fmt.Fprintln(stderr, "Usage: "+binaryName+" --maintenance scheduler run <id>")
+				return 2
+			}
+			if err := sched.RunNow(taskID); err != nil {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "scheduler run", err)
+				return 1
+			}
+			maintenance.AuditMaintenanceEvent(schedulerAuth, "scheduler.task_manual_run", map[string]any{"task_id": taskID})
+			_, _ = fmt.Fprintf(stdout, "Task %s completed.\n", taskID)
+		case "enable", "disable":
+			if taskID == "" {
+				_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance scheduler %s <id>\n", binaryName, maintenanceArg)
+				return 2
+			}
+			if _, ok := sched.GetTask(taskID); !ok {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "scheduler "+maintenanceArg, fmt.Errorf("task %q not found", taskID))
+				return 1
+			}
+			if !skippableTasks[taskID] {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "scheduler "+maintenanceArg, fmt.Errorf("task %q is required and cannot be disabled or enabled manually", taskID))
+				return 1
+			}
+			enabled := maintenanceArg == "enable"
+			if err := maintenance.SetSchedulerTaskEnabled(configDir, taskID, enabled); err != nil {
+				writeMaintenanceFailure(stderr, earlyLang, binaryName, "scheduler "+maintenanceArg, err)
+				return 1
+			}
+			if enabled {
+				sched.EnableTask(taskID)
+			} else {
+				sched.DisableTask(taskID)
+			}
+			maintenance.AuditMaintenanceEvent(schedulerAuth, "scheduler.task_"+map[bool]string{true: "enabled", false: "disabled"}[enabled], map[string]any{"task_id": taskID, "source": "cli"})
+			_, _ = fmt.Fprintf(stdout, "Task %s %sd.\n", taskID, maintenanceArg)
+		default:
+			_, _ = fmt.Fprintf(stderr, "Usage: %s --maintenance scheduler {list|show|run|enable|disable|history} [id]\n", binaryName)
+			return 2
+		}
+		return 0
+	}
 
 	// Register scheduler health callback with the server for /server/healthz.
 	srv.SetSchedulerHealthFn(sched.Running)
-	srv.SetSchedulerAPI(sched)
+	srv.SetSchedulerStatus(sched)
+	srv.SetSchedulerStopFn(sched.Stop)
 	srv.SetAfterPrivilegeDropFn(func() {
 		// Startup step 16 runs user-owned maintenance work after privilege drop
 		// and before Tor/I2P or the HTTP listener starts.
@@ -1659,7 +1753,33 @@ func runWithConfigWithError(parent context.Context, runtimeCfg config.ServerConf
 		)
 
 		stopCfgMgr := make(chan struct{})
-		cfgMgr.Start(stopCfgMgr, srv.OnConfigChange)
+		cfgMgr.Start(stopCfgMgr, srv.OnConfigChange, func(next *config.Config) {
+			for id, taskConfig := range next.Server.Scheduler.Tasks {
+				if taskConfig.Schedule != "" {
+					if err := sched.SetSchedule(id, taskConfig.Schedule); err != nil {
+						log.Printf("scheduler: invalid reloaded schedule for %s: %v", id, err)
+					}
+				}
+				if taskConfig.Enabled != nil && skippableTasks[id] {
+					if *taskConfig.Enabled {
+						sched.EnableTask(id)
+					} else {
+						sched.DisableTask(id)
+					}
+				}
+				if taskConfig.RetryOnFail != nil || taskConfig.RetryDelay != "" || taskConfig.MaxRetries > 0 {
+					retryEnabled := id == "blocklist_update" || id == "cve_update"
+					if taskConfig.RetryOnFail != nil {
+						retryEnabled = *taskConfig.RetryOnFail
+					}
+					delay := time.Duration(0)
+					if taskConfig.RetryDelay != "" {
+						delay, _ = time.ParseDuration(taskConfig.RetryDelay)
+					}
+					sched.SetRetry(id, retryEnabled, delay, taskConfig.MaxRetries)
+				}
+			}
+		})
 
 		go func() {
 			reason := "signal"

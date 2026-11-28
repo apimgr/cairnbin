@@ -166,7 +166,7 @@ _%s() {
             COMPREPLY=($(compgen -W "start stop restart reload --install --uninstall --disable --help" -- "${cur}"))
             return 0 ;;
         --maintenance)
-            COMPREPLY=($(compgen -W "backup restore update mode setup pgp token data compliance --help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "backup restore update mode setup pgp token data compliance scheduler --help" -- "${cur}"))
             return 0 ;;
         --update)
             COMPREPLY=($(compgen -W "check yes branch --help" -- "${cur}"))
@@ -205,7 +205,7 @@ _%s() {
         '--debug[Enable debug logging]'
         '--shell[Shell integration]:subcmd:(completions init --help)'
         '--service[Service management]:subcmd:(start stop restart reload --install --uninstall --disable --help)'
-        '--maintenance[Maintenance tasks]:subcmd:(backup restore update mode setup pgp token data compliance --help)'
+        '--maintenance[Maintenance tasks]:subcmd:(backup restore update mode setup pgp token data compliance scheduler --help)'
         '--update[Update management]:subcmd:(check yes branch --help)'
         '--config[Config directory]:dir:_directories'
         '--data[Data directory]:dir:_directories'
@@ -237,7 +237,7 @@ complete -c %s -l debug   -d 'Enable debug logging'
 
 complete -c %s -l shell -d 'Shell integration' -xa 'completions init --help'
 complete -c %s -l service -d 'Service management' -xa 'start stop restart reload --install --uninstall --disable --help'
-complete -c %s -l maintenance -d 'Maintenance tasks' -xa 'backup restore update mode setup pgp token data compliance --help'
+complete -c %s -l maintenance -d 'Maintenance tasks' -xa 'backup restore update mode setup pgp token data compliance scheduler --help'
 complete -c %s -l update -d 'Update management' -xa 'check yes branch --help'
 
 complete -c %s -l config  -d 'Config directory'  -xa '(__fish_complete_directories)'

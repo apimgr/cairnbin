@@ -127,7 +127,7 @@ The following settings use these dotted paths in the merged configuration. The a
 
 | Path | Settings | Purpose |
 |------|----------|---------|
-| `server` | `port`, `address`, `fqdn`, `mode`, `lang`, `api_version`, `baseurl`, `user`, `group`, `pidfile`, `daemonize`, `data_dir` | This node’s listener, identity, and data location. The operator token is in `secrets.yml`. |
+| `server` | `port`, `address`, `fqdn`, `mode`, `lang`, `api_version`, `baseurl`, `pidfile`, `daemonize`, `data_dir` | This node’s listener and data location. The system service identity is fixed by the project; the operator token is in `secrets.yml`. |
 | `server.tokens` | `max_linked`, `cookie_max_age`, `idle_purge_days` | Owner-token limits and cleanup. |
 | `server.contact.{admin,security,abuse,general}` | `email`, `webhooks` | Admin email is required for operator email alerts and has no generated default. Empty security email falls back to admin for internal delivery, while public security pages omit the email; abuse/general follow their documented delivery fallback and never publish admin. Webhook URLs and signing secrets are private and live in `secrets.yml`. |
 | `server.contact.dpo` | `name`, `email` | Public data-protection contact. An empty email falls back to the general contact address; the administrator address is never shown on the public DPO page. |

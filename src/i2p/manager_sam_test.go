@@ -144,6 +144,37 @@ func TestManager_Monitor_ExitsOnContextCancel(t *testing.T) {
 	}
 }
 
+func TestManager_CloseCancelsMonitorBeforeWaitingForLock(t *testing.T) {
+	cfg := baseSAMConfig(t, "127.0.0.1:1")
+	m := NewManager(context.Background(), cfg, http.NewServeMux())
+	m.mu.Lock()
+	closed := make(chan struct{})
+	go func() {
+		m.Close()
+		close(closed)
+	}()
+	select {
+	case <-m.ctx.Done():
+	case <-time.After(time.Second):
+		m.mu.Unlock()
+		t.Fatal("Close() did not cancel the monitor before waiting for the manager lock")
+	}
+	m.mu.Unlock()
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("Close() did not finish after the manager lock was released")
+	}
+}
+
+func TestManager_RestartAfterCloseDoesNotStartProvider(t *testing.T) {
+	m := NewManager(context.Background(), baseSAMConfig(t, "127.0.0.1:1"), http.NewServeMux())
+	m.Close()
+	if err := m.Restart(); err != context.Canceled {
+		t.Fatalf("Restart after Close() = %v; want context.Canceled", err)
+	}
+}
+
 func TestManager_Monitor_RestartsDeadI2PdProcess(t *testing.T) {
 	bin := fakeI2PdScriptWithDestination(t)
 	tmp := lenientTempDir(t)

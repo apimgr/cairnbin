@@ -213,12 +213,12 @@ func (u *unavailableDB) ListSchedulerTasks() ([]*TaskState, error) {
 	return db.ListSchedulerTasks()
 }
 
-func (u *unavailableDB) UpdateTaskRun(taskID string, lastRun time.Time, status, lastError string, runCount, failCount int64, nextRun time.Time) error {
+func (u *unavailableDB) UpdateTaskRun(taskID, lockOwner string, lastRun time.Time, status, lastError string, runCount, failCount int64, nextRun time.Time) error {
 	db, err := u.use()
 	if err != nil {
 		return err
 	}
-	return db.UpdateTaskRun(taskID, lastRun, status, lastError, runCount, failCount, nextRun)
+	return db.UpdateTaskRun(taskID, lockOwner, lastRun, status, lastError, runCount, failCount, nextRun)
 }
 
 func (u *unavailableDB) SetTaskEnabled(taskID string, enabled bool) error {
@@ -227,6 +227,20 @@ func (u *unavailableDB) SetTaskEnabled(taskID string, enabled bool) error {
 		return err
 	}
 	return db.SetTaskEnabled(taskID, enabled)
+}
+
+func (u *unavailableDB) TryAcquireSchedulerTaskLock(taskID, lockOwner string, now time.Time, lease time.Duration) (bool, error) {
+	db, err := u.use()
+	if err != nil {
+		return false, err
+	}
+	locker, ok := db.(interface {
+		TryAcquireSchedulerTaskLock(string, string, time.Time, time.Duration) (bool, error)
+	})
+	if !ok {
+		return false, fmt.Errorf("database does not support scheduler task locks")
+	}
+	return locker.TryAcquireSchedulerTaskLock(taskID, lockOwner, now, lease)
 }
 
 func (u *unavailableDB) RecordTaskHistory(history *TaskHistory) error {

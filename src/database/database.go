@@ -52,13 +52,15 @@ type TaskState struct {
 	TaskName string    `json:"task_name"`
 	Schedule string    `json:"schedule"`
 	LastRun  time.Time `json:"last_run"`
-	// "pending" | "success" | "failed" | "skipped"
+	// "pending" | "running" | "success" | "failed" | "skipped" | "interrupted"
 	LastStatus string    `json:"last_status"`
 	LastError  string    `json:"last_error"`
 	NextRun    time.Time `json:"next_run"`
 	RunCount   int64     `json:"run_count"`
 	FailCount  int64     `json:"fail_count"`
 	Enabled    bool      `json:"enabled"`
+	LockedBy   string    `json:"-"`
+	LockedAt   time.Time `json:"-"`
 }
 
 // TaskHistory records a single execution event.
@@ -92,7 +94,7 @@ type DB interface {
 	UpsertSchedulerTask(t *TaskState) error
 	GetSchedulerTask(taskID string) (*TaskState, error)
 	ListSchedulerTasks() ([]*TaskState, error)
-	UpdateTaskRun(taskID string, lastRun time.Time, status, lastError string, runCount, failCount int64, nextRun time.Time) error
+	UpdateTaskRun(taskID, lockOwner string, lastRun time.Time, status, lastError string, runCount, failCount int64, nextRun time.Time) error
 	SetTaskEnabled(taskID string, enabled bool) error
 	RecordTaskHistory(h *TaskHistory) error
 	ListTaskHistory(taskID string, limit int) ([]*TaskHistory, error)
@@ -382,7 +384,9 @@ func ensureSchemaContext(ctx context.Context, db *sql.DB) error {
 			next_run     INTEGER,
 			run_count    INTEGER NOT NULL DEFAULT 0,
 			fail_count   INTEGER NOT NULL DEFAULT 0,
-			enabled      INTEGER NOT NULL DEFAULT 1
+			enabled      INTEGER NOT NULL DEFAULT 1,
+			locked_by    TEXT,
+			locked_at    INTEGER
 		)`,
 		`CREATE TABLE IF NOT EXISTS scheduler_history (
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1348,7 +1352,7 @@ func (s *SQLiteDB) GetSchedulerTask(taskID string) (*TaskState, error) {
 	defer cancel()
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, name, schedule, last_run, last_status, last_error,
-		       next_run, run_count, fail_count, enabled
+		       next_run, run_count, fail_count, enabled, locked_by, locked_at
 		FROM   scheduler_tasks WHERE id = ?`, taskID)
 	return scanTaskState(row)
 }
@@ -1359,7 +1363,7 @@ func (s *SQLiteDB) ListSchedulerTasks() ([]*TaskState, error) {
 	defer cancel()
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, schedule, last_run, last_status, last_error,
-		       next_run, run_count, fail_count, enabled
+		       next_run, run_count, fail_count, enabled, locked_by, locked_at
 		FROM   scheduler_tasks ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -1392,20 +1396,50 @@ func (s *SQLiteDB) SetTaskEnabled(taskID string, enabled bool) error {
 	return err
 }
 
+// TryAcquireSchedulerTaskLock atomically claims an unlocked or expired task lease.
+func (s *SQLiteDB) TryAcquireSchedulerTaskLock(taskID, lockOwner string, now time.Time, lease time.Duration) (bool, error) {
+	if strings.TrimSpace(lockOwner) == "" {
+		return false, fmt.Errorf("scheduler lock owner is required")
+	}
+	if lease < 10*time.Minute {
+		lease = 10 * time.Minute
+	}
+	nowUnix := now.Unix()
+	ctx, cancel := dbCtx(dbWriteTimeout)
+	defer cancel()
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE scheduler_tasks
+		SET locked_by = ?, locked_at = ?, last_status = 'running'
+		WHERE id = ? AND (locked_by IS NULL OR locked_at IS NULL OR locked_at < ? - ?)`,
+		lockOwner, nowUnix, taskID, nowUnix, int64(lease.Seconds()))
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	return rows == 1, err
+}
+
 // UpdateTaskRun records the outcome of a completed task execution.
 func (s *SQLiteDB) UpdateTaskRun(
-	taskID string, lastRun time.Time, status, lastError string,
+	taskID, lockOwner string, lastRun time.Time, status, lastError string,
 	runCount, failCount int64, nextRun time.Time,
 ) error {
 	ctx, cancel := dbCtx(dbWriteTimeout)
 	defer cancel()
-	_, err := s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, `
 		UPDATE scheduler_tasks
 		SET last_run = ?, last_status = ?, last_error = ?,
-		    run_count = ?, fail_count = ?, next_run = ?
-		WHERE id = ?`,
-		schedulerTimeValue(lastRun), status, lastError, runCount, failCount, schedulerTimeValue(nextRun), taskID,
+		    run_count = ?, fail_count = ?, next_run = ?, locked_by = NULL, locked_at = NULL
+		WHERE id = ? AND ((? = '' AND locked_by IS NULL) OR locked_by = ?)`,
+		schedulerTimeValue(lastRun), status, lastError, runCount, failCount, schedulerTimeValue(nextRun), taskID, lockOwner, lockOwner,
 	)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err == nil && rows != 1 {
+		return fmt.Errorf("scheduler task %s lock ownership changed before run state was recorded", taskID)
+	}
 	return err
 }
 
@@ -2078,13 +2112,13 @@ type rowScanner interface {
 
 func scanTaskState(row rowScanner) (*TaskState, error) {
 	t := &TaskState{}
-	var lastRun, nextRun any
-	var lastStatus, lastError sql.NullString
+	var lastRun, nextRun, lockedAt any
+	var lastStatus, lastError, lockedBy sql.NullString
 	var enabled int
 	err := row.Scan(
 		&t.TaskID, &t.TaskName, &t.Schedule,
 		&lastRun, &lastStatus, &lastError,
-		&nextRun, &t.RunCount, &t.FailCount, &enabled,
+		&nextRun, &t.RunCount, &t.FailCount, &enabled, &lockedBy, &lockedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -2098,6 +2132,10 @@ func scanTaskState(row rowScanner) (*TaskState, error) {
 	t.LastStatus = lastStatus.String
 	t.LastError = lastError.String
 	t.Enabled = enabled != 0
+	t.LockedBy = lockedBy.String
+	if t.LockedAt, err = schedulerTimeFromValue(lockedAt); err != nil {
+		return nil, fmt.Errorf("decode scheduler task locked_at: %w", err)
+	}
 	return t, nil
 }
 

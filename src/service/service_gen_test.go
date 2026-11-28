@@ -12,7 +12,7 @@ import (
 // ─── Systemd Unit File Content Verification ──────────────────────────────────
 // Tests that the generated systemd unit file contains all required directives
 // as specified in PART 24: Type=simple, RestartSec=5, Restart=on-failure,
-// ProtectSystem=strict, ProtectHome=yes, PrivateTmp=yes.
+// ProtectSystem=true, ProtectHome=yes, PrivateTmp=yes.
 
 func TestSystemdUnitContent_RequiredDirectives(t *testing.T) {
 	serviceContent := buildSystemdUnit(GetBinaryPath())
@@ -22,9 +22,10 @@ func TestSystemdUnitContent_RequiredDirectives(t *testing.T) {
 		"Type=simple",
 		"RestartSec=5",
 		"Restart=on-failure",
+		"TimeoutStopSec=120s",
 		"StandardOutput=journal",
 		"StandardError=journal",
-		"ProtectSystem=strict",
+		"ProtectSystem=true",
 		"ProtectHome=yes",
 		"PrivateTmp=yes",
 		"WantedBy=multi-user.target",
@@ -92,6 +93,7 @@ func TestSystemdUnitContent_HasReadWritePaths(t *testing.T) {
 		fmt.Sprintf("/var/log/%s/%s", orgName, appName),
 		fmt.Sprintf("/var/run/%s/%s", orgName, appName),
 		fmt.Sprintf("/mnt/Backups/%s/%s", orgName, appName),
+		"/usr/local/bin",
 	}
 
 	for _, path := range expectedPaths {
@@ -232,9 +234,16 @@ func TestOpenRCScriptContent_HasPidfile(t *testing.T) {
 	binaryPath := GetBinaryPath()
 	rcContent := buildOpenRCScript(binaryPath)
 
-	expectedPidfile := fmt.Sprintf(`pidfile="/var/run/%s/%s/%s.pid"`, orgName, appName, appName)
+	expectedPidfile := fmt.Sprintf(`pidfile="/var/run/%s-%s.pid"`, orgName, appName)
 	if !strings.Contains(rcContent, expectedPidfile) {
 		t.Errorf("OpenRC script missing pidfile directive")
+	}
+}
+
+func TestOpenRCScriptContent_AllowsGracefulShutdown(t *testing.T) {
+	rcContent := buildOpenRCScript(GetBinaryPath())
+	if !strings.Contains(rcContent, `retry="SIGTERM/120/SIGKILL/5"`) {
+		t.Error("OpenRC script must allow bounded graceful shutdown before SIGKILL")
 	}
 }
 
@@ -251,6 +260,14 @@ func TestOpenRCScriptContent_HasCheckpathCalls(t *testing.T) {
 	binaryPath := GetBinaryPath()
 	rcContent := buildOpenRCScript(binaryPath)
 
+	expectedRunParentCheck := fmt.Sprintf("checkpath -d -m 0755 /var/run/%s", orgName)
+	if !strings.Contains(rcContent, expectedRunParentCheck) {
+		t.Errorf("OpenRC script missing start_pre checkpath for /var/run/%s", orgName)
+	}
+	expectedLogParentCheck := fmt.Sprintf("checkpath -d -m 0755 /var/log/%s", orgName)
+	if !strings.Contains(rcContent, expectedLogParentCheck) {
+		t.Errorf("OpenRC script missing start_pre checkpath for /var/log/%s", orgName)
+	}
 	expectedRunCheck := fmt.Sprintf("checkpath -d -m 0755 -o %s:%s /var/run/%s/%s", serviceUser, serviceUser, orgName, appName)
 	if !strings.Contains(rcContent, expectedRunCheck) {
 		t.Errorf("OpenRC script missing start_pre checkpath for /var/run/%s/%s", orgName, appName)

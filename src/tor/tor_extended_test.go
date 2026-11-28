@@ -575,11 +575,31 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 // context so any goroutine selecting on it (e.g. Monitor) unblocks.
 func TestClose_CancelsContext(t *testing.T) {
 	m := NewManager(context.Background(), 8080, Config{}, http.NewServeMux())
-	m.Close()
+	m.mu.Lock()
+	closed := make(chan struct{})
+	go func() {
+		m.Close()
+		close(closed)
+	}()
+	select {
+	case <-m.ctx.Done():
+	case <-time.After(time.Second):
+		m.mu.Unlock()
+		t.Fatal("Close() did not cancel the monitor before waiting for the manager lock")
+	}
+	m.mu.Unlock()
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("Close() did not finish after the manager lock was released")
+	}
 	select {
 	case <-m.ctx.Done():
 	default:
 		t.Error("expected manager context to be cancelled after Close()")
+	}
+	if err := m.Restart(); err != context.Canceled {
+		t.Fatalf("Restart after Close() = %v; want context.Canceled", err)
 	}
 }
 

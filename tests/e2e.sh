@@ -84,11 +84,11 @@ trap "__cleanup" EXIT INT TERM
 
 for arg in "$@"; do
   case "${arg}" in
-  --keep) E2E_KEEP=true ;;
-  *)
-    __fail "unknown option: ${arg}"
-    exit 2
-    ;;
+    --keep) E2E_KEEP=true ;;
+    *)
+      __fail "unknown option: ${arg}"
+      exit 2
+      ;;
   esac
 done
 
@@ -181,13 +181,18 @@ fi
 E2E_BROWSER_URL="http://${E2E_BROWSER_IP}:9222"
 (
   cd -- "${E2E_PROJECT_DIR}"
-  bash "${HOME}/.codex/hooks/test-lint-run.sh" test -- make test \
-    TEST_TAGS="-tags e2e" \
-    TEST_PKGS="./tests/e2e/..." \
-    TEST_RUN="-count=1" \
-    TEST_COVERAGE=0 \
-    TEST_NETWORK=cairnbin \
-    EXTRA_ENV="--label=cairnbin.e2e.runner=true --network-alias=cairnbin-e2e-runner -v ${E2E_TEMP_DIR}/ready:/e2e -e E2E_READY_FILE=/e2e/ready -e E2E_SERVER_IP_FILE=/e2e/server-ip -e CAIRNBIN_E2E_UPDATE_API_URL=http://cairnbin-e2e-runner:64980/update -e E2E_BROWSER_URL=${E2E_BROWSER_URL} -e E2E_ARTIFACT_DIR=${E2E_ARTIFACT_DIR}"
+  bash "${HOME}/.codex/hooks/test-lint-run.sh" test -- docker run --rm --no-healthcheck \
+    --name "cairnbin-e2e-runner-$$" --network cairnbin \
+    --label=cairnbin.e2e.runner=true --network-alias=cairnbin-e2e-runner \
+    -v "${E2E_PROJECT_DIR}:/app" \
+    -v "${HOME}/go/pkg/mod:/usr/local/share/go/pkg/mod" \
+    -v "${HOME}/.cache/go-build/cairnbin:/usr/local/share/go/cache" \
+    -v "${E2E_TEMP_DIR}/ready:/e2e" -v "${E2E_ARTIFACT_DIR}:/artifacts" \
+    -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+    -e E2E_READY_FILE=/e2e/ready -e E2E_SERVER_IP_FILE=/e2e/server-ip \
+    -e CAIRNBIN_E2E_UPDATE_API_URL=http://cairnbin-e2e-runner:64980/update \
+    -e E2E_BROWSER_URL="${E2E_BROWSER_URL}" -e E2E_ARTIFACT_DIR=/artifacts \
+    casjaysdev/go:latest sh -c 'go mod download && go test -tags e2e -count=1 ./tests/e2e/...'
 ) >"${E2E_TEMP_DIR}/e2e.log" 2>&1 &
 E2E_TEST_PID=$!
 E2E_FIXTURES_READY=false

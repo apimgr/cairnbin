@@ -148,9 +148,8 @@ func TestConfirmDestructive_CaseInsensitive(t *testing.T) {
 // Docker test container, so RemoveAll is called with non-existent paths, which
 // is a no-op. We call purgeData() and only verify it completes without a panic.
 //
-// NOTE: purgeData also calls userdel/groupdel; those will fail silently in
-// containers (the user does not exist). This is the safe, observable behavior
-// we can exercise without touching real filesystem state.
+// Account removal only runs when a protected marker confirms that this server
+// created the account, so this test does not touch host accounts.
 func TestPurgeData_ToleratesMissingSystemPaths(t *testing.T) {
 	if os.Getenv("GOOS") == "windows" {
 		t.Skip("windows path is not tested here")
@@ -161,9 +160,8 @@ func TestPurgeData_ToleratesMissingSystemPaths(t *testing.T) {
 		}
 	}()
 	// Call purgeData. In a non-root Docker container the system paths do not
-	// exist; RemoveAll on non-existent paths returns nil, so no error output
-	// is printed and userdel/groupdel exit non-zero but those errors are
-	// intentionally swallowed by the function.
+	// exist; RemoveAll on non-existent paths returns nil and no account marker
+	// exists in the test environment.
 	purgeData()
 }
 

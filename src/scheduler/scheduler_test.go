@@ -77,7 +77,7 @@ func (m *mockDB) ListSchedulerTasks() ([]*database.TaskState, error) {
 	return out, nil
 }
 
-func (m *mockDB) UpdateTaskRun(taskID string, lastRun time.Time, status, lastError string, runCount, failCount int64, nextRun time.Time) error {
+func (m *mockDB) UpdateTaskRun(taskID, lockOwner string, lastRun time.Time, status, lastError string, runCount, failCount int64, nextRun time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	st := &database.TaskState{
@@ -98,8 +98,29 @@ func (m *mockDB) UpdateTaskRun(taskID string, lastRun time.Time, status, lastErr
 		t.RunCount = runCount
 		t.FailCount = failCount
 		t.NextRun = nextRun
+		if t.LockedBy == lockOwner || (lockOwner == "" && t.LockedBy == "") {
+			t.LockedBy = ""
+			t.LockedAt = time.Time{}
+		}
 	}
 	return nil
+}
+
+func (m *mockDB) TryAcquireSchedulerTaskLock(taskID, lockOwner string, now time.Time, lease time.Duration) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	task, ok := m.tasks[taskID]
+	if ok && task.LockedBy != "" && !task.LockedAt.IsZero() && now.Sub(task.LockedAt) < lease {
+		return false, nil
+	}
+	if !ok {
+		task = &database.TaskState{TaskID: taskID, Enabled: true}
+		m.tasks[taskID] = task
+	}
+	task.LastStatus = "running"
+	task.LockedBy = lockOwner
+	task.LockedAt = now
+	return true, nil
 }
 
 func (m *mockDB) SetTaskEnabled(taskID string, enabled bool) error {
@@ -680,6 +701,66 @@ func TestScheduler_LoadState_DBError_Continues(t *testing.T) {
 	s.Stop()
 }
 
+func TestScheduler_LoadPersistedStateRestoresTaskStatusWithoutRunningMissedTasks(t *testing.T) {
+	db := newMockDB()
+	lastRun := time.Now().Add(-10 * time.Minute).Truncate(time.Second)
+	db.tasks["inspect"] = &database.TaskState{
+		TaskID: "inspect", TaskName: "Inspect", Schedule: "@every 1m",
+		LastRun: lastRun, LastStatus: "failed", LastError: "previous failure",
+		RunCount: 4, FailCount: 2, Enabled: true,
+	}
+	var runs atomic.Int32
+	s := scheduler.New(db)
+	if err := s.Register("inspect", "Inspect", "@every 1m", true, func(context.Context) error {
+		runs.Add(1)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.LoadPersistedState(); err != nil {
+		t.Fatalf("LoadPersistedState: %v", err)
+	}
+	state, ok := s.GetTask("inspect")
+	if !ok {
+		t.Fatal("loaded task is missing")
+	}
+	if state.LastStatus != "failed" || state.LastError != "previous failure" || state.RunCount != 4 || state.FailCount != 2 || !state.LastRun.Equal(lastRun) {
+		t.Fatalf("persisted state not restored: %+v", state)
+	}
+	if runs.Load() != 0 || s.Running() {
+		t.Fatalf("loading state executed tasks or started loop: runs=%d running=%t", runs.Load(), s.Running())
+	}
+}
+
+func TestScheduler_UsesConfiguredTimezoneForCronTasks(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	lastRun := time.Date(2025, time.January, 1, 0, 30, 0, 0, time.UTC)
+	db := newMockDB()
+	db.tasks["daily"] = &database.TaskState{
+		TaskID: "daily", TaskName: "Daily", Schedule: "0 2 * * *",
+		LastRun: lastRun, LastStatus: "success", Enabled: true,
+	}
+	s := scheduler.New(db)
+	s.SetLocation(loc)
+	if err := s.Register("daily", "Daily", "0 2 * * *", true, nopTask()); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if err := s.LoadPersistedState(); err != nil {
+		t.Fatalf("LoadPersistedState: %v", err)
+	}
+	state, ok := s.GetTask("daily")
+	if !ok {
+		t.Fatal("registered task is missing")
+	}
+	want := time.Date(2025, time.January, 1, 7, 0, 0, 0, time.UTC)
+	if !state.NextRun.Equal(want) {
+		t.Fatalf("next run = %s, want %s (02:00 America/New_York)", state.NextRun, want)
+	}
+}
+
 // ── Scheduler — RunNow prevents concurrent duplicate runs ────────────────────
 
 func TestScheduler_RunNow_AlreadyRunning(t *testing.T) {
@@ -725,6 +806,76 @@ func TestScheduler_RunNow_AlreadyRunning(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("first RunNow did not complete within 2s")
+	}
+}
+
+func TestScheduler_RunNow_UsesPersistedTaskLockAcrossInstances(t *testing.T) {
+	db := newMockDB()
+	if err := db.UpsertSchedulerTask(&database.TaskState{TaskID: "shared", TaskName: "Shared", LastStatus: "pending", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	gate := make(chan struct{})
+	started := make(chan struct{}, 1)
+	task := func(context.Context) error {
+		started <- struct{}{}
+		<-gate
+		return nil
+	}
+	first, second := scheduler.New(db), scheduler.New(db)
+	for _, instance := range []*scheduler.Scheduler{first, second} {
+		if err := instance.Register("shared", "Shared", "@every 1h", true, task); err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+	}
+	done := make(chan error, 1)
+	go func() { done <- first.RunNow("shared") }()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first task run did not start")
+	}
+	if err := second.RunNow("shared"); !errors.Is(err, scheduler.ErrTaskAlreadyRunning) {
+		t.Fatalf("second scheduler run error = %v, want ErrTaskAlreadyRunning", err)
+	}
+	close(gate)
+	if err := <-done; err != nil {
+		t.Fatalf("first scheduler run: %v", err)
+	}
+}
+
+func TestScheduler_LoadStateRecoversInterruptedTask(t *testing.T) {
+	db := newMockDB()
+	lastRun := time.Now().Add(-2 * time.Hour)
+	if err := db.UpsertSchedulerTask(&database.TaskState{
+		TaskID: "interrupted", TaskName: "Interrupted", Schedule: "@every 1h",
+		LastRun: lastRun, LastStatus: "running", LastError: "previous error",
+		RunCount: 2, FailCount: 1, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s := scheduler.New(db)
+	if err := s.Register("interrupted", "Interrupted", "@every 1h", true, nopTask()); err != nil {
+		t.Fatal(err)
+	}
+	s.Start()
+	defer s.Stop()
+	state, ok := s.GetTask("interrupted")
+	if !ok {
+		t.Fatal("interrupted task missing")
+	}
+	if state.LastStatus != "success" {
+		// Catch-up is queued immediately; allow the single test task to finish.
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			state, _ = s.GetTask("interrupted")
+			if state.LastStatus == "success" {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if state.LastStatus != "success" || state.RunCount != 3 || state.FailCount != 1 {
+		t.Fatalf("recovered task state = %+v, want successful retry without count loss", state)
 	}
 }
 

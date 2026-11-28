@@ -35,6 +35,15 @@ func TestRunStartsServesAndShutsDown(t *testing.T) {
 	if err := os.MkdirAll(tempBase, 0o755); err != nil {
 		t.Fatalf("create project-scoped temp base: %v", err)
 	}
+	tempBaseInfo, err := os.Stat(tempBase)
+	if err != nil {
+		t.Fatalf("stat project-scoped temp base: %v", err)
+	}
+	tempBaseMode := tempBaseInfo.Mode().Perm()
+	if err := os.Chmod(tempBase, tempBaseMode|0o011); err != nil {
+		t.Fatalf("allow the service identity to traverse the project temp base: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(tempBase, tempBaseMode) })
 	root, err := os.MkdirTemp(tempBase, "cairnbin-run-")
 	if err != nil {
 		t.Fatalf("create app runtime temp dir: %v", err)

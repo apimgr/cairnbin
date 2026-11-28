@@ -252,6 +252,32 @@ func TestPurgeData_LinuxPaths(t *testing.T) {
 	purgeData()
 }
 
+func TestLinuxAccountRemovalCommands(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only test")
+	}
+	path := t.TempDir()
+	writeTool := func(name string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(path, name), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", path)
+	writeTool("deluser")
+	writeTool("delgroup")
+	userDelete, groupDelete := linuxAccountRemovalCommands()
+	if filepath.Base(userDelete) != "deluser" || filepath.Base(groupDelete) != "delgroup" {
+		t.Fatalf("BusyBox removal tools = %q/%q; want deluser/delgroup", userDelete, groupDelete)
+	}
+	writeTool("userdel")
+	writeTool("groupdel")
+	userDelete, groupDelete = linuxAccountRemovalCommands()
+	if filepath.Base(userDelete) != "userdel" || filepath.Base(groupDelete) != "groupdel" {
+		t.Fatalf("GNU removal tools = %q/%q; want userdel/groupdel", userDelete, groupDelete)
+	}
+}
+
 func TestPurgeData_ExpectedPaths(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix path test")

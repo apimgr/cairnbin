@@ -27,6 +27,17 @@ func TestProviderString(t *testing.T) {
 	}
 }
 
+func TestManagerProviderReportsInstalledBinaryDuringBootstrap(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "i2pd")
+	if err := os.WriteFile(bin, []byte("i2pd fixture"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(context.Background(), Config{Enabled: true, Binary: bin}, http.NewServeMux())
+	if got := m.Provider(); got != ProviderI2Pd {
+		t.Fatalf("provider during bootstrap = %q, want i2pd", got)
+	}
+}
+
 // ─── FindBinary ─────────────────────────────────────────────────────────────
 
 func TestFindBinary_ConfiguredPathExisting(t *testing.T) {
@@ -178,6 +189,46 @@ func TestEnsureI2PDirs_CreatesExpectedTreeWithPerms(t *testing.T) {
 				t.Errorf("%s perms = %o; want 0700", d, perm)
 			}
 		}
+	}
+}
+
+func TestPrepareReseedCertificates_CopiesTrustedCertsPrivately(t *testing.T) {
+	tmp := t.TempDir()
+	bin := filepath.Join(tmp, "usr", "sbin", "i2pd")
+	source := filepath.Join(tmp, "usr", "share", "i2pd", "certificates", "reseed")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	certificate := []byte("test reseed certificate")
+	if err := os.WriteFile(filepath.Join(source, "fixture.crt"), certificate, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dataDir := filepath.Join(tmp, "data")
+	if err := prepareReseedCertificates(bin, dataDir); err != nil {
+		t.Fatalf("prepareReseedCertificates: %v", err)
+	}
+	destination := filepath.Join(dataDir, "i2p", "certificates", "reseed", "fixture.crt")
+	content, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatalf("read installed certificate: %v", err)
+	}
+	if string(content) != string(certificate) {
+		t.Fatalf("installed certificate = %q, want %q", content, certificate)
+	}
+	info, err := os.Stat(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Errorf("installed certificate mode = %04o, want 0600", info.Mode().Perm())
+	}
+	dirInfo, err := os.Stat(filepath.Dir(destination))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && dirInfo.Mode().Perm() != 0o700 {
+		t.Errorf("certificate directory mode = %04o, want 0700", dirInfo.Mode().Perm())
 	}
 }
 

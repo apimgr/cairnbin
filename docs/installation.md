@@ -56,7 +56,7 @@ sudo systemctl start cairnbin
 sudo systemctl enable cairnbin
 ```
 
-On first start the binary creates the `cairnbin` service account, its directories, binds its port and then drops privileges. Other init systems (OpenRC, SysVinit, runit, rc.d, launchd and Windows services) are installed by the same `--service --install` command.
+`--service --install` creates the `cairnbin` service account and its directories before installing, enabling, and starting the service. On startup the binary binds its port and drops privileges to that account. Other init systems (OpenRC, SysVinit, runit, rc.d, launchd and Windows services) use the same command.
 
 ## Build from Source
 

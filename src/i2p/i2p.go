@@ -258,6 +258,9 @@ func (m *Manager) startI2PdLocked(bin string) error {
 	if err := ensureI2PDirs(m.cfg.ConfigDir, m.cfg.DataDir); err != nil {
 		return fmt.Errorf("i2p dirs: %w", err)
 	}
+	if err := prepareReseedCertificates(bin, m.cfg.DataDir); err != nil {
+		return fmt.Errorf("i2pd reseed certificates: %w", err)
+	}
 
 	rawLn, err := listenBackendLoopback()
 	if err != nil {
@@ -303,6 +306,87 @@ func (m *Manager) startI2PdLocked(bin string) error {
 		backendServer: backendServer,
 	}
 	log.Printf("I2P eepsite ready")
+	return nil
+}
+
+// prepareReseedCertificates copies the package's public trust certificates
+// into i2pd's app-owned datadir. i2pd resolves certificates relative to its
+// datadir, which this process deliberately isolates from the system router.
+func prepareReseedCertificates(bin, dataDir string) error {
+	binDir := filepath.Dir(bin)
+	sources := []string{
+		filepath.Clean(filepath.Join(binDir, "..", "share", "i2pd", "certificates", "reseed")),
+		filepath.Join(binDir, "share", "i2pd", "certificates", "reseed"),
+		"/usr/share/i2pd/certificates/reseed",
+		"/usr/local/share/i2pd/certificates/reseed",
+		"/usr/local/etc/i2pd/certificates/reseed",
+	}
+	var source string
+	var certs []os.DirEntry
+	for _, candidate := range sources {
+		entries, err := os.ReadDir(candidate)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".crt") {
+				continue
+			}
+			info, err := entry.Info()
+			if err != nil || !info.Mode().IsRegular() {
+				continue
+			}
+			certs = append(certs, entry)
+		}
+		if len(certs) > 0 {
+			source = candidate
+			break
+		}
+	}
+	if len(certs) == 0 {
+		return fmt.Errorf("no .crt trust certificates found in standard i2pd reseed certificate directories")
+	}
+
+	destination := filepath.Join(dataDir, "i2p", "certificates", "reseed")
+	if err := ensurePrivateI2PDir(destination); err != nil {
+		return fmt.Errorf("prepare private certificate directory: %w", err)
+	}
+	for _, cert := range certs {
+		path := filepath.Join(destination, cert.Name())
+		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing symlink at %s", path)
+		}
+		content, err := os.ReadFile(filepath.Join(source, cert.Name()))
+		if err != nil {
+			return fmt.Errorf("read %s: %w", cert.Name(), err)
+		}
+		if len(content) == 0 {
+			return fmt.Errorf("certificate %s is empty", cert.Name())
+		}
+		if err := writeSecureI2PFile(path, content); err != nil {
+			return fmt.Errorf("install %s: %w", cert.Name(), err)
+		}
+	}
+	return nil
+}
+
+func ensurePrivateI2PDir(path string) error {
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return err
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("expected a private directory at %s", path)
+	}
+	if err := os.Chmod(path, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chown(path, os.Getuid(), os.Getgid()); err != nil && runtime.GOOS != "windows" {
+		return err
+	}
 	return nil
 }
 
@@ -385,9 +469,11 @@ func (m *Manager) startSAMLocked() error {
 
 // Close shuts down the I2P eepsite and its backend listener.
 func (m *Manager) Close() {
+	// Stop the monitor before waiting for its mutex. A provider restart can
+	// otherwise keep shutdown waiting on this lock.
+	m.cancel()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.cancel()
 	m.closeSvcLocked()
 }
 
@@ -416,8 +502,14 @@ func (m *Manager) closeSvcLocked() {
 // destination key so the .b32.i2p address is unchanged. Used by the
 // i2p_health scheduled task (PART 18) when the provider is found down.
 func (m *Manager) Restart() error {
+	if err := m.ctx.Err(); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.ctx.Err(); err != nil {
+		return err
+	}
 	m.closeSvcLocked()
 	return m.startLocked()
 }
@@ -473,6 +565,9 @@ func (m *Manager) Provider() Provider {
 	if m.svc != nil {
 		return m.svc.provider
 	}
+	if m.cfg.Enabled && FindBinary(m.cfg.Binary) != "" {
+		return ProviderI2Pd
+	}
 	return ProviderNone
 }
 
@@ -493,9 +588,12 @@ func (m *Manager) Monitor() {
 				continue
 			}
 			if svc.provider == ProviderI2Pd && svc.cmd != nil && !svc.cmd.Alive() {
+				if m.ctx.Err() != nil {
+					return
+				}
 				log.Printf("I2P: i2pd process exited, restarting")
 				m.mu.Lock()
-				if m.svc == svc {
+				if m.ctx.Err() == nil && m.svc == svc {
 					m.closeSvcLocked()
 					if err := m.startLocked(); err != nil {
 						log.Printf("I2P: restart failed: %v", err)

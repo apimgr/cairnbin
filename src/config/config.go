@@ -95,10 +95,6 @@ type ServerConfig struct {
 	SEO SEOConfig `yaml:"seo"`
 	// CSRF controls double-submit cookie CSRF protection (PART 16 server.csrf).
 	CSRF CSRFConfig `yaml:"csrf"`
-	// User and Group are the system user/group to drop privileges to (PART 12).
-	// Empty or "{auto}" means auto-detect; keep current privileges if unset.
-	User  string `yaml:"user"`
-	Group string `yaml:"group"`
 	// PIDFile enables writing a PID file on start (PART 12).
 	PIDFile bool `yaml:"pidfile"`
 	// Daemonize detaches from the terminal on start (PART 12). Default false.
@@ -2534,7 +2530,7 @@ func Load(args []string) (*ServerConfig, error) {
 	if o.Maintenance != "" && len(o.Positional) > 0 {
 		o.MaintenanceArg = o.Positional[0]
 		switch o.Maintenance {
-		case "pgp", "token", "data", "secret", "backup":
+		case "pgp", "token", "data", "secret", "backup", "scheduler":
 			o.MaintenanceArgs = o.Positional[1:]
 		}
 	}
@@ -4900,16 +4896,6 @@ func PeekServerPort(path string) string {
 // PeekServerAddress reads only server.address before full config validation.
 func PeekServerAddress(path string) string {
 	return peekServerScalar(path, "address")
-}
-
-// PeekServerUser reads only server.user before full config validation.
-func PeekServerUser(path string) string {
-	return peekServerScalar(path, "user")
-}
-
-// PeekServerGroup reads only server.group before full config validation.
-func PeekServerGroup(path string) string {
-	return peekServerScalar(path, "group")
 }
 
 // PeekServerDaemonize reads only the manual-start daemonize setting. It is an

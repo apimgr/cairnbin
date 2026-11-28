@@ -30,6 +30,8 @@ func migrateSchedulerSchema(ctx context.Context, db *sql.DB) error {
 		{"run_count", "INTEGER NOT NULL DEFAULT 0"},
 		{"fail_count", "INTEGER NOT NULL DEFAULT 0"},
 		{"enabled", "INTEGER NOT NULL DEFAULT 1"},
+		{"locked_by", "TEXT"},
+		{"locked_at", "INTEGER"},
 	} {
 		if err := ensureSchedulerColumn(ctx, db, "scheduler_tasks", column.name, column.declaration); err != nil {
 			return err

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -270,10 +271,47 @@ func TestHandleDebugGoroutines(t *testing.T) {
 	}
 }
 
+func TestHandleDebugError500(t *testing.T) {
+	s := &Server{cfg: config.DefaultConfig()}
+	r := httptest.NewRequest(http.MethodGet, "/debug/error500", nil)
+	r.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+	s.handleDebugError500(w, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+	if !strings.Contains(w.Body.String(), "deliberate test error") {
+		t.Fatalf("500 response did not use the normal error renderer: %s", w.Body.String())
+	}
+}
+
+func TestDebugProcessArgumentsAreSanitized(t *testing.T) {
+	previousArgs := os.Args
+	os.Args = []string{"/usr/bin/cairnbin", "--token=must-not-leak"}
+	defer func() { os.Args = previousArgs }()
+
+	cmdline := httptest.NewRecorder()
+	handleDebugCmdline(cmdline, httptest.NewRequest(http.MethodGet, "/debug/pprof/cmdline", nil))
+	if strings.Contains(cmdline.Body.String(), "must-not-leak") || !strings.Contains(cmdline.Body.String(), "cairnbin") {
+		t.Fatalf("sanitized pprof cmdline = %q", cmdline.Body.String())
+	}
+
+	vars := httptest.NewRecorder()
+	handleDebugVars(vars, httptest.NewRequest(http.MethodGet, "/debug/vars", nil))
+	var values map[string]any
+	if err := json.Unmarshal(vars.Body.Bytes(), &values); err != nil {
+		t.Fatalf("debug vars is not JSON: %v", err)
+	}
+	cmdlineValue, ok := values["cmdline"].([]any)
+	if !ok || len(cmdlineValue) != 1 || cmdlineValue[0] != "cairnbin" {
+		t.Fatalf("sanitized expvar cmdline = %#v", values["cmdline"])
+	}
+}
+
 // ─── handleDebugScheduler ─────────────────────────────────────────────────────
 
 func TestHandleDebugScheduler_NoScheduler(t *testing.T) {
-	s := &Server{cfg: config.DefaultConfig(), schedulerAPI: nil}
+	s := &Server{cfg: config.DefaultConfig(), schedulerStatus: nil}
 	r := httptest.NewRequest(http.MethodGet, "/debug/scheduler", nil)
 	w := httptest.NewRecorder()
 	s.handleDebugScheduler(w, r)

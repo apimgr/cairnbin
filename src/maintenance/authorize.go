@@ -99,6 +99,19 @@ func AuthorizeDataOp(opts AuthOptions) error {
 	return newAuthorizer(opts).authorizeDataOp()
 }
 
+// AuthorizeScheduler permits scheduler maintenance only to root or the service
+// user after operator-token confirmation.
+func AuthorizeScheduler(opts AuthOptions) error {
+	a := newAuthorizer(opts)
+	if a.isRootFn() {
+		return nil
+	}
+	if a.isServiceUser() {
+		return a.requireOperatorToken("Scheduler maintenance requires operator authorization.")
+	}
+	return errors.New("scheduler maintenance requires administrator authorization: run as root or the service user with the operator token")
+}
+
 func (a *authorizer) authorizeSetup() error {
 	// First-run: an empty database means there is nothing to protect.
 	if empty, err := a.dbEmptyFn(a.dbPath()); err == nil && empty {

@@ -2118,7 +2118,7 @@ func TestMarkPendingRestart(t *testing.T) {
 	}
 }
 
-// ─── Server.SetSchedulerHealthFn / SetSchedulerAPI ───────────────────────────
+// ─── Server.SetSchedulerHealthFn ─────────────────────────────────────────────
 
 func TestSetSchedulerHelpers(t *testing.T) {
 	t.Run("SetSchedulerHealthFn", func(t *testing.T) {
@@ -2132,12 +2132,19 @@ func TestSetSchedulerHelpers(t *testing.T) {
 			t.Error("schedHealthFn not called correctly")
 		}
 	})
-
-	t.Run("SetSchedulerAPI", func(t *testing.T) {
+	t.Run("SetSchedulerStopFn", func(t *testing.T) {
 		s := newMinimalServer(&config.Config{})
-		s.SetSchedulerAPI(nil)
-		// nil is valid; ensure no panic
+		called := false
+		s.SetSchedulerStopFn(func() { called = true })
+		if s.schedulerStopFn == nil {
+			t.Fatal("schedulerStopFn should be set")
+		}
+		s.schedulerStopFn()
+		if !called {
+			t.Error("scheduler stop callback was not called")
+		}
 	})
+
 }
 
 // ─── Server.GeoIPEnabled / TorRunning / TorOnionAddress ──────────────────────
@@ -2168,20 +2175,6 @@ func TestServerStateHelpers(t *testing.T) {
 		s := newMinimalServer(&config.Config{})
 		if err := s.TorRestart(); err != nil {
 			t.Errorf("TorRestart should be nil when torManager is nil, got %v", err)
-		}
-	})
-}
-
-// ─── Server.handleSchedulerList ───────────────────────────────────────────────
-
-func TestHandleSchedulerList(t *testing.T) {
-	t.Run("nil scheduler returns 503", func(t *testing.T) {
-		s := newMinimalServer(&config.Config{})
-		r := httptest.NewRequest(http.MethodGet, "/api/v1/server/scheduler", nil)
-		w := httptest.NewRecorder()
-		s.handleSchedulerList(w, r)
-		if w.Code != http.StatusServiceUnavailable {
-			t.Errorf("scheduler list status = %d, want 503", w.Code)
 		}
 	})
 }
@@ -2723,31 +2716,6 @@ func TestPageData(t *testing.T) {
 	}
 }
 
-// ─── Additional scheduler handler nil checks ─────────────────────────────────
-
-func TestSchedulerHandlersNilScheduler(t *testing.T) {
-	s := newMinimalServer(&config.Config{})
-	handlers := []struct {
-		name    string
-		handler http.HandlerFunc
-	}{
-		{"show", s.handleSchedulerShow},
-		{"run", s.handleSchedulerRun},
-		{"enable", s.handleSchedulerEnable},
-		{"disable", s.handleSchedulerDisable},
-	}
-	for _, tc := range handlers {
-		t.Run(tc.name+" nil scheduler returns 503", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
-			w := httptest.NewRecorder()
-			tc.handler(w, r)
-			if w.Code != http.StatusServiceUnavailable {
-				t.Errorf("%s: status = %d, want 503", tc.name, w.Code)
-			}
-		})
-	}
-}
-
 // ─── Server.maybeRateLimit with active limiter ────────────────────────────────
 
 func TestMaybeRateLimitWithLimiter(t *testing.T) {
@@ -2852,7 +2820,7 @@ func (d *stubDB) DeleteBurnedPastes() (int64, error)                      { retu
 func (d *stubDB) UpsertSchedulerTask(t *database.TaskState) error         { return nil }
 func (d *stubDB) GetSchedulerTask(id string) (*database.TaskState, error) { return nil, nil }
 func (d *stubDB) ListSchedulerTasks() ([]*database.TaskState, error)      { return nil, nil }
-func (d *stubDB) UpdateTaskRun(id string, lastRun time.Time, status, lastErr string, run, fail int64, next time.Time) error {
+func (d *stubDB) UpdateTaskRun(id, lockOwner string, lastRun time.Time, status, lastErr string, run, fail int64, next time.Time) error {
 	return nil
 }
 func (d *stubDB) SetTaskEnabled(id string, enabled bool) error    { return nil }
@@ -3008,182 +2976,6 @@ func TestHandleHealthzJSON(t *testing.T) {
 	var hr HealthResponse
 	if err := json.NewDecoder(w.Body).Decode(&hr); err != nil {
 		t.Fatalf("healthz JSON body not valid: %v", err)
-	}
-}
-
-// ─── Server.handleSchedulerHistory ───────────────────────────────────────────
-
-func TestHandleSchedulerHistory(t *testing.T) {
-	t.Run("returns history from db", func(t *testing.T) {
-		history := []*database.TaskHistory{
-			{TaskID: "ssl_renewal", Status: "ok"},
-		}
-		db := &stubDB{taskHistory: history}
-		s := newServerWithDB(&config.Config{}, db)
-
-		r := httptest.NewRequest(http.MethodGet, "/api/v1/server/scheduler/ssl_renewal/history", nil)
-		w := httptest.NewRecorder()
-		s.handleSchedulerHistory(w, r)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("scheduler history status = %d, want 200", w.Code)
-		}
-	})
-
-	t.Run("db error returns 500", func(t *testing.T) {
-		db := &stubDB{historyErr: os.ErrClosed}
-		s := newServerWithDB(&config.Config{}, db)
-
-		r := httptest.NewRequest(http.MethodGet, "/api/v1/server/scheduler/foo/history", nil)
-		w := httptest.NewRecorder()
-		s.handleSchedulerHistory(w, r)
-
-		if w.Code != http.StatusInternalServerError {
-			t.Errorf("scheduler history error status = %d, want 500", w.Code)
-		}
-	})
-}
-
-// ─── stubSchedulerAPI implements SchedulerAPI for testing ────────────────────
-
-type stubSchedulerAPI struct {
-	tasks    []database.TaskState
-	taskMap  map[string]database.TaskState
-	runNowFn func(id string) error
-}
-
-func newStubScheduler(tasks ...database.TaskState) *stubSchedulerAPI {
-	m := make(map[string]database.TaskState, len(tasks))
-	for _, t := range tasks {
-		m[t.TaskName] = t
-	}
-	return &stubSchedulerAPI{tasks: tasks, taskMap: m}
-}
-
-func (s *stubSchedulerAPI) GetTasks() []database.TaskState {
-	return s.tasks
-}
-
-func (s *stubSchedulerAPI) GetTask(id string) (database.TaskState, bool) {
-	t, ok := s.taskMap[id]
-	return t, ok
-}
-
-func (s *stubSchedulerAPI) RunNow(id string) error {
-	if s.runNowFn != nil {
-		return s.runNowFn(id)
-	}
-	return nil
-}
-
-func (s *stubSchedulerAPI) EnableTask(id string) {
-	if ts, ok := s.taskMap[id]; ok {
-		ts.Enabled = true
-		s.taskMap[id] = ts
-	}
-}
-
-func (s *stubSchedulerAPI) DisableTask(id string) {
-	if ts, ok := s.taskMap[id]; ok {
-		ts.Enabled = false
-		s.taskMap[id] = ts
-	}
-}
-
-// ─── Scheduler handler tests with a real scheduler API ───────────────────────
-
-func TestHandleSchedulerListWithAPI(t *testing.T) {
-	sched := newStubScheduler(
-		database.TaskState{TaskName: "ssl_renewal", Enabled: true},
-		database.TaskState{TaskName: "geoip_update", Enabled: false},
-	)
-	s := newMinimalServer(&config.Config{})
-	s.SetSchedulerAPI(sched)
-
-	r := httptest.NewRequest(http.MethodGet, "/api/v1/server/scheduler", nil)
-	w := httptest.NewRecorder()
-	s.handleSchedulerList(w, r)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("scheduler list status = %d, want 200", w.Code)
-	}
-	var body map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("scheduler list body not valid JSON: %v", err)
-	}
-	if body["ok"] != true {
-		t.Errorf("scheduler list ok = %v, want true", body["ok"])
-	}
-}
-
-func TestHandleSchedulerShowWithAPI(t *testing.T) {
-	sched := newStubScheduler(database.TaskState{TaskName: "ssl_renewal", Enabled: true})
-	s := newMinimalServer(&config.Config{})
-	s.SetSchedulerAPI(sched)
-
-	t.Run("existing task returns 200", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		w := httptest.NewRecorder()
-		s.handleSchedulerShow(w, r)
-		// chi.URLParam returns "" without router context → task not found → 404
-		if w.Code != http.StatusNotFound {
-			t.Errorf("no-ID show status = %d, want 404", w.Code)
-		}
-	})
-}
-
-func TestHandleSchedulerRunWithAPI(t *testing.T) {
-	sched := newStubScheduler(database.TaskState{TaskName: "ssl_renewal"})
-	s := newMinimalServer(&config.Config{})
-	s.SetSchedulerAPI(sched)
-
-	r := httptest.NewRequest(http.MethodPost, "/", nil)
-	w := httptest.NewRecorder()
-	s.handleSchedulerRun(w, r)
-	// chi.URLParam("id") = "" → RunNow("") returns nil → 200
-	if w.Code != http.StatusOK {
-		t.Errorf("scheduler run status = %d, want 200", w.Code)
-	}
-}
-
-func TestHandleSchedulerRunError(t *testing.T) {
-	sched := newStubScheduler()
-	sched.runNowFn = func(id string) error { return os.ErrNotExist }
-	s := newMinimalServer(&config.Config{})
-	s.SetSchedulerAPI(sched)
-
-	r := httptest.NewRequest(http.MethodPost, "/", nil)
-	w := httptest.NewRecorder()
-	s.handleSchedulerRun(w, r)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("scheduler run error status = %d, want 400", w.Code)
-	}
-}
-
-func TestHandleSchedulerEnableWithAPI(t *testing.T) {
-	sched := newStubScheduler(database.TaskState{TaskName: "ssl_renewal"})
-	s := newMinimalServer(&config.Config{})
-	s.SetSchedulerAPI(sched)
-
-	// Without chi context, URLParam("id") = "" → GetTask("") → not found → 404.
-	r := httptest.NewRequest(http.MethodPost, "/", nil)
-	w := httptest.NewRecorder()
-	s.handleSchedulerEnable(w, r)
-	if w.Code != http.StatusNotFound {
-		t.Errorf("scheduler enable (not found) status = %d, want 404", w.Code)
-	}
-}
-
-func TestHandleSchedulerDisableWithAPI(t *testing.T) {
-	sched := newStubScheduler(database.TaskState{TaskName: "ssl_renewal"})
-	s := newMinimalServer(&config.Config{})
-	s.SetSchedulerAPI(sched)
-
-	r := httptest.NewRequest(http.MethodPost, "/", nil)
-	w := httptest.NewRecorder()
-	s.handleSchedulerDisable(w, r)
-	if w.Code != http.StatusNotFound {
-		t.Errorf("scheduler disable (not found) status = %d, want 404", w.Code)
 	}
 }
 
@@ -4578,6 +4370,8 @@ func TestRun(t *testing.T) {
 	db := &stubDB{}
 	cfg := config.DefaultConfig()
 	s := New(db, cfg, nil, "1.0.0", "abc", "now", t.TempDir(), t.TempDir())
+	schedulerStopped := false
+	s.SetSchedulerStopFn(func() { schedulerStopped = true })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// cancel before Run — server should stop immediately after binding
@@ -4589,6 +4383,9 @@ func TestRun(t *testing.T) {
 	if err != nil && !strings.Contains(err.Error(), "context") &&
 		!strings.Contains(err.Error(), "Server closed") {
 		t.Errorf("Run returned unexpected error: %v", err)
+	}
+	if !schedulerStopped {
+		t.Error("Run did not stop the scheduler during shutdown")
 	}
 }
 

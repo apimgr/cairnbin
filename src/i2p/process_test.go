@@ -35,7 +35,18 @@ func fakeI2PdScriptWithDestination(t *testing.T) string {
 		t.Skip("shell-script fake binary requires a POSIX shell")
 	}
 	tmp := t.TempDir()
-	script := filepath.Join(tmp, "fake-i2pd-with-dest.sh")
+	binDir := filepath.Join(tmp, "usr", "sbin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(binDir, "fake-i2pd-with-dest.sh")
+	certDir := filepath.Join(tmp, "usr", "share", "i2pd", "certificates", "reseed")
+	if err := os.MkdirAll(certDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(certDir, "fixture.crt"), []byte("test reseed certificate"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	body := `#!/bin/sh
 datadir=""
 take_next=""

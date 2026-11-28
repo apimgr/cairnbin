@@ -274,6 +274,24 @@ func TestTorHealth_RestartError(t *testing.T) {
 	}
 }
 
+func TestOverlayHealthDoesNotRestartAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, tc := range []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{name: "Tor", run: task.TorHealth(func() bool { return false }, func() error { t.Error("Tor restarted after cancellation"); return nil })},
+		{name: "I2P", run: task.I2PHealth(func() bool { return false }, func() error { t.Error("I2P restarted after cancellation"); return nil })},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.run(ctx); err != nil {
+				t.Fatalf("health task after cancellation: %v", err)
+			}
+		})
+	}
+}
+
 var errTorRestart = &torRestartError{}
 
 type torRestartError struct{}
@@ -297,12 +315,13 @@ func TestBackupDaily_CreatesBackup(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "cairnbin",
-		ConfigDir:   cfgDir,
-		DataDir:     dataDir,
-		BackupDir:   bkpDir,
-		AppVersion:  "v1.0.0",
-		Retention:   task.BackupRetention{MaxBackups: 3},
+		ProjectName:   "cairnbin",
+		ConfigDir:     cfgDir,
+		DataDir:       dataDir,
+		BackupDir:     bkpDir,
+		AppVersion:    "v1.0.0",
+		Retention:     task.BackupRetention{MaxBackups: 3},
+		DiskThreshold: 100,
 	}
 	fn := task.BackupDaily(cfg)
 	if err := fn(context.Background()); err != nil {
@@ -333,12 +352,13 @@ func TestBackupDailySecondFullUsesTimestampedName(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := task.BackupConfig{
-		ProjectName: "cairnbin",
-		ConfigDir:   cfgDir,
-		DataDir:     dataDir,
-		BackupDir:   bkpDir,
-		AppVersion:  "v1.0.0",
-		Retention:   task.BackupRetention{MaxBackups: 5},
+		ProjectName:   "cairnbin",
+		ConfigDir:     cfgDir,
+		DataDir:       dataDir,
+		BackupDir:     bkpDir,
+		AppVersion:    "v1.0.0",
+		Retention:     task.BackupRetention{MaxBackups: 5},
+		DiskThreshold: 100,
 	}
 	run := task.BackupDaily(cfg)
 	if err := run(context.Background()); err != nil {
@@ -402,13 +422,14 @@ func TestBackupDaily_WithEncryption(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "cairnbin",
-		ConfigDir:   cfgDir,
-		DataDir:     dataDir,
-		BackupDir:   bkpDir,
-		AppVersion:  "v1.0.0",
-		Password:    "supersecret",
-		Retention:   task.BackupRetention{MaxBackups: 2},
+		ProjectName:   "cairnbin",
+		ConfigDir:     cfgDir,
+		DataDir:       dataDir,
+		BackupDir:     bkpDir,
+		AppVersion:    "v1.0.0",
+		Password:      "supersecret",
+		Retention:     task.BackupRetention{MaxBackups: 2},
+		DiskThreshold: 100,
 	}
 	fn := task.BackupDaily(cfg)
 	if err := fn(context.Background()); err != nil {
@@ -439,11 +460,12 @@ func TestBackupDaily_WithRetentionAndMultipleRuns(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "cairnbin",
-		ConfigDir:   cfgDir,
-		DataDir:     dataDir,
-		BackupDir:   bkpDir,
-		AppVersion:  "v1.0.0",
+		ProjectName:   "cairnbin",
+		ConfigDir:     cfgDir,
+		DataDir:       dataDir,
+		BackupDir:     bkpDir,
+		AppVersion:    "v1.0.0",
+		DiskThreshold: 100,
 		Retention: task.BackupRetention{
 			MaxBackups:  1,
 			KeepWeekly:  1,
@@ -474,11 +496,12 @@ func TestBackupHourly_CreatesRollingBackup(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "cairnbin",
-		ConfigDir:   cfgDir,
-		DataDir:     dataDir,
-		BackupDir:   bkpDir,
-		AppVersion:  "v1.0.0",
+		ProjectName:   "cairnbin",
+		ConfigDir:     cfgDir,
+		DataDir:       dataDir,
+		BackupDir:     bkpDir,
+		AppVersion:    "v1.0.0",
+		DiskThreshold: 100,
 	}
 	fn := task.BackupHourly(cfg)
 	if err := fn(context.Background()); err != nil {
@@ -507,12 +530,13 @@ func TestBackupHourly_WithEncryption(t *testing.T) {
 	}
 
 	cfg := task.BackupConfig{
-		ProjectName: "cairnbin",
-		ConfigDir:   cfgDir,
-		DataDir:     dataDir,
-		BackupDir:   bkpDir,
-		AppVersion:  "v1.0.0",
-		Password:    "secretpass",
+		ProjectName:   "cairnbin",
+		ConfigDir:     cfgDir,
+		DataDir:       dataDir,
+		BackupDir:     bkpDir,
+		AppVersion:    "v1.0.0",
+		Password:      "secretpass",
+		DiskThreshold: 100,
 	}
 	fn := task.BackupHourly(cfg)
 	if err := fn(context.Background()); err != nil {

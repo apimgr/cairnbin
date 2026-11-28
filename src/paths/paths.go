@@ -124,7 +124,7 @@ func SafeFilePath(baseDir, userPath string) (string, error) {
 
 // containerCheck and rootCheck are overridable in tests so that non-container
 // and privileged code-paths can be exercised from any environment.
-var containerCheck = isContainer
+var containerCheck = isApplicationContainer
 
 // startedElevated is captured once at process start, before any privilege
 // drop, so the system-vs-user directory mode never changes mid-run (PART 8).
@@ -435,9 +435,33 @@ func EnsureDir(path string) error {
 	return os.MkdirAll(path, perm)
 }
 
-// IsContainer reports whether the process is running inside a Linux container.
+// IsContainer reports whether the process is running inside an application
+// container. A systemd or OpenRC system container is a host for all defaults
+// that depend on application-container detection (AI.md PART 8).
 func IsContainer() bool {
+	return isApplicationContainer()
+}
+
+func isApplicationContainer() bool {
+	pid1 := ""
+	if data, err := os.ReadFile("/proc/1/comm"); err == nil {
+		pid1 = strings.TrimSpace(string(data))
+	}
+	openRCInit := false
+	if _, err := os.Stat("/run/openrc"); err == nil {
+		openRCInit = true
+	}
+	if systemInitOverridesContainer(os.Getenv("INVOCATION_ID"), os.Getenv("RC_SVCNAME"), pid1, openRCInit) {
+		return false
+	}
 	return isContainer()
+}
+
+func systemInitOverridesContainer(invocationID, rcServiceName, pid1 string, openRCInit bool) bool {
+	if invocationID != "" || rcServiceName != "" {
+		return true
+	}
+	return pid1 == "systemd" || pid1 == "openrc-init" || (pid1 == "init" && openRCInit)
 }
 
 // isContainer reports whether the process is running inside a Linux container.

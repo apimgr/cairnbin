@@ -2,7 +2,11 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"expvar"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -62,17 +66,56 @@ func redactMap(v any) any {
 	}
 }
 
-// registerDebugRoutes registers the custom debug API endpoints (PART 6). Callers
-// must gate this behind mode.ShouldShowDebugEndpoints(); pprof and expvar are
-// registered separately in the route table.
+// registerDebugRoutes registers runtime diagnostics inside the authenticated
+// /debug route group (PART 6).
 func (s *Server) registerDebugRoutes(r chi.Router) {
-	r.Get("/debug/config", s.handleDebugConfig)
-	r.Get("/debug/routes", s.handleDebugRoutes)
-	r.Get("/debug/cache", s.handleDebugCache)
-	r.Get("/debug/db", s.handleDebugDB)
-	r.Get("/debug/scheduler", s.handleDebugScheduler)
-	r.Get("/debug/memory", s.handleDebugMemory)
-	r.Get("/debug/goroutines", s.handleDebugGoroutines)
+	r.Get("/config", s.handleDebugConfig)
+	r.Get("/routes", s.handleDebugRoutes)
+	r.Get("/cache", s.handleDebugCache)
+	r.Get("/db", s.handleDebugDB)
+	r.Get("/scheduler", s.handleDebugScheduler)
+	r.Get("/memory", s.handleDebugMemory)
+	r.Get("/goroutines", s.handleDebugGoroutines)
+	r.Get("/error500", s.handleDebugError500)
+}
+
+// handleDebugCmdline exposes only the executable name, never process arguments.
+func handleDebugCmdline(w http.ResponseWriter, _ *http.Request) {
+	name := filepath.Base(os.Args[0])
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte(name + "\x00"))
+}
+
+// handleDebugVars preserves expvar values while replacing its command-line
+// variable with the executable name so arguments cannot reveal credentials.
+func handleDebugVars(w http.ResponseWriter, r *http.Request) {
+	values := make(map[string]json.RawMessage)
+	expvar.Do(func(kv expvar.KeyValue) {
+		if kv.Key == "cmdline" {
+			name, err := json.Marshal([]string{filepath.Base(os.Args[0])})
+			if err == nil {
+				values[kv.Key] = name
+			}
+			return
+		}
+		if json.Valid([]byte(kv.Value.String())) {
+			values[kv.Key] = json.RawMessage(kv.Value.String())
+			return
+		}
+		value, err := json.Marshal(kv.Value.String())
+		if err == nil {
+			values[kv.Key] = value
+		}
+	})
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err := json.NewEncoder(w).Encode(values); err != nil {
+		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
+	}
+}
+
+// handleDebugError500 triggers the normal themed 500 response for browser tests.
+func (s *Server) handleDebugError500(w http.ResponseWriter, r *http.Request) {
+	s.renderErrorPage(w, r, http.StatusInternalServerError, "A deliberate test error was requested.")
 }
 
 // handleDebugConfig returns the live configuration with all secret values
@@ -155,11 +198,11 @@ func (s *Server) handleDebugDB(w http.ResponseWriter, r *http.Request) {
 
 // handleDebugScheduler returns the status of every scheduled task (PART 6).
 func (s *Server) handleDebugScheduler(w http.ResponseWriter, r *http.Request) {
-	if s.schedulerAPI == nil {
+	if s.schedulerStatus == nil {
 		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
 		return
 	}
-	tasks := s.schedulerAPI.GetTasks()
+	tasks := s.schedulerStatus.GetTasks()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": map[string]any{"count": len(tasks), "tasks": tasks}})
 }
 

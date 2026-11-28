@@ -585,86 +585,17 @@ func addPreferenceConsent(req *http.Request) {
 	})
 }
 
-func TestTier1LocalIntegrationDoubles(t *testing.T) {
-	base := baseURL(t)
-	for _, taskID := range []string{"blocklist_update", "cve_update"} {
-		req, err := http.NewRequest(http.MethodPost, base+"/api/v1/schedulers/"+taskID+"/run", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set("Authorization", "Bearer "+e2eOperatorToken)
-		resp, err := client().Do(req)
-		if err != nil {
-			t.Fatalf("run %s scheduler task: %v", taskID, err)
-		}
-		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("run %s status = %d, body=%s", taskID, resp.StatusCode, body)
-		}
-	}
-	for _, path := range []string{"/blocklist", "/cve"} {
-		if _, ok := e2eDoubleHits.Load(path); !ok {
-			t.Errorf("local integration double did not receive %s download", path)
-		}
-	}
-	updateReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/schedulers/update_check/run", nil)
+func TestSchedulerHasNoAPIEndpoint(t *testing.T) {
+	resp, err := client().Get(baseURL(t) + "/api/v1/schedulers")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("request scheduler API path: %v", err)
 	}
-	updateReq.Header.Set("Authorization", "Bearer "+e2eOperatorToken)
-	updateResp, err := client().Do(updateReq)
-	if err != nil {
-		t.Fatalf("run update_check scheduler task: %v", err)
-	}
-	updateBody, readErr := io.ReadAll(updateResp.Body)
-	updateResp.Body.Close()
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	if updateResp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("failed update source status = %d, want %d; body=%s", updateResp.StatusCode, http.StatusBadRequest, updateBody)
-	}
-	if _, ok := e2eDoubleHits.Load("/update/latest"); !ok {
-		t.Fatal("local integration double did not receive update check")
-	}
-	select {
-	case message := <-e2eSMTPMessages:
-		if !strings.Contains(message, "Update Check") || !strings.Contains(message, "e2e-admin@example.test") {
-			t.Errorf("SMTP double received unexpected scheduler notification: %s", message)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("scheduler failure notification did not reach local SMTP double")
-	}
-	geoIPReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/schedulers/geoip_update/run", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	geoIPReq.Header.Set("Authorization", "Bearer "+e2eOperatorToken)
-	geoIPResp, err := client().Do(geoIPReq)
-	if err != nil {
-		t.Fatalf("run geoip_update scheduler task: %v", err)
-	}
-	geoIPBody, readErr := io.ReadAll(geoIPResp.Body)
-	geoIPResp.Body.Close()
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	if geoIPResp.StatusCode != http.StatusBadRequest {
-		t.Errorf("invalid GeoIP fixture status = %d, want %d; body=%s", geoIPResp.StatusCode, http.StatusBadRequest, geoIPBody)
-	}
-	for _, path := range []string{"/geoip/asn", "/geoip/country", "/geoip/city-ipv4", "/geoip/city-ipv6"} {
-		if _, ok := e2eDoubleHits.Load(path); !ok {
-			t.Errorf("local integration double did not receive GeoIP download %s", path)
-		}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("scheduler API status = %d, want 404", resp.StatusCode)
 	}
 }
 
-// TestTier1HomeSSR verifies the homepage renders its server-side create link
-// and metadata without requiring JavaScript.
 func TestTier1HomeSSR(t *testing.T) {
 	base := baseURL(t)
 	resp, err := getHTML(client(), base+"/")

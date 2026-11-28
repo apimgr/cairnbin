@@ -218,7 +218,55 @@ type managedTor interface {
 
 type bineTor struct{ tor *binettor.Tor }
 
-func (t bineTor) Close() error { return t.tor.Close() }
+func (t bineTor) Close() error {
+	if t.tor == nil {
+		return nil
+	}
+	process, ok := t.tor.Process.(*pidCapturingProcess)
+	if !ok || process == nil || process.Cmd == nil {
+		return t.tor.Close()
+	}
+
+	// Tor's monitor may be waiting for a control response while shutdown begins.
+	// Run the graceful control shutdown concurrently so the process timeout can
+	// still terminate Tor and release a wedged controller read.
+	controlDone := make(chan struct{})
+	go func() {
+		if t.tor.Control != nil {
+			_ = t.tor.Control.Signal("SHUTDOWN")
+			_ = t.tor.Control.Close()
+		}
+		close(controlDone)
+	}()
+
+	processDone := make(chan error, 1)
+	go func() { processDone <- process.Wait() }()
+	select {
+	case <-processDone:
+	case <-time.After(10 * time.Second):
+		if process.Process != nil {
+			_ = terminateTorProcess(process.Cmd)
+		}
+		select {
+		case <-processDone:
+		case <-time.After(5 * time.Second):
+			if process.Process != nil {
+				_ = process.Process.Kill()
+			}
+			<-processDone
+		}
+	}
+	if t.tor.ProcessCancelFunc != nil {
+		t.tor.ProcessCancelFunc()
+	}
+	t.tor.Process = nil
+	t.tor.Control = nil
+	select {
+	case <-controlDone:
+	case <-time.After(time.Second):
+	}
+	return nil
+}
 func (t bineTor) EnableNetwork(ctx context.Context, wait bool) error {
 	return t.tor.EnableNetwork(ctx, wait)
 }
@@ -481,9 +529,11 @@ func migrateLegacyKey(siteDir string) error {
 
 // Close shuts down the Tor process and its backend listener.
 func (m *Manager) Close() {
+	// Stop the monitor before waiting for its mutex. A failed control request
+	// can otherwise start a replacement Tor process while shutdown waits here.
+	m.cancel()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.cancel()
 	m.closeSvcLocked()
 }
 
@@ -560,8 +610,14 @@ func (m *Manager) GetHTTPClient(useTor bool) *http.Client {
 // Restart closes the current Tor process and starts a fresh one, preserving
 // the existing torrc and hidden-service keys.
 func (m *Manager) Restart() error {
+	if err := m.ctx.Err(); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.ctx.Err(); err != nil {
+		return err
+	}
 	m.closeSvcLocked()
 	return m.startLocked()
 }
@@ -651,13 +707,16 @@ func (m *Manager) Monitor() {
 				continue
 			}
 			if _, err := svc.t.GetInfo("version"); err != nil {
+				if m.ctx.Err() != nil {
+					return
+				}
 				log.Printf("Tor: control connection lost, restarting")
 				m.mu.Lock()
 				// Another path (Restart/UpdateConfig) may have already replaced
 				// or torn down this service while the lock was released; only act
 				// if the live service is still the one we sampled, to avoid a
 				// double Close() and clobbering a concurrent restart.
-				if m.svc == svc {
+				if m.ctx.Err() == nil && m.svc == svc {
 					m.closeSvcLocked()
 					if err := m.startLocked(); err != nil {
 						log.Printf("Tor: restart failed: %v", err)

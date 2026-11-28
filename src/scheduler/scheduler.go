@@ -2,8 +2,10 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -12,6 +14,8 @@ import (
 	"github.com/apimgr/cairnbin/src/database"
 	"github.com/apimgr/cairnbin/src/metric"
 )
+
+var ErrTaskAlreadyRunning = errors.New("scheduler task is already running")
 
 const (
 	defaultCatchUpWindow = time.Hour
@@ -22,6 +26,7 @@ const (
 	// shutdownDrainTimeout bounds how long Stop waits for in-flight task
 	// goroutines to finish before marking them interrupted (PART 18 shutdown).
 	shutdownDrainTimeout = 30 * time.Second
+	schedulerLockLease   = 10 * time.Minute
 )
 
 // TaskFunc is the function executed by a scheduled task. ctx is cancelled when
@@ -79,6 +84,7 @@ type Scheduler struct {
 	db            database.DB
 	catchUpWindow time.Duration
 	loc           *time.Location
+	lockOwner     string
 
 	mu       sync.Mutex
 	tasks    map[string]*taskEntry
@@ -101,11 +107,16 @@ type Scheduler struct {
 // db may be nil — in that case state is not persisted (useful for tests).
 func New(db database.DB) *Scheduler {
 	loc := time.Local
+	host, err := os.Hostname()
+	if err != nil || strings.TrimSpace(host) == "" {
+		host = "unknown"
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
 		db:            db,
 		catchUpWindow: defaultCatchUpWindow,
 		loc:           loc,
+		lockOwner:     fmt.Sprintf("node:%s:%d", host, os.Getpid()),
 		tasks:         make(map[string]*taskEntry),
 		stop:          make(chan struct{}),
 		ctx:           ctx,
@@ -113,11 +124,31 @@ func New(db database.DB) *Scheduler {
 	}
 }
 
+// SetLockOwner sets the persisted lock identity for one-shot maintenance runs.
+func (s *Scheduler) SetLockOwner(owner string) {
+	if strings.TrimSpace(owner) == "" {
+		return
+	}
+	s.mu.Lock()
+	s.lockOwner = owner
+	s.mu.Unlock()
+}
+
 // SetCatchUpWindow overrides the default 1-hour catch-up window.
 func (s *Scheduler) SetCatchUpWindow(d time.Duration) { s.catchUpWindow = d }
 
 // SetLocation sets the timezone used for cron expressions.
 func (s *Scheduler) SetLocation(loc *time.Location) { s.loc = loc }
+
+// nextRun evaluates wall-clock cron fields in the configured scheduler zone.
+// Schedule.Next returns an absolute time, so converting the input preserves the
+// instant while making cron hour/day matching use the configured location.
+func (s *Scheduler) nextRun(schedule Schedule, after time.Time) time.Time {
+	if s.loc != nil {
+		after = after.In(s.loc)
+	}
+	return schedule.Next(after)
+}
 
 // SetNotifier registers a callback invoked after every task execution. Use it to
 // write audit-log entries and send failure notifications (PART 18).
@@ -231,6 +262,46 @@ func (s *Scheduler) Running() bool {
 	return s.running
 }
 
+// LoadPersistedState restores task history without registering or running
+// missed tasks. It is used by one-shot maintenance commands.
+func (s *Scheduler) LoadPersistedState() error {
+	if s.db == nil {
+		return nil
+	}
+	stored, err := s.db.ListSchedulerTasks()
+	if err != nil {
+		return err
+	}
+	stateByID := make(map[string]*database.TaskState, len(stored))
+	for _, state := range stored {
+		stateByID[state.TaskID] = state
+	}
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, entry := range s.tasks {
+		state, ok := stateByID[entry.id]
+		if !ok {
+			entry.nextRun = s.nextRun(entry.schedule, now)
+			continue
+		}
+		entry.lastRun = state.LastRun
+		entry.lastStatus = state.LastStatus
+		entry.lastError = state.LastError
+		entry.runCount = state.RunCount
+		entry.failCount = state.FailCount
+		if entry.lastRun.IsZero() {
+			entry.nextRun = s.nextRun(entry.schedule, now)
+		} else {
+			entry.nextRun = s.nextRun(entry.schedule, entry.lastRun)
+		}
+		if err := s.db.UpsertSchedulerTask(toTaskState(entry)); err != nil {
+			return fmt.Errorf("register scheduler task %s: %w", entry.id, err)
+		}
+	}
+	return nil
+}
+
 // Stop signals the scheduler loop to exit, then drains in-flight task
 // goroutines within a bounded window (PART 18 shutdown behavior). Tasks still
 // running after the timeout are marked interrupted and scheduled to retry on
@@ -281,7 +352,12 @@ func (s *Scheduler) markInterrupted() {
 		}
 		e.lastStatus = "interrupted"
 		e.nextRun = now
-		s.persistState(e)
+		if s.db != nil {
+			if err := s.db.UpdateTaskRun(e.id, s.lockOwner, e.lastRun, e.lastStatus, e.lastError,
+				e.runCount, e.failCount, e.nextRun); err != nil {
+				log.Printf("scheduler: release interrupted task %s lock: %v", e.id, err)
+			}
+		}
 		log.Printf("scheduler: task %s interrupted by shutdown; marked for retry", e.id)
 	}
 }
@@ -334,9 +410,9 @@ func (s *Scheduler) SetSchedule(id, expression string) error {
 	}
 	e.schedule = schedule
 	if e.lastRun.IsZero() {
-		e.nextRun = schedule.Next(time.Now())
+		e.nextRun = s.nextRun(schedule, time.Now())
 	} else {
-		e.nextRun = schedule.Next(e.lastRun)
+		e.nextRun = s.nextRun(schedule, e.lastRun)
 	}
 	s.persistState(e)
 	return nil
@@ -347,7 +423,7 @@ func (s *Scheduler) EnableTask(id string) {
 	s.mu.Lock()
 	if e, ok := s.tasks[id]; ok {
 		e.enabled = true
-		e.nextRun = e.schedule.Next(time.Now())
+		e.nextRun = s.nextRun(e.schedule, time.Now())
 		s.persistState(e)
 	}
 	s.mu.Unlock()
@@ -445,7 +521,27 @@ func runIsolated(ctx context.Context, id string, fn TaskFunc) (err error) {
 }
 
 func (s *Scheduler) execute(e *taskEntry) error {
+	if s.db != nil {
+		if locker, ok := s.db.(interface {
+			TryAcquireSchedulerTaskLock(string, string, time.Time, time.Duration) (bool, error)
+		}); ok {
+			s.mu.Lock()
+			lockOwner := s.lockOwner
+			s.mu.Unlock()
+			acquired, err := locker.TryAcquireSchedulerTaskLock(e.id, lockOwner, time.Now(), schedulerLockLease)
+			if err != nil {
+				return fmt.Errorf("acquire scheduler task lock for %s: %w", e.id, err)
+			}
+			if !acquired {
+				return fmt.Errorf("%w: %s", ErrTaskAlreadyRunning, e.id)
+			}
+		}
+	}
+
 	start := time.Now()
+	s.mu.Lock()
+	e.lastStatus = "running"
+	s.mu.Unlock()
 	s.writeLog("debug", "scheduler task running", "task_id", e.id)
 
 	s.mu.Lock()
@@ -502,18 +598,18 @@ func (s *Scheduler) execute(e *taskEntry) error {
 			retryMessage = []string{"task_id", e.id, "attempt", fmt.Sprint(e.retryAttempt), "max_attempts", fmt.Sprint(e.retryMax), "delay", delay.String()}
 		} else {
 			logLevel = "error"
-			next = e.schedule.Next(finished)
+			next = s.nextRun(e.schedule, finished)
 			e.retryAttempt = 0
 		}
 	} else {
 		e.runCount++
 		e.retryAttempt = 0
-		next = e.schedule.Next(finished)
+		next = s.nextRun(e.schedule, finished)
 	}
 	e.nextRun = next
 
 	if s.db != nil {
-		if err := s.db.UpdateTaskRun(e.id, e.lastRun, e.lastStatus, e.lastError,
+		if err := s.db.UpdateTaskRun(e.id, s.lockOwner, e.lastRun, e.lastStatus, e.lastError,
 			e.runCount, e.failCount, e.nextRun); err != nil {
 			log.Printf("scheduler: persist run state for %s: %v", e.id, err)
 		}
@@ -560,7 +656,7 @@ func (s *Scheduler) loadState() {
 		s.mu.Lock()
 		now := time.Now()
 		for _, e := range s.tasks {
-			e.nextRun = e.schedule.Next(now)
+			e.nextRun = s.nextRun(e.schedule, now)
 		}
 		s.mu.Unlock()
 		return
@@ -573,7 +669,7 @@ func (s *Scheduler) loadState() {
 		// from a failed read with incomplete in-memory defaults.
 		s.mu.Lock()
 		for _, e := range s.tasks {
-			e.nextRun = e.schedule.Next(time.Now())
+			e.nextRun = s.nextRun(e.schedule, time.Now())
 		}
 		s.mu.Unlock()
 		return
@@ -589,6 +685,9 @@ func (s *Scheduler) loadState() {
 
 	s.mu.Lock()
 	for _, e := range s.tasks {
+		interrupted := false
+		liveLease := false
+		staleOwner := ""
 		if st, ok := stateByID[e.TaskID()]; ok {
 			// Restore persistent counters and timestamps.
 			e.lastRun = st.LastRun
@@ -596,20 +695,40 @@ func (s *Scheduler) loadState() {
 			e.lastError = st.LastError
 			e.runCount = st.RunCount
 			e.failCount = st.FailCount
+			liveLease = st.LastStatus == "running" && st.LockedBy != "" && !st.LockedAt.IsZero() && now.Sub(st.LockedAt) < schedulerLockLease
+			interrupted = st.LastStatus == "running" && !liveLease
+			staleOwner = st.LockedBy
+			if interrupted {
+				e.lastStatus = "interrupted"
+				e.nextRun = now.Add(-time.Second)
+			} else if liveLease {
+				// A different live node owns the lease. Queue an immediate attempt;
+				// failed acquisition leaves the task due so the next tick retries.
+				e.nextRun = now.Add(-time.Second)
+			}
 			// Recompute nextRun from the stored lastRun (the persisted nextRun
 			// may be stale after a schedule change).
-			if !e.lastRun.IsZero() {
-				e.nextRun = e.schedule.Next(e.lastRun)
-			} else {
-				e.nextRun = e.schedule.Next(now)
+			if liveLease {
+				e.nextRun = now.Add(-time.Second)
+			} else if !interrupted && !e.lastRun.IsZero() {
+				e.nextRun = s.nextRun(e.schedule, e.lastRun)
+			} else if !interrupted {
+				e.nextRun = s.nextRun(e.schedule, now)
 			}
 		} else {
 			// First registration — compute initial nextRun and upsert.
-			e.nextRun = e.schedule.Next(now)
+			e.nextRun = s.nextRun(e.schedule, now)
 		}
 		// Always upsert to register new tasks and reflect schedule changes.
 		if err := s.db.UpsertSchedulerTask(toTaskState(e)); err != nil {
 			log.Printf("scheduler: register task state for %s: %v", e.id, err)
+		}
+		if interrupted {
+			if err := s.db.UpdateTaskRun(e.id, staleOwner, e.lastRun, e.lastStatus, e.lastError,
+				e.runCount, e.failCount, e.nextRun); err != nil {
+				log.Printf("scheduler: mark interrupted task %s: %v", e.id, err)
+			}
+			log.Printf("scheduler: task %s was interrupted by a previous process; queued for recovery", e.id)
 		}
 	}
 	s.mu.Unlock()
@@ -691,12 +810,16 @@ func toTaskState(e *taskEntry) *database.TaskState {
 }
 
 func taskEntryToState(e *taskEntry) database.TaskState {
+	status := e.lastStatus
+	if e.running {
+		status = "running"
+	}
 	return database.TaskState{
 		TaskID:     e.id,
 		TaskName:   e.name,
 		Schedule:   e.schedule.String(),
 		LastRun:    e.lastRun,
-		LastStatus: e.lastStatus,
+		LastStatus: status,
 		LastError:  e.lastError,
 		NextRun:    e.nextRun,
 		RunCount:   e.runCount,

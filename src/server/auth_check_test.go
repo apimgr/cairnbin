@@ -56,6 +56,23 @@ func TestInvalidBearerLockoutBlocksValidCredentialByIP(t *testing.T) {
 	}
 }
 
+func TestRequireOperatorTokenRejectsOwnerTokenWithForbidden(t *testing.T) {
+	s, ownerToken := ownerTokenTestServer(t)
+	s.operatorTokenHash = sha256.Sum256([]byte("operator-token"))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/server/schedulers/task/enable", nil)
+	request.Header.Set("Authorization", "Bearer "+ownerToken)
+	response := httptest.NewRecorder()
+	s.requireOperatorToken(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("owner token reached operator-only handler")
+	})).ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("owner token status=%d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
+	}
+	if got := response.Header().Get("WWW-Authenticate"); got != `Bearer error="insufficient_scope"` {
+		t.Fatalf("WWW-Authenticate=%q, want insufficient_scope", got)
+	}
+}
+
 func TestAuthCheckReturnsOperatorKindWithoutToken(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Token = "operator-secret-value"

@@ -759,6 +759,7 @@ func TestBackupDaily_SendsCompleteEmail(t *testing.T) {
 		Mailer:         m,
 		SendOnComplete: true,
 		Retention:      BackupRetention{MaxBackups: 1},
+		DiskThreshold:  100,
 	}
 	fn := BackupDaily(cfg)
 	if err := fn(context.Background()); err != nil {

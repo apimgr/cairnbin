@@ -9,3 +9,9 @@ package service
 func EnsureServiceAccount(username string) error {
 	return nil
 }
+
+// PrepareSystemServiceAccount is a no-op on Windows because the service runs
+// under a Virtual Service Account provisioned by the Service Control Manager.
+func PrepareSystemServiceAccount(username string) error {
+	return nil
+}

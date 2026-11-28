@@ -248,6 +248,9 @@ func Install() error {
 		// installed, fall back to a user service (systemd --user, launchd agent).
 		return installUserService()
 	}
+	if err := PrepareSystemServiceAccount(""); err != nil {
+		return fmt.Errorf("prepare service account and directories: %w", err)
+	}
 
 	serviceType := DetectServiceManager()
 
@@ -508,6 +511,7 @@ func purgeData() {
 		}
 		return
 	}
+	accountCreated := serviceAccountWasCreated()
 
 	for _, dir := range purgeDirs() {
 		if rmErr := os.RemoveAll(dir); rmErr != nil && !os.IsNotExist(rmErr) {
@@ -520,8 +524,15 @@ func purgeData() {
 	if rmErr := os.Remove(pidFile); rmErr != nil && !os.IsNotExist(rmErr) {
 		fmt.Printf("%s\n", outputText("service_warning", "error", rmErr.Error()))
 	}
+	if rmErr := os.Remove(serviceAccountMarkerPath()); rmErr != nil && !os.IsNotExist(rmErr) {
+		fmt.Printf("%s\n", outputText("service_warning", "error", rmErr.Error()))
+	}
 
-	// Remove the dedicated service user and group created during install.
+	if !accountCreated {
+		return
+	}
+	// Remove only the account this server created; pre-existing system accounts
+	// with the same name are reused and must survive uninstall.
 	if runtime.GOOS == "darwin" {
 		if err := exec.Command("dscl", ".", "-delete", "/Users/"+serviceUser).Run(); err != nil {
 			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
@@ -531,12 +542,68 @@ func purgeData() {
 		}
 		return
 	}
-	if err := exec.Command("userdel", serviceUser).Run(); err != nil {
+	if runtime.GOOS == "freebsd" || runtime.GOOS == "openbsd" || runtime.GOOS == "netbsd" || runtime.GOOS == "dragonfly" {
+		if err := exec.Command("pw", "userdel", serviceUser).Run(); err != nil {
+			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
+		}
+		if err := exec.Command("pw", "groupdel", serviceUser).Run(); err != nil {
+			fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
+		}
+		return
+	}
+	userDelete, groupDelete := linuxAccountRemovalCommands()
+	if userDelete == "" || groupDelete == "" {
+		fmt.Printf("%s\n", outputText("service_warning", "error", "no supported Linux account removal tools found"))
+		return
+	}
+	if err := exec.Command(userDelete, serviceUser).Run(); err != nil {
 		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
-	if err := exec.Command("groupdel", serviceUser).Run(); err != nil {
+	if err := exec.Command(groupDelete, serviceUser).Run(); err != nil {
 		fmt.Printf("%s\n", outputText("service_warning", "error", err.Error()))
 	}
+}
+
+func serviceAccountMarkerPath() string {
+	return filepath.Join(filepath.Dir(paths.GetDataDir(appName)), "."+appName+"-service-account-created")
+}
+
+func markServiceAccountCreated(name string) error {
+	marker := serviceAccountMarkerPath()
+	if err := os.MkdirAll(filepath.Dir(marker), 0o755); err != nil {
+		return fmt.Errorf("create service-account marker directory: %w", err)
+	}
+	if info, err := os.Lstat(marker); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing symlink at service-account marker %s", marker)
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("inspect service-account marker: %w", err)
+	}
+	if err := os.WriteFile(marker, []byte(name+"\n"), 0o600); err != nil {
+		return fmt.Errorf("write service-account marker: %w", err)
+	}
+	if err := os.Chmod(marker, 0o600); err != nil {
+		return fmt.Errorf("secure service-account marker: %w", err)
+	}
+	return nil
+}
+
+func serviceAccountWasCreated() bool {
+	content, err := os.ReadFile(serviceAccountMarkerPath())
+	return err == nil && strings.TrimSpace(string(content)) == serviceUser
+}
+
+func linuxAccountRemovalCommands() (string, string) {
+	userDelete, userErr := exec.LookPath("userdel")
+	groupDelete, groupErr := exec.LookPath("groupdel")
+	if userErr == nil && groupErr == nil {
+		return userDelete, groupDelete
+	}
+	userDelete, userErr = exec.LookPath("deluser")
+	groupDelete, groupErr = exec.LookPath("delgroup")
+	if userErr == nil && groupErr == nil {
+		return userDelete, groupDelete
+	}
+	return "", ""
 }
 
 // GetBinaryPath returns the path where the binary should be installed
@@ -645,6 +712,9 @@ func installOpenRC() error {
 	rcPath := fmt.Sprintf("/etc/init.d/%s", appName)
 
 	rcContent := buildOpenRCScript(binaryPath)
+	if err := os.MkdirAll(filepath.Dir(rcPath), 0o755); err != nil {
+		return fmt.Errorf("failed to create OpenRC init directory: %w", err)
+	}
 
 	if err := os.WriteFile(rcPath, []byte(rcContent), 0o755); err != nil {
 		return fmt.Errorf("failed to write OpenRC init script: %w", err)

@@ -58,6 +58,20 @@ uses it as the default server; use `--server <url>` to target your own instance.
 - Cross-platform service management (systemd, OpenRC, SysVinit, runit, launchd, rc.d, Windows Service)
 - Self-contained static binary with local SQLite by default or optional remote libSQL/Turso
 
+### Scheduler maintenance
+
+Inspect task state and history or control a task with the server binary:
+
+```bash
+cairnbin --maintenance scheduler list
+cairnbin --maintenance scheduler history backup_daily
+cairnbin --maintenance scheduler run backup_daily
+```
+
+The scheduler commands also support `show`, `enable`, and `disable`; see the
+[CLI reference](docs/cli.md#scheduler-maintenance) for details. Scheduler
+management is local to the server binary and is not exposed as an HTTP API.
+
 ## Production
 
 ### Docker (Recommended)

@@ -12,7 +12,6 @@ import (
 	"embed"
 	"encoding/base64"
 	"encoding/json"
-	"expvar"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -21,8 +20,7 @@ import (
 	"net"
 	"net/http"
 
-	// blank import side-effect: registers pprof handlers on DefaultServeMux
-	_ "net/http/pprof"
+	"net/http/pprof"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -256,14 +254,9 @@ type StatsInfo struct {
 	PastesTotal   int64 `json:"pastes_total"`
 }
 
-// SchedulerAPI is the interface the server uses to interact with the scheduler.
-// It is satisfied by *scheduler.Scheduler and can be set via SetSchedulerAPI.
-type SchedulerAPI interface {
+// SchedulerStatus provides a read-only task snapshot for the protected debug route.
+type SchedulerStatus interface {
 	GetTasks() []database.TaskState
-	GetTask(id string) (database.TaskState, bool)
-	RunNow(id string) error
-	EnableTask(id string)
-	DisableTask(id string)
 }
 
 // Server owns the HTTP router and all handler dependencies.
@@ -345,8 +338,11 @@ type Server struct {
 	// schedHealthFn is an optional callback that reports whether the scheduler
 	// is running — set by main after constructing the server.
 	schedHealthFn func() bool
-	// schedulerAPI provides runtime access to the scheduler for the API handlers.
-	schedulerAPI SchedulerAPI
+	// schedulerStatus provides task state for the protected debug route.
+	schedulerStatus SchedulerStatus
+	// schedulerStopFn drains scheduled tasks after HTTP shutdown and before
+	// child providers are closed.
+	schedulerStopFn func()
 	// operatorTokenHash is SHA-256(server.token), cached at construction time.
 	// Constant-time compared against incoming Bearer tokens on protected routes.
 	operatorTokenHash [32]byte
@@ -656,11 +652,16 @@ func (s *Server) SetSchedulerHealthFn(fn func() bool) {
 	s.schedHealthFn = fn
 }
 
-// SetSchedulerAPI wires the scheduler into the server so scheduler API routes can
-// delegate to it. Call this from main after constructing both the server and the
-// scheduler, before calling Run.
-func (s *Server) SetSchedulerAPI(api SchedulerAPI) {
-	s.schedulerAPI = api
+// SetSchedulerStatus wires the read-only task snapshot used by the protected
+// debug route. Call this before Run.
+func (s *Server) SetSchedulerStatus(status SchedulerStatus) {
+	s.schedulerStatus = status
+}
+
+// SetSchedulerStopFn registers the scheduler drain hook used during shutdown.
+// Call this before Run so tasks finish before their child providers close.
+func (s *Server) SetSchedulerStopFn(fn func()) {
+	s.schedulerStopFn = fn
 }
 
 // SetEmailConfigChangeFn registers the SMTP/template refresh hook used after a
@@ -1973,14 +1974,31 @@ func (s *Server) setupRoutes() {
 	// ── Debug endpoints (only when --debug flag is active) (PART 6) ──────────
 	if mode.ShouldShowDebugEndpoints() {
 		dbg := s.liveCfg().Server.Debug
+		r.Route("/debug", func(debug chi.Router) {
+			debug.Use(s.requireOperatorToken)
+			if dbg.Pprof {
+				debug.HandleFunc("/pprof", pprof.Index)
+				debug.HandleFunc("/pprof/cmdline", handleDebugCmdline)
+				debug.HandleFunc("/pprof/profile", pprof.Profile)
+				debug.HandleFunc("/pprof/symbol", pprof.Symbol)
+				debug.HandleFunc("/pprof/trace", pprof.Trace)
+				debug.Handle("/pprof/heap", pprof.Handler("heap"))
+				debug.Handle("/pprof/goroutine", pprof.Handler("goroutine"))
+				debug.Handle("/pprof/allocs", pprof.Handler("allocs"))
+				debug.Handle("/pprof/block", pprof.Handler("block"))
+				debug.Handle("/pprof/mutex", pprof.Handler("mutex"))
+				debug.Handle("/pprof/threadcreate", pprof.Handler("threadcreate"))
+				debug.Get("/vars", handleDebugVars)
+			}
+			if dbg.RuntimeEndpoints {
+				s.registerDebugRoutes(debug)
+			}
+		})
 		if dbg.Pprof {
-			r.Mount("/debug/pprof", http.DefaultServeMux)
-			r.Get("/debug/vars", expvar.Handler().ServeHTTP)
 			log.Printf("debug: /debug/pprof and /debug/vars endpoints enabled")
 		}
 		if dbg.RuntimeEndpoints {
-			s.registerDebugRoutes(r)
-			log.Printf("debug: /debug/{config,routes,cache,db,scheduler,memory,goroutines} endpoints enabled")
+			log.Printf("debug: /debug runtime endpoints enabled")
 		}
 	}
 
@@ -2103,18 +2121,6 @@ func (s *Server) setupRoutes() {
 		r.Get("/server/graphql", s.graphqlHandler.ServeHTTP)
 		r.Post("/server/graphql", s.graphqlHandler.ServeHTTP)
 
-		// Scheduler API (PART 18)
-		// Read-only status routes are public. Mutating routes require server.token.
-		// Plural route name per PART 14 "Route Naming Convention" (always plural, no exceptions).
-		r.Route("/schedulers", func(r chi.Router) {
-			r.Get("/", s.handleSchedulerList)
-			r.Get("/{id}", s.handleSchedulerShow)
-			r.Get("/{id}/history", s.handleSchedulerHistory)
-			r.With(s.requireOperatorToken).Post("/{id}/run", s.handleSchedulerRun)
-			r.With(s.requireOperatorToken).Post("/{id}/enable", s.handleSchedulerEnable)
-			r.With(s.requireOperatorToken).Post("/{id}/disable", s.handleSchedulerDisable)
-		})
-
 		// PART 20: the metrics tree also answers under the versioned API path,
 		// invoking the same handlers with the same per-service tokens.
 		if s.cfg.Server.Metrics.Enabled {
@@ -2220,8 +2226,8 @@ func (s *Server) seoIndexMiddleware(next http.Handler) http.Handler {
 // It reads the credential resolved by authMiddleware (execution step 9, which
 // honours every PART 8 auth header in priority order), SHA-256 hashes it, and
 // compares against the cached hash using constant-time comparison (PART 11).
-// Returns 401 on missing/invalid credentials — always with the same generic message
-// to prevent user enumeration.
+// Returns 401 on missing/invalid credentials and 403 for a recognized owner
+// token that lacks operator scope.
 func (s *Server) requireOperatorToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		incoming, source := TokenFromContext(r.Context())
@@ -2250,6 +2256,13 @@ func (s *Server) requireOperatorToken(next http.Handler) http.Handler {
 			return
 		}
 		if subtle.ConstantTimeCompare(incomingHash[:], s.operatorTokenHash[:]) != 1 {
+			if s.validBearer(r) {
+				metric.AuthAttemptsTotal.WithLabelValues(source, "failure").Inc()
+				s.authLog(r, "operator", "fail", "insufficient_scope")
+				w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
+				writeAPIError(w, r, http.StatusForbidden, "FORBIDDEN", "errors.forbidden")
+				return
+			}
 			metric.AuthAttemptsTotal.WithLabelValues(source, "failure").Inc()
 			s.authLog(r, "operator", "fail", "invalid_token")
 			w.Header().Set("WWW-Authenticate", `Bearer realm="cairnbin"`)
@@ -3303,9 +3316,10 @@ func (s *Server) startManagedNetworkServices(ctx context.Context) {
 	}
 	if s.i2pManager != nil {
 		if s.i2pManager.Enabled() {
+			provider := s.i2pManager.Provider()
 			s.overlayMu.Lock()
 			s.i2pStatus = "starting"
-			s.i2pProvider = i2p.ProviderNone
+			s.i2pProvider = provider
 			s.overlayMu.Unlock()
 			go s.startI2PManager()
 			go s.watchOverlayAddress(ctx, false)
@@ -3461,6 +3475,9 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 			s.stopTermbinFn()
 		}
 	}()
+	if s.schedulerStopFn != nil {
+		defer s.schedulerStopFn()
+	}
 
 	cfg := s.liveCfg()
 
@@ -6507,95 +6524,6 @@ func (s *Server) serveBrandingImage(w http.ResponseWriter, r *http.Request, fiel
 func (s *Server) handleOffline(w http.ResponseWriter, r *http.Request) {
 	d := s.pageData()
 	s.renderTemplate(w, r, "offline.html", d)
-}
-
-// ─── Scheduler API handlers (PART 18) ────────────────────────────────────────
-
-// handleSchedulerList returns all registered tasks.
-func (s *Server) handleSchedulerList(w http.ResponseWriter, r *http.Request) {
-	if s.schedulerAPI == nil {
-		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
-		return
-	}
-	tasks := s.schedulerAPI.GetTasks()
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": tasks})
-}
-
-// handleSchedulerShow returns the state for a single task.
-func (s *Server) handleSchedulerShow(w http.ResponseWriter, r *http.Request) {
-	if s.schedulerAPI == nil {
-		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
-		return
-	}
-	id := chi.URLParam(r, "id")
-	t, ok := s.schedulerAPI.GetTask(id)
-	if !ok {
-		writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": t})
-}
-
-// handleSchedulerRun triggers a task to run immediately.
-func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
-	if s.schedulerAPI == nil {
-		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
-		return
-	}
-	id := chi.URLParam(r, "id")
-	if err := s.schedulerAPI.RunNow(id); err != nil {
-		writeAPIError(w, r, http.StatusBadRequest, "BAD_REQUEST", "errors.bad_request")
-		return
-	}
-	// PART 11 audit event: task manually triggered (task name + actor IP).
-	s.auditLog(r, audit.Entry{
-		Event:    "scheduler.task_manual_run",
-		Severity: audit.SeverityInfo,
-		Result:   audit.ResultSuccess,
-		Target:   &audit.Target{Type: "scheduler_task", ID: id},
-	})
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"status": "triggered", "task": id}})
-}
-
-// handleSchedulerEnable enables a task.
-func (s *Server) handleSchedulerEnable(w http.ResponseWriter, r *http.Request) {
-	if s.schedulerAPI == nil {
-		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
-		return
-	}
-	id := chi.URLParam(r, "id")
-	if _, ok := s.schedulerAPI.GetTask(id); !ok {
-		writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
-		return
-	}
-	s.schedulerAPI.EnableTask(id)
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"status": "enabled", "task": id}})
-}
-
-// handleSchedulerDisable disables a task.
-func (s *Server) handleSchedulerDisable(w http.ResponseWriter, r *http.Request) {
-	if s.schedulerAPI == nil {
-		writeAPIError(w, r, http.StatusServiceUnavailable, "MAINTENANCE", "errors.maintenance_mode")
-		return
-	}
-	id := chi.URLParam(r, "id")
-	if _, ok := s.schedulerAPI.GetTask(id); !ok {
-		writeAPIError(w, r, http.StatusNotFound, "NOT_FOUND", "errors.not_found")
-		return
-	}
-	s.schedulerAPI.DisableTask(id)
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": map[string]string{"status": "disabled", "task": id}})
-}
-
-// handleSchedulerHistory returns recent execution history for a task.
-func (s *Server) handleSchedulerHistory(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	history, err := s.db.ListTaskHistory(id, 20)
-	if err != nil {
-		writeAPIError(w, r, http.StatusInternalServerError, "SERVER_ERROR", "errors.server_error")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "data": history})
 }
 
 // maxPasteSizeDisplay renders the operator-configured paste.max_size as a

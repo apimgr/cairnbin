@@ -382,8 +382,8 @@ func TestEarlyPeeksUseMergedDropInOrder(t *testing.T) {
 	}
 	files := map[string]string{
 		path: "server:\n  port: 8080\n  address: '[::]'\n  daemonize: false\n  user: default-user\n  group: default-group\n",
-		filepath.Join(dropInDir, "10-network.yml"): "server:\n  port: 8443\n  address: 0.0.0.0\n  user: service-user\n",
-		filepath.Join(dropInDir, "20-start.yml"):   "server:\n  address: pste.us\n  daemonize: true\n  group: service-group\n",
+		filepath.Join(dropInDir, "10-network.yml"): "server:\n  port: 8443\n  address: 0.0.0.0\n",
+		filepath.Join(dropInDir, "20-start.yml"):   "server:\n  address: pste.us\n  daemonize: true\n",
 	}
 	for file, content := range files {
 		if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
@@ -398,12 +398,6 @@ func TestEarlyPeeksUseMergedDropInOrder(t *testing.T) {
 	}
 	if !config.PeekServerDaemonize(path) {
 		t.Error("PeekServerDaemonize() = false, want true from the last drop-in")
-	}
-	if got := config.PeekServerUser(path); got != "service-user" {
-		t.Errorf("PeekServerUser() = %q, want service-user", got)
-	}
-	if got := config.PeekServerGroup(path); got != "service-group" {
-		t.Errorf("PeekServerGroup() = %q, want service-group", got)
 	}
 }
 
@@ -1783,5 +1777,18 @@ func TestValidate_CompressionDefaults(t *testing.T) {
 	}
 	if len(cfg.Server.Compression.Types) == 0 {
 		t.Error("types not restored to defaults")
+	}
+}
+
+func TestLoadSchedulerMaintenanceArguments(t *testing.T) {
+	cfg, err := config.Load([]string{"--maintenance", "scheduler", "run", "database_check"})
+	if err != nil {
+		t.Fatalf("Load scheduler maintenance args: %v", err)
+	}
+	if cfg.Command.Maintenance != "scheduler" || cfg.Command.MaintenanceArg != "run" {
+		t.Fatalf("scheduler command = %q %q, want scheduler run", cfg.Command.Maintenance, cfg.Command.MaintenanceArg)
+	}
+	if !reflect.DeepEqual(cfg.Command.MaintenanceArgs, []string{"database_check"}) {
+		t.Fatalf("scheduler args = %#v, want [database_check]", cfg.Command.MaintenanceArgs)
 	}
 }

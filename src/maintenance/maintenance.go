@@ -1063,14 +1063,21 @@ func Setup(configDir string) error {
 
 // PrintHelp prints the --maintenance subcommand help.
 func PrintHelp(binaryName string, languages ...string) {
+	PrintHelpTo(os.Stdout, binaryName, languages...)
+}
+
+// PrintHelpTo writes maintenance help to the supplied output stream.
+func PrintHelpTo(w io.Writer, binaryName string, languages ...string) {
 	lang := "en"
 	if len(languages) > 0 {
 		lang = i18n.GetLanguage(languages[0], "")
 	}
-	fmt.Println(i18n.TranslateFormat(lang, "cli.maintenance_help", i18n.Args(
+	fmt.Fprintln(w, i18n.TranslateFormat(lang, "cli.maintenance_help", i18n.Args(
 		"project_name", binaryName,
 		"backup_dir", paths.GetBackupDir(projectName),
 	)))
+	fmt.Fprintf(w, "\nscheduler {list|show|history|run|enable|disable} [id] - %s\n",
+		i18n.Translate(lang, "cli.client.help_cmd_scheduler"))
 }
 
 // VerifyBackup performs the post-creation checks required by PART 21:

@@ -642,7 +642,7 @@ func TestUpdateTaskRun(t *testing.T) {
 
 	ran := time.Now().Truncate(time.Second)
 	next := ran.Add(time.Hour)
-	if err := db.UpdateTaskRun("task-upd", ran, "success", "", 1, 0, next); err != nil {
+	if err := db.UpdateTaskRun("task-upd", "", ran, "success", "", 1, 0, next); err != nil {
 		t.Fatalf("UpdateTaskRun: %v", err)
 	}
 
@@ -658,6 +658,46 @@ func TestUpdateTaskRun(t *testing.T) {
 	}
 	if got.FailCount != 0 {
 		t.Errorf("FailCount: got %d, want 0", got.FailCount)
+	}
+}
+
+func TestTryAcquireSchedulerTaskLock(t *testing.T) {
+	db := newTestDB(t)
+	locker, ok := db.(interface {
+		TryAcquireSchedulerTaskLock(string, string, time.Time, time.Duration) (bool, error)
+	})
+	if !ok {
+		t.Fatal("test database does not support scheduler task locks")
+	}
+	if err := db.UpsertSchedulerTask(minimalTask("locked-task")); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	acquired, err := locker.TryAcquireSchedulerTaskLock("locked-task", "node:test:1", now, 10*time.Minute)
+	if err != nil || !acquired {
+		t.Fatalf("first lock acquisition = %t, %v; want true, nil", acquired, err)
+	}
+	acquired, err = locker.TryAcquireSchedulerTaskLock("locked-task", "node:test:2", now, 10*time.Minute)
+	if err != nil || acquired {
+		t.Fatalf("second lock acquisition = %t, %v; want false, nil", acquired, err)
+	}
+	if err := db.UpdateTaskRun("locked-task", "node:test:1", now, "success", "", 1, 0, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	acquired, err = locker.TryAcquireSchedulerTaskLock("locked-task", "node:test:2", now, 10*time.Minute)
+	if err != nil || !acquired {
+		t.Fatalf("lock acquisition after completion = %t, %v; want true, nil", acquired, err)
+	}
+	if err := db.UpdateTaskRun("locked-task", "node:test:1", now, "success", "stale owner", 2, 0, now.Add(time.Hour)); err == nil {
+		t.Fatal("stale owner was allowed to release another owner's lease")
+	}
+	state, err := db.GetSchedulerTask("locked-task")
+	if err != nil || state.LockedBy != "node:test:2" {
+		t.Fatalf("lock owner after stale release = %q, %v; want node:test:2", state.LockedBy, err)
+	}
+	acquired, err = locker.TryAcquireSchedulerTaskLock("locked-task", "node:test:3", now.Add(11*time.Minute), 10*time.Minute)
+	if err != nil || !acquired {
+		t.Fatalf("expired lease takeover = %t, %v; want true, nil", acquired, err)
 	}
 }
 

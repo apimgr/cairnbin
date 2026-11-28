@@ -28,7 +28,7 @@ func TestInstallSystemd_WithMockPaths(t *testing.T) {
 		{"Type=simple", "Type=simple"},
 		{"RestartSec=5", "RestartSec=5"},
 		{"Restart=on-failure", "Restart=on-failure"},
-		{"ProtectSystem=strict", "ProtectSystem=strict"},
+		{"ProtectSystem=true", "ProtectSystem=true"},
 		{"PrivateTmp=yes", "PrivateTmp=yes"},
 	}
 

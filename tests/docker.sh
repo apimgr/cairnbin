@@ -1,39 +1,53 @@
 #!/usr/bin/env bash
 # @@License : WTFPL
-# tests/docker.sh — Docker integration tests for cairnbin
-# Builds the local image, brings it up via the mandated
-# docker/docker-compose.test.yml (copied to a temp dir, never run from the
-# project tree), and exercises the API with content negotiation and endpoint
-# coverage per PART 28 requirements.
-# Usage: bash tests/docker.sh [--keep]
-# Options:
-#   --keep   Do not tear down the stack / temp dir after the test run
+# tests/docker.sh — binary validation in a disposable Alpine container.
+# Usage: bash tests/docker.sh
 
 set -euo pipefail
 
 # ── Variables ────────────────────────────────────────────────────────────────
 DOCKER_SCRIPT_NAME="$(basename -- "$0")"
 DOCKER_PROJECT_DIR="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
-DOCKER_PROJECT_ORG="apimgr"
-DOCKER_PROJECT_NAME="cairnbin"
-# Local build tag — the temp compose file is rewritten to use this image with
-# pull_policy:never so we exercise the current source, not a published image.
-DOCKER_IMAGE_NAME="${DOCKER_PROJECT_NAME}:test-$$"
-DOCKER_COMPOSE_PROJECT="${DOCKER_PROJECT_NAME}-test-$$"
-# Fixed by docker/docker-compose.test.yml (Test context → 172.17.0.1:64581:80).
-# The compose file binds the published port to the Docker bridge gateway IP
-# only (AI.md PART 26 "Production binds to Docker bridge IP for security"),
-# never 127.0.0.1/all interfaces — the host reaches it via the bridge
-# address, not loopback.
-DOCKER_CONTAINER_NAME="${DOCKER_PROJECT_NAME}-app"
-DOCKER_PORT="64581"
+DOCKER_PROJECT_ORG="$(awk -F': *' '$1 == "project_org" { print $2; exit }' "${DOCKER_PROJECT_DIR}/IDEA.md")"
+DOCKER_INTERNAL_NAME="$(awk -F': *' '$1 == "internal_name" { print $2; exit }' "${DOCKER_PROJECT_DIR}/IDEA.md")"
+DOCKER_PROJECT_NAME="$(awk -F': *' '$1 == "project_name" { print $2; exit }' "${DOCKER_PROJECT_DIR}/IDEA.md")"
+DOCKER_RANDOM_SUFFIX="$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n' | cut -c1-8)"
+DOCKER_CONTAINER_NAME="${DOCKER_PROJECT_NAME}-${DOCKER_RANDOM_SUFFIX}"
+DOCKER_NETWORK_NAME="${DOCKER_PROJECT_NAME}-${DOCKER_RANDOM_SUFFIX}"
+DOCKER_PORT="$((62000 + RANDOM % 3000))"
 DOCKER_BRIDGE_IP="172.17.0.1"
 DOCKER_BASE_URL="http://${DOCKER_BRIDGE_IP}:${DOCKER_PORT}"
 DOCKER_TEMP_DIR=""
-DOCKER_KEEP=false
 DOCKER_ERRORS=0
-DOCKER_TORMIG_NAME="${DOCKER_PROJECT_NAME}-tormig-$$"
-DOCKER_TORMIG_VOLUME="${DOCKER_PROJECT_NAME}-tormig-vol-$$"
+DOCKER_TOR_WAIT="${TOR_WAIT:-300}"
+DOCKER_I2P_WAIT="${I2P_WAIT:-600}"
+DOCKER_GO_CACHE="${GO_CACHE:-${HOME}/go/pkg/mod}"
+DOCKER_GO_BUILD="${GO_BUILD:-${HOME}/.cache/go-build/${DOCKER_PROJECT_NAME}}"
+DOCKER_COMMIT_ID="$(git -C "${DOCKER_PROJECT_DIR}" rev-parse --short=7 HEAD)"
+DOCKER_VERSION="${VERSION:-$(sed -n 's/[[:space:]]//gp' "${DOCKER_PROJECT_DIR}/release.txt" 2>/dev/null | head -n1)}"
+DOCKER_BUILD_EPOCH="$(date -u +%s)"
+DOCKER_OFFICIAL_SITE="${OFFICIAL_SITE:-}"
+if [[ -f "${DOCKER_PROJECT_DIR}/site.txt" ]]; then
+  DOCKER_OFFICIAL_SITE="$(cat "${DOCKER_PROJECT_DIR}/site.txt")"
+fi
+if [[ -z "${DOCKER_VERSION}" ]]; then
+  DOCKER_VERSION="${DOCKER_COMMIT_ID}"
+fi
+DOCKER_TORMIG_SUFFIX="$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n' | cut -c1-8)"
+DOCKER_TORMIG_NAME="${DOCKER_PROJECT_NAME}-${DOCKER_TORMIG_SUFFIX}"
+
+for wait_value in "${DOCKER_TOR_WAIT}" "${DOCKER_I2P_WAIT}"; do
+  case "${wait_value}" in
+    '' | *[!0-9]*)
+      printf 'TOR_WAIT and I2P_WAIT must be positive integers\n' >&2
+      exit 2
+      ;;
+  esac
+  if [[ "${wait_value}" -lt 1 ]]; then
+    printf 'TOR_WAIT and I2P_WAIT must be positive integers\n' >&2
+    exit 2
+  fi
+done
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 __pass() { printf "[PASS] %s\n" "$*"; }
@@ -60,59 +74,79 @@ __check_body() {
   shift 3
   local body
   body=$(curl -q -LSsf "$@" "${url}" 2>/dev/null || true)
-  if printf '%s' "${body}" | grep -qi -- "${pattern}"; then
+  if printf '%s' "${body}" | grep -i -- "${pattern}" >/dev/null; then
     __pass "${desc}"
   else
     __fail "${desc} — pattern '${pattern}' not found in: ${body}"
   fi
 }
 
-__cleanup() {
-  if [[ "${DOCKER_KEEP}" == "false" ]]; then
-    if [[ -n "${DOCKER_TEMP_DIR}" && -f "${DOCKER_TEMP_DIR}/docker-compose.yml" ]]; then
-      __info "Tearing down compose project ${DOCKER_COMPOSE_PROJECT}"
-      (cd "${DOCKER_TEMP_DIR}" && docker compose -p "${DOCKER_COMPOSE_PROJECT}" down -v 2>/dev/null) || true
-    fi
-    docker rmi -f "${DOCKER_IMAGE_NAME}" 2>/dev/null || true
-    [[ -n "${DOCKER_TEMP_DIR}" && -d "${DOCKER_TEMP_DIR}" ]] && rm -rf "${DOCKER_TEMP_DIR}"
-    docker rm -f "${DOCKER_TORMIG_NAME}" >/dev/null 2>&1 || true
-    docker volume rm -f "${DOCKER_TORMIG_VOLUME}" >/dev/null 2>&1 || true
+__skip_overlay_if_network_missing() {
+  local overlay="$1" url
+  [[ "${REQUIRE_OVERLAY:-0}" == "1" ]] && return 1
+  if [[ "${overlay}" == "i2p" ]]; then
+    url="https://reseed.i2p.net/"
   else
-    __info "Keeping compose project ${DOCKER_COMPOSE_PROJECT} and temp dir ${DOCKER_TEMP_DIR} (--keep flag set)"
-    __info "Keeping Tor migration container ${DOCKER_TORMIG_NAME} and volume ${DOCKER_TORMIG_VOLUME} (--keep flag set)"
+    url="https://www.torproject.org/"
   fi
+  if docker exec "${DOCKER_CONTAINER_NAME}" sh -c \
+    'code=$(curl -q -LSs -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 8 "$1" 2>/dev/null || true); [ -n "$code" ] && [ "$code" != 000 ]' \
+    sh "${url}" 2>/dev/null; then
+    return 1
+  fi
+  __info "SKIP: ${overlay^^} bootstrap network is unavailable"
+  return 0
+}
+
+__cleanup() {
+  docker rm -f "${DOCKER_CONTAINER_NAME}" >/dev/null 2>&1 || true
+  docker rm -f "${DOCKER_TORMIG_NAME}" >/dev/null 2>&1 || true
+  docker network rm "${DOCKER_NETWORK_NAME}" >/dev/null 2>&1 || true
+  [[ -n "${DOCKER_TEMP_DIR}" && -d "${DOCKER_TEMP_DIR}" ]] && rm -rf "${DOCKER_TEMP_DIR}"
 }
 trap __cleanup EXIT
+trap '__cleanup; exit 130' INT
+trap '__cleanup; exit 143' TERM
 
 # ── Argument parsing ─────────────────────────────────────────────────────────
 for arg in "$@"; do
   case "${arg}" in
-  --keep) DOCKER_KEEP=true ;;
-  *)
-    printf "%s: unknown argument: %s\n" "${DOCKER_SCRIPT_NAME}" "${arg}" >&2
-    exit 2
-    ;;
+    *)
+      printf "%s: unknown argument: %s\n" "${DOCKER_SCRIPT_NAME}" "${arg}" >&2
+      exit 2
+      ;;
   esac
 done
 
-# ── Build test image ─────────────────────────────────────────────────────────
-__info "Building test image ${DOCKER_IMAGE_NAME}"
-docker build \
-  --file "${DOCKER_PROJECT_DIR}/docker/Dockerfile" \
-  --tag "${DOCKER_IMAGE_NAME}" \
-  "${DOCKER_PROJECT_DIR}"
+if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+  printf 'ERROR: Docker is required and its daemon must be available\n' >&2
+  exit 69
+fi
 
-# ── Prepare compose stack in a temp dir (PART 28: never run from project tree) ─
+# ── Build host-platform binaries with the Docker toolchain ───────────────────
 mkdir -p "${TMPDIR:-/tmp}/${DOCKER_PROJECT_ORG}"
-DOCKER_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${DOCKER_PROJECT_ORG}/${DOCKER_PROJECT_NAME}-XXXXXX")"
-mkdir -p "${DOCKER_TEMP_DIR}/volumes/config" "${DOCKER_TEMP_DIR}/volumes/data"
-mkdir -p "${DOCKER_TEMP_DIR}/volumes/config/cairnbin"
-cat >"${DOCKER_TEMP_DIR}/volumes/config/cairnbin/server.yml" <<'EOF'
+DOCKER_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${DOCKER_PROJECT_ORG}/${DOCKER_INTERNAL_NAME}-XXXXXX")"
+mkdir -p "${DOCKER_PROJECT_DIR}/binaries" "${DOCKER_GO_CACHE}" "${DOCKER_GO_BUILD}" \
+  "${DOCKER_TEMP_DIR}/config/${DOCKER_INTERNAL_NAME}" "${DOCKER_TEMP_DIR}/data/${DOCKER_INTERNAL_NAME}"
+__info "Building server and CLI into binaries/ with casjaysdev/go:latest"
+docker run --rm --no-healthcheck --name "${DOCKER_PROJECT_NAME}-build-${DOCKER_RANDOM_SUFFIX}" \
+  --memory="${DOCKER_MEM:-4g}" --cpus="${DOCKER_CPUS:-2}" --cpu-shares=256 \
+  -v "${DOCKER_PROJECT_DIR}:/app" -v "${DOCKER_GO_CACHE}:/usr/local/share/go/pkg/mod" \
+  -v "${DOCKER_GO_BUILD}:/usr/local/share/go/cache" -w /app \
+  -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  -e BUILD_LDFLAGS="-X main.Version=${DOCKER_VERSION} -X main.CommitID=${DOCKER_COMMIT_ID} -X main.BuildEpoch=${DOCKER_BUILD_EPOCH} -X main.OfficialSite=${DOCKER_OFFICIAL_SITE}" \
+  -e BUILD_GCFLAGS='all=-N -l' casjaysdev/go:latest sh -c 'set -e; go mod download; \
+  go build -buildvcs=false -gcflags "$BUILD_GCFLAGS" -ldflags "$BUILD_LDFLAGS" -o binaries/cairnbin ./src; \
+  if [ -d src/client ]; then go build -buildvcs=false -gcflags "$BUILD_GCFLAGS" -ldflags "$BUILD_LDFLAGS" -o binaries/cairnbin-cli ./src/client; fi'
+cat >"${DOCKER_TEMP_DIR}/config/${DOCKER_INTERNAL_NAME}/server.yml" <<'EOF'
 server:
   geoip:
     enabled: false
   tor:
-    binary: /__cairnbin_e2e__/tor
+    expose: true
+  i2p:
+    expose: true
+    bootstrap_timeout: 10m
   notifications:
     email:
       enabled: false
@@ -124,29 +158,37 @@ server:
       window: 60
     global_burst: 2000
 EOF
-chmod 600 "${DOCKER_TEMP_DIR}/volumes/config/cairnbin/server.yml"
-mkdir -p "${DOCKER_TEMP_DIR}/tormig-config/cairnbin"
-cat >"${DOCKER_TEMP_DIR}/tormig-config/cairnbin/server.yml" <<'EOF'
-server:
-  geoip:
-    enabled: false
-  notifications:
-    email:
-      enabled: false
-      smtp:
-        host: localhost
-EOF
-chmod 600 "${DOCKER_TEMP_DIR}/tormig-config/cairnbin/server.yml"
-cp "${DOCKER_PROJECT_DIR}/docker/docker-compose.test.yml" "${DOCKER_TEMP_DIR}/docker-compose.yml"
-# Point the stack at the locally built image and never pull a published one.
-sed -i \
-  -e "s|image: ghcr.io/apimgr/cairnbin:.*|image: ${DOCKER_IMAGE_NAME}|" \
-  -e "s|pull_policy: always|pull_policy: never|" \
-  "${DOCKER_TEMP_DIR}/docker-compose.yml"
+chmod 600 "${DOCKER_TEMP_DIR}/config/${DOCKER_INTERNAL_NAME}/server.yml"
 
-# ── Start stack ──────────────────────────────────────────────────────────────
-__info "Starting compose project ${DOCKER_COMPOSE_PROJECT} on port ${DOCKER_PORT}"
-(cd "${DOCKER_TEMP_DIR}" && docker compose -p "${DOCKER_COMPOSE_PROJECT}" up --detach)
+# ── Start a disposable Alpine container and install test tools ────────────────
+__info "Starting compiled binary in Alpine on port ${DOCKER_PORT}"
+docker network create "${DOCKER_NETWORK_NAME}" >/dev/null
+docker run --rm --detach --name "${DOCKER_CONTAINER_NAME}" \
+  --network "${DOCKER_NETWORK_NAME}" \
+  --publish "${DOCKER_BRIDGE_IP}:${DOCKER_PORT}:80" \
+  --volume "${DOCKER_PROJECT_DIR}/binaries:/build:ro" \
+  --volume "${DOCKER_TEMP_DIR}/config:/config" \
+  --volume "${DOCKER_TEMP_DIR}/data:/data" \
+  --entrypoint sh alpine:latest -c 'sleep infinity' >/dev/null
+docker exec "${DOCKER_CONTAINER_NAME}" apk add --no-cache shadow curl bash file jq tor i2pd tzdata ca-certificates >/dev/null
+docker exec "${DOCKER_CONTAINER_NAME}" /build/cairnbin --version
+docker exec "${DOCKER_CONTAINER_NAME}" /build/cairnbin --help >/dev/null
+docker exec "${DOCKER_CONTAINER_NAME}" /build/cairnbin-cli --version
+docker exec "${DOCKER_CONTAINER_NAME}" /build/cairnbin-cli --help >/dev/null
+docker exec "${DOCKER_CONTAINER_NAME}" sh -c 'cp /build/cairnbin /tmp/renamed-server && chmod 700 /tmp/renamed-server && /tmp/renamed-server --help' >"${DOCKER_TEMP_DIR}/renamed-server-help.txt"
+if grep -F 'renamed-server' "${DOCKER_TEMP_DIR}/renamed-server-help.txt" >/dev/null; then
+  __pass "Server binary rename is reflected in --help"
+else
+  __fail "Server --help did not show the renamed executable"
+fi
+docker exec "${DOCKER_CONTAINER_NAME}" sh -c 'cp /build/cairnbin-cli /tmp/renamed-cli && chmod 700 /tmp/renamed-cli && /tmp/renamed-cli --help' >"${DOCKER_TEMP_DIR}/renamed-cli-help.txt"
+if grep -F 'renamed-cli' "${DOCKER_TEMP_DIR}/renamed-cli-help.txt" >/dev/null; then
+  __pass "CLI binary rename is reflected in --help"
+else
+  __fail "CLI --help did not show the renamed executable"
+fi
+docker exec --detach "${DOCKER_CONTAINER_NAME}" sh -c \
+  "/build/${DOCKER_PROJECT_NAME} --debug --address 0.0.0.0 --port 80 --config /config/${DOCKER_INTERNAL_NAME} --data /data/${DOCKER_INTERNAL_NAME} >/tmp/${DOCKER_PROJECT_NAME}-test.log 2>&1"
 
 # Wait for server to become ready (up to 30 s)
 __info "Waiting for server to start..."
@@ -156,18 +198,83 @@ for ((i = 1; i <= 30; i++)); do
   fi
   sleep 1
   if [[ "${i}" -eq 30 ]]; then
-    (cd "${DOCKER_TEMP_DIR}" && docker compose -p "${DOCKER_COMPOSE_PROJECT}" logs) >&2 || true
+    docker exec "${DOCKER_CONTAINER_NAME}" cat "/tmp/${DOCKER_PROJECT_NAME}-test.log" >&2 || true
+    curl -q -LSs -i "${DOCKER_BASE_URL}/server/healthz" >&2 || true
     __fail "Server did not start within 30 seconds"
     exit 1
   fi
 done
 __pass "Server is up"
-DOCKER_APP_UID=$(docker exec "${DOCKER_CONTAINER_NAME}" sh -c "for status in /proc/[0-9]*/status; do if grep -q '^Name:[[:space:]]*cairnbin$' \"\$status\"; then awk '\$1 == \"Uid:\" {print \$3; exit}' \"\$status\"; exit; fi; done")
-DOCKER_SERVICE_UID=$(docker exec "${DOCKER_CONTAINER_NAME}" id -u "${DOCKER_PROJECT_NAME}")
-if [[ -n "${DOCKER_APP_UID}" && "${DOCKER_APP_UID}" != "0" && "${DOCKER_APP_UID}" == "${DOCKER_SERVICE_UID}" ]]; then
-  __pass "Server runs as the dedicated ${DOCKER_PROJECT_NAME} account"
+__pass "Compiled server binary is running in Alpine"
+
+# The scheduler is controlled through the server binary maintenance CLI.
+docker exec "${DOCKER_CONTAINER_NAME}" "/build/${DOCKER_PROJECT_NAME}" \
+  --config "/config/${DOCKER_INTERNAL_NAME}" --data "/data/${DOCKER_INTERNAL_NAME}" \
+  --maintenance scheduler list >"${DOCKER_TEMP_DIR}/scheduler-list.txt"
+if grep -F 'backup_daily' "${DOCKER_TEMP_DIR}/scheduler-list.txt" >/dev/null; then
+  __pass "Scheduler maintenance CLI lists registered tasks"
 else
-  __fail "Server did not run as the dedicated ${DOCKER_PROJECT_NAME} account"
+  __fail "Scheduler maintenance CLI omitted backup_daily"
+fi
+docker exec "${DOCKER_CONTAINER_NAME}" "/build/${DOCKER_PROJECT_NAME}" \
+  --config "/config/${DOCKER_INTERNAL_NAME}" --data "/data/${DOCKER_INTERNAL_NAME}" \
+  --maintenance scheduler run database_check >"${DOCKER_TEMP_DIR}/scheduler-run.txt"
+if grep -F 'Task database_check completed.' "${DOCKER_TEMP_DIR}/scheduler-run.txt" >/dev/null; then
+  __pass "Scheduler maintenance CLI runs a registered task"
+else
+  __fail "Scheduler maintenance CLI did not complete database_check"
+fi
+docker exec "${DOCKER_CONTAINER_NAME}" "/build/${DOCKER_PROJECT_NAME}" \
+  --config "/config/${DOCKER_INTERNAL_NAME}" --data "/data/${DOCKER_INTERNAL_NAME}" \
+  --maintenance scheduler history database_check >"${DOCKER_TEMP_DIR}/scheduler-history.txt"
+if grep -F 'success' "${DOCKER_TEMP_DIR}/scheduler-history.txt" >/dev/null; then
+  __pass "Scheduler maintenance CLI reads persisted task history"
+else
+  __fail "Scheduler task history omitted the successful manual run"
+fi
+
+# Exercise CLI reads and writes against the running server.
+docker exec "${DOCKER_CONTAINER_NAME}" /build/cairnbin-cli \
+  --server http://127.0.0.1 list --limit 10 >"${DOCKER_TEMP_DIR}/cli-list.txt"
+__pass "CLI list command"
+DOCKER_CLI_CREATE=$(printf 'cairnbin cli integration test\n' | docker exec -i "${DOCKER_CONTAINER_NAME}" \
+  /build/cairnbin-cli --server http://127.0.0.1 --output json create)
+DOCKER_CLI_ID=$(printf '%s' "${DOCKER_CLI_CREATE}" | grep -o -- '"id": *"[^"]*"' | awk 'NR == 1 { print }' | cut -d'"' -f4)
+DOCKER_CLI_TOKEN=$(printf '%s' "${DOCKER_CLI_CREATE}" | grep -o -- '"owner_token": *"[^"]*"' | awk 'NR == 1 { print }' | cut -d'"' -f4)
+if [[ -z "${DOCKER_CLI_ID}" || -z "${DOCKER_CLI_TOKEN}" ]]; then
+  __fail "CLI create did not return a paste ID and owner token"
+else
+  DOCKER_CLI_GET=$(docker exec "${DOCKER_CONTAINER_NAME}" /build/cairnbin-cli \
+    --server http://127.0.0.1 get "${DOCKER_CLI_ID}")
+  if printf '%s' "${DOCKER_CLI_GET}" | grep -F 'cairnbin cli integration test' >/dev/null; then
+    __pass "CLI get command"
+  else
+    __fail "CLI get did not return the created paste"
+  fi
+  DOCKER_OPERATOR_TOKEN=$(docker exec "${DOCKER_CONTAINER_NAME}" sh -c \
+    "awk -F': ' '\$1 == \"  token\" { print \$2; exit }' /config/${DOCKER_INTERNAL_NAME}/secrets.yml")
+  if [[ -z "${DOCKER_OPERATOR_TOKEN}" ]]; then
+    __fail "Could not read server.token for protected debug-route checks"
+  else
+    __check_status "Debug error route rejects missing token" GET "${DOCKER_BASE_URL}/debug/error500" 401
+    __check_status "Debug error route rejects wrong token" GET "${DOCKER_BASE_URL}/debug/error500" 401 \
+      --header "Authorization: Bearer invalid-token"
+    __check_status "Debug error route rejects owner token" GET "${DOCKER_BASE_URL}/debug/error500" 403 \
+      --header "Authorization: Bearer ${DOCKER_CLI_TOKEN}"
+    __check_status "Debug error route accepts server.token" GET "${DOCKER_BASE_URL}/debug/error500" 500 \
+      --header "Authorization: Bearer ${DOCKER_OPERATOR_TOKEN}"
+    __check_status "Debug error route rejects query token" GET \
+      "${DOCKER_BASE_URL}/debug/error500?token=${DOCKER_OPERATOR_TOKEN}" 401
+  fi
+  if docker exec "${DOCKER_CONTAINER_NAME}" /build/cairnbin-cli \
+    --server http://127.0.0.1 delete "${DOCKER_CLI_ID}" own_invalid_token >/dev/null 2>&1; then
+    __fail "CLI delete accepted an invalid owner token"
+  else
+    __pass "CLI delete rejects an invalid owner token"
+  fi
+  docker exec "${DOCKER_CONTAINER_NAME}" /build/cairnbin-cli \
+    --server http://127.0.0.1 delete "${DOCKER_CLI_ID}" "${DOCKER_CLI_TOKEN}" >/dev/null
+  __pass "CLI delete command with owner token"
 fi
 
 # ── Health endpoints ──────────────────────────────────────────────────────────
@@ -179,6 +286,51 @@ __check_body "healthz has version field" "${DOCKER_BASE_URL}/api/v1/server/healt
 __check_body "healthz has status field" "${DOCKER_BASE_URL}/api/v1/server/healthz" "ok\|status\|healthy"
 __check_body "healthz reports Tor status" "${DOCKER_BASE_URL}/api/v1/server/healthz" "features.tor.status"
 __check_body "healthz reports I2P status" "${DOCKER_BASE_URL}/api/v1/server/healthz" "features.i2p.status"
+__check_body "healthz selects i2pd provider in application container" \
+  "${DOCKER_BASE_URL}/api/v1/server/healthz" 'features.i2p.provider[^,]*i2pd'
+
+__wait_overlay_health() {
+  local overlay="$1" timeout="$2" waited=0 status provider
+  while [[ "${waited}" -lt "${timeout}" ]]; do
+    status=$(docker exec "${DOCKER_CONTAINER_NAME}" sh -c \
+      "curl -q -LSsf http://127.0.0.1/api/v1/server/healthz.txt | awk -F': ' '\$1 == \"features.${overlay}.status\" { print \$2 }'" 2>/dev/null || true)
+    provider=""
+    if [[ "${overlay}" == "i2p" ]]; then
+      provider=$(docker exec "${DOCKER_CONTAINER_NAME}" sh -c \
+        "curl -q -LSsf http://127.0.0.1/api/v1/server/healthz.txt | awk -F': ' '\$1 == \"features.i2p.provider\" { print \$2 }'" 2>/dev/null || true)
+    fi
+    if [[ "${status}" == "healthy" ]]; then
+      if [[ "${overlay}" == "i2p" && "${provider}" != "i2pd" ]]; then
+        __fail "I2P provider is ${provider:-missing}, expected i2pd"
+        return 1
+      fi
+      __pass "${overlay^^} reached healthy${provider:+ with provider ${provider}} status"
+      return 0
+    fi
+    if [[ "${status}" == "error" || "${status}" == "unavailable" ]]; then
+      if __skip_overlay_if_network_missing "${overlay}"; then
+        return 0
+      fi
+      __fail "${overlay^^} became ${status} before reaching healthy status"
+      docker logs "${DOCKER_CONTAINER_NAME}" >&2 || true
+      if [[ "${overlay}" == "i2p" ]]; then
+        docker exec "${DOCKER_CONTAINER_NAME}" sh -c \
+          'tail -n 40 "$1"' sh "/data/log/${DOCKER_INTERNAL_NAME}/i2pd.log" >&2 || true
+      fi
+      return 1
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+  if __skip_overlay_if_network_missing "${overlay}"; then
+    return 0
+  fi
+  __fail "${overlay^^} did not become healthy within ${timeout} seconds (last status: ${status:-unknown})"
+  return 1
+}
+
+__wait_overlay_health tor "${DOCKER_TOR_WAIT}" || true
+__wait_overlay_health i2p "${DOCKER_I2P_WAIT}" || true
 
 # ── Content negotiation: frontend routes ─────────────────────────────────────
 __info "--- Content negotiation: frontend routes ---"
@@ -206,7 +358,7 @@ __info "--- Paste creation ---"
 
 DOCKER_CSRF_TOKEN=$(curl -q -LSsf -D - -o /dev/null \
   --header "Accept: text/html" --user-agent "Mozilla/5.0" "${DOCKER_BASE_URL}/create" |
-  sed -n 's/^Set-Cookie: csrf_token=\([^;]*\).*/\1/ip' | head -1)
+  awk 'BEGIN { IGNORECASE=1 } /^Set-Cookie: csrf_token=/ && !found { sub(/^Set-Cookie: csrf_token=/, ""); sub(/;.*/, ""); print; found=1 }')
 [[ -n "${DOCKER_CSRF_TOKEN}" ]] || __fail "Could not obtain CSRF token from /create"
 DOCKER_CSRF_ARGS=(--cookie "csrf_token=${DOCKER_CSRF_TOKEN}" --header "X-CSRF-Token: ${DOCKER_CSRF_TOKEN}")
 
@@ -217,7 +369,7 @@ DOCKER_RESPONSE=$(curl -q -LSsf \
   "${DOCKER_CSRF_ARGS[@]}" \
   --data '{"content":"hello from docker test","language":"text"}' \
   "${DOCKER_BASE_URL}/api/v1/pastes") || __fail "Create paste (JSON): request failed"
-DOCKER_PASTE_ID=$(printf '%s' "${DOCKER_RESPONSE}" | grep -o -- '"id": *"[^"]*"' | head -1 | cut -d'"' -f4)
+DOCKER_PASTE_ID=$(printf '%s' "${DOCKER_RESPONSE}" | grep -o -- '"id": *"[^"]*"' | awk 'NR == 1 { print }' | cut -d'"' -f4)
 DOCKER_OWNER_TOKEN=$(printf '%s' "${DOCKER_RESPONSE}" | grep -o -- '"owner_token": *"[^"]*"' | cut -d'"' -f4)
 [[ -n "${DOCKER_PASTE_ID}" ]] || __fail "Create paste (JSON): no ID in response: ${DOCKER_RESPONSE}"
 __pass "Create paste (JSON): id=${DOCKER_PASTE_ID}"
@@ -229,7 +381,7 @@ DOCKER_RAW_RESPONSE=$(curl -q -LSsf \
   "${DOCKER_CSRF_ARGS[@]}" \
   --data "raw paste from curl" \
   "${DOCKER_BASE_URL}/api/v1/pastes") || __fail "Create paste (raw): request failed"
-printf '%s' "${DOCKER_RAW_RESPONSE}" | grep -q -- '"id"' ||
+printf '%s' "${DOCKER_RAW_RESPONSE}" | grep -- '"id"' >/dev/null ||
   __fail "Create paste (raw): no id in response: ${DOCKER_RAW_RESPONSE}"
 __pass "Create paste (raw body)"
 
@@ -253,7 +405,7 @@ DOCKER_EXP_RESPONSE=$(curl -q -LSsf \
   "${DOCKER_CSRF_ARGS[@]}" \
   --data '{"content":"expiring paste","expires_in":"1h"}' \
   "${DOCKER_BASE_URL}/api/v1/pastes") || __fail "Create paste (expiry): request failed"
-printf '%s' "${DOCKER_EXP_RESPONSE}" | grep -q -- '"expires_at"' ||
+printf '%s' "${DOCKER_EXP_RESPONSE}" | grep -- '"expires_at"' >/dev/null ||
   __fail "Create paste (expiry): expires_at missing in: ${DOCKER_EXP_RESPONSE}"
 __pass "Create paste (with expiry)"
 
@@ -264,7 +416,7 @@ DOCKER_BURN_RESPONSE=$(curl -q -LSsf \
   "${DOCKER_CSRF_ARGS[@]}" \
   --data '{"content":"burn after 2","burn_after":2}' \
   "${DOCKER_BASE_URL}/api/v1/pastes") || __fail "Create paste (burn_after): request failed"
-printf '%s' "${DOCKER_BURN_RESPONSE}" | grep -q -- '"burn_after"' ||
+printf '%s' "${DOCKER_BURN_RESPONSE}" | grep -- '"burn_after"' >/dev/null ||
   __fail "Create paste (burn_after): field missing in: ${DOCKER_BURN_RESPONSE}"
 __pass "Create paste (burn_after=2)"
 
@@ -275,7 +427,7 @@ DOCKER_UNLIST_RESPONSE=$(curl -q -LSsf \
   "${DOCKER_CSRF_ARGS[@]}" \
   --data '{"content":"unlisted paste","visibility":"unlisted"}' \
   "${DOCKER_BASE_URL}/api/v1/pastes") || __fail "Create paste (unlisted): request failed"
-printf '%s' "${DOCKER_UNLIST_RESPONSE}" | grep -q -- '"visibility"' ||
+printf '%s' "${DOCKER_UNLIST_RESPONSE}" | grep -- '"visibility"' >/dev/null ||
   __fail "Create paste (unlisted): field missing"
 __pass "Create paste (unlisted)"
 
@@ -287,9 +439,9 @@ DOCKER_LINK_RESPONSE=$(curl -q -LSsf \
   "${DOCKER_CSRF_ARGS[@]}" \
   --data "{\"content\":\"${DOCKER_LINK_TARGET}\",\"is_link\":true}" \
   "${DOCKER_BASE_URL}/api/v1/pastes") || __fail "Create paste (link): request failed"
-DOCKER_LINK_ID=$(printf '%s' "${DOCKER_LINK_RESPONSE}" | grep -o -- '"id": *"[^"]*"' | head -1 | cut -d'"' -f4)
+DOCKER_LINK_ID=$(printf '%s' "${DOCKER_LINK_RESPONSE}" | grep -o -- '"id": *"[^"]*"' | awk 'NR == 1 { print }' | cut -d'"' -f4)
 [[ -n "${DOCKER_LINK_ID}" ]] || __fail "Create paste (link): no ID in response: ${DOCKER_LINK_RESPONSE}"
-printf '%s' "${DOCKER_LINK_RESPONSE}" | grep -q -- '"is_link": *true' ||
+printf '%s' "${DOCKER_LINK_RESPONSE}" | grep -- '"is_link": *true' >/dev/null ||
   __fail "Create paste (link): is_link field missing/false in: ${DOCKER_LINK_RESPONSE}"
 __pass "Create paste (link): id=${DOCKER_LINK_ID}"
 
@@ -304,7 +456,7 @@ DOCKER_LINK_NONHTTP_RESPONSE=$(curl -q -LSsf \
   --data '{"content":"javascript:alert(1)","is_link":true}' \
   "${DOCKER_BASE_URL}/api/v1/pastes") ||
   __fail "Create paste (link, non-http scheme): request failed"
-printf '%s' "${DOCKER_LINK_NONHTTP_RESPONSE}" | grep -q -- '"is_link": *false' ||
+printf '%s' "${DOCKER_LINK_NONHTTP_RESPONSE}" | grep -- '"is_link": *false' >/dev/null ||
   __fail "Create paste (link, non-http scheme): expected is_link:false in: ${DOCKER_LINK_NONHTTP_RESPONSE}"
 __pass "Create paste (link, non-http scheme ignored, stored as ordinary paste)"
 
@@ -328,7 +480,7 @@ __info "--- Paste retrieval ---"
 DOCKER_GET=$(curl -q -LSsf \
   --header "Accept: application/json" \
   "${DOCKER_BASE_URL}/api/v1/pastes/${DOCKER_PASTE_ID}") || __fail "Get paste: request failed"
-printf '%s' "${DOCKER_GET}" | grep -q -- "hello from docker test" ||
+printf '%s' "${DOCKER_GET}" | grep -- "hello from docker test" >/dev/null ||
   __fail "Get paste: content mismatch: ${DOCKER_GET}"
 __pass "Get paste (JSON)"
 
@@ -341,7 +493,7 @@ __pass "Get raw paste"
 # List pastes
 DOCKER_LIST=$(curl -q -LSsf --header "Accept: application/json" "${DOCKER_BASE_URL}/api/v1/pastes") ||
   __fail "List pastes: request failed"
-printf '%s' "${DOCKER_LIST}" | grep -q -- "${DOCKER_PASTE_ID}" ||
+printf '%s' "${DOCKER_LIST}" | grep -- "${DOCKER_PASTE_ID}" >/dev/null ||
   __fail "List pastes: paste ID not found"
 __pass "List pastes"
 
@@ -364,7 +516,7 @@ if [[ -n "${DOCKER_OWNER_TOKEN}" ]]; then
     --request DELETE \
     --header "Authorization: Bearer ${DOCKER_OWNER_TOKEN}" \
     "${DOCKER_BASE_URL}/api/v1/pastes/${DOCKER_PASTE_ID}") || __fail "Delete paste: request failed"
-  printf '%s' "${DOCKER_DEL}" | grep -qi -- '"ok".*true\|deleted' ||
+  printf '%s' "${DOCKER_DEL}" | grep -i -- '"ok".*true\|deleted' >/dev/null ||
     __fail "Delete paste: unexpected response: ${DOCKER_DEL}"
   __pass "Delete paste (owner token)"
 
@@ -390,9 +542,14 @@ __info "--- Compat API endpoints ---"
 DOCKER_COMPAT_RESPONSE=$(curl -q -LSsf \
   --data "api_paste_code=compat+test&api_paste_private=0" \
   "${DOCKER_BASE_URL}/api/api_post.php") || __fail "pastebin.com compat POST: request failed"
-printf '%s' "${DOCKER_COMPAT_RESPONSE}" | grep -qi -- "http\|paste\|error" ||
-  __fail "pastebin.com compat POST: unexpected response: ${DOCKER_COMPAT_RESPONSE}"
-__pass "pastebin.com compat POST /api/api_post.php"
+if [[ "${DOCKER_COMPAT_RESPONSE}" =~ ^/([[:alnum:]]{8})$ ]]; then
+  DOCKER_COMPAT_ID="${BASH_REMATCH[1]}"
+  __pass "pastebin.com compat POST /api/api_post.php"
+  __check_body "pastebin.com compat raw retrieval" \
+    "${DOCKER_BASE_URL}/api/api_raw.php?i=${DOCKER_COMPAT_ID}" "compat test"
+else
+  __fail "pastebin.com compat POST returned an invalid URL path: ${DOCKER_COMPAT_RESPONSE}"
+fi
 
 __check_status "pastebin.com login stub → 200" POST "${DOCKER_BASE_URL}/api/api_login.php" 200 \
   --data "api_dev_key=x&api_user_name=x&api_user_password=x"
@@ -452,32 +609,42 @@ __check_status "GET /.well-known/security.txt → 200" GET "${DOCKER_BASE_URL}/.
 # ── Security headers ─────────────────────────────────────────────────────────
 __info "--- Security headers ---"
 DOCKER_HEADERS=$(curl -q -LSsf -D - -o /dev/null "${DOCKER_BASE_URL}/" | tr '[:upper:]' '[:lower:]')
-printf '%s' "${DOCKER_HEADERS}" | grep -q -- "x-content-type-options" ||
+printf '%s' "${DOCKER_HEADERS}" | grep -- "x-content-type-options" >/dev/null ||
   __fail "Missing X-Content-Type-Options header"
 __pass "X-Content-Type-Options present"
-printf '%s' "${DOCKER_HEADERS}" | grep -q -- "x-frame-options\|content-security-policy" ||
+printf '%s' "${DOCKER_HEADERS}" | grep -- "x-frame-options\|content-security-policy" >/dev/null ||
   __fail "Missing X-Frame-Options or Content-Security-Policy header"
 __pass "Framing protection header present"
 
 # ── --status flag ─────────────────────────────────────────────────────────────
-docker exec "${DOCKER_CONTAINER_NAME}" /usr/local/bin/cairnbin --status >/dev/null ||
+docker exec "${DOCKER_CONTAINER_NAME}" "/build/${DOCKER_PROJECT_NAME}" \
+  --config "/config/${DOCKER_INTERNAL_NAME}" --status >/dev/null ||
   __fail "--status exited non-zero"
 __pass "--status flag: ok"
 
 # ── Tor key-format migration (NO REGRESSIONS) ─────────────────────────────────
-# Proves the app's legacy-key migration (src/tor/tor.go) preserves the .onion
-# address: a pre-migration key (old ADD_ONION-era saveKey() format — the raw
-# 64-byte expanded ed25519 key, no header) must yield the SAME hostname after
-# migration to the native 96-byte format as it did before. All file
-# inspection/mutation runs via `docker exec` (root inside the container,
-# regardless of host UID) — never touching the volume from the host, per
-# PART 28 (no project-directory/runtime-data host coupling).
+# Proves the compiled binary migrates a legacy key without changing its address.
 __info "--- Tor key-format migration verification ---"
+
+mkdir -p "${DOCKER_TEMP_DIR}/tormig-config/${DOCKER_INTERNAL_NAME}" "${DOCKER_TEMP_DIR}/tormig-data/${DOCKER_INTERNAL_NAME}"
+cat >"${DOCKER_TEMP_DIR}/tormig-config/${DOCKER_INTERNAL_NAME}/server.yml" <<'EOF'
+server:
+  geoip:
+    enabled: false
+  i2p:
+    enabled: false
+  notifications:
+    email:
+      enabled: false
+      smtp:
+        host: localhost
+EOF
+chmod 600 "${DOCKER_TEMP_DIR}/tormig-config/${DOCKER_INTERNAL_NAME}/server.yml"
 
 __tormig_wait_hostname() {
   local timeout="$1" waited=0
   while ! docker exec "${DOCKER_TORMIG_NAME}" test -s \
-    /data/cairnbin/tor/site/hostname 2>/dev/null; do
+    "/data/${DOCKER_INTERNAL_NAME}/tor/site/hostname" 2>/dev/null; do
     sleep 2
     waited=$((waited + 2))
     [[ "${waited}" -lt "${timeout}" ]] || return 1
@@ -485,17 +652,20 @@ __tormig_wait_hostname() {
   return 0
 }
 
-docker volume create "${DOCKER_TORMIG_VOLUME}" >/dev/null
-docker run -d --name "${DOCKER_TORMIG_NAME}" \
-  -e MODE=dev -e DEBUG=1 \
-  -v "${DOCKER_TEMP_DIR}/tormig-config:/config:z" \
-  -v "${DOCKER_TORMIG_VOLUME}:/data" \
-  "${DOCKER_IMAGE_NAME}" >/dev/null
+docker run --rm --detach --name "${DOCKER_TORMIG_NAME}" \
+  --network "${DOCKER_NETWORK_NAME}" \
+  --volume "${DOCKER_PROJECT_DIR}/binaries:/build:ro" \
+  --volume "${DOCKER_TEMP_DIR}/tormig-config:/config" \
+  --volume "${DOCKER_TEMP_DIR}/tormig-data:/data" \
+  --entrypoint sh alpine:latest -c 'sleep infinity' >/dev/null
+docker exec "${DOCKER_TORMIG_NAME}" apk add --no-cache shadow curl bash file jq tor i2pd tzdata ca-certificates >/dev/null
+docker exec --detach "${DOCKER_TORMIG_NAME}" "/build/${DOCKER_PROJECT_NAME}" \
+  --address 0.0.0.0 --port 80 --config "/config/${DOCKER_INTERNAL_NAME}" --data "/data/${DOCKER_INTERNAL_NAME}"
 
 if __tormig_wait_hostname 200; then
-  DOCKER_TORMIG_ONION_1=$(docker exec "${DOCKER_TORMIG_NAME}" cat /data/cairnbin/tor/site/hostname)
+  DOCKER_TORMIG_ONION_1=$(docker exec "${DOCKER_TORMIG_NAME}" cat "/data/${DOCKER_INTERNAL_NAME}/tor/site/hostname")
   DOCKER_TORMIG_KEYSIZE_1=$(docker exec "${DOCKER_TORMIG_NAME}" \
-    stat -c%s /data/cairnbin/tor/site/hs_ed25519_secret_key)
+    stat -c%s "/data/${DOCKER_INTERNAL_NAME}/tor/site/hs_ed25519_secret_key")
   if [[ "${DOCKER_TORMIG_KEYSIZE_1}" -eq 96 ]]; then
     __pass "Fresh install: native 96-byte key, .onion=${DOCKER_TORMIG_ONION_1}"
   else
@@ -507,21 +677,26 @@ if __tormig_wait_hostname 200; then
   # leaving the same 64-byte expanded key the old saveKey() wrote raw.
   # Remove the derived hostname/public-key so only the legacy secret
   # key remains for the app to discover and migrate on next startup.
-  docker exec --user cairnbin "${DOCKER_TORMIG_NAME}" sh -c '
+  docker exec "${DOCKER_TORMIG_NAME}" sh -c "
         set -e
-        cd /data/cairnbin/tor/site
+        cd /data/${DOCKER_INTERNAL_NAME}/tor/site
         tail -c 64 hs_ed25519_secret_key > hs_ed25519_secret_key.legacy
         mv hs_ed25519_secret_key.legacy hs_ed25519_secret_key
         chmod 600 hs_ed25519_secret_key
         rm -f hostname hs_ed25519_public_key
-    '
+    "
   docker rm -f "${DOCKER_TORMIG_NAME}" >/dev/null 2>&1
 
-  docker run -d --name "${DOCKER_TORMIG_NAME}" \
-    -e MODE=dev -e DEBUG=1 \
-    -v "${DOCKER_TEMP_DIR}/tormig-config:/config:z" \
-    -v "${DOCKER_TORMIG_VOLUME}:/data" \
-    "${DOCKER_IMAGE_NAME}" >/dev/null
+  docker rm -f "${DOCKER_TORMIG_NAME}" >/dev/null 2>&1 || true
+  docker run --rm --detach --name "${DOCKER_TORMIG_NAME}" \
+    --network "${DOCKER_NETWORK_NAME}" \
+    --volume "${DOCKER_PROJECT_DIR}/binaries:/build:ro" \
+    --volume "${DOCKER_TEMP_DIR}/tormig-config:/config" \
+    --volume "${DOCKER_TEMP_DIR}/tormig-data:/data" \
+    --entrypoint sh alpine:latest -c 'sleep infinity' >/dev/null
+  docker exec "${DOCKER_TORMIG_NAME}" apk add --no-cache shadow curl bash file jq tor i2pd tzdata ca-certificates >/dev/null
+  docker exec --detach "${DOCKER_TORMIG_NAME}" "/build/${DOCKER_PROJECT_NAME}" \
+    --address 0.0.0.0 --port 80 --config /config/cairnbin --data /data/cairnbin
 
   if __tormig_wait_hostname 200; then
     DOCKER_TORMIG_ONION_2=$(docker exec "${DOCKER_TORMIG_NAME}" cat /data/cairnbin/tor/site/hostname)
@@ -536,11 +711,11 @@ if __tormig_wait_hostname 200; then
     fi
   else
     __fail "Tor did not publish hostname after key migration within timeout"
-    docker logs "${DOCKER_TORMIG_NAME}" 2>&1 | tail -40 >&2
+    docker logs "${DOCKER_TORMIG_NAME}" >&2
   fi
 else
   __fail "Tor did not publish hostname on fresh install within timeout"
-  docker logs "${DOCKER_TORMIG_NAME}" 2>&1 | tail -40 >&2
+  docker logs "${DOCKER_TORMIG_NAME}" >&2
 fi
 
 docker rm -f "${DOCKER_TORMIG_NAME}" >/dev/null 2>&1 || true
